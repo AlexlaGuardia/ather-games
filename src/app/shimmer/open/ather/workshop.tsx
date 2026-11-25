@@ -26,7 +26,7 @@ import { MoglinModel, furOf, type MoglinGarb } from '../shared/moglin-model'
 import {
   ROOMS, ROOM_ORDER, TABLE, canPlace, place, raised, progress, wallsOf, benchOf, footprint, loadWorks, saveWorks,
   WALL_H, benchBox, keepClear, tableAt, TABLE_ITEM, type Works, type Room, type RoomKind, type WorkNear,
-  stationOf, setStation, stockItemFromBag, stockItemFromBank, craftAt, jobRuns, toWorld, pieceRect, pieceBoxes, pieceFloor, canPlacePiece, placePiece, turnPiece, retireRooms, type Piece,
+  stationOf, setStation, stockItemFromBag, stockItemFromBank, craftAt, jobRuns, toWorld, pieceRect, pieceBoxes, pieceFloor, canPlacePiece, placePiece, planPiece, plannedAt, unplan, withPlanned, turnPiece, retireRooms, type Piece,
   ROOM_STORE_SLOTS, ROOM_KEEPS, roomAccepts, roomStore, stockRoom, stockRoomFromBag, takeFromRoom, makeBaitAt, benchCount, type StoreMove,
   CHEST_W, CHEST_D, CHEST_H, KEEPSTONE, KEEPSTONE_RECIPE, makeKeepstone, makeKeepstoneFrom, shortOf, haveFor, payCost, pickUpChest, allChests, chestBox, chestsStanding, canPlaceChest, placeChest, type Chest,
 } from './rooms'
@@ -43,7 +43,7 @@ import { floorAt, liftOf, setHouseFound, houseFoundDelta, plinthBoxes, doorSteps
 import { stairBoxes, landingRails, stairCellSet, toggleStair, dirOfYaw, type Stairs, type Turn } from './plot-stairs'
 import { deckRect, planDecks, eraseDecks, deckBoxes, supported as deckSupported, builtDeckCells, DECK_T, type Decks } from './plot-decks'
 import { colBoxes, toggleCol, colAt, paintColumn, colColour, colStandsOn, parseCol, COL_T, type Cols, trimmedRect, COL_CAP } from './plot-cols'
-import { FURNITURE, REFINE, STONE_REFINE, PIECE_JOBS, KEEPSTONES, isPiece, ALC_LIVE, type Job } from './furniture'
+import { FURNITURE, REFINE, STONE_REFINE, BENCH_JOBS, PLAN_PIECES, KEEPSTONES, isPiece, ALC_LIVE, type Job } from './furniture'
 import { AlchemyPanel } from './alchemy-panel'
 import { loadAssign, mayUse } from './train-assign'   // M118 s2: the keeper's assign-a-piece gate
 import { PlanterPanel, GrimoirePanel, getPots, setPots, settlePlanter, useBook, type BankStore } from './spirit-panels'
@@ -76,8 +76,8 @@ import { BREW } from './alchemy'
 import { RINSTICKS, makeRinstick, loadTools, saveTools, rinstickName, easeOf } from './rinsticks'
 import { FOCUSES, BENCH, makeFocus, reachOf, focusName, type FocusSkill } from './focuses'
 import { TOOL_DEFS } from '../../engine/tools'
-import { isBuilding, useBuildMode, enterBuild, exitBuild, buildPoint, onBuildTap, setBuildTool, useBuildTool, onBuildDraw, buildYaw, buildFocus, setPlanLift, setPlanInsets, viewTo } from './build-mode'
-import { cancelPlan, hasDraft, planSpot, draftKeys } from './plan-draft'   // M138
+import { isBuilding, useBuildMode, enterBuild, exitBuild, buildPoint, onBuildTap, setBuildTool, buildTool, useBuildTool, onBuildDraw, buildYaw, buildFocus, setPlanLift, setPlanInsets, viewTo } from './build-mode'
+import { cancelPlan, hasDraft, planSpot, draftKeys, builtUnderPlan } from './plan-draft'   // M138
 import { PlanGrid } from './plan-grid-view'   // M142
 import { useQuest, questEvent } from './use-rinquest'
 import { currentStep } from './rinquest'
@@ -162,6 +162,7 @@ function wallBlockers(w: Works) {
     const f = footprint(r.kind, r.x, r.z, r.q); rects.push({ r: { x0: f.x0 - 0.3, x1: f.x1 + 0.3, z0: f.z0 - 0.3, z1: f.z1 + 0.3 }, why: `In your ${ROOMS[r.kind].name}.` })
   }
   for (const c of allChests(w)) rects.push({ r: chestBox(c), why: 'A Keepstone is in the way.' })
+  for (const p of w.planned ?? []) rects.push({ r: pieceRect(p.item, p.x, p.z, p.q), why: 'A planned piece is there.' })   // M143
   for (const p of w.pieces) rects.push({ r: pieceRect(p.item, p.x, p.z, p.q), why: isLiftPiece(p) ? SHAFT_WHY : 'Something already stands there.' })
   return { rects, circles: keepClear(w) }   // M96: the table's circle follows the table
 }
@@ -179,6 +180,7 @@ function layOn(w: Works, lv: number, keys: string[], owned: ReadonlySet<string>)
 let planEdit = false
 const setPlanEdit = (v: boolean) => { if (v !== planEdit) { planEdit = v; wdEmit() } }
 const usePlanEdit = () => useSyncExternalStore(f => { wdSubs.add(f); return () => { wdSubs.delete(f) } }, () => planEdit, () => false)
+const BUILT_FLOOR = 'That floor is built: build or cancel the plan across it first.'
 const EDIT_ONLY = 'Editing the plan: that one is built.'
 function wallVerdict(owned: ReadonlySet<string>, a: Corner, b: Corner, erase: boolean) {
   const w = currentWorks(), keys = runKeys(a, b), lv = getPlanLevel(), cur = levelOf(w, lv).walls
@@ -244,6 +246,7 @@ function tapToolHandler(kind: 'door' | 'window' | 'paint' | 'blueprint') {
         if (ck) { const r = paintColumn(L.cols, ck, paintCol); if ('why' in r) { hudSay(r.why, 'info'); return } setWorks(withLevel(w, lv, { ...L, cols: r.cols })); return }
         if (k) { const r = paintWall(walls, k, paintCol); if ('why' in r) { hudSay(r.why, 'info'); return } setWorks(withLevel(w, lv, { ...L, walls: r.walls })); return }
         const room = roomAt(findRooms(walls), x, z); if (!room) { hudSay('Tap a wall, or the floor of one of your rooms.', 'info'); return }
+        if (builtUnderPlan(walls, L.paid, room)) { hudSay(BUILT_FLOOR, 'info'); return }
         const fr = setFloor(L.floors, room, paintPat, paintCol, !!(L.paid ?? {})[room.key], getInv()); if ('why' in fr) { hudSay(fr.why, 'info'); return }
         setWorks(withLevel(w, lv, { ...L, floors: fr.floors })); setInv(fr.inv); return
       }
@@ -266,6 +269,7 @@ function tapToolHandler(kind: 'door' | 'window' | 'paint' | 'blueprint') {
       const rooms = findRooms(walls), room = roomAt(rooms, x, z); if (!room) { hudSay('Right-click a wall, or the floor of one of your rooms.', 'info'); return }
       let floors = L.floors, inv = getInv(), n = 0
       for (const rm of connectedRooms(rooms, room)) {
+        if (builtUnderPlan(walls, L.paid, rm)) { hudSay(BUILT_FLOOR, 'info'); continue }
         const fr = setFloor(floors, rm, paintPat, paintCol, !!(L.paid ?? {})[rm.key], inv); if ('why' in fr) { hudSay(fr.why, 'info'); break }
         floors = fr.floors; inv = fr.inv; n++
       }
@@ -429,7 +433,12 @@ function wallDrawHandler(owned: () => ReadonlySet<string>, erase: boolean) {
     end(x: number, z: number) {
       if (!wallDrag) return
       const a = wallDrag.a, b = at(x, z); wallDrag = null; wdEmit()
-      const w = currentWorks(), keys = runKeys(a, b); if (!keys.length) return
+      const w = currentWorks(), keys = runKeys(a, b)
+      if (erase && !keys.length && getPlanLevel() === 0) {   // M143: a tap on a planned slab or panel takes it off the plan
+        const pc = plannedAt(w, x, z); if (!pc) return
+        setWorks(unplan(w, pc.id)); hudSay(`${FURNITURE[pc.item].name} taken off the plan.`, 'info'); return
+      }
+      if (!keys.length) return
       const lv = getPlanLevel(), L = levelOf(w, lv)
       if (erase) {
         const hit = planEdit ? draftKeys(L.walls, keys) : keys   // M138: an edit takes out the plan's own only
@@ -716,7 +725,8 @@ function WallGhost() {
 // a material is a LOOK, never power.
 const WOOD_GATE: Record<WallMat, number> = { goldwood: 1, shimmeroak: 4, dawnwood: 10, brick: 0, stucco: 0 }   // forestry.ts TREE_TIER gates
 function Catalog({ onPick }: { onPick: () => void }) {
-  const inv = useInv(), lvl = forestryLevel()
+  const inv = useInv(), bank = useBank(), lvl = forestryLevel()
+  const pickPiece = (item: string) => { setBuildTool('look'); setPlanLevel(0); setPlacing({ kind: 'piece', item, q: 0, plan: true }); onPick() }   // M143
   const pick = (t: 'walls' | 'paint' | 'door' | 'window', m?: WallMat, fp?: FloorPat, rail = false) => { setPlacing(null); if (m) { wallMat = m } if (t === 'walls') wallRail = rail; if (fp) { paintPat = fp; paintCol = FLOOR_PATS[fp].color } wdEmit(); setBuildTool(t); onPick() }
   const card = (key: string, label: string, sub: string, lit: boolean, onClick: () => void, swatch?: string) => (
     <button key={key} type="button" data-cat={key} data-lit={lit} disabled={!lit} onClick={onClick}
@@ -746,6 +756,12 @@ function Catalog({ onPick }: { onPick: () => void }) {
         {card('door', 'Door', 'Tap a wall · 2 m · keeps its wood', true, () => pick('door'))}
         {card('window', 'Window', 'Tap a wall · a crystal pane (on the list)', true, () => pick('window'))}
         {card('railing', 'Railing', 'Drag like a wall · 1 m high · a third the cost', true, () => pick('walls', undefined, undefined, true))}
+      </div>
+      <div data-cat-group="pieces" style={{ display: 'grid', gap: 5 }}>
+        <div style={{ font: '700 11px system-ui', letterSpacing: '.12em', textTransform: 'uppercase', color: H.ink, opacity: 0.7 }}>Slabs and panels · set anywhere, built from the list</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 6 }}>
+          {PLAN_PIECES.map(id => card(`piece:${id}`, FURNITURE[id].name, FURNITURE[id].recipe.map(c => `${haveFor(inv, bank, c.id)} / ${c.n} ${itemDef(c.id).name}`).join(' · '), true, () => pickPiece(id), FURNITURE[id].tint ?? (FURNITURE[id].wood === 'stone' ? WALL_MATS.stucco.color : WALL_MATS.goldwood.color)))}
+        </div>
       </div>
     </div>
   )
@@ -854,7 +870,7 @@ const PLANTER_BANK: BankStore = { use: useBank, get: getB, set: setBank }
 // placing: which room, its turn, and where the ghost stands now (set by the scene each frame)
 // `hand` (M45): the thing came from the HOTBAR (held in hand), not from a menu. It follows the stance: stow or swap and the
 // ghost goes; E taps set it, an E hold turns it; R stays the stance's key (draw / stow), Esc is not a cancel.
-type Placing = { kind: RoomKind; q: number } | { kind: 'chest'; item: string; q: number; hand?: true } | { kind: 'piece'; item: string; q: number; hand?: true } | null
+type Placing = { kind: RoomKind; q: number } | { kind: 'chest'; item: string; q: number; hand?: true } | { kind: 'piece'; item: string; q: number; hand?: true; /** M143: set as a DRAFT (the catalog); from = the planned piece being moved */ plan?: true; from?: string } | null
 let placing: Placing = null
 const ghost = { x: 0, z: 0 }
 const psubs = new Set<() => void>()
@@ -909,6 +925,15 @@ function startBuild(p: Placing) {
 /** Confirm the ghost where it stands. */
 function confirmPlace(owned: ReadonlySet<string>) {
   if (!placing) return
+  if (placing.kind === 'piece' && placing.plan) {   // M143: onto the plan; nothing leaves the bag
+    const item = placing.item, f = FURNITURE[item], r = planPiece(getW(), owned, item, ghost.x, ghost.z, placing.q, placing.from)
+    if ('why' in r) { hudSay(r.why, 'info'); return }
+    setWorks(r.works)
+    const an = anchorIfFree(placing.q, f.w, f.d, !!f.slab) ? ' · anchor set, pick a snap to line up on it' : ''
+    if (placing.from) setPlacing(null)
+    hudSay(`${f.name} planned${placing.from ? '' : ' · Esc stops'}${an}`, 'info', 4)
+    return
+  }
   if (placing.kind === 'piece') {
     const item = placing.item, c = placePiece(getW(), owned, getInv(), item, ghost.x, ghost.z, placing.q)
     if (!c) { const v = canPlacePiece(getW(), owned, item, ghost.x, ghost.z, placing.q, getInv()); hudSay(v.ok ? 'Cannot set it there.' : v.why, 'info'); return }
@@ -1001,6 +1026,7 @@ export function WorkshopScene({ pose, owned, stowed }: { pose: React.MutableRefO
       {w.rooms.map(r => { const up = roomLift(w, r); return raised(r) ? <RoomMesh key={r.id} r={r} lift={up} /> : r.shell ? <ShellRising key={r.id} r={r} lift={up} /> : <Scaffold key={r.id} r={r} lift={up} /> })}   {/* M55: a prefab room rides its own foundation */}
       {allChests(w).map(c => <Wobbly key={c.id} id={c.id} at={[c.x, floorAt(w, GROUND_Y, c.x, c.z), c.z]}><Keepstone c={c} pose={pose} y={floorAt(w, GROUND_Y, c.x, c.z)} /></Wobbly>)}
       {w.pieces.map(pc => { const y = pieceFloor(w, pc); return <Wobbly key={pc.id} id={pc.id} at={[pc.x, y, pc.z]}><PieceMesh p={pc} y={y} /></Wobbly> })}
+      {!isVisiting() && w.planned?.map(pc => p?.kind === 'piece' && p.from === pc.id ? null : <PlannedPiece key={pc.id} p={pc} y={pieceFloor(withPlanned(w), pc)} />)}
       <Plinth w={w} />
       {stowed && <MeleeAim stowed={stowed} />}
       {w.pieces.some(x => x.item === 'lift') && <LiftInput />}
@@ -1010,7 +1036,7 @@ export function WorkshopScene({ pose, owned, stowed }: { pose: React.MutableRefO
       <PlanGrid owned={owned} works={w} />
       <WallGhost />
       <DeckGhost />
-      {p && (p.kind === 'piece' ? <PieceGhost pose={pose} owned={owned} item={p.item} q={p.q} /> : p.kind === 'chest' ? <ChestGhost pose={pose} owned={owned} q={p.q} item={p.item} /> : <Ghost pose={pose} owned={owned} kind={p.kind} q={p.q} />)}
+      {p && (p.kind === 'piece' ? <PieceGhost pose={pose} owned={owned} item={p.item} q={p.q} plan={p.plan} from={p.from} /> : p.kind === 'chest' ? <ChestGhost pose={pose} owned={owned} q={p.q} item={p.item} /> : <Ghost pose={pose} owned={owned} kind={p.kind} q={p.q} />)}
     </>
   )
 }
@@ -1377,13 +1403,19 @@ function PieceMesh({ p, y = GROUND_Y }: { p: Piece; y?: number }) {
   if (p.item === 'lift') return <LiftMesh p={p} />
   return <group position={[p.x, y, p.z]} rotation-y={-p.q * Math.PI / 2}><PieceBody item={p.item} id={p.id} /></group>
 }
+/** M143: a piece only planned: a see-through sheet of its size, like a planned wall */
+function PlannedPiece({ p, y }: { p: Piece; y: number }) {
+  const f = FURNITURE[p.item]
+  return <mesh name="planned-piece" position={[p.x, y + f.h / 2, p.z]} rotation-y={-p.q * Math.PI / 2}><boxGeometry args={[f.w, f.h, f.d]} /><meshBasicMaterial color={SHEET} transparent opacity={0.45} depthWrite={false} /></mesh>
+}
 /** The piece's ghost: the real piece, tinted, snapped to the quarter metre in front of the keeper. */
-function PieceGhost({ pose, owned, item, q }: { pose: React.MutableRefObject<Pose>; owned: ReadonlySet<string>; item: string; q: number }) {
+function PieceGhost({ pose, owned, item, q, plan, from }: { pose: React.MutableRefObject<Pose>; owned: ReadonlySet<string>; item: string; q: number; plan?: boolean; from?: string }) {
   const f = FURNITURE[item], g = useRef<THREE.Group>(null), mat = useRef<THREE.MeshBasicMaterial>(null)
+  const site = () => (from ? unplan(getW(), from) : getW())
   useFrame(() => {
     ghostFine(pose.current, Math.max(f.w, f.d) / 2 + 1.2, f.w, f.d, q, !!f.shaft, !f.slab)
-    g.current?.position.set(f.shaft ? cellMid(ghost.x) : ghost.x, pieceFloor(getW(), { item, x: ghost.x, z: ghost.z }), f.shaft ? cellMid(ghost.z) : ghost.z)
-    mat.current?.color.set(canPlacePiece(getW(), owned, item, ghost.x, ghost.z, q, getInv()).ok ? GHOST_OK : GHOST_BAD)
+    g.current?.position.set(f.shaft ? cellMid(ghost.x) : ghost.x, pieceFloor(plan ? withPlanned(site()) : getW(), { item, x: ghost.x, z: ghost.z }), f.shaft ? cellMid(ghost.z) : ghost.z)
+    mat.current?.color.set(canPlacePiece(site(), owned, item, ghost.x, ghost.z, q, plan ? undefined : getInv()).ok ? GHOST_OK : GHOST_BAD)
   })
   return (
     <group ref={g} rotation-y={-q * Math.PI / 2}>
@@ -1566,6 +1598,8 @@ const healthClear = () => {
   const r = plate?.getBoundingClientRect()
   return r && r.height ? Math.round(innerHeight - r.top + 10) : 92
 }
+/** M143: the plan card's heading: metres of wall, and planned slabs and panels */
+const planHead = (b: { pieces: number; set: { n: number }[] }, long: boolean) => { const n = b.set.reduce((t, c) => t + c.n, 0), m = `${b.pieces} m${long ? ' of wall' : ''}`, s = `${n} piece${n === 1 ? '' : 's'}`; return !n ? m : b.pieces ? `${m} · ${s}` : s }
 function PlanBom({ slim = false }: { slim?: boolean }) {
   const w = useWorks(), inv = useInv(), bank = useBank()
   const [lift, setLift] = useState(92)
@@ -1606,7 +1640,7 @@ function PlanBom({ slim = false }: { slim?: boolean }) {
       <div data-plan-bom data-ready={bom.ok} data-slim style={{ position: 'fixed', bottom: 'calc(108px + env(safe-area-inset-bottom, 0px))', left: '50%', transform: 'translateX(-50%)', width: 'calc(100vw - 24px)', zIndex: 41, pointerEvents: 'auto', display: 'flex', alignItems: 'center', gap: 8, padding: '6px 6px 6px 10px', borderRadius: 12, background: 'rgba(255,250,235,.94)', boxShadow: '0 2px 8px rgba(0,0,0,.25)', color: H.ink }}>
         {ask && planned ? askRow : <>
         <div style={{ flex: 1, minWidth: 0, display: 'grid', gap: 1 }}>
-          <span style={{ font: '700 10px system-ui', letterSpacing: '.1em', textTransform: 'uppercase', opacity: 0.65, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Plan · {bom.pieces} m{bom.rooms ? ` · ${bom.rooms} room${bom.rooms > 1 ? 's' : ''}` : ''}</span>
+          <span style={{ font: '700 10px system-ui', letterSpacing: '.1em', textTransform: 'uppercase', opacity: 0.65, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Plan · {planHead(bom, false)}{bom.rooms ? ` · ${bom.rooms} room${bom.rooms > 1 ? 's' : ''}` : ''}</span>
           <span style={{ fontSize: 12, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: short ? '#b5452c' : H.ink }}>{short ? `${Math.min(short.have, short.n)} / ${short.n} ${short.name}` : `Everything is here (${bom.lines.map(l => `${l.n} ${l.name}`).join(', ')})`}</span>
           {bom.lines.map(l => <span key={l.id} data-bom-line={l.id} data-need={l.n} data-have={l.have} data-short={l.short} hidden />)}
         </div>
@@ -1620,12 +1654,13 @@ function PlanBom({ slim = false }: { slim?: boolean }) {
     // DESKTOP (11-21): bottom-left above the Health card. It used to sit INSIDE the build bar, whose transform made 'fixed' mean the
     // bar: the card landed across the bar's third row (walls down / roof / foundation) and over the middle of the drawing.
     <div data-plan-bom data-ready={bom.ok} style={{ position: 'fixed', bottom: lift, left: 'calc(16px + env(safe-area-inset-left, 0px))', width: 'min(340px, calc(100vw - 32px))', zIndex: 41, pointerEvents: 'auto', display: 'grid', gap: 4, padding: '8px 10px', borderRadius: 12, background: 'rgba(255,250,235,.92)', boxShadow: '0 2px 8px rgba(0,0,0,.2)', color: H.ink }}>
-      <div style={{ font: '700 11px system-ui', letterSpacing: '.12em', textTransform: 'uppercase', opacity: 0.7 }}>Plan · {bom.pieces} m of wall{bom.rooms ? ` · ${bom.rooms} room${bom.rooms > 1 ? 's' : ''}` : ''} · materials</div>
+      <div style={{ font: '700 11px system-ui', letterSpacing: '.12em', textTransform: 'uppercase', opacity: 0.7 }}>Plan · {planHead(bom, true)}{bom.rooms ? ` · ${bom.rooms} room${bom.rooms > 1 ? 's' : ''}` : ''} · materials</div>
       {bom.lines.map(l => (
         <div key={l.id} data-bom-line={l.id} data-need={l.n} data-have={l.have} data-short={l.short} style={{ display: 'flex', gap: 6, fontSize: 12.5, color: l.short ? '#b5452c' : H.ink }}>
           <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 700, minWidth: 54 }}>{Math.min(l.have, l.n)} / {l.n}</span><span>{l.name}</span>
         </div>
       ))}
+      {bom.set.length > 0 && <div data-bom-set style={{ fontSize: 11.5, color: H.inkSoft }}>{bom.set.map(c => `${c.n} x ${FURNITURE[c.id].name}`).join(' · ')}</div>}
       <div style={{ fontSize: 11.5, color: H.inkSoft }}>{edit ? 'Editing: Erase takes planned pieces out, the other tools add.' : bom.ok ? 'Everything is here.' : 'Planks: Carpentry. Bricks and panes: Stonery.'}</div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         {ask && planned ? askRow : <>{planActs}<span style={{ flex: 1 }} />
@@ -1641,8 +1676,12 @@ export function BuildBar({ owned }: { owned: ReadonlySet<string> }) {
   const ownedRef = useRef(owned); ownedRef.current = owned
   const touchy = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches
   // a mouse click on the ground places what is on the pointer
-  useEffect(() => { if (!b) return; onBuildTap(() => { if (placing) confirmPlace(ownedRef.current) }); return () => onBuildTap(null) }, [b])
-  useEffect(() => { if (!b) { setSel(null); setCat(false) } }, [b])
+  useEffect(() => { if (!b) return; onBuildTap((touch, at) => {
+    if (placing) { if (!touch) confirmPlace(ownedRef.current); return }
+    if (buildTool() !== 'look' || getPlanLevel() !== 0) return
+    const pc = at && plannedAt(getW(), at.x, at.z); if (pc) setPlacing({ kind: 'piece', item: pc.item, q: pc.q, plan: true, from: pc.id })   // M143: a tap picks a planned piece up to move it (it stays planned until set)
+  }); return () => onBuildTap(null) }, [b])
+  useEffect(() => { if (!b) { setSel(null); setCat(false); if (placing?.kind === 'piece' && placing.plan) setPlacing(null) } }, [b])
   // 11-21: tell the plan lens how much the bar covers (top) and the HUD / materials strip (bottom), so the work is framed in the free band
   useEffect(() => {
     if (!b) return
@@ -1771,7 +1810,7 @@ function BenchPanel({ room, onClose }: { room: Room; onClose: () => void }) {
       case 'refine': return r.kind === 'stonemason'
         ? cl(crafts(STONE_REFINE), 'Parts for a house plan, cut from every stone in the store. A Moglin also keeps stacks going by itself.', 'No blankstone or mana shards to cut. Prospect them in the Wilds.')
         : cl(crafts(REFINE), 'Each log works two ways. Focus one: the station works every log in its store, one at a time. A Moglin also keeps stacks going by itself.', 'No logs to work. Prune trees in the Wilds. Better woods come as your Forestry grows.')
-      case 'furniture': return cl(spirits3d ? PIECE_JOBS : PIECE_JOBS.filter(j => !FURNITURE[j.id]?.train), 'Finished pieces wait in the output. Hold one from the hotbar on your plot and E sets it.')
+      case 'furniture': return cl(BENCH_JOBS.filter(j => spirits3d || !FURNITURE[j.id]?.train), 'Finished pieces wait in the output. Hold one from the hotbar on your plot and E sets it.')
       case 'hearth': return cl(ROAST, 'Hold a roast in the Wilds and click to eat it mid-fight. Meat comes from the Smokehouse in the continent\'s towns.')
       case 'cauldron': return cl(BREW, 'Hold a potion and click to drink.')
       case 'blades': case 'spikes': return focusSkill ? <FocusList r={r} inv={inv} skill={focusSkill} /> : null

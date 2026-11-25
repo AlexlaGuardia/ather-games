@@ -18,7 +18,7 @@ import { gardenKey } from '@/lib/keeper-local'
 import { countOf, take, give, ITEM_GROUP, HOTBAR, SLOTS, baitYield, type Inv, type Stack } from '../shared/inventory'
 import { MAX_CHESTS, putIn, withdraw, adoptBank, bankCount, bankTake, type Bank } from './garden-bank'
 import { BED_UI } from './planter-lines'
-import { FURNITURE, BEDS_MAX, PIECE_JOBS, MAX_PIECES, KEEPSTONES, keepstoneFor, ALC_LIVE, type Job } from './furniture'
+import { FURNITURE, isPlanned, BEDS_MAX, PIECE_JOBS, MAX_PIECES, KEEPSTONES, keepstoneFor, ALC_LIVE, type Job } from './furniture'
 import { adoptWork, adoptOut, stockJobs, type Work, type Station } from './station-queue'
 import { adoptUpper, levelBase, type Level } from './plot-floors'
 import { adoptCols, type Cols } from './plot-cols'
@@ -118,7 +118,7 @@ export interface Room {
 export interface Chest { id: string; x: number; z: number; q: number; placedAt: number; crystal?: string }
 /** A piece of furniture or decor standing on the plot (furniture.ts). Picked up, it is the bag item `item` again. */
 export interface Piece { id: string; item: string; x: number; z: number; q: number; placedAt: number; /** M48: a lift's car level (lift.ts); absent = the ground */ lv?: number }
-export interface Works { v: 1; rooms: Room[]; chests: Chest[]; pieces: Piece[]; /** M37: the keeper's own walls (plot-walls.ts); an older save has none */ walls?: Walls; /** M37 slice 2: the house's roof style */ roof?: RoofStyle; /** M37 slice 3: painted floor cells */ floors?: Floors; /** M37 slice 4: rooms whose floor and roof are built (room key to its m²); see plot-bom.ts */ paid?: Record<string, number>; /** M47: the floors above the ground one (plot-floors.ts); an older save has none = one storey */ upper?: Level[]; /** M54: ground-floor columns (plot-cols.ts) */ cols?: Cols; /** M56: ground-floor stairs (plot-stairs.ts) */ stairs?: Stairs; /** M56 (a): ground-floor open floor, patios (plot-decks.ts) */ decks?: Decks; /** M55: the house's foundation height (plot-found.ts), 0 / 0.6 / 1.2 */ found?: number; /** M96: the planning table has left its first spot (it is a placed piece now, or in the bag); see tableAt */ tableMoved?: true; /** M55 slice 2: per house, per room cell */ foundCells?: Record<string, number>; /** 11-22: a take-down's leftover fraction of a plank per item (plot-walls raze), carried to the next */ wallCarry?: Record<string, number> }
+export interface Works { v: 1; rooms: Room[]; chests: Chest[]; pieces: Piece[]; /** M143: pieces only PLANNED (slabs, panels): not solid, not near, nothing paid. Apart from `pieces`, so no reader can take one for real; Build moves them over */ planned?: Piece[]; /** M37: the keeper's own walls (plot-walls.ts); an older save has none */ walls?: Walls; /** M37 slice 2: the house's roof style */ roof?: RoofStyle; /** M37 slice 3: painted floor cells */ floors?: Floors; /** M37 slice 4: rooms whose floor and roof are built (room key to its m²); see plot-bom.ts */ paid?: Record<string, number>; /** M47: the floors above the ground one (plot-floors.ts); an older save has none = one storey */ upper?: Level[]; /** M54: ground-floor columns (plot-cols.ts) */ cols?: Cols; /** M56: ground-floor stairs (plot-stairs.ts) */ stairs?: Stairs; /** M56 (a): ground-floor open floor, patios (plot-decks.ts) */ decks?: Decks; /** M55: the house's foundation height (plot-found.ts), 0 / 0.6 / 1.2 */ found?: number; /** M96: the planning table has left its first spot (it is a placed piece now, or in the bag); see tableAt */ tableMoved?: true; /** M55 slice 2: per house, per room cell */ foundCells?: Record<string, number>; /** 11-22: a take-down's leftover fraction of a plank per item (plot-walls raze), carried to the next */ wallCarry?: Record<string, number> }
 /** M37: is this rectangle in a drawn wall (plot-walls.ts)? */
 const inDrawnWall = (w: Works, r: { x0: number; x1: number; z0: number; z1: number }, pad = 0) => wallRects(w.walls ?? {}).some(b => r.x0 - pad < b.x1 && r.x1 + pad > b.x0 && r.z0 - pad < b.z1 && r.z1 + pad > b.z0)
 export const freshWorks = (): Works => ({ v: 1, rooms: [], chests: [], pieces: [] })
@@ -485,7 +485,8 @@ export function canPlacePiece(works: Works, owned: ReadonlySet<string>, item: st
   // M124 (RULED ce34508): at most BEDS_MAX spirit beds stand in a garden, set by hand or on a SITE (s2); a 9th NEW one is
   // refused (signed line). Only placing asks: an old save over the cap loads whole.
   if (!standing && f.spirit === 'planter' && works.pieces.filter(p => FURNITURE[p.item]?.spirit === 'planter').length >= BEDS_MAX) return { ok: false, why: BED_UI.capped }
-  if (works.pieces.length >= MAX_PIECES) return { ok: false, why: `${MAX_PIECES} pieces already stand. Pick one up to make room.` }
+  const planned = works.planned ?? []
+  if (works.pieces.length + planned.length >= MAX_PIECES) return { ok: false, why: `${MAX_PIECES} pieces already stand. Pick one up to make room.` }
   const k = pieceRect(item, x, z, q)
   for (const [cx, cz] of [[k.x0, k.z0], [k.x1, k.z0], [k.x0, k.z1], [k.x1, k.z1]]) {
     if (site) { if (!site.inside(cx, cz)) return { ok: false, why: 'Keep it inside the zone.' }; continue }
@@ -507,6 +508,7 @@ export function canPlacePiece(works: Works, owned: ReadonlySet<string>, item: st
   // only a real overlap refuses, with 5 mm of float slack. Walls and Keepstones keep their 0.15 m clearance.
   // M98b: a slab and a piece never clash (the piece stands ON it); slab against slab does.
   if (works.pieces.some(p => FURNITURE[p.item] && !!FURNITURE[p.item].slab === !!f.slab && quadsHit(mine, pieceQuad(p.item, p.x, p.z, p.q), -0.005))) return { ok: false, why: 'Something already stands there.' }
+  if (planned.some(p => !!FURNITURE[p.item].slab === !!f.slab && quadsHit(mine, pieceQuad(p.item, p.x, p.z, p.q), -0.005))) return { ok: false, why: 'A planned piece is there.' }
   if (wallRects(works.walls ?? {}).some(hit)) return { ok: false, why: 'In one of your walls.' }
   if (inv && countOf(inv, item) < 1) return { ok: false, why: `No ${f.name} in the bag.` }
   return { ok: true }
@@ -517,6 +519,23 @@ export function placePiece(works: Works, owned: ReadonlySet<string>, inv: Inv, i
   const out = take(inv, item, 1); if (!out) return null
   const piece: Piece = { id: `piece-${now.toString(36)}-${works.pieces.length}`, item, x, z, q: normQ(q), placedAt: now }
   return { works: { ...works, pieces: [...works.pieces, piece] }, inv: out, piece }
+}
+/** M143: the works as if every planned piece stood (what a planned one is drawn and set against) */
+export const withPlanned = (w: Works): Works => (w.planned?.length ? { ...w, pieces: [...w.pieces, ...w.planned] } : w)
+export const unplan = (w: Works, id: string): Works => { const rest = (w.planned ?? []).filter(p => p.id !== id), { planned: _p, ...o } = w; void _p; return rest.length ? { ...o, planned: rest } : o }
+/** M143: PLAN one: the same rules as setting it, from no bag, nothing spent. `from` = the planned piece being moved. */
+export function planPiece(works: Works, owned: ReadonlySet<string>, item: string, x: number, z: number, q: number, from?: string, now = Date.now()): { works: Works } | { why: string } {
+  if (!isPlanned(item)) return { why: 'That is not planned here.' }
+  const w = from ? unplan(works, from) : works, v = canPlacePiece(w, owned, item, x, z, q)
+  if (!v.ok) return { why: v.why }
+  const taken = new Set([...w.pieces, ...(w.planned ?? [])].map(p => p.id)); let n = taken.size, id = ''
+  do id = `piece-${now.toString(36)}-${n++}`; while (taken.has(id))
+  return { works: { ...w, planned: [...(w.planned ?? []), { id, item, x, z, q: normQ(q), placedAt: now }] } }
+}
+/** M143: the planned piece under a point (a panel before the slab it stands on) */
+export function plannedAt(w: Pick<Works, 'planned'>, x: number, z: number, pad = 0.15): Piece | null {
+  const over = (w.planned ?? []).filter(p => { const f = FURNITURE[p.item], a = -(p.q * Math.PI) / 2, dx = x - p.x, dz = z - p.z, lx = dx * Math.cos(a) - dz * Math.sin(a), lz = dx * Math.sin(a) + dz * Math.cos(a); return Math.abs(lx) <= f.w / 2 + pad && Math.abs(lz) <= f.d / 2 + pad })
+  return over.find(p => !FURNITURE[p.item].slab) ?? over[0] ?? null
 }
 export function pickUpPiece(works: Works, id: string, inv: Inv): { works: Works; inv: Inv } | null {
   const p = works.pieces.find(x => x.id === id)
@@ -546,6 +565,7 @@ export function turnPiece(works: Works, owned: ReadonlySet<string>, id: string):
 }
 
 // ── save: garden-tied (the garden is shared across a roster; Alex 11-17), registered in GARDEN_KEY_SPECS ─────────────
+export const adoptPlanned = (v: unknown): Piece[] => Array.isArray(v) ? v.filter((p: Piece) => p && typeof p.id === 'string' && isPlanned(p.item) && Number.isFinite(p.x) && Number.isFinite(p.z)).map((p: Piece) => ({ id: p.id, item: p.item, x: p.x, z: p.z, q: Number.isFinite(p.q) ? p.q : 0, placedAt: 0 })) : []
 export const WORKS_KEY = 'open.works.v1'
 export function loadWorks(): Works {
   try {
@@ -557,6 +577,7 @@ export function loadWorks(): Works {
       chests: Array.isArray(v.chests) ? v.chests.filter((c: Chest) => c && typeof c.id === 'string' && Number.isFinite(c.x) && Number.isFinite(c.z)) : [],
       // furniture arrived after Keepstones (11-17): an older save has none; a piece whose item is gone is dropped
       pieces: Array.isArray(v.pieces) ? v.pieces.filter((p: Piece) => p && typeof p.id === 'string' && p.item in FURNITURE && Number.isFinite(p.x) && Number.isFinite(p.z)) : [],
+      ...(adoptPlanned(v.planned).length ? { planned: adoptPlanned(v.planned) } : {}),   // M143
       walls: adoptWalls(v.walls),   // M37 (11-19): the keeper's own walls
       ...(Object.keys(adoptCols(v.cols)).length ? { cols: adoptCols(v.cols) } : {}),   // M54: columns
       ...(Object.keys(adoptStairs(v.stairs)).length ? { stairs: adoptStairs(v.stairs) } : {}),   // M56: stairs

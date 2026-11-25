@@ -82,9 +82,9 @@ export function buildPoint(): { x: number; z: number } | null {
   if (!on) return null
   return point.has ? { x: point.x, z: point.z } : { x: cur.x, z: cur.z }
 }
-let tap: (() => void) | null = null
+let tap: ((touch: boolean, at: { x: number; z: number } | null) => void) | null = null
 /** workshop.tsx: what a click (desktop) does in build mode. One handler; the last registered wins. */
-export function onBuildTap(f: (() => void) | null) { tap = f }
+export function onBuildTap(f: ((touch: boolean, at: { x: number; z: number } | null) => void) | null) { tap = f }
 
 // ── keys: held while in build mode (the walker is frozen, so it never sees them move the keeper) ──
 const held = new Set<string>()
@@ -224,7 +224,7 @@ export function BuildPointer() {
       if (!p || moved || pts.size) return
       // a tap, not a drag: touch moves the ghost there; a mouse click places (the ghost is already under it)
       setNdc(e)
-      if (e.pointerType === 'mouse' && e.button === 0) tap?.()
+      if (e.pointerType !== 'mouse' || e.button === 0) tap?.(e.pointerType !== 'mouse', groundAt(e))   // a touch tap only ever picks up (M143), Place sets
       if (e.pointerType === 'mouse' && e.button === 2 && tool !== 'look' && draw?.alt) { const g = groundAt(e); if (g) draw.alt(g.x, g.z) }   // M53: right-click = all connected
     }
     const wheel = (e: WheelEvent) => { e.preventDefault(); zoom(Math.exp(e.deltaY * 0.0012)) }

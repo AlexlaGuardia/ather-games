@@ -16,7 +16,7 @@ const built = { v: 1, rooms: [], chests: [], pieces: [{ id: 'p1', item: 'x' }], 
 // nothing planned = the very same save
 ok(!hasDraft(built) && cancelPlan(built) === built && planSpot(built, 0) === null, 'nothing planned: cancel is the same object')
 // a plan of every kind on every level
-const plan = { ...built, walls: { ...built.walls, ...draft(box(4, 0, 4)), ...draft({ 'v,2,1': { mat: 'goldwood' } } as any) }, cols: { ...built.cols, '8,8': { mat: 'goldwood', draft: true } }, stairs: { ...built.stairs, '5,1': { mat: 'goldwood', dir: 1, draft: true } }, decks: { ...built.decks, '10,9': { pat: 'planks', col: '#aaaaaa', draft: true } }, pieces: [...built.pieces, { id: 'p2', item: 'slab', draft: true }],
+const plan = { ...built, walls: { ...built.walls, ...draft(box(4, 0, 4)), ...draft({ 'v,2,1': { mat: 'goldwood' } } as any) }, cols: { ...built.cols, '8,8': { mat: 'goldwood', draft: true } }, stairs: { ...built.stairs, '5,1': { mat: 'goldwood', dir: 1, draft: true } }, decks: { ...built.decks, '10,9': { pat: 'planks', col: '#aaaaaa', draft: true } }, planned: [{ id: 'p2', item: 'goldwood_slab', x: 3, z: 3, q: 0, placedAt: 0 }],
   upper: [{ ...built.upper[0], walls: { ...built.upper[0].walls, 'v,1,1': { mat: 'goldwood', kind: 'rail', draft: true } } }, { walls: draft(box(0, 0, 2)) }] } as any
 // (box(4,0,4) shares no edge with the house but its west wall: those keys stay the draft's only where the house has none)
 for (const k of Object.keys(house)) plan.walls[k] = (house as any)[k]

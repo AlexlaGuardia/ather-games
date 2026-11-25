@@ -149,6 +149,11 @@ export const stockOf = (front: string) => FURNITURE_ORDER.filter(id => FURNITURE
 /** M57: the alchemy set stays off the carpentry bench until E at a piece opens its station (workshop.tsx); flip when wired. */
 export const ALC_LIVE = true   // FLIPPED 2026-11-21 (Alex via Magii: "turn alchemy on"; hub call). One-line revert.
 export const PIECE_JOBS: readonly Job[] = FURNITURE_ORDER.filter(id => FURNITURE[id].recipe.length > 0 && (ALC_LIVE || !FURNITURE[id].alc)).map(id => ({ id, label: FURNITURE[id].name, in: FURNITURE[id].recipe, out: { id, n: 1 } }))
+/** BETA M143 (Alex 11-24): the free-build slabs and wall panels are PLANNED (the plan-mode catalog, paid at Build), not crafted. Their
+ *  jobs stay known (PIECE_JOBS) so one already running at a bench finishes; the bench just no longer offers them. */
+export const isPlanned = (id: string) => !!(FURNITURE[id]?.slab || FURNITURE[id]?.panel)
+export const PLAN_PIECES = FURNITURE_ORDER.filter(isPlanned)
+export const BENCH_JOBS: readonly Job[] = PIECE_JOBS.filter(j => !isPlanned(j.id))
 /** How many pieces a plot holds (a keeper furnishes, not fills). */
 export const MAX_PIECES = 60
 /** M124: at most this many spirit beds (the spirit_planter item) stand in one garden. ★ CANON, NOT A DIAL (Alex 11-24,

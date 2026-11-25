@@ -16,6 +16,7 @@ import { findRooms, RAIL_FRAC, WALL_PER_M, wallRate, WALL_MATS, FLOOR_PATS, FLOO
 import { payCost, haveFor } from './rooms'
 import { give, itemDef, type Inv } from '../shared/inventory'
 import type { Bank } from './garden-bank'
+import { FURNITURE } from './furniture'
 import { levelsOf, levelOf, levelCount, withLevel, type Stacked } from './plot-floors'
 
 export const STONE_BRICK = 'stone_brick', CRYSTAL_PANE = 'crystal_pane', FLOOR_ITEM = 'goldwood_plank'
@@ -111,19 +112,26 @@ export function paneFor(from: Walls, to: Walls, k: string, inv: Inv, bank?: Bank
 
 // ── M47 slice 1: the whole STACK. Level 0 is the house as before (floor + roof per room); every level above pays its SLAB
 // (the floor, planks / bricks per m²) and no roof of its own: the plain default, one number to change if Alex wants a roof bill.
-export function billOfAll(w: Stacked & { found?: number; foundCells?: Readonly<Record<string, number>> }, inv: Inv, bank?: Bank | null): { lines: Line[]; ok: boolean; empty: boolean; pieces: number; rooms: number } {
+/** M143: the planned slabs and wall panels: each at its recipe, the price it was crafted for */
+export type PlannedPiece = { item: string }
+export const plannedNeeds = (ps: readonly PlannedPiece[] | undefined): Need[] => { const m = new Map<string, number>(); for (const p of ps ?? []) for (const c of FURNITURE[p.item]?.recipe ?? []) add(m, c.id, c.n); return lines(m) }
+/** how many of each are planned, for the plan card */
+export const plannedCount = (ps: readonly PlannedPiece[] | undefined): Need[] => { const m = new Map<string, number>(); for (const p of ps ?? []) add(m, p.item, 1); return lines(m) }
+type Billed = Stacked & { found?: number; foundCells?: Readonly<Record<string, number>>; planned?: readonly PlannedPiece[]; pieces?: readonly PlannedPiece[] }
+export function billOfAll(w: Billed, inv: Inv, bank?: Bank | null): { lines: Line[]; ok: boolean; empty: boolean; pieces: number; rooms: number; set: Need[] } {
   const m = new Map<string, number>(); let pieces = 0, rooms = 0
   levelsOf(w).forEach((lv, k) => { const p = planNeeds(lv.walls, lv.paid, lv.floors, k === 0); pieces += p.pieces; rooms += p.rooms; for (const c of p.needs) add(m, c.id, c.n)
     pieces += draftCols(lv.cols); for (const c of colNeeds(lv.cols, PER_COL)) add(m, c.id, c.n)   // M54: columns, 2 m of their wall each
     pieces += draftStairs(lv.stairs); for (const c of stairNeeds(lv.stairs)) add(m, c.id, c.n)   // M56: stairs, a step's worth each
     pieces += draftDecks(lv.decks); for (const c of deckNeeds(lv.decks)) add(m, c.id, c.n) })   // M56 (a): open floor, a room floor's worth per m²
+  for (const c of plannedNeeds(w.planned)) add(m, c.id, c.n)   // M143
   const pl = plinthNeed(w); if (pl) add(m, STONE_BRICK, pl)   // M55: a new room on a raised house pays its plinth
   const ls = lines(m).map(c => { const have = haveFor(inv, bank, c.id); return { ...c, have, short: have < c.n, name: itemDef(c.id).name } })
-  return { lines: ls, ok: ls.length > 0 && ls.every(l => !l.short), empty: ls.length === 0, pieces, rooms }
+  return { lines: ls, ok: ls.length > 0 && ls.every(l => !l.short), empty: ls.length === 0, pieces, rooms, set: plannedCount(w.planned) }
 }
 export type BuiltAll = { ok: true; works: Stacked; inv: Inv; bank: Bank | null; spent: Need[] } | { ok: false; why: string }
 /** Build spends EVERY level's draft: the whole list is checked first, then each level builds in turn (nothing is spent unless all of it is there) */
-export function buildAll<T extends Stacked & { found?: number; foundCells?: Readonly<Record<string, number>> }>(w: T, inv: Inv, bank?: Bank | null): { ok: true; works: T; inv: Inv; bank: Bank | null; spent: Need[] } | { ok: false; why: string } {
+export function buildAll<T extends Billed>(w: T, inv: Inv, bank?: Bank | null): { ok: true; works: T; inv: Inv; bank: Bank | null; spent: Need[] } | { ok: false; why: string } {
   const b = billOfAll(w, inv, bank)
   if (b.empty) return { ok: false, why: 'Nothing is planned.' }
   const short = b.lines.find(l => l.short); if (short) return { ok: false, why: `${short.n} ${short.name} needed, ${short.have} on hand.` }
@@ -137,10 +145,12 @@ export function buildAll<T extends Stacked & { found?: number; foundCells?: Read
   }
   // M54: then every level's draft columns, paid as one list (billOfAll already checked the whole of it is on hand)
   const cm = new Map<string, number>(); if (plinth) add(cm, STONE_BRICK, plinth); levelsOf(cur).forEach(lv => { for (const c of colNeeds(lv.cols, PER_COL)) add(cm, c.id, c.n); for (const c of stairNeeds(lv.stairs)) add(cm, c.id, c.n); for (const c of deckNeeds(lv.decks)) add(cm, c.id, c.n) })   // + M56 stairs + decks
+  for (const c of plannedNeeds(cur.planned)) add(cm, c.id, c.n)   // M143: the planned slabs and panels
   if (cm.size) {
-    const need = lines(cm), pay = payCost(need, bag, bk); if (!pay) return { ok: false, why: 'Not enough on hand for the columns.' }
+    const need = lines(cm), pay = payCost(need, bag, bk); if (!pay) return { ok: false, why: 'Not enough on hand.' }
     bag = pay.inv; bk = pay.bank; for (const c of need) add(spent, c.id, c.n)
     for (let k = 0; k < levelCount(cur); k++) { const lv = levelOf(cur, k); if (draftCols(lv.cols) || draftStairs(lv.stairs) || draftDecks(lv.decks)) cur = withLevel(cur, k, { ...lv, cols: standCols(lv.cols), stairs: standStairs(lv.stairs), ...(lv.decks ? { decks: standDecks(lv.decks) } : {}) }) }
   }
+  if (cur.planned) { const { planned, ...rest } = cur; cur = { ...rest, pieces: [...(cur.pieces ?? []), ...planned!] } as unknown as T }
   return { ok: true, works: cur, inv: bag, bank: bk, spent: lines(spent) }
 }
