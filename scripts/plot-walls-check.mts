@@ -12,8 +12,9 @@
 //   npx tsx scripts/plot-walls-check.mts [--url https://ather.games] [--out dir] [--phone [--w 360 --h 780]]
 import puppeteer from 'puppeteer-core'
 import { mkdirSync } from 'fs'
+import * as THREE from 'three'
 import { TABLE, KEEP_CLEAR } from '../src/app/shimmer/open/ather/rooms'
-import { STARTING_SQUARES, squareAt, sqId } from '../src/app/shimmer/open/ather/plot'
+import { STARTING_SQUARES, squareAt, sqId, GROUND_Y } from '../src/app/shimmer/open/ather/plot'
 import { AMOUNTS } from '../src/app/shimmer/open/ather/plot-bom'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), out = flag('--out', '/tmp/plot-walls'), phone = process.argv.includes('--phone')
@@ -66,13 +67,29 @@ try {
   const W = phone ? Number(flag('--w', '390')) : 1100, Hh = phone ? Number(flag('--h', '844')) : 680
   // a straight drag across the middle of the view (the view looks at the spot)
   // the view EASES toward __build.to (1-2 fps here): a drag before it lands draws on another line, so wait for it to settle
-  const settled = () => poll(async () => { const v = await p.evaluate(() => (window as any).__build.view()); await sleep(500); const w = await p.evaluate(() => (window as any).__build.view()); return Math.hypot(v.x - spot!.x, v.z - spot!.z) < 0.2 && Math.abs(Math.atan2(Math.sin(v.yaw), Math.cos(v.yaw))) < 0.01 && Math.abs(v.h - w.h) < 0.05 && Math.abs(v.x - w.x) < 0.02 }, 60000)
-  const drag = async () => {
+  // 11-25: view() is what the lens LOOKS at, and since the M77 bar insets that sits off __build.to's point by a bar-height offset
+  // (phone: z 100 for spot 104), so 'within 0.2 of the spot' was never true there: every drag waited out the 60 s and fired mid-ease.
+  const settled = () => poll(async () => { const rd = () => p.evaluate(() => (window as any).__build.view()); const v = await rd(); await sleep(700); const u = await rd(); await sleep(700); const w = await rd(); return Math.hypot(v.x - w.x, v.z - w.z) < 0.02 && Math.hypot(v.x - u.x, v.z - u.z) < 0.02 && Math.abs(v.x - spot!.x) < 0.2 && Math.abs(Math.atan2(Math.sin(v.yaw), Math.cos(v.yaw))) < 0.01 && Math.abs(v.h - w.h) < 0.05 }, 60000)
+  const screenOf = (v: { x: number; z: number; h: number; yaw: number }, wx: number, wz: number) => {   // build-mode.tsx lensFor
+    const cam = new THREE.PerspectiveCamera(75, W / Hh, 0.05, 900), back = v.h / Math.tan(0.98)
+    cam.position.set(v.x + Math.sin(v.yaw) * back, GROUND_Y + v.h, v.z + Math.cos(v.yaw) * back); cam.rotation.set(-0.98, v.yaw, 0, 'YXZ'); cam.updateMatrixWorld()
+    const q = new THREE.Vector3(wx, GROUND_Y, wz).project(cam); return { x: (q.x + 1) / 2 * W, y: (1 - q.y) / 2 * Hh }
+  }
+  let camZ = spot!.z
+  const drag = async (run?: string[]) => {   // `run` = drag along THIS run's own line (the bar's height, so the view, moves once the list comes and goes)
     await settled()
     // below the plan bar: its panels take the pointer, and since M55 (11-21 Foundation row) the bar reaches past mid-screen on
     // desk (bottom ~344 of 680), so a drag at Hh/2 landed on the bar and drew nothing (11-22 sweep pass 6). The hint passes taps through.
     const barBottom = await p.evaluate(() => { let b = 0; document.querySelectorAll('[data-build-bar] > *:not([data-build-hint]), [data-plan-bom]').forEach(e => { const r = e.getBoundingClientRect(); if (r.height > 0) b = Math.max(b, r.bottom) }); return b })
-    const y = Math.round(Math.min(Hh - 200, Math.max(Hh * 0.5, barBottom + 30))), x0 = Math.round(W * 0.4), x1 = Math.round(W * 0.6)
+    let y = Math.round(Math.min(Hh - 200, Math.max(Hh * 0.5, barBottom + 30))); let x0 = Math.round(W * 0.4), x1 = Math.round(W * 0.6)
+    if (run?.length && run.every(k => k[0] === 'h')) {
+      const ks = run.map(k => k.split(',')), wz = +ks[0][2], xs = ks.map(k => +k[1]), a = Math.min(...xs), b = Math.max(...xs) + 1
+      let v = await p.evaluate(() => (window as any).__build.view()), best = 0
+      for (let d = -12; d <= 12; d += 0.25) if (Math.abs(screenOf({ ...v, z: v.z + d }, a, wz).y - y) < Math.abs(screenOf({ ...v, z: v.z + best }, a, wz).y - y)) best = d
+      await p.evaluate((x: number, z: number) => (window as any).__build.to(x, z, 0), spot!.x, camZ += best); await sleep(600); await settled()
+      v = await p.evaluate(() => (window as any).__build.view()); const s0 = screenOf(v, a + 0.1, wz), s1 = screenOf(v, b - 0.1, wz)
+      y = s0.y; x0 = s0.x; x1 = s1.x; console.log(`  along z ${wz}, x ${a}..${b}: screen ${x0.toFixed(0)}..${x1.toFixed(0)}, y ${y.toFixed(0)} (bar ends ${barBottom.toFixed(0)})`)
+    }
     if (phone) {
       const c = await p.target().createCDPSession()
       await c.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: x0, y }] })
@@ -117,11 +134,11 @@ try {
   ok(straight, `   it is one straight run (${s1.walls.slice(0, 4).join(' ')}…)`)
   ok(await tap('[data-tool="erase"]'), 'the Erase tool'); await sleep(400)
   console.log('  probe:', JSON.stringify(await p.evaluate(() => ({ tool: (window as any).__build.tool?.(), drawer: (window as any).__build.drawer?.(), view: (window as any).__build.view() }))))
-  await drag(); await shot('walls-2b-erased')
+  await drag(s1b.walls); await shot('walls-2b-erased')
   console.log('  probe after:', JSON.stringify(await p.evaluate(() => ({ tool: (window as any).__build.tool?.(), view: (window as any).__build.view() }))))
   const s2 = await read()
   ok(s2.walls.length === 0 && s2.planks === 40, `2. erase takes it down, every plank back (${s2.walls.length} walls, ${s2.planks} planks)`)
-  await tap('[data-tool="walls"]'); await sleep(400); await drag()
+  await tap('[data-tool="walls"]'); await sleep(400); await drag(s1b.walls)
   const s3a = await read(); ok(s3a.walls.length >= 3 && s3a.draft === s3a.walls.length, `   drawn again as a draft (${s3a.walls.length})`)
   ok(await tap('[data-act="build-plan"] button') && await poll(async () => (await read()).draft === 0), '   built again')
   const s3 = await read()
@@ -136,11 +153,14 @@ try {
   const from = o === 'h' ? { x: wx, z: wz - 1.6, yaw: Math.PI } : { x: wx - 1.6, z: wz, yaw: -Math.PI / 2 }   // yaw 0 looks -z
   await p.evaluate((a: { x: number; z: number; yaw: number }) => (window as any).__ather.tp(a.x, a.z, a.yaw), from); await sleep(1500)
   if (!phone) { await p.mouse.click(550, 340); await sleep(400) }
-  await p.keyboard.down('KeyW'); await sleep(3000); await p.keyboard.up('KeyW'); await sleep(500)
+  // 11-25: held until he is AT REST (cap 25 s), not 3 s: at 2-3 frames / s 3 s moved him 0.73 of the 1.6 m, so the wall was never met
+  const at4 = () => p.evaluate(() => { const a = (window as any).__ather.state(); return [a.px, a.pz] as number[] }), from0 = await at4()
+  await p.keyboard.down('KeyW'); await poll(async () => { const a = await at4(); await sleep(2500); const b = await at4(); return Math.hypot(b[0] - from0[0], b[1] - from0[1]) > 0.3 && Math.hypot(a[0] - b[0], a[1] - b[1]) < 0.02 }, 25000); await p.keyboard.up('KeyW'); await sleep(500)
   const end = await p.evaluate(() => { const a = (window as any).__ather.state(); return { x: a.px, z: a.pz } })
   const side = (q: { x: number; z: number }) => Math.sign(o === 'h' ? q.z - wz : q.x - wx)
   const movedToward = o === 'h' ? end.z - from.z : end.x - from.x
-  ok(side(end) === side(from) && movedToward > 0.3, `4. the walker walked up to the wall and stayed on its side (moved ${movedToward.toFixed(2)} m, ended ${(o === 'h' ? end.z - wz : end.x - wx).toFixed(2)} m off)`)
+  const off = Math.abs(o === 'h' ? end.z - wz : end.x - wx)
+  ok(side(end) === side(from) && movedToward > 0.3 && off < 0.7, `4. the walker walked up to the wall and stayed on its side (moved ${movedToward.toFixed(2)} m, ended ${(o === 'h' ? end.z - wz : end.x - wx).toFixed(2)} m off)`)
   await shot('walls-3-walker')
   ok(errs.length === 0, `5. 0 page errors${errs.length ? ': ' + errs.slice(0, 3).join(' | ') : ''}`)
 } finally { await br.close() }

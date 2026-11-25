@@ -57,8 +57,11 @@ await tp(X + 4, Z + 5, Math.PI / 5); await shot('m98b-p1-run')
 // 3. walk straight at panel A from 1.5 m off its face (local z -1.5 -> +): stopped short of the face
 let blocked = false
 if (A) { const [sx, sz] = wld(0.3, -1.5); await tp(sx, sz, 3 * Math.PI / 4)
-  await p.keyboard.down('KeyW'); await sleep(2500); await p.keyboard.up('KeyW'); await sleep(500)
-  const [px, pz] = await st(), [lx, lz] = loc(px, pz); res.walkEnd = [lx, lz]; blocked = lz < -0.1 && lz > -1.4 }
+  // 11-25: held until at REST (cap 25 s), not 2.5 s (at 2-3 frames / s that ended 1.0 m off the face, never touching it)
+  const s0 = await st(); await p.keyboard.down('KeyW')
+  for (const t = Date.now(); Date.now() - t < 25000;) { const a = await st(); await sleep(2500); const b = await st(); if (Math.hypot(b[0] - s0[0], b[1] - s0[1]) > 0.3 && Math.hypot(a[0] - b[0], a[1] - b[1]) < 0.02) break }
+  await p.keyboard.up('KeyW'); await sleep(500)
+  const [px, pz] = await st(), [lx, lz] = loc(px, pz); res.walkEnd = [lx, lz]; blocked = lz < -0.1 && lz > -0.7 }
 res.blocked = blocked
 // 4. just off the panel, inside its axis box: the keeper is not shoved
 let free = false
