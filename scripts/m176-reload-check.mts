@@ -31,7 +31,7 @@ try {
   })
   await p.goto(`${url}/shimmer/open/ather?hour=13&waymark=greg`, { waitUntil: 'load', timeout: 240000 })
   ok(await poll(() => p.evaluate(() => (window as any).__ather?.zone?.() === 'wilds' && !!(window as any).__fight), 240000), 'in the Wilds')
-  await sleep(4000); if (!phone) await p.mouse.click(550, 350); await sleep(800)
+  await sleep(4000); if (!phone) await p.mouse.click(550, 350); else await p.touchscreen.tap(w / 2, 300); await sleep(800)   // a phone's first tap closes the 'Tap to start' card
   type S = { gun: string; ammo: number; clip: number; rel: number; mana: number; rack: Record<string, number>; st: string; panel: string | null }
   const S = () => p.evaluate(() => { const c = (window as any).__ather.combat(); return { gun: c.gun.id, ammo: c.keeper.ammo, clip: c.gun.clip, rel: c.keeper.reloading, mana: (window as any).__ather.mana(), rack: Object.fromEntries(Object.entries(c.rack ?? {}).map(([k, v]: any) => [k, v.ammo])), st: (window as any).__ather.stance().kind, panel: (window as any).__ather.panel() } }) as Promise<S>
   // the mana refill off for the count: the bar's regen is paused by every spend for 3 s, so read deltas against a rising bar with room
@@ -39,8 +39,7 @@ try {
   const keep = setInterval(() => { p.evaluate(() => { const c = (window as any).__ather?.combat?.(); if (c) { c.hollows.length = 0; c.keeper.hp = c.keeper.maxHp } }).catch(() => {}) }, 1500)   // nothing to fight: this is about clips
   const btn = (l: string) => p.evaluate(l => { const e = document.querySelector(`[data-touch="${l}"]`); if (!e) return null; const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 } }, l)
   const tap = async (l: string) => { if (!await poll(async () => !!(await btn(l)), 8000)) { ok(false, `the ${l} button is up`); return } const b = (await btn(l))!
-    const hitAt = () => p.evaluate((x, y) => { const e = document.elementFromPoint(x, y); return e?.closest('[data-touch]')?.getAttribute('data-touch') ?? `${e?.tagName}.${String(e?.className).slice(0, 40)} '${(e as HTMLElement)?.innerText?.slice(0, 60)}'` }, b.x, b.y); let hit = await hitAt(); for (let i = 0; i < 25 && hit !== l; i++) { await sleep(400); hit = await hitAt() }   // the arrival's title card lies over the bar for a moment
-    if (hit !== l) ok(false, `the tap on ${l} lands on ${hit}`); await p.touchscreen.tap(b.x, b.y); await sleep(700) }
+    const hitAt = () => p.evaluate((x, y) => { const e = document.elementFromPoint(x, y); return e?.closest('[data-touch]')?.getAttribute('data-touch') ?? `${e?.tagName}.${String(e?.className).slice(0, 40)} '${(e as HTMLElement)?.innerText?.slice(0, 60)}'` }, b.x, b.y); let hit = await hitAt();     if (hit !== l) ok(false, `the tap on ${l} lands on ${hit}`); await p.touchscreen.tap(b.x, b.y); await sleep(700) }
   const R = async () => { if (phone) return tap((await S()).st === 'weapon' ? 'swap' : 'draw'); await p.keyboard.down('KeyR'); await sleep(100); await p.keyboard.up('KeyR'); await sleep(700) }
   const E = async (hold = 100) => { await p.keyboard.down('KeyE'); await sleep(hold); await p.keyboard.up('KeyE'); await sleep(500) }
   const stow = async () => { if (phone) { await tap('menu'); await tap('stow') } else { await p.keyboard.down('KeyR'); await sleep(1500); await p.keyboard.up('KeyR') } await poll(async () => (await S()).st === 'stowed') }
