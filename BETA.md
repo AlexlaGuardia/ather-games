@@ -224,6 +224,8 @@ Steps (one worker each, in order; each keeps `beta-m7-saves` green):
 - **Rules:** only rows on this list. No new systems, no lore, nothing public. Canon gate + tests before every build.
 
 ## Inbox (Alex's brain dump: hub writes here at once, dated, his words; triaged into rows / queue / CANON_GAPS / killed)
+- 11-25 05:2x Alex: "go back to the 2 opus worker system as we were alternating them between the lanes.. the 3rd is just the one that breaks the camels back.. if i see the weeks usage isnt going to make it we can reajust" -> WORK.md
+- 11-25 05:2x Alex (dialog): M151 GO again, ships after the owed checks (M147, M143, M146, Glade v14 sweep)
 - 11-24 20:2x OWED: Glade v14 sweep (Greg, friends, gate, pool, newborn spot, followers) never run on the new ground
 - 11-24 20:1x Alex: "hold on we are about to run out of credits at this rate" -> all lanes wrapping; no new agents; M151 stays OFF
 - 11-24 20:1x Alex (dialog, sim shown): hold fires on every gun + Roar pellets + shove, Repeater 0.22 s (45/s held) -> M151 GO
