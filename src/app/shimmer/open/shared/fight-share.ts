@@ -170,13 +170,13 @@ export function champNetHit(c: Combat, T: Terrain, from: { id: string; x: number
   return true
 }
 /** what a guest was last shown of a champion; `done` = its fall was believed */
-export interface Shown { node: string; bar: number; x: number; z: number; nx: number; nz: number; at: number; done: boolean; host: string }
+export interface Shown { node: string; bar: number; x: number; z: number; nx: number; nz: number; at: number; done: boolean; host: string; /** risen: a round could fell it */ up: boolean; /** the last fall believed (its repeats carry the same key) */ key?: number }
 export const shownOf = (was: Shown | null, ch: Champion, host: string, at: number): Shown =>
-  ({ node: ch.nodeId, bar: ch.bar, x: ch.x, z: ch.z, nx: ch.nx, nz: ch.nz, at, host, done: !!was?.done && was.node === ch.nodeId && ch.state !== 'rise' })
+  ({ node: ch.nodeId, bar: ch.bar, x: ch.x, z: ch.z, nx: ch.nx, nz: ch.nz, at, host, up: ch.state !== 'rise', key: was?.key, done: !!was?.done && was.node === ch.nodeId && ch.state !== 'rise' })
 /** Is this word of its fall true for me? */
 export function believeDown(s: Shown | null, from: string, v: unknown, me: { x: number; z: number }, now: number): string | null {
-  const n = (v as { n?: unknown } | null)?.n
-  return s && !s.done && s.host === from && n === s.node && s.bar === 2 && now - s.at < DOWN_MS && Math.min(Math.hypot(me.x - s.x, me.z - s.z), Math.hypot(me.x - s.nx, me.z - s.nz)) < THERE_R + 15 ? s.node : null
+  const { n, k } = (v ?? {}) as { n?: unknown; k?: unknown }
+  return s && !s.done && s.up && typeof k === 'number' && k !== s.key && s.host === from && n === s.node && s.bar === 2 && now - s.at < DOWN_MS && Math.min(Math.hypot(me.x - s.x, me.z - s.z), Math.hypot(me.x - s.nx, me.z - s.nz)) < THERE_R + 15 ? s.node : null
 }
 /** The host is back: the fight the interim host kept, as [node, bar, health]. Only ever a fight in progress. */
 export const encodeHand = (ch: Champion) => ({ n: ch.nodeId, b: ch.bar, h: Math.ceil(ch.hp) })

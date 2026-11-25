@@ -672,6 +672,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
       } else {
         C.events = []
         for (const { from, row: [id, dmg] } of N.inHits) if (id === CHAMP_ID) champNetHit(C, T, peer(from), dmg, N.budget, at); else applyNetHit(C, id, dmg)   // a guest's round, applied like mine; a kill drops in the step below
+        for (const e of C.events) if (e.kind === 'champ-down') spent.current.add(e.nodeId)   // before the wake below looks: it does not rise again in the frame it fell
         heard.push(...C.events)   // M156 s3: what a guest's round did to the champion (stepCombat starts the list again)
         N.inHits = []; N.outHits = []; N.inKills = []; N.inHurt = []
         // #1651: my party mates here, by the spot the server last gave (not the drawn lerp): my Hollows hunt the nearest of us
@@ -683,7 +684,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
       // M156 s3: it is down: the host's word, believed once, for a keeper who was there
       for (const d of N.inDowns) {
         const node = believeDown(N.shown, d.from, d.data, feet, at); if (!node) continue
-        N.shown = { ...N.shown!, done: true }; C.champ = undefined
+        N.shown = { ...N.shown!, done: true, key: (d.data as { k: number }).k }; C.champ = undefined
         C.drops.push({ id: C.nextId++, x: N.shown.x, y: T.heightAt(N.shown.x, N.shown.z), z: N.shown.z, amount: CHAMP.chunk, age: 0 })   // each keeper's own, as alone
         if (N.host) N.seen.add(C.nextId - 1)
         heard.push({ kind: 'champ-down', nodeId: node, here: true })
@@ -798,7 +799,8 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
         if (e.kind === 'hit') { const L = lastAt.current.get(e.id); sfx(e.killed ? 'hollow-disperse' : 'hollow-hit', L ? { at: { x: L.x, y: L.y + 0.8, z: L.z } } : {}) }   // M36
         if (e.kind === 'champ-down') {
           spent.current.add(e.nodeId)
-          for (const to of e.there ?? []) { openNet()?.relay(DOWN_KIND, { n: e.nodeId }, to); for (const d of DOWN_AGAIN) net.current.again.push({ at: performance.now() + d, to, data: { n: e.nodeId } }) }   // M156 s3
+          const fall = { n: e.nodeId, k: Math.floor(Math.random() * 2 ** 31) }
+          for (const to of e.there ?? []) { openNet()?.relay(DOWN_KIND, fall, to); for (const d of DOWN_AGAIN) net.current.again.push({ at: performance.now() + d, to, data: fall }) }   // M156 s3
           // its ground goes quiet at once: the Hollows standing on it melt back into nothing (no drops; the chunk is the pay)
           const own = ownerRef.current
           if (own) C.hollows = C.hollows.filter(h => own(h.x, h.z) !== e.nodeId)

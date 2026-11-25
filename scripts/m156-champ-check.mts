@@ -138,7 +138,7 @@ try {
     const g0 = [await grey(h), await grey(n)]
     await onHost(h, 2, 6); ok(await poll(async () => (await champ(n))?.bar === 2, 20000), '3. N is shown its last bar')
     for (let i = 0; i < 60 && (await champ(h))?.node === K.id; i++) { await shot(); if ((await champ(h))?.hp! > 6) await onHost(h, 2, 6) }
-    { const c = await champ(h); ok(c?.node !== K.id, `3. N's real shots felled it (${JSON.stringify(c)})`) }
+    await sleep(3000); { const c = await champ(h); ok(c?.node !== K.id, `3. N's real shots felled it (${JSON.stringify(c)})`) }
     ok(await poll(async () => (await count(h, K.id)) === 1 && (await count(n, K.id)) === 1, 15000), `3. K in both saves, once (H ${await count(h, K.id)}, N ${await count(n, K.id)})`)
     ok((await ledger(n)).filter(k => k !== K.id).join() === n0.join(), '3. nothing else of N\'s save moved')
     ok(await poll(async () => !(await champ(n)), 5000), '3. N\'s screen: gone')
