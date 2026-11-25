@@ -58,7 +58,8 @@ ok(J(gladeLotBoxes(RELIEF.y, gladeZoneGround)) === codeBoxes, 'asked with the la
 ok(padGround(v16.props, flat) === flat && gladeFrame(v16) !== undefined, 'no house moved = the land itself')
 ok(gladePlaces().filter(p => p.place !== 'jars').every(p => Number.isFinite(placeY(p.place, gladeZoneGround))), 'heights')
 
-// ── the resolver: every reader, one answer
+// ── the resolver: every reader, one answer (asked once before, so a kept list has to notice)
+const ds = withPieces({ ...plotShape(GLADE_OWNED, []), ground: flat }, () => null, true); ok(gladeStructures(-64, 56, -56, 64).length === 0 && ds.solids(-68, 0, 52, -52, 6, 68).length === 0, 'empty before')
 const ver = gladePeopleVersion()
 let mv = move('fennel', -60, 60, 1.2); mv = move('home', -60, 130, 2, mv); mv = move('jars', -90, 110, 0.4, mv)
 setGladePeople(mv); ok(gladePeopleVersion() === ver + 1, 'a house moves the version'); setGladePeople([...mv]); ok(gladePeopleVersion() === ver + 1, 'the same list does not')
@@ -70,7 +71,7 @@ setGladePeople(putWho(mv, 'fennel', { x: -70, z: 100, q: 0 })); ok(gladeSpots([`
 ok(gladeHome().x === -60 && ang(gladeHome().yaw, 2) && gladeHomeBoxes(flat, -62, 128, -58, 132).length === 2 && gladeHomeBoxes(flat, -101, 82, -96, 87).length === 0, "Greg's home")
 ok(near(yarrowCrate()!.crate.x, -90) && near(yarrowCrate()!.crate.z, 110) && ang(yarrowCrate()!.crate.yaw, 0.4) && Math.hypot(yarrowCrate()!.jars[0].x + 90, yarrowCrate()!.jars[0].z - 110) < 0.3, 'the crate and its jars')
 ok(placeSolids('jars', flat).every(x => x.x0 < -90 && x.x1 > -90 && x.y1 > RELIEF.y + 0.5), 'the crate blocks')
-const ds = withPieces({ ...plotShape(GLADE_OWNED, []), ground: flat }, () => null, true), hit = (x: number, z: number, d = 8) => ds.solids(x - d, 0, z - d, x + d, 6, z + d).length
+const hit = (x: number, z: number, d = 8) => ds.solids(x - d, 0, z - d, x + d, 6, z + d).length
 ok(hit(-60, 60) > 20 && hit(-60, 130) >= 2 && hit(-90, 110, 0.3) >= 1, 'the walker bumps all three where they are now')
 const oldL = JSON.parse(code).find((p: any) => p.place === 'fennel'); ok(ds.solids(oldL.x - 4, 0, oldL.z - 3, oldL.x + 4, 6, oldL.z + 3).length === 0, 'and nothing where the house was')
 ok(gladeStructures(-64, 56, -56, 64).length > 10, "Greg's walk goes round it")

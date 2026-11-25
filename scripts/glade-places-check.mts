@@ -117,7 +117,7 @@ try {
     // straight down on a spot of the house that nothing covers: its pad's corner, or the crate / the drum itself
     const select = async (id: string) => {
       setGladePeople(await props(o)); const p = gladePlaces().find(q => q.place === id)!, c = id === 'home' || id === 'jars' ? { x: p.x + (id === 'home' ? 1.5 : 0), z: p.z } : { x: p.x + Math.cos(p.yaw) * (p.w / 2 - 0.4) - Math.sin(p.yaw) * (p.d / 2 - 0.4), z: p.z - Math.sin(p.yaw) * (p.w / 2 - 0.4) - Math.cos(p.yaw) * (p.d / 2 - 0.4) }
-      await o.evaluate((x: number, y: number, z: number) => (window as W).__builderFly.setCam({ x, z: z + 4, y, yaw: 0, pitch: -Math.atan2(5, 4), top: false }), c.x, placeY(p.place, land) + 5 + (id === 'home' ? 1.2 : 0.1), c.z + 0); await sleep(1800); await key(o, 'KeyM'); return (await P(o)).moving }
+      await o.evaluate((x: number, y: number, z: number, d: number, h: number) => (window as W).__builderFly.setCam({ x, z: z + d, y: y + h, yaw: 0, pitch: -Math.atan2(h, d), top: false }), c.x, placeY(p.place, land) + (id === 'home' ? 1.2 : id === 'jars' ? 0.5 : 0.1), c.z, id === 'jars' ? 0.6 : 4, id === 'jars' ? 1.5 : 5); await sleep(1800); await key(o, 'KeyM'); return (await P(o)).moving }
     await lock(o)
     const move = async (id: string, to: { x: number; z: number; r: number }) => { const sel = await select(id); for (let i = 0; i < to.r; i++) await key(o, 'KeyR'); if (id === 'fennel') await o.screenshot({ path: `${out}/fly-ghost.png` }); await o.evaluate((a: number, b: number) => (window as W).__terrain.place.put(a, b), to.x, to.z); await sleep(900); return sel }
     const sels: string[] = []; for (const id of Object.keys(GO)) sels.push(await move(id, GO[id]))
