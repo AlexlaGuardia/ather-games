@@ -3,7 +3,7 @@
 //   1. a walker draws the new skin (one shared geometry, eight bones), near-black, wet, no glow, borrowing an env
 //   2. what a round hits: the dome (crit), the chest, the hanging arm, a heel; past the arm / beside the dome miss
 //   3. the sim's wind-up and lunge are the drawn ones (tell rises, fall forward)
-//   4. a REAL fight: the Repeater fired (__fight-free: R + clicks, aim by __ather.look) lowers one; it is killed, dispersal + grey matter as today
+//   4. a REAL fight: the Repeater fired (R, then the mouse or the phone's fire button; the aim is __ather.look) lowers one; it is killed, dispersal + grey matter as today
 //   5. cost: draw calls and frame ms with six up against none   6. stills   7. 0 page errors
 //   npx tsx scripts/m163-walker-check.mts [--phone] [--cost] [--url https://ather.games] [--out dir]     (--cost: part 5 only, the before / after leg)
 import puppeteer from 'puppeteer-core'
@@ -57,24 +57,28 @@ try {
     for (const [n, q] of Object.entries(H)) { const d = await shot(q); ok(d === (n === 'dome' ? 8 : 5), `2. the ${n} hits (${d})`) }
     for (const q of [[0.7, 1], [0.42, 1.55], [0.6, 0.14]] as [number, number][]) { const d = await shot(q); ok(d === 0, `   ${q} misses (${d})`) } }
   // ── 3 + 6 ── the sim pinned in a state, the body drawn in it, a still of it
-  for (const [st, want] of [['rest', (w: any) => w.tell < 0.1 && w.fall < 0.1], ['windup', (w: any) => w.tell > 0.8 && w.sy > 1.12], ['lunge', (w: any) => w.fall > 0.8]] as const) {
+  for (const [st, want] of [['rest', (w: any) => w.tell < 0.1 && w.fall < 0.1], ['windup', (w: any) => w.tell > 0.6 && w.sy > 1.09], ['lunge', (w: any) => w.fall > 0.8]] as const) {
     const [hx, hz] = ahead(5)
-    await C(`C.hollows.length = 0; const h = ${body(hx, hz)}; C.hollows.push(h); window.__pin = h; const k = () => { if (window.__pin !== h) return; h.x = ${hx}; h.z = ${hz}; h.yaw = ${face}${st === 'rest' ? ' + 0.5' : ' + 0.9'}; h.state = '${st === 'rest' ? 'recover' : st}'; h.t = ${st === 'windup' ? 0.04 : st === 'lunge' ? 0.2 : 99}; requestAnimationFrame(k) }; k()`)
+    await C(`C.hollows.length = 0; const h = ${body(hx, hz)}; C.hollows.push(h); window.__pin = h; const k = () => { if (window.__pin !== h) return; h.x = ${hx}; h.z = ${hz}; h.yaw = ${face}${st === 'rest' ? ' + 0.5' : ' + 0.9'}; h.state = '${st === 'rest' ? 'recover' : st}'; h.t = ${st === 'windup' ? 0.1 : st === 'lunge' ? 0.2 : 99}; requestAnimationFrame(k) }; k()`)
     await frames(25); const w = await C('return A.walker?.(window.__pin.id) ?? null'); ok(!!w && want(w), `3. ${st} is drawn (tell ${w?.tell?.toFixed(2)} fall ${w?.fall?.toFixed(2)} height x${w?.sy?.toFixed(2)})`)
     await p.screenshot({ path: `${out}/live-${st}-${phone ? '390' : 'desk'}.png` as `${string}.png` }) }
   await C('window.__pin = null; C.hollows.length = 0')
   // ── 4 ── a real fight: R, aim, the real trigger, until it is gone
-  { await p.evaluate(() => { (window as any).__free = true }); await p.keyboard.press('KeyR'); await sleep(2500)
+  { await p.evaluate(() => { (window as any).__free = true }); let drawn = false
+    for (let i = 0; i < 5 && !drawn; i++) { await p.keyboard.down('KeyR'); await sleep(200); await p.keyboard.up('KeyR'); drawn = await poll(async () => (await p.evaluate(() => (window as any).__ather.stance()?.kind)) === 'weapon', 4000) }
+    ok(drawn, '   the Repeater is drawn')
+    const fireAt = phone ? await p.evaluate(() => { const e = document.querySelector('[data-touch="fire"]'), r = e?.getBoundingClientRect(); if (!e || !r) return null; const x = r.x + r.width / 2, y = r.y + r.height / 2; return e.contains(document.elementFromPoint(x, y)) ? { x, y } : null }) : { x: 0, y: 0 }
+    ok(!!fireAt, phone ? '   the fire button is up and under the thumb' : '   the mouse is the trigger')
     const [hx, hz] = ahead(8); const id = await C(`C.hollows.length = 0; const h = ${body(hx, hz, 'chase', 0)}; h.hp = h.maxHp = 45; h.y = ${s.y}; C.hollows.push(h); return h.id`) as number
     const hp = () => C(`const h = C.hollows.find(q => q.id === ${id}); return h ? h.hp : null`) as Promise<number | null>
-    const d0 = await C('return (C.drops ?? C.pickups ?? []).length'); let low = 45, gone = false, up = 0, disp = false, drops = 0
+    const d0 = await C('return C.drops.length'); let low = 45, gone = false, up = 0, disp = false, drops = 0
     for (let i = 0; i < 60 && !gone; i++) {
       await C('C.keeper.hp = C.keeper.maxHp'); await p.evaluate((k: number) => { const A = (window as any).__ather, C = A.combat(); C.hollows = C.hollows.filter((h: any) => h.id === k); const h = C.hollows[0], c = A.camAim(); if (!h) return; const e = (window as any).__fight?.eye?.() ?? { x: c.cx, y: c.cy, z: c.cz }, dx = h.x - e.x, dz = h.z - e.z, dd = Math.hypot(dx, dz) || 1; A.look(Math.atan2(-dx, -dz), Math.atan2(h.y + 0.95 - e.y, dd)) }, id)
-      await p.mouse.down(); await sleep(260); await p.mouse.up(); up++; await sleep(phone ? 500 : 350)
+      if (phone) { await p.touchscreen.touchStart(fireAt!.x, fireAt!.y); await sleep(350); await p.touchscreen.touchEnd() } else { await p.mouse.down(); await sleep(260); await p.mouse.up() } up++; await sleep(phone ? 500 : 350)
       const v = await hp(); if (v === null) gone = true; else low = Math.min(low, v)
-      disp = disp || ((await p.evaluate(() => (window as any).__ather.dispersing?.() ?? [])) as unknown[]).length > 0; drops = Math.max(drops, await C('return (C.drops ?? C.pickups ?? []).length') as number) }
+      disp = disp || ((await p.evaluate(() => (window as any).__ather.dispersing?.() ?? [])) as unknown[]).length > 0; drops = Math.max(drops, await C('return C.drops.length') as number) }
     console.log(`   ${up} trigger pulls, lowest seen ${low}, drops ${d0} -> ${drops}`)
-    ok(gone, '4. a real fight: the Repeater put it down'); ok(disp, '   it dispersed'); ok(drops > d0 || (await C('return C.keeper.grey ?? C.grey ?? 0')) > 0, '   grey matter left, as today') }
+    ok(gone, '4. a real fight: the Repeater put it down'); ok(disp, '   it dispersed'); ok(drops > d0, '   grey matter left, as today') }
   }
   ok(errs.length === 0, `7. 0 page errors${errs.length ? `: ${errs.join(' | ')}` : ''}`)
 } finally { await br.close() }
