@@ -42,19 +42,25 @@ try {
       ok(!!probe.rim && probe.rim.stones > 60 && probe.rim.worst < 0.03, `the rim's stones stand on the DRAWN ground (${JSON.stringify(probe.rim)})`)
       // wade: from the bank, forward over the rim into the water, then turned and out again
       const st = () => p.evaluate(() => (window as any).__ather.state()) as Promise<{ px: number; pz: number; py: number }>
-      const inside = (s: { px: number; pz: number }) => Math.hypot((s.px - WELL.x) / 20.5, (s.pz - WELL.z) / 24.5) < 0.97
+      const ell = (s: { px: number; pz: number }) => Math.hypot((s.px - WELL.x) / 20.5, (s.pz - WELL.z) / 24.5)   // in = past the stones' inside lip, out = clear of their outer edge (1 m)
+      const there = (s: { px: number; pz: number }, want: boolean) => want ? ell(s) < 0.97 : ell(s) > 1.055
       for (const [side, x, z, yaw] of [['south', WELL.x, SHORE_Z + 2.2, 0], ['north', WELL.x + 6, WELL.z - 24.5 - 1.2, Math.PI], ['east', WELL.x + 22.6, WELL.z, Math.PI / 2], ['west', WELL.x - 22.6, WELL.z, -Math.PI / 2]] as [string, number, number, number][]) {
         for (const [what, sx, sz, sy, want] of [['in', x, z, yaw, true], ['out', WELL.x + (x - WELL.x) * 0.86, WELL.z + (z - WELL.z) * 0.86, yaw + Math.PI, false]] as [string, number, number, number, boolean][]) {
           await p.evaluate((x, z, y) => (window as any).__ather.gladeAt(x, z, y), sx, sz, sy); await sleep(1500); await calm()
           const a = await st(); let s = a
-          await p.keyboard.down('KeyW'); for (let t = 0; t < 40 && inside(s) !== want; t++) { await sleep(500); s = await st() } await p.keyboard.up('KeyW')
-          ok(inside(a) !== want && inside(s) === want, `wade ${what}, ${side}: ${a.px.toFixed(1)},${a.pz.toFixed(1)} -> ${s.px.toFixed(1)},${s.pz.toFixed(1)}`)
+          await p.keyboard.down('KeyW'); for (let t = 0; t < 40 && !there(s, want); t++) { await sleep(500); s = await st() } await p.keyboard.up('KeyW')
+          ok(there(a, !want) && there(s, want), `wade ${what}, ${side}: ${a.px.toFixed(1)},${a.pz.toFixed(1)} -> ${s.px.toFixed(1)},${s.pz.toFixed(1)}`)
         }
       }
-      await p.evaluate(() => (window as any).__ather.travel({ kind: 'plot' })); await p.waitForFunction(() => (window as any).__ather.zone() === 'plot', { timeout: 120000 }); await sleep(6000)
-      const own = await p.evaluate(() => (window as any).__gladeGate?.drawn?.() ?? null) as { grown: number; ring: number } | null
-      ok(own === null, `at home the grown gate is not mounted (${JSON.stringify(own)})`)
-      await p.screenshot({ path: `${out}/own-cluster-${tag}.png` as `${string}.png` })
+      // a keeper's own cluster (a fresh profile, no tutorial = their plot): the gold ring, as ever
+      const h = await (await b.createBrowserContext()).newPage(); h.on('pageerror', e => errs.push('home: ' + String(e).slice(0, 200)))
+      if (phone) await h.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true }); else await h.setViewport({ width: 1100, height: 760 })
+      await h.evaluateOnNewDocument(() => localStorage.setItem('ather:shimmer:birthRune', 'star'))
+      await h.goto(`${url}/shimmer/open/ather?hour=13&cluster=preview`, { waitUntil: 'load', timeout: 240000 })
+      ok(await h.waitForFunction(() => (window as any).__ather?.zone?.() === 'plot' && !!(window as any).__ather?.tp, { timeout: 120000 }).then(() => true, () => false), 'at home on my own cluster')
+      await h.evaluate((x, z) => (window as any).__ather.tp(x, z, Math.PI * 0.75), GATE.x + 8.5, GATE.z - 8.5); await sleep(8000)
+      ok(await h.evaluate(() => (window as any).__gladeGate === undefined), 'the grown gate is not mounted at home')
+      await h.screenshot({ path: `${out}/own-cluster-${tag}.png` as `${string}.png` }); await h.close()
     }
     await p.close()
   }
