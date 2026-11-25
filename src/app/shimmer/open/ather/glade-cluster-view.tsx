@@ -1,13 +1,15 @@
 'use client'
 // THE CLOSED GLADE, DRAWN (BETA M67 s1a; ground + islands are page.tsx's PlotScene + ClusterScene on GLADE_FRAME). This file
-// draws who lives there: the three friends (Otto, Tess, Bonn as placeholder figures until their looks lock), the five Glade
+// draws who lives there: the three friends (Otto, Tess, Bonn in their locked looks, friend-figure.ts), the five Glade
 // Moglins (Fennel at her lot in Greg's garden, the rest on the friends' gardens; folk-spots.ts) and the marker over Greg
 // (a newborn's first heading). Greg himself is glade-greg.tsx on his bench (s1b-2). `gladeFolkDrawn` is who page.tsx lets
 // E talk to. Mount in the 'glade' zone only.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
 import type * as THREE from 'three'
-import { FolkModel, folkLook, FOLK_HEIGHT } from '../shared/folk-model'
+import { FOLK_HEIGHT } from '../shared/folk-model'
+import { FriendModel } from '../shared/friend-model'
+import { isFriend } from '../shared/friend-figure'
 import { MoglinModel, furOf } from '../shared/moglin-model'
 import { gladeKeepers, gregInGlade } from './glade-cluster'
 import { GLADE, gladeFolk } from './moonwell-glade'
@@ -53,7 +55,7 @@ export function GladeCluster({ ground, marker = true }: { ground: (x: number, z:
     <>
       {KEEPERS.map(k => (
         <group key={k.id} position={[k.x, ground(k.x, k.z), k.z]} rotation-y={k.yaw} userData={{ gladeKeeper: k.id }}>
-          <FolkModel look={folkLook(`glade-${k.id}`)} action="idle" seed={k.x * 0.01} />
+          {isFriend(k.id) && <FriendModel who={k.id} action="idle" seed={k.x * 0.01} />}
         </group>
       ))}
       {FOLK.map((f, i) => (

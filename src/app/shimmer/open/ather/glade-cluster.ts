@@ -7,7 +7,7 @@
 // you back down at the spawn.
 //   · the Moglins (canon moonwell-folk, placement ours): Fennel on Greg's plot, Sax at Otto's, Yarrow + Mallow at Tess's,
 //     Hazel at Bonn's. NOT invitable (they belong to the Glade).
-//   · Otto, Tess, Bonn have no locked look yet: placeholder figures (folkLook's id colours). Greg has his locked look.
+//   · Otto, Tess, Bonn stand in their locked looks (M154, shared/friend-figure.ts). Greg has his locked look.
 //   · s1b-2 (hub 11-22): Greg's garden carries the Glade backdrop: the Moonwell layout (pond, green, the five's lots, his home
 //     + jetty; moonwell.ts GLADE_ANCHOR) stands in a 6 x 4 block of his ground, and the Glade is gone from the Wilds. Greg
 //     is the real one on his bench (moonwell-glade gregSpot, glade-greg.tsx), Fennel stands at her lot (gladeSpots); the

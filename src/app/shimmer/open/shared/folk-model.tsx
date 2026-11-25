@@ -79,6 +79,9 @@ function res(): Shared {
   return shared
 }
 const cylOf = (rt: number, rb: number) => { const r = res(), k = `${rt}:${rb}`; if (!r.cyl.has(k)) r.cyl.set(k, new THREE.CylinderGeometry(rt, rb, 1, 16)); return r.cyl.get(k)! }
+/** the toon ramp, for a rig that brings its own material */
+export const folkRamp = () => res().grad
+export const folkInk = () => res().ink
 const toon = (c: string) => { const r = res(); if (!r.mats.has(c)) r.mats.set(c, new THREE.MeshToonMaterial({ color: c, gradientMap: r.grad })); return r.mats.get(c)! }
 const flat = (c: string) => { const r = res(), k = `b${c}`; if (!r.mats.has(k)) r.mats.set(k, new THREE.MeshBasicMaterial({ color: c })); return r.mats.get(k)! }
 
@@ -93,35 +96,38 @@ function Part({ geo, color, pos, scale, ink = true, rot }: { geo: THREE.BufferGe
   )
 }
 
+export interface FolkJoints { head: THREE.Object3D | null; body: THREE.Object3D | null; eyes: THREE.Object3D | null; armL: THREE.Object3D | null; armR: THREE.Object3D | null; legL: THREE.Object3D | null; legR: THREE.Object3D | null }
+/** One frame of an action at time t (the rig's joints; friend-model.tsx poses its merged figures with the same one). */
+export function poseFolk(j: FolkJoints, action: FolkAction, t: number, seed: number) {
+  let yaw = Math.sin(t * 0.37 + seed) * 0.16, pitch = 0, roll = 0
+  let aL = 0, aR = 0, sL = 0, sR = 0   // pitch (forward -) and swing out, per arm
+  if (action === 'talk') {   // one hand making the point, the head with it
+    const ph = t * 2.6
+    aR = -0.9 + Math.sin(ph) * 0.25; sR = 0.2 + Math.sin(ph * 0.5) * 0.15; yaw = Math.sin(ph * 0.5) * 0.12; pitch = Math.sin(ph) * 0.05
+  } else if (action === 'wave') {
+    sR = 2.5 + Math.sin(t * 6) * 0.3; roll = 0.08; yaw = 0
+  } else if (action === 'walk') {   // M32: a stride at ~1.9 steps/s (speed scales it); arms counter-swing, a step's bob
+    const ph = t * 6
+    aL = Math.sin(ph) * 0.45; aR = -aL; yaw = 0
+  } else {
+    aL = Math.sin(t * 1.8) * 0.03; aR = -aL
+  }
+  const stride = action === 'walk' ? Math.sin(t * 6) * 0.5 : 0
+  if (j.legL) j.legL.rotation.x = -stride
+  if (j.legR) j.legR.rotation.x = stride
+  if (j.body) j.body.position.y = action === 'walk' ? Math.abs(Math.cos(t * 6)) * 0.03 : Math.sin(t * 1.8) * 0.006
+  if (j.head) j.head.rotation.set(pitch, yaw, roll)
+  if (j.armL) j.armL.rotation.set(aL, 0, -sL)
+  if (j.armR) j.armR.rotation.set(aR, 0, sR)
+  if (j.eyes) j.eyes.scale.y = ((t + seed) % 4.1) < 0.12 ? 0.15 : 1
+}
+
 export function FolkModel({ look, action = 'idle', seed = 0, speed = 1, pose = 'stand' }: { look: FolkLook; action?: FolkAction; seed?: number; speed?: number; pose?: FolkPose }) {
   const head = useRef<THREE.Group>(null), body = useRef<THREE.Group>(null), eyes = useRef<THREE.Group>(null)
   const armL = useRef<THREE.Group>(null), armR = useRef<THREE.Group>(null)
   const legL = useRef<THREE.Group>(null), legR = useRef<THREE.Group>(null)
   const t0 = useRef(seed * 1.3)
-  useFrame((_, dt) => {
-    const t = (t0.current += Math.min(0.05, dt) * speed)
-    let yaw = Math.sin(t * 0.37 + seed) * 0.16, pitch = 0, roll = 0
-    let aL = 0, aR = 0, sL = 0, sR = 0   // pitch (forward -) and swing out, per arm
-    if (action === 'talk') {   // one hand making the point, the head with it
-      const ph = t * 2.6
-      aR = -0.9 + Math.sin(ph) * 0.25; sR = 0.2 + Math.sin(ph * 0.5) * 0.15; yaw = Math.sin(ph * 0.5) * 0.12; pitch = Math.sin(ph) * 0.05
-    } else if (action === 'wave') {
-      sR = 2.5 + Math.sin(t * 6) * 0.3; roll = 0.08; yaw = 0
-    } else if (action === 'walk') {   // M32: a stride at ~1.9 steps/s (speed scales it); arms counter-swing, a step's bob
-      const ph = t * 6
-      aL = Math.sin(ph) * 0.45; aR = -aL; yaw = 0
-    } else {
-      aL = Math.sin(t * 1.8) * 0.03; aR = -aL
-    }
-    const stride = action === 'walk' ? Math.sin(t * 6) * 0.5 : 0
-    if (legL.current) legL.current.rotation.x = -stride
-    if (legR.current) legR.current.rotation.x = stride
-    if (body.current) body.current.position.y = action === 'walk' ? Math.abs(Math.cos(t * 6)) * 0.03 : Math.sin(t * 1.8) * 0.006
-    if (head.current) head.current.rotation.set(pitch, yaw, roll)
-    if (armL.current) armL.current.rotation.set(aL, 0, -sL)
-    if (armR.current) armR.current.rotation.set(aR, 0, sR)
-    if (eyes.current) eyes.current.scale.y = ((t + seed) % 4.1) < 0.12 ? 0.15 : 1
-  })
+  useFrame((_, dt) => poseFolk({ head: head.current, body: body.current, eyes: eyes.current, armL: armL.current, armR: armR.current, legL: legL.current, legR: legR.current }, action, t0.current += Math.min(0.05, dt) * speed, seed))
   const r = res(), S = r.sphere
   const sit = pose === 'sit'   // seated on something ~0.48 m high: thighs forward, shins down (the bench is the scene's)
   return (

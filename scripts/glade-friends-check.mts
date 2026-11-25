@@ -71,6 +71,10 @@ try {
     ok(await poll(() => p.evaluate((n: string) => new RegExp(`E · ${n}`).test(document.body.innerText) || !!document.querySelector('[data-touch="use"][data-touch-near]'), name), 15000), `2. ${name}: the prompt 'E · ${name}'`)
     // the phone's 'use' button carries no name: the last friend's button can still be up through the warp, so wait for THIS friend to be the one in reach
     ok(await poll(async () => { const n = await A(p, 'near') as { kind?: string; f?: string } | null; return n?.kind === 'friend' && n.f === id }, 15000), `2. ${name}: in reach`)
+    // M154: the warp is an ARRIVAL (a veil); `near` is already this friend and the phone's 'use' button can still be the last
+    // friend's while it is up, and the page ignores a press under it. A walking keeper has no veil: wait for it to lift.
+    let calm = 0   // 2 s of no veil: on a slow GPU it goes up late too
+    ok(await poll(async () => { calm = await p.evaluate(() => document.querySelector<HTMLElement>('[data-veil]')?.style.opacity === '0') ? calm + 1 : 0; return calm >= 4 }, 30000), `2. ${name}: the arrival's veil is down`)
     await pressE(p)
     const seen: string[] = []
     for (const lid of ids) {
