@@ -91,6 +91,13 @@ for (const k of ['rock-large', 'sign', 'log-fallen', 'reeds']) ok(put(P(k), hill
   const g = gladeLayerGround(null)(cx, cz), lv = (m: number) => Math.round((g + m) * 10)
   ok(Object.keys(cells).length > 3 && near(at(lv(1))(cx, cz)!, lv(1) / 10 - GLADE_WATER_DROP, 1e-6) && near(at(lv(2))(cx, cz)!, lv(2) / 10 - GLADE_WATER_DROP, 1e-6), 'painted water: its drawn surface, at any level')
   ok(at(lv(-1))(cx, cz) === null && gladeWaterAt({ edits: null, water: {} })(cx, cz) === null, 'under the ground, or erased: none')
+  // a painted cell on a slope: only where its ground is under the level
+  { const G = gladeLayerGround(null); let best: { x: number; z: number; lo: number; hi: number } | null = null
+    for (let k = 0; k < 400 && !best; k++) { const x = -300 + (k % 20) * 9.3, z = 120 + Math.floor(k / 20) * 9.7, ys = [0, 1, 2, 3].flatMap(i => [0, 1, 2, 3].map(j => G(x + i, z + j))); if (ys.every(Number.isFinite) && Math.max(...ys) - Math.min(...ys) > 0.6) best = { x, z, lo: Math.min(...ys), hi: Math.max(...ys) } }
+    if (!best) ok(false, 'a sloped cell to test on')
+    else { const c = paintWater([GLADE_BRUSH_TILE], best.x + 1.5, best.z + 1.5, 6, 0), lv = Math.round((best.lo + best.hi) / 2 * 10), w = gladeWaterAt({ edits: null, water: Object.fromEntries(Object.keys(Object.values(c)[0] ?? {}).map(k => [k, lv])) })
+      let dry = 0, wet = 0; for (let i = 0; i <= 12; i++) for (let j = 0; j <= 12; j++) { const x = best.x + i / 4, z = best.z + j / 4, v = w(x, z), g = G(x, z); if (v === null) dry++; else { if (g >= v) wet = -999; wet++ } }
+      ok(dry > 0 && wet > 0, `a painted cell on a slope: water only over the ground under it (${wet} wet, ${dry} dry)`) } }
   const pool = Object.values(paintWater([GLADE_BRUSH_TILE], MOONWELL.x, MOONWELL.z, 8, 0))[0] ?? {}, hi = gladeWaterAt({ edits: null, water: Object.fromEntries(Object.keys(pool).map(k => [k, Math.round((POOL_Y + 0.5) * 10)])) })
   ok(hi(MOONWELL.x, MOONWELL.z)! > POOL_Y + 0.3, 'two sheets: the higher one is the surface')
 }

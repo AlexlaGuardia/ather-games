@@ -107,10 +107,14 @@ try {
   await o.setViewport({ width: 390, height: 844 }); await sleep(2500); await aim(o, MOONWELL.x, MOONWELL.z, 9, -0.6); await o.screenshot({ path: `${out}/fly-390.png` as `${string}.png` }); await o.setViewport({ width: 1280, height: 900 }); await sleep(1500)
   if (!LOOP) { ok(!posts.includes('publish'), `4. nothing was published (answered in the page: ${posts.join() || 'none'})`); ok(writes.length === 0, `4. no other request that writes (${writes})`) }
   else {
-    ids.push(q.id); await o.evaluate(() => (window as W).__terrain.publish('m168b')); const s2 = await store(o); ok(s2.v === before.v + 1, `L. Publish: v${s2.v} (${await status()})`)
+    // the painted water goes again (it floods a house's door): its lily stays in the list, and the game does not draw it either
+    await water(null)
+    ok((await yOf(q.id)) === null && (await props(o)).some(p => p.id === q.id), 'L. the water undone: its lily kept, not drawn')
+    await o.evaluate(() => (window as W).__terrain.publish('m168b')); const s2 = await store(o); ok(s2.v === before.v + 1, `L. Publish: v${s2.v} (${await status()})`)
     const fly = (await scen(o)).filter(i => ids.includes(i.id))
     for (const ph of [true, false]) {
       const g = await game(ph), tag = ph ? 'phone' : 'desk'; await until(async () => (await scen(g)).length > 0)
+      ok(!(await scen(g)).some(i => i.id === q.id), `L. ${tag}: the lily whose water went is not drawn`)
       const gi = (await scen(g)).filter(i => ids.includes(i.id)); ok(gi.length === ids.length && gi.every(a => Math.abs(a.y - fly.find(f => f.id === a.id)!.y) < 1e-6), `L. ${tag}: every lily lies as in Fly (${gi.length})`)
       const sc = await g.evaluate(() => { const s = (window as W).__scenery(); return { meshes: s.meshes, drawn: s.drawn } }); console.log(`  ${tag}: scenery ${sc.meshes} draw calls, ${sc.drawn} instances`)
       await g.evaluate((x: number, z: number) => { const a = (window as W).__ather; a.gladeAt(x, z, 0); a.look?.(0, -0.35) }, MOONWELL.x, MOONWELL.z + 7); await sleep(9000); if (ph) { await g.touchscreen.tap(195, 400); await sleep(1500) }
