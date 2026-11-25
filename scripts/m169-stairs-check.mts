@@ -135,14 +135,14 @@ async function run(PHONE: boolean) {
   const hold = async (key: string, done: (m: { x: number; y: number; z: number }) => boolean, ms = 9000) => { let top = -1e9; await p.keyboard.down(key); await poll(async () => { const m = await me(); top = Math.max(top, m.y); return done(m) }, ms); await p.keyboard.up(key); await sleep(500); return { ...(await me()), top } }
   // 4: up the stair to the wall top
   await tpTo(S.x, S.z + 4.5); const g0 = (await me()).y
-  let m = await hold('w', m => m.z < S.z - 2.9 || m.y - g0 > 4.7); ok(m.top - g0 > 4.6, `4. ${N}: the keeper walks up the stair to the wall top (feet +${(m.top - g0).toFixed(2)} m)`); await shot(`m169s-${N}-4-top`)
+  let m = await hold('w', m => m.z < S.z - 2.9 || m.y - g0 > 4.7, 40000); ok(m.top - g0 > 4.6, `4. ${N}: the keeper walks up the stair to the wall top (feet +${(m.top - g0).toFixed(2)} m)`); await shot(`m169s-${N}-4-top`)
   // 5: half way up, the railing holds her on
-  await tpTo(S.x, S.z + 4.5); m = await hold('w', m => m.z < S.z + 0.4); const y5 = m.y
-  m = await hold('a', () => false, 1800); const l5 = m
-  m = await hold('d', () => false, 2500)
-  ok(y5 - g0 > 1.6 && l5.x > S.x - 1 && l5.y > y5 - 0.45 && m.x < S.x + 1 && m.y > y5 - 0.45, `5. ${N}: half way up (+${(y5 - g0).toFixed(2)} m) the railings hold her on (left x ${(l5.x - S.x).toFixed(2)}, right x ${(m.x - S.x).toFixed(2)}, feet +${(m.y - g0).toFixed(2)})`); await shot(`m169s-${N}-5-rail`)
+  await tpTo(S.x, S.z + 4.5); m = await hold('w', m => m.z < S.z + 0.4, 40000); const y5 = m.y
+  m = await hold('a', m => m.x < S.x - 1.2, 12000); const l5 = m   // a slow desktop frame walks slowly: hold until off the side, or 12 s pressed on the rail
+  m = await hold('d', m => m.x > S.x + 1.2, 15000)
+  ok(y5 - g0 > 1.6 && l5.x > S.x - 1 && l5.x < S.x - 0.4 && l5.y > y5 - 0.45 && m.x < S.x + 1 && m.x > S.x + 0.4 && m.y > y5 - 0.45, `5. ${N}: half way up (+${(y5 - g0).toFixed(2)} m) the railings hold her on (left x ${(l5.x - S.x).toFixed(2)}, right x ${(m.x - S.x).toFixed(2)}, feet +${(m.y - g0).toFixed(2)})`); await shot(`m169s-${N}-5-rail`)
   // 6: up the ramp
-  await tpTo(R.x, R.z + 3.2); const g6 = (await me()).y; m = await hold('w', m => m.z < R.z - 1.6); ok(m.top - g6 > 1.0, `6. ${N}: up the ramp (feet +${(m.top - g6).toFixed(2)} m)`)
+  await tpTo(R.x, R.z + 3.2); const g6 = (await me()).y; m = await hold('w', m => m.z < R.z - 1.6, 30000); ok(m.top - g6 > 1.0, `6. ${N}: up the ramp (feet +${(m.top - g6).toFixed(2)} m)`)
   // 7: the gate
   await tpTo(G0.x, G0.z + 1.6); m = await hold('w', m => m.z < G0.z - 0.4, 3000); ok(m.z > G0.z + 0.05, `7. ${N}: the shut gate stops the keeper (z ${(m.z - G0.z).toFixed(2)})`)
   await p.keyboard.press('e'); await sleep(1200); ok((await gate()).open === true, `7. ${N}: E opens the gate (saved)`); await shot(`m169s-${N}-7-open`)
