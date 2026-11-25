@@ -2,6 +2,7 @@
 // her own mixer, the glb's geometry shared by all her kind. No trot here: step() is told what to play.
 import * as THREE from 'three'
 import { clone } from 'three/examples/jsm/utils/SkeletonUtils.js'
+import { flapCycles } from './spirit-fly'   // M173
 import { RIG_CLIPS, STAND, fadeWeights, gaitCycles, strideLen, type RigClip, type RigLook } from './spirit-rig'
 
 export type RigMats = { skin: THREE.Material; glow: THREE.Material | null; halo: THREE.Material; eye: THREE.Material }
@@ -89,7 +90,8 @@ export function makeRigBody(gltf: RigGltf, rig: RigLook, mats: RigMats, glowPart
       want = clip; w = fadeWeights(w, clip, dt)
       const gait = clip === 'run' || clip === 'walk' ? clip : w.run > w.walk ? 'run' : 'walk'
       const air = clip === 'run' && Math.abs(moved) < 1e-6 ? dt / act.run.getClip().duration : null
-      const g = air !== null ? { cycles: air, capped: false } : gaitCycles(moved, dt, strideLen(rig.clipV[gait], act[gait].getClip().duration, h), rig.cadence)
+      const g = rig.fly && gait === 'run' ? { cycles: flapCycles(rig.fly, Math.abs(moved) / Math.max(dt, 1e-3), rig.clipV.run * h, act.run.getClip().duration, dt), capped: false }   // M173: wings, not feet
+        : air !== null ? { cycles: air, capped: false } : gaitCycles(moved, dt, strideLen(rig.clipV[gait], act[gait].getClip().duration, h), rig.cadence)
       phase = ((phase + g.cycles) % 1 + 1) % 1; capped = g.capped; rate = dt > 0 ? g.cycles * act[gait].getClip().duration / dt : 0
       for (const c of has) { const on = w[c] > 0; act[c].enabled = on; act[c].setEffectiveWeight(w[c]) }
       act.walk.time = phase * act.walk.getClip().duration; act.run.time = phase * act.run.getClip().duration

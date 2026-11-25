@@ -40,7 +40,7 @@ ok(groundMoved(5, 0, 0, 0) === 0 && groundMoved(0, 0, 0, 0.1) > 0, 'a set-down i
 ok(rigLook('axolotl', SPIRIT_MODELS.axolotl!, false) === SPIRIT_MODELS.axolotl && rigLook('axolotl', SPIRIT_MODELS.axolotl!, true) === L, 'off = today\'s Manalotl, on = the rigged one')
 ok(rigLook('fox', SPIRIT_MODELS.fox!, false) === SPIRIT_MODELS.fox && rigLook('fox', SPIRIT_MODELS.fox!, true) === SPIRIT_RIGS.fox, 'off = today\'s Vulnyx, on = the rigged one')
 ok(SPIRIT_MODELS.fox!.rig === undefined && SPIRIT_MODELS.fox!.trot.planted === undefined && SPIRIT_MODELS.fox!.url === '/open/spirits/vulnyx.glb' && SPIRIT_MODELS.fox!.ears === true, 'today\'s Vulnyx carries none of it')
-ok(rigLook('owl', SPIRIT_MODELS.fox!, true) === SPIRIT_MODELS.fox, 'a species with no rig keeps the look it has')
+ok(rigLook('rabbit', SPIRIT_MODELS.fox!, true) === SPIRIT_MODELS.fox, 'a species with no rig keeps the look it has')
 ok(SPIRIT_MODELS.axolotl!.rig === undefined && SPIRIT_MODELS.axolotl!.trot.planted === undefined && SPIRIT_MODELS.axolotl!.url === '/open/spirits/manalotl.glb', 'today\'s Manalotl carries none of it')
 ok(L.trot.hopH === 0 && L.trot.squash === 0 && L.trot.speed === 0.42 && L.trot.dash === 0.62, 'she ambles: no hop, no squash, her own speeds')
 

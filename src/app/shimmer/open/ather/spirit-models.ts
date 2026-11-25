@@ -79,6 +79,27 @@ const MANALOTL_TROT: Partial<TrotDials> = {
   happyHops: 3, happyHop: 0.45, happyH: 0.035, happyWig: 0.1,   // M109 s2 fed: three soft bobs, not bounces (she flows)
 }
 
+// ── M173 (Alex 11-24 approved both looks; 11-25 "spirits first"): ATHOWL + NOCTYX. Manner = the temperament column of world/spirits-species.md.
+//  · Athowl "Nocturnal, silent flight, all-seeing ... patient stillness punctuated by sudden precise movement": long still looks,
+//    slow turns of the head, few moves, and when she goes she goes straight and quick on the wing. She rarely sniffs.
+//  · Noctyx "Echo-based, nocturnal, shadow-dwelling ... wrapped-wing poses": short stops, snappy glances, longer darts, sits wrapped.
+const ATHOWL_TROT: Partial<TrotDials> = {
+  speed: 1.0, dash: 1.9, turnK: 7, hopH: 0, stretch: 0, squash: 0, lean: 0, planted: 1,
+  chain: 0.97, checkS: [1.2, 2.2], legMax: 4,
+  beat: { look: 0.62, sniff: 0.03, sit: 0.2, tilt: 0.15 },
+  lookS: [4.5, 7.5], sitS: [5.0, 8.0], tiltS: [2.4, 4.0],
+  glance: 0.28, glanceHold: [1.2, 2.2], glanceMax: 0.85, tiltK: 3, lookTilt: 0.2,
+  happyHops: 3, happyHop: 0.4, happyH: 0.08, happyWig: 0.08,
+}
+const NOCTYX_TROT: Partial<TrotDials> = {
+  speed: 1.3, dash: 2.2, turnK: 12, hopH: 0, stretch: 0, squash: 0, lean: 0, planted: 1,
+  chain: 0.85, checkS: [0.4, 0.9], legMax: 3.5,
+  beat: { look: 0.45, sniff: 0.1, sit: 0.4, tilt: 0.05 },
+  lookS: [1.6, 3.0], sitS: [3.0, 5.0],
+  glance: 0.11, glanceHold: [0.35, 0.8], glanceMax: 0.85,
+  happyHops: 5, happyHop: 0.26, happyH: 0.1, happyWig: 0.16,
+}
+
 export const SPIRIT_MODELS: Partial<Record<Species, SpiritLook>> = {
   // Vulnyx: grown 0.70 m (shipped M102/M107 at 0.55), gold; tail out along +x, swings in z; ear flick; trot = TROT's
   // defaults, grown (grownTrot).
@@ -102,6 +123,20 @@ export const SPIRIT_MODELS: Partial<Record<Species, SpiritLook>> = {
     // the head (z > ~0.1, frills and eyes with it) rolls round the neck at x 0.1 (the head's own centre), y 0.35
     tilt: { from: -0.05, to: 0.2, px: 0.1, py: 0.35, max: 0.38 },
     trot: grownTrot(MANALOTL_TROT, TUNED_H.axolotl, AXOLOTL_H, true),   // tuned at 0.15; her slow amble speeds are her manner and stay
+  },
+  // Athowl: faces +z, wings folded, a short fan of tail down the back. 0.50 m (GROWN), lavender-silver floor, pale hull.
+  owl: {
+    name: 'athowl', url: '/open/spirits/athowl.glb', h: GROWN.owl.height,
+    skin: { emissive: '#e7ddff', emissiveI: 0.10 }, hull: { color: '#f3ecff', opacity: 0.38 },
+    sway: { along: 'z', sign: -1, from: 0.3, to: 0.5, dir: 'x', amp: 0.02, ampRun: 0.02, hz: 0.6, hzRun: 2, lag: 0 },
+    trot: ATHOWL_TROT,
+  },
+  // Noctyx: the darkest of the four, so the violet floor and hull stay (the look proof's note). 0.45 m; no tail, so no sway.
+  bat: {
+    name: 'noctyx', url: '/open/spirits/noctyx.glb', h: GROWN.bat.height,
+    skin: { emissive: '#9985f0', emissiveI: 0.10 }, hull: { color: '#b8a3ff', opacity: 0.38 },
+    sway: { along: 'z', sign: -1, from: 2, to: 3, dir: 'x', amp: 0, ampRun: 0, hz: 1, hzRun: 1, lag: 0 },
+    trot: NOCTYX_TROT,
   },
 }
 
@@ -128,6 +163,17 @@ export const VULNYX_RIG: RigLook = {
 /** her glb's height standing (the idle clip's mean), glb units */
 export const VULNYX_GLB_TALL = 1.003
 const VRIG_H = GROWN.fox.height / VULNYX_GLB_TALL
+// ── M173 the fliers' rigs: walk = a two-footed hop (planted), run = FLIGHT, so `fly` (spirit-fly.ts) and no stride there.
+export const ATHOWL_RIG: RigLook = {
+  glbLen: 0.777, pivot: { x: 0, z: 0 }, clipV: { walk: 0.55 / 0.5, run: 2.8 / 0.5 }, runAt: [0.9, 0.75], hull: 0.024,
+  neck: 'b_neck', head: 'b_head', lie: true, fly: { alt: 0.3, up: 2.2, down: 3, flap: [0.75, 1.25] }, avatar: { z: -0.04, far: 1.1 },
+}
+export const NOCTYX_RIG: RigLook = {
+  glbLen: 0.434, pivot: { x: 0, z: 0 }, clipV: { walk: 0.55 / 0.45, run: 2.8 / 0.45 }, runAt: [0.9, 0.75], hull: 0.024,
+  neck: 'b_neck', head: 'b_head', lie: true, fly: { alt: 0.45, up: 4, down: 4, flap: [1.1, 1.8] }, avatar: { z: 0.02, far: 1.1 },
+}
+/** their glbs' heights standing (the idle clips' means), glb units */
+export const ATHOWL_GLB_TALL = 1.005, NOCTYX_GLB_TALL = 0.999
 export const SPIRIT_RIGS: Partial<Record<Species, SpiritLook>> = {
   axolotl: {
     ...SPIRIT_MODELS.axolotl!, url: '/open/spirits/manalotl-rigged.glb', h: RIG_H, rig: MANALOTL_RIG, tilt: undefined,
@@ -139,6 +185,8 @@ export const SPIRIT_RIGS: Partial<Record<Species, SpiritLook>> = {
     ...SPIRIT_MODELS.fox!, url: '/open/spirits/vulnyx-rigged.glb', h: VRIG_H, rig: VULNYX_RIG, ears: undefined,
     trot: { ...SPIRIT_MODELS.fox!.trot, hopH: 0, stretch: 0, squash: 0, lean: 0, planted: 1 },
   },
+  owl: { ...SPIRIT_MODELS.owl!, url: '/open/spirits/athowl-rigged.glb', h: GROWN.owl.height / ATHOWL_GLB_TALL, rig: ATHOWL_RIG },
+  bat: { ...SPIRIT_MODELS.bat!, url: '/open/spirits/noctyx-rigged.glb', h: GROWN.bat.height / NOCTYX_GLB_TALL, rig: NOCTYX_RIG },
 }
 /** the look to draw: the rigged one where there is one and `on` */
 export const rigLook = (sp: Species, look: SpiritLook, on: boolean): SpiritLook => (on ? SPIRIT_RIGS[sp] ?? look : look)

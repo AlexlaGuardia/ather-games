@@ -6,6 +6,7 @@
 //  - sit = the sit beat, the perch, a long stand-by (the Manalotl's sit clip IS her lying along the ground); lie = an idle skit's
 //    nap, for a glb that has the clip (the Vulnyx), else sit; idle = everything else still.
 import type { TrotPose } from './spirit-trot'
+import type { FlyLook } from './spirit-fly'
 
 export type RigClip = 'idle' | 'walk' | 'run' | 'sit' | 'lie'
 export const RIG_CLIPS: readonly RigClip[] = ['idle', 'walk', 'run', 'sit', 'lie']
@@ -25,6 +26,8 @@ export type RigLook = {
   neck: string; head: string
   /** strides a second her legs never pass (default CADENCE_MAX) */
   cadence?: number
+  /** M173: a flier: her run clip is flight (spirit-fly.ts); no ground under it, no stride */
+  fly?: FlyLook
   /** the glb has its own lie clip */
   lie?: boolean
   /** the panel's turntable: the z she turns round (her middle, tail and all, glb units) and how far the camera stands back */

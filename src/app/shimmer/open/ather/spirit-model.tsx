@@ -22,6 +22,7 @@ import { isTrainStat, trainPlay } from './spirit-stats'   // M110 s1: a finished
 
 import { SPIRIT_MODELS, groundLift, lowPoints, rigLook, type SpiritLook } from './spirit-models'
 import { groundMoved, rigClip, type RigClip } from './spirit-rig'   // M132 s2
+import { GROUNDED, flyClip, flyStep, travels, type FlyState } from './spirit-fly'   // M173
 import { hullPush, makeRigBody, rigCount, type RigBody } from './spirit-rig-body'
 import type { Species } from '../../spirits/spirit'
 import { slotOf } from './spirit-seeds'   // M122: a spirit's slot in her planter
@@ -56,7 +57,7 @@ export function useSpiritRig(): boolean {
 // read-only probe for the check: how many spirit models are mounted right now (all, and by species). `trot` = the Vulnyx's
 // pose (the M107 asserts read it), `trots[species]` = each species' latest pose.
 type TrotProbe = { x: number; y: number; z: number; mode: string; home: { x: number; z: number }; rMin: number; rMax: number; beats: number; homes: number; tilt: number; h: number; hWorld?: number; len?: number; keepMax?: number; cheers: number; yMax: number; calling: boolean; near: boolean; plays: number; playing: string | null; playYMax: number; braceMax: number }
-type RigProbe = { id: string; sp: Species; h: number; yaw: number; x: number; y: number; z: number; mode: string; v: number; body: RigBody }
+type RigProbe = { id: string; sp: Species; h: number; yaw: number; x: number; y: number; z: number; mode: string; v: number; /** M173: a flier's metres off the ground (0 walking) */ alt: number; body: RigBody }
 type Probe = { rigs: Map<string, RigProbe>; rigCount: typeof rigCount; mounted: number; url: string; h: number; species: Record<string, number>; trot?: TrotProbe; trots: Record<string, TrotProbe> }
 const probe = (): Probe => { const w = window as unknown as { __spiritModel?: Probe }; return (w.__spiritModel ??= { mounted: 0, url: VULNYX_URL, h: VULNYX_H, species: {}, trots: {}, rigs: new Map(), rigCount }) }
 
@@ -123,7 +124,7 @@ function SpiritModel({ sp, look, nav, id, avatar, dev }: { sp: Species; look: Sp
   }, [scene, time, look])
   // M132 s2: a rigged spirit's body: her own bones + mixer, built and thrown away with her
   const [body, setBody] = useState<RigBody | null>(null), bodyRef = useRef<RigBody | null>(null), glowRef = useRef<THREE.MeshToonMaterial | null>(null)
-  const step = useMemo(() => ({ x: NaN, z: 0, yaw: 0, v: 0, turn: 0, clip: 'idle' as RigClip, sizeAt: -1, hWorld: 0, len: 0 }), [trot])
+  const step = useMemo(() => ({ x: NaN, z: 0, yaw: 0, v: 0, turn: 0, clip: 'idle' as RigClip, fly: GROUNDED as FlyState, sizeAt: -1, hWorld: 0, len: 0 }), [trot])
   useEffect(() => {
     if (!rig) return
     const rim = (m: THREE.Material) => { m.onBeforeCompile = sh => { sh.fragmentShader = sh.fragmentShader.replace('#include <opaque_fragment>', `#include <opaque_fragment>
@@ -192,7 +193,12 @@ function SpiritModel({ sp, look, nav, id, avatar, dev }: { sp: Species; look: Sp
         tmp.fy += (fnav.y() - baseY - tmp.fy) * (1 - Math.exp(-dt * 14)); if (Math.abs(tmp.fy) < 1e-3) tmp.fy = 0
       }
       const floor = Number.isNaN(tmp.fy) ? 0 : tmp.fy
-      v.set(ps.x, baseY + floor + ps.y + keep, ps.z); par.worldToLocal(v); g.current.position.copy(v)
+      // M173: a flier's height while she travels (0 for a walker); the hold = whatever is walking through her (the deadzone)
+      if (rig?.fly) { let near = Math.hypot(keeperAt.x - ps.x, keeperAt.z - ps.z)
+        for (const o of spiritLive.values()) if (o.id !== id && Date.now() - o.at < 500) near = Math.min(near, Math.hypot(o.x - ps.x, o.z - ps.z))
+        step.fly = flyStep(step.fly, rig.fly, travels(step.clip, ps.mode) && step.v > rig.runAt[1], near, dt) }
+      const alt = step.fly.alt
+      v.set(ps.x, baseY + floor + ps.y + keep + alt, ps.z); par.worldToLocal(v); g.current.position.copy(v)
       par.getWorldQuaternion(q); e.setFromQuaternion(q)
       // a species with no head bend (none yet; the Vulnyx carries no tilt beat) would tip the whole body instead
       g.current.rotation.set(pitch, bodyYaw - e.y, roll, 'YXZ')
@@ -206,9 +212,10 @@ function SpiritModel({ sp, look, nav, id, avatar, dev }: { sp: Species; look: Sp
         step.v += (travel / Math.max(dt, 1e-3) - step.v) * k; step.turn += ((fresh ? 0 : Math.abs(dyaw)) / Math.max(dt, 1e-3) - step.turn) * k
         step.x = ps.x; step.z = ps.z; step.yaw = bodyYaw
         step.clip = rigClip(ps, step.v, step.turn, step.clip, rig.runAt, rig.lie)
+        if (rig.fly) step.clip = flyClip(step.clip, alt)
         bd.step(dt, step.clip, m, look.h, { look: ps.look, sniff: ps.sniff, tilt: ps.tilt })
-        if (t - step.sizeAt > 0.5 && step.clip !== 'sit' && step.clip !== 'lie' && bd.state().w.sit + bd.state().w.lie < 0.01) { step.sizeAt = t; const s = bd.size(look.h); step.hWorld = s.height; step.len = s.len }
-        if (id) probe().rigs.set(id, { id, sp, h: look.h, yaw: bodyYaw, x: ps.x, y: baseY + floor + ps.y, z: ps.z, mode: ps.mode, v: step.v, body: bd })
+        if (t - step.sizeAt > 0.5 && step.clip !== 'sit' && step.clip !== 'lie' && bd.state().w.sit + bd.state().w.lie < 0.01 && !(rig.fly && bd.state().w.run > 0.01)) { step.sizeAt = t; const s = bd.size(look.h); step.hWorld = s.height; step.len = s.len }
+        if (id) probe().rigs.set(id, { id, sp, h: look.h, yaw: bodyYaw, x: ps.x, y: baseY + floor + ps.y, z: ps.z, mode: ps.mode, v: step.v, alt, body: bd })
       }
       sw.value += (ps.swing - sw.value) * Math.min(1, dt * 6); lift.value = ps.lift
       // the measured world height (the drawn meshes' box, hull included) for the check, twice a second
@@ -223,7 +230,7 @@ function SpiritModel({ sp, look, nav, id, avatar, dev }: { sp: Species; look: Sp
         braceMax: Math.max(pr.trots[sp]?.braceMax ?? 0, trot.braced()),   // M110 s2: the shove's lean / the guard's crouch, at its deepest
         yMax: ps.mode === 'happy' ? Math.max(pr.trots[sp]?.mode === 'happy' ? pr.trots[sp].yMax : 0, ps.y) : (pr.trots[sp]?.yMax ?? 0) }   // M109 s2: the happy beat's peak hop
       pr.trots[sp] = tp; if (sp === 'fox') pr.trot = tp
-      if (dev && id) spiritLive.set(id, { id, sp, x: ps.x, y: baseY + floor + ps.y, z: ps.z, h: look.h, at: Date.now() })   // M109: the E pick reads it
+      if (dev && id) spiritLive.set(id, { id, sp, x: ps.x, y: baseY + floor + ps.y + alt, z: ps.z, h: look.h, at: Date.now() })   // M109: the E pick reads it
       if (id && inFormation(id)) reportFormationPos(id, ps.x, ps.z)   // M126 s1: the probe's real spacing
       return
     }
