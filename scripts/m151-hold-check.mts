@@ -57,8 +57,9 @@ async function run(phone: boolean, g: (typeof RANGE_GUNS)[number]) {
   const T = await tr(); await lift(); await rest(cyc + 0.3); const n1 = await count()
   const at = T.flatMap(r => Array.from({ length: r.n }, () => r.t - T[0].t)).slice(0, shots), lead = at.filter((_, i) => i % burst === 0)
   ok(got, `1. ${L}: held fires on (${n1} rounds; wanted ${shots} in one hold)`)
+  // the Spitter (auto, untouched by M151) leaves on whole frames: late by up to one a round, never early
   // charge: each frame boundary may add one frame (0.05) before and after the charge, so its cycle may only run late, not early
-  const slack = g.charge ? (i: number) => [-0.055, 0.055 + 0.1 * i] : () => [-0.055, 0.055], off = lead.map((t, i) => t - i * cyc)
+  const slack = g.charge || g.auto ? (i: number) => [-0.055, 0.055 + (g.charge ? 0.1 : 0.05) * i] : () => [-0.055, 0.055], off = lead.map((t, i) => t - i * cyc)
   ok(got && off.every((o, i) => o >= slack(i)[0] && o <= slack(i)[1]), `1. ${L}: every ${cyc.toFixed(2)} s (measured ${lead.length > 1 ? (lead[lead.length - 1] / (lead.length - 1)).toFixed(3) : '-'}, worst off ${Math.max(...off.map(Math.abs)).toFixed(3)})`)
   // 2 released: no round after the last the trigger asked for (a burst / a charge in flight may finish)
   await rest(cyc * 2); const n2 = await count(); ok(n2 === n1, `2. ${L}: released, it stops (${n1} -> ${n2})`)
