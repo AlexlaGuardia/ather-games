@@ -224,6 +224,7 @@ Steps (one worker each, in order; each keeps `beta-m7-saves` green):
 - **Rules:** only rows on this list. No new systems, no lore, nothing public. Canon gate + tests before every build.
 
 ## Inbox (Alex's brain dump: hub writes here at once, dated, his words; triaged into rows / queue / CANON_GAPS / killed)
+- 11-25 Alex (M153 cut, live): "we need a line of decorative trees and bushes that we can use as scenery.. but for moonwell specifically i will need to be able to place actual nodes that i can place for tutorial purposes.. this way bonn and otto dont have to send the player back and forth to the wilds but can have a few example nodes to experiment but these nodes should have a super long cooldown so the player doesnt get any funny ideas ya know.." -> M153
 - 11-25 05:2x Alex: "go back to the 2 opus worker system as we were alternating them between the lanes.. the 3rd is just the one that breaks the camels back.. if i see the weeks usage isnt going to make it we can reajust" -> WORK.md
 - 11-25 05:2x Alex (dialog): M151 GO again, ships after the owed checks (M147, M143, M146, Glade v14 sweep)
 - 11-24 20:2x OWED: Glade v14 sweep (Greg, friends, gate, pool, newborn spot, followers) never run on the new ground
