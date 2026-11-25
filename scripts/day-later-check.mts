@@ -3,7 +3,7 @@
 //   turned separately, with the session recorder on / blocked, as player / owner. A row hangs when the page stops answering.
 //   Rows 'agree' (every clock tells the same time) must not hang; rows 'split' (only Date.now moved) are there to name the cause and are reported only.
 //   Nothing reaches PostHog's event / replay endpoints (answered in the browser).
-//   [OWNER_KEY=..] npx tsx scripts/day-later-check.mts [--url https://ather.games] [--only 2,5]
+//   [OWNER_KEY=..] npx tsx scripts/day-later-check.mts [--url https://ather.games] [--only 2,5] [--repeat 3]
 import puppeteer, { type CDPSession, type Page } from 'puppeteer-core'
 import { fakeClock } from './lib/clock.mts'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
@@ -85,7 +85,7 @@ try {
   const seed: Seed = { ls: await s.p.evaluate(() => ({ ...localStorage })) as any, ck: await s.p.cookies(url) }; await s.ctx.close()
   console.log(`seed ${sr}: ${Object.keys(seed.ls).length} keys (${Object.keys(seed.ls).filter(k => k.startsWith('ph_')).length} ph_), ${seed.ck.length} cookies, recorder asked ${s.c.rec}, replay posts ${s.c.replay}`)
   if (sr !== 'ok') throw new Error('the seed did not load')
-  for (const r of ROWS) {
+  for (const r of ROWS.flatMap(x => Array<Row>(+flag('--repeat', '1')).fill(x))) {
     if (only.length && !only.includes(r.n)) continue
     if (r.owner && !KEY) { console.log(`- ${r.n}. ${r.name}: skipped, no OWNER_KEY`); continue }
     const ms = r.age * H, aged: Seed = { ls: Object.fromEntries(Object.entries(seed.ls).map(([k, v]) => [k, older(v, ms)])), ck: seed.ck.map(({ name, value, domain, path, secure, sameSite, expires }) => ({ name, value: older(value, ms), domain, path, secure, sameSite, ...(expires > 0 ? { expires } : {}) })) }
