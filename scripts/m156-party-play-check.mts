@@ -6,7 +6,7 @@
 //   V2 A opens N's visit link: refused, A never starts a visit, A's zone stays its own plot
 //   V3 N's fold map lists no 'Your plot' stop; travel home puts N in the Glade
 //   V4 N visits A (folded) by the real Visit button: the snapshot lands.  V5 N reloads there: N wakes in the Glade, never on a plot
-//   W1 both in the Wilds, each sees the other.  W2 N walks (real W held): A's figure of N moves its feet; W3 A walks: N sees the same;
+//   W1 both in the Wilds, each sees the other.  V4b N walks A's plot (real W held), W2 N moves at walking speed: A's figure of N moves its feet; W3 A walks: N sees the same;
 //   W4 standing still the feet rest; W5 a turn (real look hook) turns the figure
 // MEASURED, never asserted: frame ms + draw calls with 0 and 1 mate in view (--frames N seconds); the infection ledger of each (the
 //   host's Wilds question).    --only VWF picks parts.
@@ -131,7 +131,11 @@ try {
     const rowA = `[data-mate="${idA}"] [data-act="visit-plot"]`
     ok(await poll(async () => !!(await n.$(rowA)), 60000), 'V4 A (folded) has a Visit button'); await n.evaluate((s: string) => document.querySelector<HTMLElement>(s)?.click(), rowA)
     ok(await poll(async () => (await ev(n, '__visit', 'hasSnap')) === true, 45000) && await zone(n, 'plot'), `V4 N is on A's plot, the snapshot landed (${await ev(n, '__visit', 'log')})`)
-    await sleep(3500); await load(n); await sleep(3000)
+    await sleep(3500); await n.bringToFront(); await n.mouse.click(200, 250); await sleep(600)
+    ok(await poll(async () => !!(await figure(a, idN)), 30000), 'V4b A draws N on the plot')
+    await n.keyboard.down('KeyW'); await sleep(700); const w = await watch(a, idN, 9000); await n.keyboard.up('KeyW')
+    ok(w.went > 1 && w.foot > 0.06, `V4b N holds W (real key): A sees N walk, limbs moving (went ${w.went.toFixed(1)} m, foot ${mm(w.foot)})`)
+    await load(n); await sleep(3000)
     ok(await zone(n, 'glade', 15000), `V5 N reloads on A's plot and wakes in the Glade (${await ev(n, '__ather', 'zone')}, visiting ${await ev(n, '__visit', 'visiting')})`)
   }
   if (only.includes('W') || only.includes('F')) {
@@ -144,9 +148,10 @@ try {
       ok(await poll(async () => !!(await figure(to, id)), 30000), `${who}: drawn as a keeper figure`)
       const still = await watch(to, id, 3000)
       ok(still.foot < 0.02, `W4 ${who} standing: feet at rest (${mm(still.foot)}, ${still.n} samples)`)
-      await from.evaluate(() => { const g = (window as any).__ather; g.look?.(g.yaw() + Math.PI * 0.75, 0) }); await sleep(2500)   // off the waymark stone, which an arrival faces
-      await from.keyboard.down('KeyW'); await sleep(700)
-      const walk = await watch(to, id, 7000); await from.keyboard.up('KeyW')
+      // two Wilds pages on software GL run ~1.4 fps, and a keyed body there crawls at 0.2 m/s: the mover is set along at a true 4.2 m/s
+      // instead (its own page, its own socket, everything the mate's page does is real). V4b holds the real key, on the light plot.
+      await from.evaluate(() => { const w = window as any, m = w.__mp.me(), t0 = performance.now(); w.__go = setInterval(() => { const d = Math.min(45, 4.2 * (performance.now() - t0) / 1000); w.__ather.tp(m.x - d * 0.7, m.z - d * 0.7) }, 60) })
+      await sleep(1500); const walk = await watch(to, id, 7000); await from.evaluate(() => clearInterval((window as any).__go))
       ok(walk.went > 1, `${who} walk: the figure travels (${walk.went.toFixed(1)} m)`)
       ok(walk.foot > 0.06 && walk.hand > 0.05, `${who} walk: LIMBS move (foot ${mm(walk.foot)}, hand ${mm(walk.hand)}, ${walk.n} samples)`)
       await sleep(2500); const rest = await watch(to, id, 2500)
