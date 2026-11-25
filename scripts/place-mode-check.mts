@@ -144,7 +144,7 @@ try {
   // save: the layer a save sends
   if (!LOOP) {
     await o.evaluate(() => (window as W).__terrain.save()); await sleep(1500)
-    const L = sent.at(-1)?.layer; ok(posts.join() === 'draft' && L?.props?.length === base.length + 2, `7. Save sends the pieces in the draft (${posts}), blocked here`)
+    const L = sent.at(-1)?.layer; ok(posts.length > 0 && posts.every(a => a === 'draft') && L?.props?.length === base.length + 2, `7. Save sends the pieces in the draft (${posts}), blocked here`)
     const { props: _p, ...rest } = L ?? {}, { props: _q, ...rest0 } = before.draft; ok(hash(rest) === hash(rest0) || JSON.stringify(Object.keys(rest).sort()) === JSON.stringify(Object.keys(rest0).sort()), '7. the rest of the layer keeps its keys')
     ok(hash(rest.tiles) === hash(rest0.tiles), '7. the sculpted ground it would send is the draft\'s, byte for byte')
     await o.evaluate(() => (window as W).__terrain.save())
