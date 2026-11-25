@@ -197,6 +197,7 @@ Status: ⬜ open · 🟨 partly · ✅ check passes on prod · 🔒 needs Alex (
 | M164 | **Does a player who comes back a day later hang?** · done (no), full row in BETA_ARCHIVE.md | | ✅ |
 | M165 | **The Glade's gate and Greg's garden look as Alex locked them** (11-25, athernyx 0399315; /root/athernyx/assets/concept-1672/glade/gate-LOCKED.png, gregs-garden-LOCKED.png; git-ignored, NEVER in this public repo). Gate: grown arch, two living trunks fused over a stone plinth, spiral of light. Greg's garden: honey-gold light, turf roofs, Fennel's kitchen an open pavilion, the Moonwell stone-rimmed and glowing (answers the M157 rim question: stone rim). Looks only; places are Alex's (s1c); valley water and cloud wall win over the pictures' hills. The gate's code is shared with every player's cluster: Alex decides whether all gates change or the Glade's only. | beside the pictures, prod 390 + desktop, frame cost stated; Alex OKs | ⬜ after M153 s1c |
 | M166 | **Greg and Blue match Alex's locked pictures** (11-25, athernyx 2a70d7c; assets/concept-1672/greg-blue-momo/greg-{front,side,back}-LOCKED.png: short white beard, green waistcoat, specs, pencil; blue-{side,rest}-LOCKED.png = colour + warm seam light only, Blue's body stays our Dewbear; draw_momo.py in momo/ has Momo's colours). PNGs NEVER in this public repo. | beside the pictures, 390 + desktop; Alex OKs | ⬜ with M162 |
+| M167 | **The worn pruner and worn spike look as Alex locked them** (11-25, athernyx a8b1db5; /root/athernyx/assets/concept-1672/tools-rooms/{pruner,spike}-LOCKED.png, NEVER in this public repo; spike: blunt chipped tip, thicker shaft). Looks only. | beside the pictures, 390 + desktop; Alex OKs | ⬜ look batch, after M166 |
 
 ## M12 spec: the keeper roster (Alex 11-17, from the M7 save-loss finding)
 
@@ -236,6 +237,7 @@ Steps (one worker each, in order; each keeps `beta-m7-saves` green):
 - **Rules:** only rows on this list. No new systems, no lore, nothing public. Canon gate + tests before every build.
 
 ## Inbox (Alex's brain dump: hub writes here at once, dated, his words; triaged into rows / queue / CANON_GAPS / killed)
+- 11-25 11:51 Alex (via Magii a8b1db5): worn pruner + spike looks LOCKED -> M167; workshop rooms pictures: "Close but more open let's try to have it just a pad" = no room LOOK change until Alex picks (M153 s1c-3 = placing only); asked for "the concept art for all the building pieces" (Magii running it)
 - 11-25 11:5x Alex (dialog): dewls drop 1 / 2 / 3 / 5 by tier; prices ALL DEAR (15 to 100); a BAG ITEM (slot, drops on death); play after dewls = the look batch (Moglins, Greg + Blue, then Hollows)
 - 11-25 10:5x Alex (dialog): friends' looks good, two small fixes (Tess's blush, hazel eyes) -> rider on play-M156s4
 - 11-25 09:0x Alex (dialog): owner-only infection visible to his party guests = fine; usage = keep two agents going
