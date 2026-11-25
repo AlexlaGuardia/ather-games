@@ -83,6 +83,7 @@ import { FIRST_STEPS_ID, firstStepsEntries, mapSpots, type FirstStepsWorld } fro
 import { useFirstSteps } from './use-first-steps'
 import { gregSpot, gladeSpots, GLADE } from './moonwell-glade'   // M30 part 2: Greg lives at the Glade
 import { GladeLots } from './glade-lots-view'
+import { padGround } from './glade-pads'   // M153 s1c-2
 import { GladeCluster, gladeFolkDrawn } from './glade-cluster-view'   // M67 s1a: the closed Glade's keepers, Moglins, Greg's marker
 import { GLADE_FRAME, GLADE_OWNED, GLADE_TILE, GLADE_ZONE_NAME, GLADE_GATE, gladeNewbornSpot, gladeWhere, gregInGlade, gladeKeepers } from './glade-cluster'   // M40: the green, the five's lots + stations, Greg's jetty
 import { whenGladePeopleKnown } from './glade-people'
@@ -443,15 +444,15 @@ function AtherSliceGame() {
     : plotShape(owned, [...mistWalls(owned), ...workWalls(works)]))), [owned, cl.frame, works])
   useEffect(() => { setGardenGround(zone.kind === 'plot' ? { owned, works, walls: workWalls(works), frame: cl.frame } : null); return () => setGardenGround(null) }, [zone.kind, owned, works, cl.frame])   // M126
   const gladeLayer = useGladeLayer(zone.kind === 'glade')   // M83 s2b: refetched on each Glade entry, so a publish shows next visit
-  const gladeZoneGround = useMemo(() => gladeLayerGround(gladeLayer.edits), [gladeLayer])
+  const gladeLand = useMemo(() => gladeLayerGround(gladeLayer.edits), [gladeLayer]), gladeZoneGround = useMemo(() => padGround(gladeLayer.props, gladeLand), [gladeLayer, gladeLand])   // M153 s1c-2: the land; what stands also stands on a moved house's pad
   const gladeMeshLift = useMemo(() => gladeLift(gladeLayer.edits), [gladeLayer])
-  const gladeParts = useMemo(() => zoneParts(gladeLayer.zones ?? [], gladeZoneGround), [gladeLayer, gladeZoneGround])   // M84 s3
+  const gladeParts = useMemo(() => zoneParts(gladeLayer.zones ?? [], gladeLand), [gladeLayer, gladeLand])   // M84 s3
   const gladeScenery = useMemo(() => sceneryPlaced(gladeLayer.props ?? [], gladeZoneGround), [gladeLayer, gladeZoneGround])   // M153 s1a
   const gladeOwnNodes = useMemo(() => gladeNodes(gladeLayer.props ?? [], gladeZoneGround), [gladeLayer, gladeZoneGround]), gladeDecor = useMemo(() => gladeScenery.filter(p => !isNode(p)), [gladeScenery])   // M153 s1b
   // M114 s2: each tagged zone's ONE E point (zone-tags.ts: front edge; locked / shop panel / home label + talk / supplier line)
   const gladeDoors = useMemo(() => (gladeLayer.zones ?? []).flatMap(z => { const u = zoneUse(z); return u ? [{ id: z.id, ...zoneDoor(z), u }] : [] }), [gladeLayer])
   const gladeDoorsRef = useRef(gladeDoors); gladeDoorsRef.current = gladeDoors
-  const gladeShape = useMemo(() => withZoneParts(withPieces({ ...plotShape(GLADE_OWNED, [...mistWalls(GLADE_OWNED), ...mateWalls(GLADE_FRAME)]), ground: gladeZoneGround }, undefined, true), [...zonePartBoxes(gladeParts), ...sceneryBoxes(gladeScenery)]), [gladeZoneGround, gladeParts, gladeScenery]), gladeWorld = useMemo(() => terrainWorld(gladeShape), [gladeShape])   // M67 s1a; s1b-2: the pond's bowl + Greg's home, lots, jetty
+  const gladeShape = useMemo(() => withZoneParts(withPieces({ ...plotShape(GLADE_OWNED, [...mistWalls(GLADE_OWNED), ...mateWalls(GLADE_FRAME)]), ground: gladeLand }, undefined, true), [...zonePartBoxes(gladeParts), ...sceneryBoxes(gladeScenery)]), [gladeLand, gladeParts, gladeScenery]), gladeWorld = useMemo(() => terrainWorld(gladeShape), [gladeShape])   // M67 s1a; s1b-2: the pond's bowl + Greg's home, lots, jetty
   const updateGarden = useCallback((g: Garden) => { setGarden(g); saveGarden(g) }, [])
 
   const fading = useRef(false)
@@ -1796,8 +1797,8 @@ function AtherSliceGame() {
         {zone.kind === 'wilds' && ww && held === 'waymark' && !panel && <WaymarkGhost pose={plantPose} height={ww.heightAt} verdict={(x, z) => plantVerdict({ x, z })} onWhy={setWmWhy} />}
         {zone.kind === 'wilds' && ww && <GroundLoot keeper={lootKeeper} ground={ground} can={lootCan} />}
         {zone.kind === 'wilds' && ww && <><CloudReefs layout={reefLayout} /><CloudDeck squares={deckLayout} size={TILE_M} y={WILDS_WATER_Y - 0.1} /><HorizonRing y={WILDS_WATER_Y} /></>}   {/* M24: the sea turns to cloud past the map */}
-        {zone.kind === 'glade' && <><MoonwellPool ground={ground} stowed={() => stanceRef.current.kind === 'stowed'} /><GladeLots /></>}   {/* M67 s1b-2: the Glade's backdrop in Greg's garden */}
-        {zone.kind === 'glade' && <GladeGreg loaded={(x, z) => { const y = gladeZoneGround(x, z); return Number.isFinite(y) ? y : null }} tour={tour} hold={panel?.kind === 'talk' || panel?.kind === 'greg'} keeper={poseRef} onArrive={onTourArrive} live={gregLive} />}
+        {zone.kind === 'glade' && <><MoonwellPool ground={ground} stowed={() => stanceRef.current.kind === 'stowed'} /><GladeLots ground={gladeLand} /></>}   {/* M67 s1b-2: the Glade's backdrop in Greg's garden */}
+        {zone.kind === 'glade' && <GladeGreg land={gladeLand} loaded={(x, z) => { const y = gladeZoneGround(x, z); return Number.isFinite(y) ? y : null }} tour={tour} hold={panel?.kind === 'talk' || panel?.kind === 'greg'} keeper={poseRef} onArrive={onTourArrive} live={gregLive} />}
         {zone.kind === 'wilds' && ww && standing && <Settlements net={standing} loaded={(x, z) => ww.tileAtPoint(x, z) ? ww.heightAt(x, z) : null} />}
         {zone.kind === 'wilds' && ww && <FirstSettlement loaded={(x, z) => ww.tileAtPoint(x, z) ? ww.heightAt(x, z) : null} />}   {/* M70 s1 */}
         {zone.kind === 'wilds' && ww && net?.fair && ww.tileAtPoint(net.fair.x, net.fair.z) && <BigTop fair={net.fair} y={ww.heightAt(net.fair.x, net.fair.z)} />}
