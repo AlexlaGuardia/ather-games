@@ -50,6 +50,38 @@ const BUILD = {
 const PINK = '#f0a3a0', EAR_IN = '#ee9a92', EYE = '#1d1410', NOSE = '#e98282', WHISKER = '#3a2a20'
 const TAU = Math.PI * 2
 
+/** The rig's pose at time t (pure): shared with the named Moglins (moglin-look-model.tsx). */
+export function moglinPose(action: MoglinAction, t: number) {
+  const breathe = Math.sin(t * 2.1) * 0.012
+  let roll = 0, bob = breathe, headPitch = 0, headRoll = 0, earDroop = 0
+  // arms: [pitch (forward +), roll (out +)] ; default = paws together at the chest (the ref's pose)
+  let aL: [number, number] = [-1.15, -0.55], aR: [number, number] = [-1.15, 0.55], lL = 0, lR = 0
+  if (action === 'idle') {
+    headRoll = Math.sin(t * 0.7) * 0.05
+    earDroop = Math.max(0, Math.sin(t * 0.9 + 2) - 0.92) * 3   // a flick now and then
+  } else if (action === 'waddle') {
+    const ph = t * 5.2
+    roll = Math.sin(ph) * 0.12; bob = Math.abs(Math.sin(ph)) * 0.035
+    lL = Math.sin(ph) * 0.45; lR = -Math.sin(ph) * 0.45
+    aL = [-0.25 - Math.sin(ph) * 0.35, -0.25]; aR = [-0.25 + Math.sin(ph) * 0.35, 0.25]
+    headRoll = -roll * 0.6
+  } else if (action === 'work') {   // at a bench: both paws forward, working in turn (kneading / stirring / planing)
+    const ph = t * 3.2
+    aL = [-1.35 + Math.sin(ph) * 0.3, -0.2]; aR = [-1.35 - Math.sin(ph) * 0.3, 0.2]
+    headPitch = 0.28 + Math.sin(ph * 0.5) * 0.04; roll = Math.sin(ph) * 0.03
+  } else if (action === 'wave') {
+    const ph = t * 6
+    aR = [-0.3, 2.4 + Math.sin(ph) * 0.35]; aL = [-1.1, -0.45]
+    headRoll = 0.12; headPitch = -0.05
+  } else if (action === 'shy') {
+    aL = [-1.45, -0.75]; aR = [-1.45, 0.75]
+    headPitch = 0.32; headRoll = Math.sin(t * 0.8) * 0.06 + 0.1; earDroop = 0.75; bob = breathe * 0.5
+  }
+  return { roll, bob, headPitch, headRoll, earDroop, aL, aR, lL, lR }
+}
+/** a quick close every few seconds */
+export const moglinBlink = (t: number, seed: number) => ((t + seed) % 3.7) < 0.12 ? 0.12 : 1
+
 export function MoglinModel({ build = MOGLIN_BUILD, action = 'idle', garb = 'none', tone = FUR_TONES[0], speed = 1, seed = 0 }: {
   build?: MoglinBuild; action?: MoglinAction; garb?: MoglinGarb; tone?: (typeof FUR_TONES)[number]; speed?: number; seed?: number
 }) {
@@ -62,31 +94,7 @@ export function MoglinModel({ build = MOGLIN_BUILD, action = 'idle', garb = 'non
   const t0 = useRef(seed * 1.7)
   useFrame((_, dt) => {
     const t = (t0.current += Math.min(0.05, dt) * speed)
-    const breathe = Math.sin(t * 2.1) * 0.012
-    let roll = 0, bob = breathe, headPitch = 0, headRoll = 0, earDroop = 0
-    // arms: [pitch (forward +), roll (out +)] ; default = paws together at the chest (the ref's pose)
-    let aL: [number, number] = [-1.15, -0.55], aR: [number, number] = [-1.15, 0.55], lL = 0, lR = 0
-    if (action === 'idle') {
-      headRoll = Math.sin(t * 0.7) * 0.05
-      earDroop = Math.max(0, Math.sin(t * 0.9 + 2) - 0.92) * 3   // a flick now and then
-    } else if (action === 'waddle') {
-      const ph = t * 5.2
-      roll = Math.sin(ph) * 0.12; bob = Math.abs(Math.sin(ph)) * 0.035
-      lL = Math.sin(ph) * 0.45; lR = -Math.sin(ph) * 0.45
-      aL = [-0.25 - Math.sin(ph) * 0.35, -0.25]; aR = [-0.25 + Math.sin(ph) * 0.35, 0.25]
-      headRoll = -roll * 0.6
-    } else if (action === 'work') {   // at a bench: both paws forward, working in turn (kneading / stirring / planing)
-      const ph = t * 3.2
-      aL = [-1.35 + Math.sin(ph) * 0.3, -0.2]; aR = [-1.35 - Math.sin(ph) * 0.3, 0.2]
-      headPitch = 0.28 + Math.sin(ph * 0.5) * 0.04; roll = Math.sin(ph) * 0.03
-    } else if (action === 'wave') {
-      const ph = t * 6
-      aR = [-0.3, 2.4 + Math.sin(ph) * 0.35]; aL = [-1.1, -0.45]
-      headRoll = 0.12; headPitch = -0.05
-    } else if (action === 'shy') {
-      aL = [-1.45, -0.75]; aR = [-1.45, 0.75]
-      headPitch = 0.32; headRoll = Math.sin(t * 0.8) * 0.06 + 0.1; earDroop = 0.75; bob = breathe * 0.5
-    }
+    const { roll, bob, headPitch, headRoll, earDroop, aL, aR, lL, lR } = moglinPose(action, t)
     if (body.current) { body.current.rotation.z = roll; body.current.position.y = bob }
     if (head.current) { head.current.rotation.x = headPitch; head.current.rotation.z = headRoll }
     if (earL.current) earL.current.rotation.z = 0.78 + earDroop * 0.6
@@ -95,9 +103,7 @@ export function MoglinModel({ build = MOGLIN_BUILD, action = 'idle', garb = 'non
     if (armR.current) armR.current.rotation.set(aR[0], 0, -aR[1])
     if (legL.current) legL.current.rotation.x = lL
     if (legR.current) legR.current.rotation.x = lR
-    // blink: a quick close every few seconds
-    const blink = ((t + seed) % 3.7) < 0.12 ? 0.12 : 1
-    if (eyes.current) eyes.current.scale.y = blink
+    if (eyes.current) eyes.current.scale.y = moglinBlink(t, seed)
   })
   const fur = <meshStandardMaterial color={tone.fur} roughness={0.95} />
   const light = <meshStandardMaterial color={tone.light} roughness={0.95} />

@@ -5,7 +5,8 @@
 // (pure, tested); this only draws it. Hidden axes / scores (trust reveal) draw as '?'. Drawn ABOVE the talk answers.
 import type { ReactNode } from 'react'
 import { Canvas } from '@react-three/fiber'
-import { MoglinModel, furOf, MOGLIN_HEIGHT } from '../shared/moglin-model'
+import { MOGLIN_HEIGHT } from '../shared/moglin-model'
+import { NamedMoglin } from '../shared/moglin-look-model'
 import type { Grade } from './moglins'
 import type { CardView } from './moglin-card'
 import type { StatGrade } from './moglin-stats'
@@ -62,7 +63,7 @@ function Portrait({ id, size }: { id: string; size: number }) {
         onCreated={({ camera }) => camera.lookAt(0, h * 0.5, 0)}>
         <ambientLight intensity={0.9} />
         <directionalLight position={[1.5, 3, 2.5]} intensity={1.4} />
-        <group rotation-y={-0.35}><MoglinModel build="chibi" action="idle" tone={furOf(id)} seed={id.length} /></group>
+        <group rotation-y={-0.35}><NamedMoglin id={id} seed={id.length} /></group>
       </Canvas>
     </div>
   )

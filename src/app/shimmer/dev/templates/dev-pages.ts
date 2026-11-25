@@ -171,6 +171,22 @@ export const DEV_PAGES: DevPage[] = [
     keywords: ['moglin', 'model', 'folk', 'villager', 'plush', 'chibi', 'garb', 'rig', 'character'],
   },
   {
+    path: '/shimmer/dev/moglin-looks',
+    title: 'The Moglin Looks',
+    blurb: "The Glade's named Moglins in their locked looks, front, side and back.",
+    group: 'glass',
+    era: 'live',
+    keywords: ['moglin', 'hazel', 'sax', 'yarrow', 'glade', 'look', 'character'],
+  },
+  {
+    path: '/shimmer/dev/friends',
+    title: 'The Friends Bench',
+    blurb: 'Bonn, Otto and Tess grown, front, side and back, with their talk, wave and walk.',
+    group: 'glass',
+    era: 'live',
+    keywords: ['friends', 'bonn', 'otto', 'tess', 'glade', 'look', 'character'],
+  },
+  {
     path: '/shimmer/dev/hands',
     title: 'The Hands Tuner',
     blurb: 'Place the first-person hands in each key pose: rest, run, jump, cast.',

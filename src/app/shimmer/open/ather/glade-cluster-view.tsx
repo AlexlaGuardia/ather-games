@@ -10,7 +10,7 @@ import type * as THREE from 'three'
 import { FOLK_HEIGHT } from '../shared/folk-model'
 import { FriendModel } from '../shared/friend-model'
 import { isFriend } from '../shared/friend-figure'
-import { MoglinModel, furOf } from '../shared/moglin-model'
+import { NamedMoglin } from '../shared/moglin-look-model'
 import { gladeKeepers, gregInGlade } from './glade-cluster'
 import { GLADE, gladeFolk } from './moonwell-glade'
 import { folkSpots, type Spot } from './folk-spots'
@@ -64,7 +64,7 @@ export function GladeCluster({ ground, marker = true }: { ground: (x: number, z:
       ))}
       {FOLK.map((f, i) => (
         <group key={f.id} position={[f.x, ground(f.x, f.z), f.z]} rotation-y={f.yaw} userData={{ gladeFolk: f.id }}>
-          <MoglinModel build="chibi" action="idle" tone={furOf(f.id)} seed={i * 1.7} />
+          <NamedMoglin id={f.id} seed={i * 1.7} />
         </group>
       ))}
       {marker && <GregMarker ground={ground} />}

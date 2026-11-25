@@ -7,10 +7,10 @@ import { poseFolk, folkRamp, folkInk, type FolkAction } from './folk-model'
 import { friendFigure, type FriendId, type JointName } from './friend-figure'
 
 let mats: { toon: THREE.MeshToonMaterial; flat: THREE.MeshBasicMaterial } | null = null
-const mat = () => (mats ??= { toon: new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: folkRamp() }), flat: new THREE.MeshBasicMaterial({ vertexColors: true }) })
+export const figureMats = () => (mats ??= { toon: new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: folkRamp() }), flat: new THREE.MeshBasicMaterial({ vertexColors: true }) })
 
 export function FriendModel({ who, action = 'idle', seed = 0, speed = 1 }: { who: FriendId; action?: FolkAction; seed?: number; speed?: number }) {
-  const f = friendFigure(who), m = mat()
+  const f = friendFigure(who), m = figureMats()
   const j = useRef<Record<JointName | 'eyes', THREE.Object3D | null>>({ body: null, head: null, armL: null, armR: null, legL: null, legR: null, eyes: null })
   const root = useRef<THREE.Group>(null)
   const t = useRef(seed * 1.3)

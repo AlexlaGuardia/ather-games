@@ -21,7 +21,7 @@ export interface FriendFigure {
 /** toon + ink for six joints, the face lines, the eyes */
 export const FRIEND_CALLS = 6 * 2 + 2
 
-type V3 = [number, number, number]
+export type V3 = [number, number, number]
 const INK_T = 0.011   // the outline's thickness (m), the same on every part (the pictures' thin line)
 
 export const FRIEND_COLOR = {
@@ -36,7 +36,8 @@ const SOLE = '#3a2a20', METAL = '#b9a888', DARK = '#1c1712'
 const SPH = new THREE.SphereGeometry(1, 14, 10)
 /** the coils: many, so cheap */
 const COIL = new THREE.SphereGeometry(1, 9, 7)
-class Mould {
+export class Mould {
+  constructor(private inkT = INK_T) {}
   p: number[] = []; n: number[] = []; c: number[] = []; i: number[] = []; ip: number[] = []; ii: number[] = []
   add(geo: THREE.BufferGeometry, color: string, pos: V3 = [0, 0, 0], scale: V3 = [1, 1, 1], rot: V3 = [0, 0, 0], ink = true) {
     const g = geo.clone().applyMatrix4(new THREE.Matrix4().compose(new THREE.Vector3(...pos), new THREE.Quaternion().setFromEuler(new THREE.Euler(...rot)), new THREE.Vector3(...scale)))
@@ -49,7 +50,7 @@ class Mould {
       for (let k = 0; k < P.count; k++) { const q = key(k), v = sum.get(q) ?? new THREE.Vector3(); v.add(new THREE.Vector3(N.getX(k), N.getY(k), N.getZ(k))); sum.set(q, v) }
       for (const v of sum.values()) if (v.lengthSq() > 1e-8) v.normalize()
       const ib = this.ip.length / 3
-      for (let k = 0; k < P.count; k++) { const v = sum.get(key(k))!; this.ip.push(P.getX(k) + v.x * INK_T, P.getY(k) + v.y * INK_T, P.getZ(k) + v.z * INK_T) }
+      for (let k = 0; k < P.count; k++) { const v = sum.get(key(k))!; this.ip.push(P.getX(k) + v.x * this.inkT, P.getY(k) + v.y * this.inkT, P.getZ(k) + v.z * this.inkT) }
       for (const k of idx) this.ii.push(ib + k)
     }
     g.dispose()
@@ -60,19 +61,19 @@ class Mould {
   ink() { return buf(this.ip, this.ii) }
   joint(at: V3): FriendJoint { return { at, toon: this.toon(), ink: this.ink() } }
 }
-function buf(p: number[], i: number[], n?: number[], c?: number[]) {
+export function buf(p: number[], i: number[], n?: number[], c?: number[]) {
   const g = new THREE.BufferGeometry()
   g.setAttribute('position', new THREE.Float32BufferAttribute(p, 3))
   if (n) g.setAttribute('normal', new THREE.Float32BufferAttribute(n, 3))
   if (c) g.setAttribute('color', new THREE.Float32BufferAttribute(c, 3))
   g.setIndex(i); return g
 }
-type Prof = readonly (readonly [number, number])[]   // [radius, y], bottom to top
+export type Prof = readonly (readonly [number, number])[]   // [radius, y], bottom to top
 /** a turned shape; a0..a1 = only that arc (0 = the front, +x a quarter round) */
-const turn = (prof: Prof, a0 = 0, a1 = Math.PI * 2, seg = 20) => new THREE.LatheGeometry(prof.map(([r, y]) => new THREE.Vector2(Math.max(r, 0.0001), y)), seg, a0, a1 - a0)
+export const turn = (prof: Prof, a0 = 0, a1 = Math.PI * 2, seg = 20) => new THREE.LatheGeometry(prof.map(([r, y]) => new THREE.Vector2(Math.max(r, 0.0001), y)), seg, a0, a1 - a0)
 /** closed both ends */
-const tube = (prof: Prof, seg = 14) => turn([[0, prof[0][1]], ...prof, [0, prof[prof.length - 1][1]]], 0, Math.PI * 2, seg)
-const radAt = (prof: Prof, y: number) => {
+export const tube = (prof: Prof, seg = 14) => turn([[0, prof[0][1]], ...prof, [0, prof[prof.length - 1][1]]], 0, Math.PI * 2, seg)
+export const radAt = (prof: Prof, y: number) => {
   for (let k = 1; k < prof.length; k++) { const [r0, y0] = prof[k - 1], [r1, y1] = prof[k]; if (y >= y0 && y <= y1) return y1 === y0 ? r1 : r0 + (r1 - r0) * (y - y0) / (y1 - y0) }
   return y < prof[0][1] ? prof[0][0] : prof[prof.length - 1][0]
 }
@@ -90,12 +91,12 @@ export function band(prof: Prof, zs: number, yAt: (a: number) => number, w: numb
 }
 /** slung from the left shoulder (+x) to the right hip */
 const sling = (lo: number, hi: number) => (a: number) => lo + (hi - lo) * (Math.sin(a) * 0.5 + 0.5)
-const BOOTFOOT = (() => {   // a round toe on a flat floor
+export const BOOTFOOT = (() => {   // a round toe on a flat floor
   const g = new THREE.SphereGeometry(1, 16, 12), P = g.attributes.position
   for (let k = 0; k < P.count; k++) if (P.getY(k) < -0.15) P.setY(k, -0.15)
   g.computeVertexNormals(); return g
 })()
-const ROUND = (() => {   // a soft box
+export const ROUND = (() => {   // a soft box
   const g = new THREE.BoxGeometry(2, 2, 2, 4, 4, 4), P = g.attributes.position, v = new THREE.Vector3()
   for (let k = 0; k < P.count; k++) { v.fromBufferAttribute(P, k); const q = v.clone().clampScalar(-0.72, 0.72); v.sub(q).normalize().multiplyScalar(0.28).add(q); P.setXYZ(k, v.x, v.y, v.z) }
   g.computeVertexNormals(); return g
