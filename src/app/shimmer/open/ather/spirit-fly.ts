@@ -14,7 +14,7 @@ export type FlyLook = {
   flap: [number, number]
 }
 /** m: below this she is down (the next clip may take over) */
-export const DOWN = 0.05
+export const DOWN = 0.02
 /** THE DEADZONE: anything (the keeper, another spirit) this near her in plan while she is up: she holds her height, neither
  *  settling onto them nor climbing off, until it is past `out`, for at most `hold` s (two fliers never hold each other up) */
 export const DEADZONE = { in: 0.55, out: 0.75, hold: 1.5 } as const

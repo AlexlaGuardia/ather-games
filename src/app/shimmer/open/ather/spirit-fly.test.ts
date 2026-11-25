@@ -81,7 +81,7 @@ function body(sp: typeof SPS[number], gltf: RigGltf) {
       fly = flyStep(fly, R.fly!, travels(clip, p.mode) && sv > R.runAt[1], 9, dt); clip = flyClip(clip, fly.alt); seen.add(clip); hi = Math.max(hi, fly.alt)
       if (clip === 'run' && p.mode === 'trot') hops++
       if (d < 1e-5) { still += dt; stood++ } else still = 0
-      if (still > 1 && fly.alt > 0.05) late++
+      if (still > 1 && fly.alt > DOWN) late++
       prev = { ...p } }
     ok(hi > R.fly!.alt * 0.5 && hops > 60, `${sp} seed ${seed}: up to ${hi.toFixed(2)} m`); ok(late === 0, `${sp} seed ${seed}: ${late} frames hanging a second after she stopped`); ok(stood / N > 0.45, `${sp} seed ${seed}: still ${(stood / N * 100).toFixed(0)}%`)
     ok(['idle', 'run', 'sit'].every(c => seen.has(c as RigClip)), `${sp} seed ${seed}: ${[...seen]}`); if (seed === 1) console.log(`   ${sp}: still ${(stood / N * 100).toFixed(0)}% of the time, up to ${hi.toFixed(2)} m over the clip's ${lo.run.toFixed(2)}`) }

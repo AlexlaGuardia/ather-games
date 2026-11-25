@@ -166,11 +166,11 @@ const VRIG_H = GROWN.fox.height / VULNYX_GLB_TALL
 // ── M173 the fliers' rigs: walk = a two-footed hop (planted), run = FLIGHT, so `fly` (spirit-fly.ts) and no stride there.
 export const ATHOWL_RIG: RigLook = {
   glbLen: 0.777, pivot: { x: 0, z: 0 }, clipV: { walk: 0.55 / 0.5, run: 2.8 / 0.5 }, runAt: [0.9, 0.75], hull: 0.024,
-  neck: 'b_neck', head: 'b_head', lie: true, fly: { alt: 0.3, up: 2.2, down: 3, flap: [0.75, 1.25] }, avatar: { z: -0.04, far: 1.1 },
+  neck: 'b_neck', head: 'b_head', lie: true, fly: { alt: 0.3, up: 2.2, down: 4, flap: [0.75, 1.25] }, avatar: { z: -0.04, far: 1.1 },
 }
 export const NOCTYX_RIG: RigLook = {
   glbLen: 0.434, pivot: { x: 0, z: 0 }, clipV: { walk: 0.55 / 0.45, run: 2.8 / 0.45 }, runAt: [0.9, 0.75], hull: 0.024,
-  neck: 'b_neck', head: 'b_head', lie: true, fly: { alt: 0.45, up: 4, down: 4, flap: [1.1, 1.8] }, avatar: { z: 0.02, far: 1.1 },
+  neck: 'b_neck', head: 'b_head', lie: true, fly: { alt: 0.45, up: 4, down: 5, flap: [1.1, 1.8] }, avatar: { z: 0.02, far: 1.1 },
 }
 /** their glbs' heights standing (the idle clips' means), glb units */
 export const ATHOWL_GLB_TALL = 1.005, NOCTYX_GLB_TALL = 0.999

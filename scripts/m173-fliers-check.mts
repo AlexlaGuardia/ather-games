@@ -92,15 +92,20 @@ try {
     await p.evaluate(() => (window as any).__ather.travel({ kind: 'waymark', w: { id: 'greg', tile: 'first-wilds', x: -300, y: 0, z: 300, biome: 2, made: 0 } }))
     await p.waitForFunction(() => (window as any).__ather.zone() === 'wilds' && !!(window as any).__ather.combat, { timeout: 120000 }); ok(await gl(p, 3), '5. the Wilds: the three are rigged'); await sleep(5000)
     ok(await p.evaluate(() => { const F = (window as any).__formation, S = (window as any).__spiritFight?.(); return ['p0', 'p1', 'p2'].every(i => F?.members.some((m: any) => m.id === i)) && S?.spirits.length === 3 }), '5. in the formation and in the fight brain')
-    await p.evaluate(() => { (window as any).__m173.r = {}; const W = window as any, A = W.__ather, D = W.__f = { acts: 0 }; let shotAt = 0
-      setInterval(() => { const C = A.combat(), e = A.camAim(); C.keeper.hp = C.keeper.maxHp; if (C.hollows.length < 2) { A.spawn(0, -9, 'shambler'); const h = C.hollows.at(-1); if (h) h.state = 'chase' }
+    await p.evaluate(() => { (window as any).__m173.r = {}; const W = window as any, A = W.__ather, D = W.__f = { fight: true, on: 0, mine: new Set<number>() }; let shotAt = 0
+      setInterval(() => { const C = A.combat(), e = A.camAim(); if (!D.fight) { D.mine.clear(); C.hollows.length = 0; C.spits.length = 0; C.packs = {}; return }
+        C.keeper.hp = C.keeper.maxHp; for (const id of D.mine) if (!C.hollows.some((h: any) => h.id === id)) D.mine.delete(id)
+        C.hollows = C.hollows.filter((h: any) => D.mine.has(h.id))
+        if (D.mine.size < 3) { const n = C.hollows.length; A.spawn(D.mine.size * 2 - 2, -9, 'shambler'); if (C.hollows.length > n) { const h = C.hollows.at(-1); h.state = 'chase'; D.mine.add(h.id) } }
         const t = C.hollows.find((h: any) => h.hp > 0); if (t && performance.now() - shotAt > 900) { shotAt = performance.now(); const dx = t.x - e.cx, dz = t.z - e.cz, d = Math.hypot(dx, dz) || 1; C.rounds.push({ x: t.x - dx / d * 0.5, y: t.y + 0.9, z: t.z - dz / d * 0.5, vx: dx / d * 12, vy: 0, vz: dz / d * 12, life: 0.4, dmg: 5, crit: 5 }) }
-        D.acts = W.__spiritFight().seen.hit }, 100) })
-    const t1 = Date.now(); let f: any = {}
-    while (Date.now() - t1 < 120000) { await sleep(3000); f = await p.evaluate(() => { const S = (window as any).__spiritFight(); return { on: S.on, hit: S.seen.hit, by: [...new Set(S.log.filter((e: any) => e.kind === 'hit').map((e: any) => e.id))], spirits: S.spirits.map((s: any) => s.id) } }); if (f.by.includes('p0') && f.by.includes('p1')) break }
+        if (W.__spiritFight().on) D.on++ }, 60) })
+    const t1 = Date.now(); let f: any = {}; const by = new Set<string>()
+    while (Date.now() - t1 < 300000 && !(by.has('p0') && by.has('p1'))) {   // each joins a fight only when she chooses (0.7): fight after fight
+      for (let k = 0; k < 10; k++) { await sleep(2500); f = await p.evaluate(() => { const S = (window as any).__spiritFight(); return { on: (window as any).__f.on, fights: S.seen.fights, hit: S.seen.hit, by: [...new Set(S.log.filter((e: any) => e.kind === 'hit').map((e: any) => e.id))], spirits: S.spirits.map((s: any) => s.id) } }); for (const x of f.by) by.add(x); if (k === 4 && by.size) await shot(p, `fight-${f.fights}`) }
+      await p.evaluate(() => { (window as any).__f.fight = false }); await sleep(8000); await p.evaluate(() => { (window as any).__f.fight = true }) }
     await shot(p, 'fight'); const R3 = await rows(p)
-    ok(f.on && f.spirits.length === 3 && f.hit > 0, `5. a fight with the three drawn: ${JSON.stringify(f)}`)
-    for (const id of ['p0', 'p1']) ok(!!R3[id]?.length && R3[id].every(r => r.off > -0.06), `5. ${R3[id]?.[0]?.sp} draws through it (${R3[id]?.length} frames, off ${Math.min(...R3[id].map(r => r.off)).toFixed(2)} .. ${Math.max(...R3[id].map(r => r.off)).toFixed(2)} m)`)
+    ok(f.on > 10 && f.spirits.length === 3 && by.has('p0') && by.has('p1'), `5. fights, the owl and the bat each landed a HIT (${[...by]}): ${JSON.stringify(f)}`)
+    for (const id of ['p0', 'p1']) ok(!!R3[id]?.length && R3[id].every(r => r.off > -0.06) && R3[id].some(r => r.alt > 0.1), `5. ${R3[id]?.[0]?.sp} flies in it (${R3[id]?.length} frames, off ${Math.min(...R3[id].map(r => r.off)).toFixed(2)} .. ${Math.max(...R3[id].map(r => r.off)).toFixed(2)} m)`)
     await p.close() }
 } catch (e) { ok(false, `threw ${String(e).slice(0, 300)}`) }
 await br.close()
