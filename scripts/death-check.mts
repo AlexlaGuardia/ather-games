@@ -8,6 +8,9 @@
 //   4. RELOAD with an empty bag: walk onto it -> everything back, the pack gone
 //   5. fall again, age the pack past 5 min in the save (the clock hook), reload, walk onto the spot -> nothing given, gone
 //   6. 0 page errors
+// HOME (M71 s1, page.tsx goHome): a keeper whose garden Greg has FOLDED falls home to the plot; one who has no garden yet falls
+//   home to the Glade, by design. This check's keeper is FOLDED (a tutorial save written at setup) and must reach the PLOT.
+//   --unfolded: a newborn instead; step 1 must read the GLADE (never the plot), full health, then the check ends.
 // SETUP (stated): born keeper (birthRune); the bag + pack written to localStorage between reloads (anon keeper = bare keys).
 // Hooks: __ather.fall / hp / zone / tp / aim / pack, reading + movement only.
 //   npx tsx scripts/death-check.mts [--url https://ather.games]
@@ -46,7 +49,10 @@ async function walkTo(x: number, z: number) {
 
 // ── 1 + 2: fall ──
 await p.goto(`${url}/shimmer/open/ather?hour=13&home=1`, { waitUntil: 'domcontentloaded', timeout: 240000 })
-await p.evaluate((ik, pk, bag) => { localStorage.setItem('ather:shimmer:birthRune', 'star'); localStorage.setItem(ik, JSON.stringify(bag)); localStorage.removeItem(pk) }, INV_KEY, PACK_KEY, bagOf(START))
+const unfolded = process.argv.includes('--unfolded'), HOME = unfolded ? 'glade' : 'plot'
+// the legacy tutorial save (glade-tutorial.ts legacyTut: First Steps done, garden folded); --unfolded leaves a newborn's (none)
+const TUT = { v: 1, live: false, greg: { welcome: true, moglins: true, spirits: true, wilds: true }, heard: ['otto', 'tess', 'bonn', 'fennel'], gifts: ['grimoire', 'spike', 'pruner', 'seeds', 'bait', 'rinquest'], b2: 'accepted', baitDay: null, m70: 'none', m70node: null, m70side: 'none', folded: true }
+await p.evaluate((ik, pk, bag, tut) => { localStorage.setItem('ather:shimmer:birthRune', 'star'); localStorage.setItem(ik, JSON.stringify(bag)); localStorage.removeItem(pk); if (tut) localStorage.setItem('open.tutorial.v1', JSON.stringify(tut)); else localStorage.removeItem('open.tutorial.v1') }, INV_KEY, PACK_KEY, bagOf(START), unfolded ? null : TUT)
 await intoWilds()
 const a0 = await at(), spot = { x: a0.x + 24, z: a0.z - 18 }
 await walkTo(spot.x, spot.z)
@@ -55,8 +61,10 @@ const fell = await at()
 await p.evaluate(() => { (window as any).__ather.combat().keeper.hp = 2; (window as any).__ather.combat().keeper.sinceHurt = 0 })
 ok(await poll(async () => (await p.evaluate(() => (window as any).__ather.hp())) <= 2, 15000), '0. the HUD shows the keeper at 2 hp before the fall')
 await p.evaluate(() => (window as any).__ather.fall())
-ok(await poll(async () => (await zone()) === 'plot', 30000), '1. a fall sends the keeper home to the plot')
+{ const left = await poll(async () => { const z = await zone(); return z === 'plot' || z === 'glade' }, 30000), z = await zone()
+  ok(left && z === HOME, `1. a fall sends the ${unfolded ? 'newborn (no garden yet) home to the Glade' : 'folded keeper home to the plot'} (it reads '${z}')`) }
 ok(await poll(async () => (await p.evaluate(() => (window as any).__ather.hp())) === 100, 15000), `1. ...at FULL health on the HUD (${await p.evaluate(() => (window as any).__ather.hp())})`)
+if (unfolded) { ok(errs.length === 0, `0 page errors ${errs.slice(0, 2).join(' | ')}`); await br.close(); console.log(fails ? `FAIL (${fails})` : 'PASS (--unfolded: step 1 only)'); process.exit(fails ? 1 : 0) }
 const pk = await p.evaluate(() => (window as any).__ather.pack()) as Pack | null
 ok(!!pk && total(pk.items) === 29 && Math.hypot(pk.x - fell.x, pk.z - fell.z) < 1.5, `2. a pack lies where they fell holding the whole bag (${pk ? total(pk.items) : 'none'} things, ${pk ? Math.hypot(pk.x - fell.x, pk.z - fell.z).toFixed(2) : '-'} m off)`)
 const saved = await store(PACK_KEY) as Pack | null, inv0 = await store(INV_KEY) as { slots: Stack[] }
