@@ -9,7 +9,7 @@
 //      E -> Veyra Unit 1 v2 WORD FOR WORD (scene boxes + lines + the two choices, both asked) -> the send line -> THE SHIP-REPAIR
 //      FLAG set (__chain.shipRepair); RELOAD -> still set, and Veyra's bark word for word
 //   0 page errors.
-// SETUP (stated): born keeper (birthRune) only. Hooks: __ather.fall / tp / state / pack / zone / open (movement + panel
+// SETUP (stated): born keeper (birthRune), PAST First Steps (M146: the chain is held until it is done; m146-first-steps-check). Hooks: __ather.fall / tp / state / pack / zone / open (movement + panel
 // open + reads); __chain.state / said (READ only).   npx tsx scripts/m73-chain-check.mts [--url https://ather.games]
 import puppeteer, { type Page } from 'puppeteer-core'
 import { KAEL_INVITE_TEXT } from '../src/app/shimmer/open/shared/kael-invite-lines'
@@ -37,7 +37,7 @@ async function keeper(tag: string) {
   await p.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: false })
   p.on('pageerror', e => errs.push(`${tag}: ${String(e).slice(0, 200)}`))
   await p.evaluateOnNewDocument('window.__name = (f) => f')
-  await p.evaluateOnNewDocument(() => { try { if (!localStorage.getItem('ather:shimmer:birthRune')) localStorage.setItem('ather:shimmer:birthRune', 'star') } catch { /* */ } })
+  await p.evaluateOnNewDocument(() => { try { if (!localStorage.getItem('ather:shimmer:birthRune')) { localStorage.setItem('ather:shimmer:birthRune', 'star'); if (!localStorage.getItem('open.tutorial.v1')) localStorage.setItem('open.tutorial.v1', JSON.stringify({ v: 1, live: true, greg: { welcome: true, moglins: true, spirits: true, wilds: true }, heard: ['otto', 'tess', 'bonn', 'fennel'], gifts: ['grimoire', 'spike', 'pruner', 'seeds', 'bait', 'rinquest'], b2: 'accepted', baitDay: null, m70: 'thanked', m70node: null, folded: true })) } } catch { /* */ } })
   return p
 }
 const poll = async (f: () => Promise<boolean>, ms = 60000) => { for (let t = 0; t < ms; t += 500) { if (await f().catch(() => false)) return true; await sleep(500) } return false }
