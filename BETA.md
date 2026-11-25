@@ -237,6 +237,7 @@ Steps (one worker each, in order; each keeps `beta-m7-saves` green):
 - **Rules:** only rows on this list. No new systems, no lore, nothing public. Canon gate + tests before every build.
 
 ## Inbox (Alex's brain dump: hub writes here at once, dated, his words; triaged into rows / queue / CANON_GAPS / killed)
+- 11-25 12:17 Alex (via Magii 246c2cc): workshop rooms LOCKED as pads (floor + stations; replaces 'until Alex picks' below; look athernyx assets/concept-1672/building/sheet-pads.png, NEVER in this public repo) · roof skin = clay tile AND living turf, keeper chooses · walls stay 4.8 m · wanted pieces: a door that closes, fence + gate, shutters + round windows, a chimney · textures: "I'd like to have different textures for players to choose from so we should keep the materials available in the game in mind" = OPEN with Magii, DON'T build yet · 47 piece drawings building/sheet-*.png + NOTES.md. Not rows yet: Alex sets the order
 - 11-25 11:51 Alex (via Magii a8b1db5): worn pruner + spike looks LOCKED -> M167; workshop rooms pictures: "Close but more open let's try to have it just a pad" = no room LOOK change until Alex picks (M153 s1c-3 = placing only); asked for "the concept art for all the building pieces" (Magii running it)
 - 11-25 11:5x Alex (dialog): dewls drop 1 / 2 / 3 / 5 by tier; prices ALL DEAR (15 to 100); a BAG ITEM (slot, drops on death); play after dewls = the look batch (Moglins, Greg + Blue, then Hollows)
 - 11-25 10:5x Alex (dialog): friends' looks good, two small fixes (Tess's blush, hazel eyes) -> rider on play-M156s4
