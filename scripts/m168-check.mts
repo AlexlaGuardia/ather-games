@@ -80,8 +80,8 @@ try {
       await g.evaluate((x, z, y) => (window as W).__ather.gladeAt(x, z, y), f.x + Math.sin(f.yaw) * 1.8, f.z + Math.cos(f.yaw) * 1.8, Math.atan2(Math.sin(f.yaw), Math.cos(f.yaw))); await sleep(2500); await aimAt(g, f.x, f.z, 0.6)
       ok(await until(() => g.evaluate((k: string) => { const q = (window as W).__ather.near(); return k === 'moonwell:fennel' ? q?.kind === 'gfennel' : q?.kind === 'folk' && q.id === k }, id)), `${n}: in reach`)
       let calm = 0; await until(async () => { calm = await g.evaluate(() => document.querySelector<HTMLElement>('[data-veil]')?.style.opacity === '0') ? calm + 1 : 0; return calm >= 4 }, 40000)
-      if (!phone) ok(await until(() => g.evaluate((t: string) => document.body.innerText.includes(t), `E · talk to ${n}`)) && !(await g.evaluate(() => /talk to the folk of|E · Fennel/.test(document.body.innerText))), `${n}: the prompt 'E · talk to ${n}'`)
-      else {
+      ok(await until(() => g.evaluate((t: string) => document.body.innerText.includes(t), `E · talk to ${n}`)) && !(await g.evaluate(() => /talk to the folk of|E · Fennel/.test(document.body.innerText))), `${n}: the prompt 'E · talk to ${n}'`)
+      if (phone) {
         const at = await g.evaluate(() => { const b = document.querySelector<HTMLElement>('[data-touch="use"][data-touch-near]'); if (!b) return null; const r = b.getBoundingClientRect(), x = r.x + r.width / 2, y = r.y + r.height / 2, e = document.elementFromPoint(x, y); return { x, y, top: e === b || b.contains(e) } })
         ok(at?.top, `${n}: the 'use' button is up and on top`); ok(!(await g.evaluate(() => document.querySelector('[data-talk-option]'))), `${n}: no talk before the tap`)
         if (at) await g.touchscreen.tap(at.x, at.y)

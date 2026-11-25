@@ -75,7 +75,7 @@ import { tutStart, tutNode, grimoireGift, pedestalOwed, type TutCursor } from '.
 import { useSpiritsDev } from './spirit-model'   // M123: Greg's grimoire hand-over for a legacy keeper (every keeper since s2)
 import { loadTut, saveTut, gift as tutGift, allHeard, tessPacket, type Tut, type Gift as TutGift } from './glade-tutorial'
 import { gardenOpen, foldOffered, foldNode, buyPick, FOLD_TEXT, type FoldStep } from './garden-fold'   // M71 s1: Greg folds the first garden
-import { friendStart, friendNode, nodeBeside, guideTalks, isGuideId, FRIEND_NAME, GARDEN_FRIENDS, type FriendCursor, type GardenFriend, type Talker } from './glade-friend-talk'   // M68 s3a
+import { friendStart, friendNode, nodeBeside, guideTalks, isGuideId, FRIEND_NAME, moglinPrompt, GARDEN_FRIENDS, type FriendCursor, type GardenFriend, type Talker } from './glade-friend-talk'   // M68 s3a
 import { line as gladeLine } from './glade-tutorial-lines'
 import { endFirstSteps, peekFirstSteps } from './glade-tutorial'
 import { firstStepsHello } from './glade-greg-talk'
@@ -971,14 +971,14 @@ function AtherSliceGame() {
         : tourRef.current?.talk ? null   // M32: Greg is talking at a stop; E answers him, nothing else
         : n?.kind === 'gate' ? (zone.kind === 'glade' ? 'E · the gate (the Wilds)' : 'E · the gate (fold map)')
         : n?.kind === 'greg' ? 'E · Gregory (buy ground)'
-        : n?.kind === 'fennel' || n?.kind === 'gfennel' ? 'E · Fennel'
+        : n?.kind === 'gfennel' ? moglinPrompt('fennel') : n?.kind === 'fennel' ? 'E · Fennel'
         : n?.kind === 'idlemog' || n?.kind === 'spirit' || n?.kind === 'settler' ? `E · ${n.name}`
         : n?.kind === 'friend' ? `E · ${FRIEND_NAME[n.f]}`
         : n?.kind === 'anemonyx' ? 'E · the Anemonyx'
         : n?.kind === 'adesk' ? `E · ${M70SIDE_TEXT.deskTitle}`
         : n?.kind === 'work' ? workPrompt(n.near)
         : n?.kind === 'waymark' ? (n.own ? 'E · fold map · L lift this waymark' : 'E · fold map')
-        : n?.kind === 'folk' ? `E · talk to the folk of ${n.s.name}`
+        : n?.kind === 'folk' ? (n.id && moglinPrompt(n.id)) || `E · talk to the folk of ${n.s.name}`
         : n?.kind === 'zone' ? zonePrompt(n.u)   // M114 s2
         : atFairDoor(lc.px, lc.pz) ? 'E · the Thistledown Fair'
         : rinPrompt() ?? (cAimRef.current.crystal && cAimRef.current.dist < aimRef.current.dist ? crystalPrompt() : treePrompt())
