@@ -231,6 +231,7 @@ Steps (one worker each, in order; each keeps `beta-m7-saves` green):
 - **Rules:** only rows on this list. No new systems, no lore, nothing public. Canon gate + tests before every build.
 
 ## Inbox (Alex's brain dump: hub writes here at once, dated, his words; triaged into rows / queue / CANON_GAPS / killed)
+- 11-25 (agent find, reproduced by hub): spread-map.test red 1 of 50, 'legend word for word': the test strips 'Charted' before comparing with canon; likely canon's legend line now has it (not proven). Small: next play slice
 - 11-25 Alex (dialog): Glade pines in the water = remove where wet -> M160; filler scenery look judged in game tonight
 - 11-25 Alex (via Magii 587e67c, RULED): "we introduce a new currency dewls and these are gems that come from all the mining nodes as an accessory to the nodes drops with this currency the player can trade with this moglin ware that are determined mainly by the type of settlement and the moglins that reside there"; picks: Burrfolk wares cost dewls ONLY (item barter ends, changes M112); spent at Burrfolk stalls + camp only -> M159
 - 11-25 Alex (via Magii 4bdec6b): "Yea they should get a clue relative to there story if not in a cluster since a cluster share the wilds and story and what would be cool is if the moglins could keep track of the keepers that visit them like if we use the username of users in the dialogue" -> M156 s3, M158
