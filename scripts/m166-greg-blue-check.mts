@@ -61,6 +61,7 @@ try {
     if (q && !process.argv.includes('--no-press')) await p.touchscreen.tap(q.x, q.y)
   } else if (!process.argv.includes('--no-press')) await p.keyboard.press('KeyE')
   ok(await p.waitForFunction(() => !!document.querySelector('[data-talk-option]') || !!document.querySelector('[data-talk-bubble]'), { timeout: 30000 }).then(() => true, () => false), 'the talk opens')
+  ok(await p.waitForFunction(() => !!document.querySelector('[data-talk-bubble]')?.textContent, { timeout: 15000 }).then(() => true, () => false), "Greg's bubble is up")   // drei's Html mounts it a frame after the answers
   console.log(`bubble: ${await p.evaluate(() => document.querySelector('[data-talk-bubble]')?.textContent ?? '(none)')}`)
   if (save === 'newborn') ok((await p.evaluate(() => document.querySelector('[data-talk-bubble]')?.textContent ?? '')).includes(line('greg.b1.welcome.1')), "a newborn's first talk starts on Greg's signed welcome")
   await sleep(3000); await hide(); await p.screenshot({ path: `${out}/glade-greg-talk-${tag}.png` as `${string}.png` })
