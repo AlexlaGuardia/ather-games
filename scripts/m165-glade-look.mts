@@ -28,6 +28,7 @@ try {
     await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 240000 }); await sleep(2000)
     for (let i = 0; i < 30 && (await p.evaluate(() => (window as any).__ather.zone())) !== 'glade'; i++) { await p.evaluate(() => (window as any).__ather.travel({ kind: 'glade' })); await sleep(4000) }
     await p.waitForFunction(() => (window as any).__ather.zone() === 'glade' && !!(window as any).__glade?.folk, { timeout: 120000 }); await sleep(4000)
+    if (phone) { await p.touchscreen.tap(195, 500); await sleep(1000) }   // the start card
     const hide = () => p.evaluate(() => { const h = [...document.querySelectorAll('div')].filter(d => d.textContent?.includes('Click to play')); for (const d of h.filter(x => !h.some(o => o !== x && x.contains(o)))) (d as HTMLElement).style.visibility = 'hidden' })
     const ms = () => p.evaluate(() => new Promise<number>(r => { let n = 0, t0 = 0; const f = (t: number) => { if (!t0) t0 = t; if (++n > 25) r((t - t0) / 25); else requestAnimationFrame(f) }; requestAnimationFrame(f) }))
     const calm = async () => { for (let t = 0, c = 0; t < 60 && c < 4; t++) { await sleep(500); c = await p.evaluate(() => document.querySelector<HTMLElement>('[data-veil]')?.style.opacity === '0') ? c + 1 : 0 } }
@@ -58,7 +59,7 @@ try {
       await h.evaluateOnNewDocument(() => localStorage.setItem('ather:shimmer:birthRune', 'star'))
       await h.goto(`${url}/shimmer/open/ather?hour=13&cluster=preview`, { waitUntil: 'load', timeout: 240000 })
       ok(await h.waitForFunction(() => (window as any).__ather?.zone?.() === 'plot' && !!(window as any).__ather?.tp, { timeout: 120000 }).then(() => true, () => false), 'at home on my own cluster')
-      await h.evaluate((x, z) => (window as any).__ather.tp(x, z, Math.PI * 0.75), GATE.x + 8.5, GATE.z - 8.5); await sleep(8000)
+      await h.evaluate((x, z) => (window as any).__ather.tp(x, z, Math.PI * 0.75), GATE.x + 8.5, GATE.z - 8.5); await sleep(8000); if (phone) { await h.touchscreen.tap(195, 500); await sleep(2000) }
       ok(await h.evaluate(() => (window as any).__gladeGate === undefined), 'the grown gate is not mounted at home')
       await h.screenshot({ path: `${out}/own-cluster-${tag}.png` as `${string}.png` }); await h.close()
     }
