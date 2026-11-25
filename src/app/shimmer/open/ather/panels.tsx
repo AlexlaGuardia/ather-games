@@ -83,7 +83,9 @@ function FogLayer({ fog, W }: { fog: Fog; W: Wilds }) {
 // BETA M73: The Dig's pulse (the flip button, then Rune Hold's door): an ember ring that breathes
 const DIG_PULSE_CSS = '@keyframes dig-pulse{0%,100%{box-shadow:0 0 0 0 rgba(255,154,74,0)}50%{box-shadow:0 0 0 4px rgba(255,154,74,.55),0 0 14px rgba(255,154,74,.7)}}'
 
-export function FoldMap({ view, travel, W, fog, waymarks, infected, here, inWilds, onTravel, tile, pitstops, nodes = [], regions = [], onClose, onFlip, area, goal, flipPulse, digGoal }: {
+export function FoldMap({ view, travel, W, fog, waymarks, infected, here, inWilds, onTravel, tile, pitstops, nodes = [], regions = [], onClose, onFlip, area, goal, flipPulse, digGoal, quest }: {
+  /** M146: First Steps' current step: its Wilds spots are pinned, and a step in the Glade lights the Glade's stop */
+  quest?: readonly { zone: string; x: number; z: number }[]
   /** BETA M73 The Dig: the Flip map button pulses until the keeper turns the map over (opening-chain.ts › flipPulse) */
   flipPulse?: boolean
   /** BETA M73 The Dig: `goal` (Rune Hold) is The Dig's, not the errand's: its pin + door pulse, the door keeps its own sub */
@@ -144,6 +146,7 @@ export function FoldMap({ view, travel, W, fog, waymarks, infected, here, inWild
                       const o = offOf(w.tile); if (!o || !inA(w.x + o.x, w.z + o.z)) return null
                       return <button key={w.id} title={t} onClick={() => go({ kind: 'waymark', w })} style={{ ...pin(col, 12), ...ap(w.x + o.x, w.z + o.z) }} />
                     })}
+                    {(quest ?? []).filter(q => q.zone === 'wilds' && inA(q.x, q.z)).map((q, k) => <div key={`q${k}`} data-quest-pin style={{ ...pin('#ff9a4a', 16), pointerEvents: 'none', ...ap(q.x, q.z) }} />)}
                     {/* no node blots: the player tracks the champion (Alex 11-18); the section tint shows infected ground */}
                     {inWilds && <div style={{ ...pin('#ffffff', 8), cursor: 'default', ...ap(area.here.x, area.here.z) }} />}
                   </>
@@ -170,7 +173,9 @@ export function FoldMap({ view, travel, W, fog, waymarks, infected, here, inWild
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <div style={label}>Stops</div>
               {stop('Your plot', 'home', { kind: 'home' }, '#f2d88a')}
-              {stop('Moonwell Glade', "Gregory's garden", { kind: 'glade' }, '#9fd27a')}
+              {quest?.some(q => q.zone === 'glade')
+                ? <div data-quest-stop style={{ borderRadius: 6, boxShadow: '0 0 0 2px #ff9a4a' }}>{stop('Moonwell Glade', "Gregory's garden", { kind: 'glade' }, '#ff9a4a')}</div>
+                : stop('Moonwell Glade', "Gregory's garden", { kind: 'glade' }, '#9fd27a')}
               {stop("Gregory's waymark", 'the Wilds · meadow', { kind: 'waymark', w: GREG_WAYMARK }, '#e7c766')}
               {regions.length > 1 && (
                 <div data-spread-legend style={{ display: 'flex', flexWrap: 'wrap', gap: 4, fontSize: 11, margin: '2px 0 4px' }}>

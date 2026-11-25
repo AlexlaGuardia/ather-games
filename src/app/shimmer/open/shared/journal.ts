@@ -20,6 +20,8 @@ export interface JournalEntry {
   note: string
   /** where it points (null = nowhere to go yet) */
   where: { zone: Zone; x: number; z: number } | null
+  /** M146: more spots the same line points at now (First Steps: every friend not yet heard, the gate AND the settlement) */
+  also?: { zone: Zone; x: number; z: number }[]
   /** whose line: 'kael' (his page, lark's words) or 'keeper' (the keeper's own entries) */
   hand: 'kael' | 'keeper'
   struck?: boolean
@@ -31,7 +33,11 @@ export interface JournalPrefs { v: 1; active: string | null; marker: Record<stri
  *  pointed nowhere. Until the player chooses, the open first errand IS the active line (beacon + trail on, Greg first). */
 export const DEFAULT_ACTIVE = 'errand'
 export function withDefault(p: JournalPrefs, entries: JournalEntry[]): JournalPrefs {
+  // M146: First Steps is the one open line: it leads unless the player picked a line that is still open (or cleared it)
+  const fs = entries.some(e => e.id === 'first-steps')
+  if (fs && p.active !== null && !entries.some(e => e.id === p.active && !e.struck)) return { ...p, active: 'first-steps' }
   if (p.chosen || p.active) return p
+  if (fs) return { ...p, active: 'first-steps' }
   return entries.some(e => e.id === DEFAULT_ACTIVE && !e.struck) ? { ...p, active: DEFAULT_ACTIVE } : p
 }
 
@@ -53,9 +59,11 @@ function emit() {
   if (typeof window !== 'undefined') (window as unknown as { __journal?: () => typeof snap }).__journal = () => snap   // checks' READ-only probe (trail-check)
   subs.forEach(f => f())
 }
+const near = (a: { zone: Zone; x: number; z: number }, b: { zone: Zone; x: number; z: number }) => a.zone === b.zone && Math.abs(a.x - b.x) < 0.5 && Math.abs(a.z - b.z) < 0.5
 const same = (a: JournalEntry[], b: JournalEntry[]) =>
   a.length === b.length && a.every((e, i) => { const f = b[i]; return e.id === f.id && e.title === f.title && e.note === f.note && !!e.struck === !!f.struck
-    && (e.where === f.where || (!!e.where && !!f.where && e.where.zone === f.where.zone && Math.abs(e.where.x - f.where.x) < 0.5 && Math.abs(e.where.z - f.where.z) < 0.5)) })
+    && (e.where === f.where || (!!e.where && !!f.where && near(e.where, f.where)))
+    && (e.also?.length ?? 0) === (f.also?.length ?? 0) && (e.also ?? []).every((w, k) => near(w, f.also![k])) })
 
 /** A system replaces its own lines (call it whenever what it knows changes; unchanged posts are free). */
 export function postEntries(source: string, entries: JournalEntry[]) {
@@ -86,10 +94,11 @@ export const useJournal = () => useSyncExternalStore(subscribe, getJournal, serv
 /** What the world should point at, in this zone: every entry with its marker on, and the trailed ones. */
 export function guides(zone: Zone) {
   const { entries, prefs: p } = getJournal()
-  const here = entries.filter(e => e.where && e.where.zone === zone && !e.struck)
+  // one line may point at several spots (M146 `also`): each is a mark of its own; only the first is the routed (active) trail
+  const here = entries.filter(e => !e.struck).flatMap(e => [...(e.where ? [e.where] : []), ...(e.also ?? [])].filter(w => w.zone === zone).map((w, k) => ({ e, w, k })))
   return {
-    markers: here.filter(e => markerOn(p, e.id)).map(e => ({ id: e.id, title: e.title, x: e.where!.x, z: e.where!.z, active: p.active === e.id })),
-    trails: here.filter(e => trailOn(p, e.id)).map(e => ({ id: e.id, x: e.where!.x, z: e.where!.z, active: p.active === e.id })),
+    markers: here.filter(h => markerOn(p, h.e.id)).map(({ e, w, k }) => ({ id: k ? `${e.id}#${k}` : e.id, title: e.title, x: w.x, z: w.z, active: p.active === e.id })),
+    trails: here.filter(h => trailOn(p, h.e.id)).map(({ e, w, k }) => ({ id: k ? `${e.id}#${k}` : e.id, x: w.x, z: w.z, active: p.active === e.id && k === 0 })),
   }
 }
 /** Compass marks for the template's `marks` ref (the active one in ember, the rest in ink). */

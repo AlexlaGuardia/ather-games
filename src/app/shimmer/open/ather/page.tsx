@@ -77,7 +77,11 @@ import { loadTut, saveTut, gift as tutGift, allHeard, tessPacket, type Tut, type
 import { gardenOpen, foldOffered, foldNode, buyPick, FOLD_TEXT, type FoldStep } from './garden-fold'   // M71 s1: Greg folds the first garden
 import { friendStart, friendNode, FRIEND_NAME, GARDEN_FRIENDS, type FriendCursor, type GardenFriend } from './glade-friend-talk'   // M68 s3a
 import { line as gladeLine } from './glade-tutorial-lines'
-import { gregSpot, GLADE } from './moonwell-glade'   // M30 part 2: Greg lives at the Glade
+import { endFirstSteps } from './glade-tutorial'
+import { firstStepsHello } from './glade-greg-talk'
+import { FIRST_STEPS_ID, firstStepsEntries, stepSpots, type FirstStepsWorld } from './first-steps'   // M146: the one opening quest
+import { useFirstSteps } from './use-first-steps'
+import { gregSpot, gladeSpots, GLADE } from './moonwell-glade'   // M30 part 2: Greg lives at the Glade
 import { GladeLots } from './glade-lots-view'
 import { GladeCluster, gladeFolkDrawn } from './glade-cluster-view'   // M67 s1a: the closed Glade's keepers, Moglins, Greg's marker
 import { GLADE_FRAME, GLADE_OWNED, GLADE_TILE, GLADE_ZONE_NAME, GLADE_GATE, gladeNewbornSpot, gladeWhere, gregInGlade, gladeKeepers } from './glade-cluster'   // M40: the green, the five's lots + stations, Greg's jetty
@@ -646,7 +650,7 @@ function AtherSliceGame() {
       if (e.kind === 'champ-down' && infectionRef.current.down(e.nodeId)) { hudSay(clearLine(), 'info', 4); continue }   // M128: a settlement's infection, never the spread's ledger
       if (e.kind === 'champ-down') {
         setToast('The grey thins here. For now.')
-        { const t0 = loadTut(), t1 = m70Down(t0, e.nodeId); if (t1 !== t0) saveTut(t1) }   // M70 s1: Lamps Out's big one
+        { const t0 = loadTut(), t1 = m70Down(t0, e.nodeId, pickTarget(nodesRef0.current)?.id ?? null); if (t1 !== t0) saveTut(t1) }   // M70 s1: Lamps Out's big one
         { const m = tend(smapRef.current, e.nodeId, clock()); setSmap(m); smapPrev.current = smapPrev.current && { ...smapPrev.current, [e.nodeId]: 'clear' }; hudSay(clearLine(), 'info', 4) }   // M70 s2: its area reads Clear
         const cur = spreadRef.current
         if (cur) { const s = clearAt(cur, e.nodeId, clock()); saveSpread(s); setSpread(s) }
@@ -1306,8 +1310,9 @@ function AtherSliceGame() {
     return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); if (t) clearTimeout(t) }
   }, [])
   // compass marks: what the keeper might be heading for, by zone
+  const fsOn = useFirstSteps()   // M146: First Steps is on: the current step's marks and nothing else
   useEffect(() => {
-    marksRef.current = zone.kind === 'glade'
+    marksRef.current = fsOn ? [] : zone.kind === 'glade'
       ? [{ x: gregInGlade().x, z: gregInGlade().z, color: '#f2cf63', title: 'Gregory' }, { x: GLADE_GATE.x, z: GLADE_GATE.z, color: '#e7c766', title: 'the gate' }]
       : zone.kind === 'plot'
       ? [{ x: GATE.x, z: GATE.z, color: '#e7c766', title: 'the gate' }]
@@ -1321,7 +1326,7 @@ function AtherSliceGame() {
           ...waymarks.filter(w => ww?.byName.has(w.tile)).map(w => { const o = ww!.offsetOf(w.tile); return { x: w.x + o.x, z: w.z + o.z, color: '#6fd3c4', title: 'your waymark' } }),
         ]
     marksRef.current = [...marksRef.current, ...questMarks(zone.kind === 'plot' ? 'ather' : zone.kind)]   // the journal's waymarks (pack.tsx); M67 s1b-2: the Glade has its own (the pool, Greg)
-  }, [zone, nearNodes, waymarks, journal, ww, net, standing])
+  }, [zone, nearNodes, waymarks, journal, ww, net, standing, fsOn])
   // THE FIRST ERRAND (business/errand.ts, Magii + Alex 11-16): Greg hands the birth letter's gems; the journal points to
   // the school's runesmith, then the Enchant Temple in the Citadel (those waymarks light on the continent page)
   const birth = useBirth(), loadoutNow = useLoadout()
@@ -1346,7 +1351,7 @@ function AtherSliceGame() {
   }, [])
   const [given, setGiven] = useState(false)
   useEffect(() => setGiven(gemsGiven()), [])
-  const errandStage = stageOf(birth, inv, loadoutNow, given)
+  const errandStage = fsOn ? 'none' as const : stageOf(birth, inv, loadoutNow, given)   // M146: no errand, gems or glove before First Steps is done
   const errandToHold = errandStage === 'smith' || errandStage === 'temple'   // M32 trail: the next step is through Rune Hold
   // M32 trail (hub 11-19): the way on to the runesmith is continuous. On the plot it is the gate; in the Wilds it is the Glade's
   // waymark stone (both open the fold map, which then opens on Rune Hold for an errand keeper); on the continent, the door.
@@ -1394,7 +1399,7 @@ function AtherSliceGame() {
   const setTut = (t: Tut) => { saveTut(t); setTutState(t) }
   const [gregSaid, setGregSaid] = useState<string | null>(null)   // M123 s1: his line after handing the grimoire over
   const spiritsDev = useSpiritsDev()
-  const openGreg = () => { setGregSaid(null); const t = loadTut(); setTutState(t); const c = tutStart(t); setTutC(c); setFoldC(!c && foldOffered(t) ? 'offer' : null); setPanel({ kind: 'talk', step: 0 }) }
+  const openGreg = () => { setGregSaid(null); const t0 = loadTut(), t = endFirstSteps(t0); if (t !== t0) saveTut(t); setTutState(t); const c = tutStart(t); setTutC(c); setFoldC(!c && foldOffered(t) ? 'offer' : null); setPanel({ kind: 'talk', step: 0 }) }
   /** Hub call (M68): ONE Grimoire Pedestal per keeper. One already crafted (the old recipe) or placed or banked counts. */
   const ownsPedestal = () => countOf(getInv(), 'grimoire_pedestal') > 0 || currentWorks().pieces.some(p => p.item === 'grimoire_pedestal') || bankCount(currentBank(), 'grimoire_pedestal') > 0
   /** M71 s2: a bought waymark: into the bag first (a full bag refuses, nothing spent), then the garden's grey */
@@ -1426,12 +1431,11 @@ function AtherSliceGame() {
       home: () => goHome(),
       buy: grey => buyWaymark(grey),
     })
-    const pending = !!tut && tut.live && tut.greg.wilds && !allHeard(tut)
     const open = !tut || gardenOpen(tut)   // M71 s1: no ground screen and no tour (it ends at your table) before the fold
     return gregTalk(gregErrand, talkStep, {
       ground: open ? () => setPanel({ kind: 'greg' }) : undefined, bye: () => setPanel(null), goto: step => setPanel({ kind: 'talk', step }),
       tour: open ? () => { setPanel(null); setStops(tourStops()); setTour({ i: 0, talk: false }) } : undefined,
-      hello: pending ? gladeLine('greg.b1.bark.pending') : undefined,
+      hello: tut ? firstStepsHello(tut) : undefined,
       // M123 s1: a keeper with no grimoire pedestal (a legacy keeper never heard Beat 1) asks 'Spirits?' and Greg hands it over
       grimoire: spiritsDev && pedestalOwed(tut, ownsPedestal()) ? { label: gladeLine('greg.b1.choice.b'), pick: () => {
         const r = give(getInv(), 'grimoire_pedestal', 1)
@@ -1560,6 +1564,17 @@ function AtherSliceGame() {
     }
     post(); const id = setInterval(post, 3000); return () => clearInterval(id)
   }, [nodes])
+  // M146: First Steps in the journal, its marks and its pins (re-read every second and at every move of the tutorial's save)
+  const fsWorld = useRef<() => FirstStepsWorld>(() => { throw new Error('first steps') })
+  fsWorld.current = () => {
+    const t = loadTut(), fr = (f: GardenFriend) => GLADE_FRIENDS_AT.find(k => k.id === f) ?? gregInGlade(), fen = gladeFolkDrawn.find(f => f.id === FENNEL_FOLK_ID) ?? gladeSpots([FENNEL_FOLK_ID])[0] ?? gregInGlade()
+    return { greg: gregInGlade(), gate: GLADE_GATE, stone: GREG_WAYMARK, friends: { otto: fr('otto'), tess: fr('tess'), bonn: fr('bonn'), fennel: fen },
+      bigone: t.m70node ? allNodes.find(n => n.id === t.m70node) ?? null : null }
+  }
+  useEffect(() => {
+    const post = () => postEntries('first-steps', fsOn ? firstStepsEntries(loadTut(), fsWorld.current()) : [])
+    post(); const id = setInterval(post, 1000); return () => clearInterval(id)
+  }, [allNodes, fsOn])
   // M70 s1: Lamps Out in the journal (signed quest-log lines; re-read every 3 s, the tutorial save moves in talks and fights)
   useEffect(() => {
     const post = () => {
@@ -1760,7 +1775,7 @@ function AtherSliceGame() {
         // (Keepstones, furniture, bait), and HearthHotbar drops the selected slot's light while dimmed (selected = i === sel && !dimmed)
         dimmed={false} input={!panel && !fade && !optionsOpen && !building}
         minimap={ww && zone.kind !== 'glade' && <AtherMiniMap size={hudSize} zone={zone.kind} world={ww} wrev={wrev} fog={fog} tileOff={tileOff} pose={poseRef} waymarks={waymarks} regionsByTile={regionsByTile} cluster={cl.frame}
-          owned={owned} onExpand={() => setPanel({ kind: 'map', view: 'ather', travel: false })} />}
+          owned={owned} onExpand={() => setPanel({ kind: 'map', view: 'ather', travel: false })} quest={fsOn} />}
         status={[
           { label: hud.where },
           ...(zone.kind === 'wilds' && chud ? [{ label: chud.gun.charAt(0) + chud.gun.slice(1).toLowerCase(), value: chud.reloading ? 'reloading' : `${chud.ammo} / ${chud.clip}` }] : []),
@@ -1803,7 +1818,8 @@ function AtherSliceGame() {
           inWilds={zone.kind === 'wilds'} onTravel={travel} tile={hereTile} pitstops={pitstops}
           nodes={(nodesByTile.get(hereTile) ?? []).filter(n => infectedSet.has(n.id)).map(n => ({ ...n, x: n.x - hereOff.x, z: n.z - hereOff.z }))} regions={regions}
           area={ww ? { world: ww, regionsByTile, cx: hereOff.x, cz: hereOff.z, tileOff, nodes: nodes.filter(n => Math.abs(n.x - hereOff.x) < 1600 && Math.abs(n.z - hereOff.z) < 1600), here: { x: pos.current.x, z: pos.current.z } } : undefined}
-          onClose={() => setPanel(null)} goal={errandToHold || runeHoldPulse(chain) ? LANDING.id : undefined} flipPulse={flipPulse(chain)} digGoal={runeHoldPulse(chain) && !errandToHold} onFlip={() => setPanel(p => p?.kind === 'map' ? { ...p, view: p.view === 'ather' ? 'athernyx' : 'ather' } : p)} />
+          onClose={() => setPanel(null)} quest={fsOn ? stepSpots(loadTut(), fsWorld.current()) : undefined}
+          goal={errandToHold || runeHoldPulse(chain, fsOn) ? LANDING.id : undefined} flipPulse={flipPulse(chain, fsOn)} digGoal={runeHoldPulse(chain, fsOn) && !errandToHold} onFlip={() => setPanel(p => p?.kind === 'map' ? { ...p, view: p.view === 'ather' ? 'athernyx' : 'ather' } : p)} />
       )}
       {folkTalk.node && <TalkChoices node={folkTalk.node} phone={hudSize === 'phone'} />}
       {(talkNode ?? fennelNode ?? friendTalkNode ?? settlerTalkNode ?? gFennel.node ?? idleTalk.node ?? tourNode) && <TalkChoices node={(talkNode ?? fennelNode ?? friendTalkNode ?? settlerTalkNode ?? gFennel.node ?? idleTalk.node ?? tourNode)!} phone={hudSize === 'phone'} />}

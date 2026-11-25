@@ -18,6 +18,10 @@
 //   starts at the invite with the note handed once (the bag's `gifts` gate), and the ping waits for their NEXT death (a
 //   death before this shipped was never recorded, and the ping must come after a pack, not out of nowhere on load).
 //
+// ★ M146 (Alex 11-24, canon e4092f5): while FIRST STEPS is on (`held`) nothing here starts: the note may be read any time, a
+//   death is remembered, and both wait for the return to Greg (the yard too). Then: read = The Dig starts; unread after a death
+//   = the ping, once.
+//
 // PURE (no React, no storage): the store is opening-chain-store.ts. Lines: kael-invite-lines.ts + morel-lines.ts (SIGNED).
 
 export const CHAIN_KEY = 'open.chain.v1'
@@ -78,9 +82,11 @@ export const digActive = (c: Chain) => c.step === 'dig' && !c.past
 /** Should the bag hold the note? (an old keeper past the yard is not handed one) */
 export const wantsInvite = (c: Chain) => !c.past
 
-/** The keeper read the note: The Dig starts (or was already on through the ping). */
-export function readInvite(c: Chain): Chain {
+/** The keeper read the note: The Dig starts (or was already on through the ping). `held` (M146, canon e4092f5: First Steps is
+ *  not done): the note is read, and The Dig waits for the return to Greg (tick starts it). */
+export function readInvite(c: Chain, held = false): Chain {
   if (c.read) return c
+  if (held) return { ...c, read: true }
   return { ...c, read: true, step: 'dig' }
 }
 
@@ -97,8 +103,9 @@ export type ChainSay = 'ping' | 'nudge' | 'hint'
 
 /** One look at the world (called on a timer while the page runs). `packLying` = a backpack is still on the ground.
  *  Returns the next chain and what Morel says now (at most one line per tick). */
-export function tick(c: Chain, w: { packLying: boolean; now: number }): { chain: Chain; say: ChainSay | null } {
-  if (c.past) return { chain: c, say: null }
+export function tick(c0: Chain, w: { packLying: boolean; now: number; held?: boolean }): { chain: Chain; say: ChainSay | null } {
+  if (c0.past || w.held) return { chain: c0, say: null }   // M146: held = First Steps is on: no ping, no nudge, no Dig
+  const c: Chain = c0.read && c0.step === 'invite' ? { ...c0, step: 'dig' } : c0   // M146: read while held: The Dig starts now
   if (!c.pinged && c.died && !w.packLying) {
     // the ping's line is about the UNREAD note: a keeper who already read it has The Dig on and is owed nothing (nor is one
     // who walked to the yard without it: the chain is already past the note)
@@ -113,20 +120,20 @@ export function tick(c: Chain, w: { packLying: boolean; now: number }): { chain:
 
 /** A gate panel opened (the fold map, with travel). The hint goes once, only with The Dig on AND the note read
  *  (morel-dig-ping-script §3: Morel may not speak of a note the keeper has not opened). */
-export function onGateOpen(c: Chain): { chain: Chain; say: ChainSay | null } {
-  if (!digActive(c) || !c.read || c.hinted) return { chain: c, say: null }
+export function onGateOpen(c: Chain, held = false): { chain: Chain; say: ChainSay | null } {
+  if (held || !digActive(c) || !c.read || c.hinted) return { chain: c, say: null }
   return { chain: { ...c, hinted: true }, say: 'hint' }
 }
 
 /** The flip button pulses while The Dig is on and the keeper has not yet turned the map over. */
-export const flipPulse = (c: Chain) => digActive(c) && !c.flipped
+export const flipPulse = (c: Chain, held = false) => !held && digActive(c) && !c.flipped
 /** The keeper turned the map to the Athernyx side. */
-export function onFlip(c: Chain, to: 'ather' | 'athernyx'): Chain {
-  if (to !== 'athernyx' || !digActive(c) || c.flipped) return c
+export function onFlip(c: Chain, to: 'ather' | 'athernyx', held = false): Chain {
+  if (held || to !== 'athernyx' || !digActive(c) || c.flipped) return c
   return { ...c, flipped: true }
 }
 /** Rune Hold pulses in the Nyx door list while The Dig is on (the yard ends it: step 'yard'). */
-export const runeHoldPulse = (c: Chain) => digActive(c)
+export const runeHoldPulse = (c: Chain, held = false) => !held && digActive(c)
 
 // ── s3: THE YARD -> THE JOURNAL PAGE -> VEYRA -> THE SHIP-REPAIR FLAG ─────────────────────────────────────────────────────
 /** the journal page's bag id (kael-journal-page-script.md, SIGNED b317812); kept on a fall like the note */
@@ -136,8 +143,8 @@ export const GIFT_KAEL_PAGE = 'kael_page'
 
 /** The keeper stands in Kael's yard (the inherited shipyard plot above Rune Hold). From the invite or The Dig (a keeper who
  *  walked up without reading the note still found the yard); a past keeper and a later step are left alone. */
-export function onYard(c: Chain): Chain {
-  if (c.past || !early(c)) return c
+export function onYard(c: Chain, held = false): Chain {
+  if (held || c.past || !early(c)) return c
   return { ...c, step: 'yard' }
 }
 /** Should the yard hand the page into the bag now? (once; the store retries while the bag is full) */

@@ -43,6 +43,8 @@ export interface Tut {
   /** M71 s1 (garden-fold.ts): Greg has folded this keeper's first garden. false only for a keeper born after M71 who has not
    *  paid him yet; every save from before M71 (no field) and every legacy keeper reads true: an existing garden is never taken. */
   folded: boolean
+  /** M146: First Steps ended (back at Greg after the settlement's thanks). Absent on every save from before it: firstStepsOn. */
+  fs?: 'done'
 }
 export const freshTut = (): Tut => ({ v: 1, live: true, greg: { welcome: false, moglins: false, spirits: false, wilds: false }, heard: [], gifts: [], b2: 'none', baitDay: null, m70: 'none', m70node: null, m70side: 'none', folded: false })
 /** What an older save becomes: the whole tutorial done, every gift counted as given (they already hold their tools). */
@@ -77,6 +79,11 @@ export function heardWilds(t: Tut): Tut {
   if (t.greg.wilds || !(t.greg.moglins && t.greg.spirits)) return t
   return { ...t, greg: { ...t.greg, wilds: true } }
 }
+/** M146: FIRST STEPS is still on: nothing else opens until it is done. A legacy keeper, and any keeper with a garden (folded:
+ *  Greg folds only after the settlement, and every save from before M71 reads folded), is past it, so old saves never change. */
+export const firstStepsOn = (t: Tut) => t.live && !t.folded && t.fs !== 'done'
+/** E at Greg after the settlement's thanks ends it. */
+export const endFirstSteps = (t: Tut): Tut => (firstStepsOn(t) && t.m70 === 'thanked' ? { ...t, fs: 'done' } : t)
 export const answerGate = (t: Tut, go: boolean): Tut => (!allHeard(t) || t.b2 === 'accepted' ? t : { ...t, b2: go ? 'accepted' : 'asked' })
 
 // ── the four ─────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -99,13 +106,6 @@ export const GIFT_OF: Readonly<Record<Friend, Gift>> = { otto: 'spike', bonn: 'p
 export function gift(t: Tut, g: Gift): { t: Tut; fresh: boolean } {
   if (t.gifts.includes(g)) return { t, fresh: false }
   return { t: { ...t, gifts: [...t.gifts, g] }, fresh: true }
-}
-/** The quest log's line. */
-export function questLine(t: Tut): { title: 'quest.b1.title' | 'quest.b2.title'; step: string } | null {
-  if (!t.live || !t.greg.wilds) return null
-  if (!allHeard(t)) return { title: 'quest.b1.title', step: `quest.b1.step:${t.heard.length}` }
-  if (t.b2 !== 'accepted') return { title: 'quest.b1.title', step: 'quest.b1.done' }
-  return { title: 'quest.b2.title', step: 'quest.b2.step' }
 }
 
 /** Tool sockets start EMPTY for a live tutorial keeper (Magii 846719a): the worn spike is lit by Otto, the worn pruner by Bonn.
@@ -155,6 +155,7 @@ export function parseTut(v: unknown): Tut | null {
     m70: M70S.includes(o.m70 as M70) ? o.m70! : 'none',
     m70node: typeof o.m70node === 'string' ? o.m70node : null,
     m70side: M70SIDES.includes(o.m70side as M70Side) ? o.m70side! : 'none',
+    ...(o.fs === 'done' ? { fs: 'done' as const } : {}),
     folded: o.folded !== false,   // M71: only an explicit false (a post-M71 newborn) is unfolded; a save without the field had its garden
   }
 }
@@ -173,4 +174,11 @@ export function loadTut(): Tut {
 }
 export function saveTut(t: Tut): void {
   try { localStorage.setItem(gardenKey(TUT_KEY), JSON.stringify(t)) } catch { /* private window */ }
+  if (typeof window !== 'undefined' && typeof Event !== 'undefined') window.dispatchEvent?.(new Event(TUT_EVENT))
+}
+/** M146: the tutorial's save moved (use-first-steps.ts, opening-chain-store.ts) */
+export const TUT_EVENT = 'ather-tutorial'
+/** M146: is First Steps on, READ only (never writes a first save: a keeper with no record yet is judged where they first meet Greg). */
+export function peekFirstSteps(): boolean {
+  try { const t = parseTut(JSON.parse(localStorage.getItem(gardenKey(TUT_KEY)) ?? 'null')); return !!t && firstStepsOn(t) } catch { return false }
 }

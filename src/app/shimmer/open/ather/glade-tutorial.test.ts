@@ -2,7 +2,7 @@
 // M68 s1: Greg's chain in order (The Wilds? only after Moglins? + Spirits?; the gate ask only after all four), each gift once
 // (a reload = parse(save) cannot re-gift), Tess's packet holds exactly one grade-A seed, Fennel's jar once per in-game day,
 // older saves migrate as DONE, and every line id the build reads exists in the signed lines.
-import { freshTut, legacyTut, gregScreen, heardWelcome, heardMoglins, heardSpirits, heardWilds, answerGate, hearFriend, friendScreen, gift, GIFT_OF, allHeard, questLine, tessPacket, TESS_SEEDS, claimJar, jarFull, JAR_BAIT, parseTut, adoptTut, FRIENDS } from './glade-tutorial'
+import { freshTut, legacyTut, gregScreen, heardWelcome, heardMoglins, heardSpirits, heardWilds, answerGate, hearFriend, friendScreen, gift, GIFT_OF, allHeard, firstStepsOn, endFirstSteps, tessPacket, TESS_SEEDS, claimJar, jarFull, JAR_BAIT, parseTut, adoptTut, FRIENDS } from './glade-tutorial'
 import { GLADE_LINES, line } from './glade-tutorial-lines'
 let pass = 0, fail = 0
 const ok = (c: unknown, m: string) => { if (c) pass++; else { fail++; console.log('FAIL', m) } }
@@ -22,23 +22,20 @@ ok(!gift(t, 'grimoire').fresh && !gift(rt(t), 'grimoire').fresh, 'the grimoire n
 s = gregScreen(t); ok(s.kind === 'hub' && s.choices.join() === 'c', 'both heard: The Wilds? opens')
 // friends before Greg sends you do not tick the quest
 ok(hearFriend(t, 'otto') === t, 'a friend heard before The Wilds? does not count')
-ok(questLine(t) === null, 'no quest before Greg sends you')
 t = heardWilds(t)
 ok(gregScreen(t).kind === 'pending', 'sent: Greg barks pending until all four')
 ok(answerGate(t, true) === t, 'no gate answer before all four')
-ok(questLine(t)?.step === 'quest.b1.step:0', 'quest: Meet the Glade 0/4')
-for (const [i, f] of FRIENDS.entries()) {
+for (const f of FRIENDS) {
   ok(friendScreen(t, f) === 'greet', `${f}: greet first`)
   t = hearFriend(t, f); const r = gift(t, GIFT_OF[f]); ok(r.fresh, `${f}: gift lands`); t = r.t
   ok(friendScreen(t, f) === 'bark' && !gift(rt(t), GIFT_OF[f]).fresh, `${f}: then bark, gift never again (reload)`)
   ok(hearFriend(t, f) === t, `${f}: heard once`)
-  if (i < 3) ok(questLine(t)?.step === `quest.b1.step:${i + 1}`, `quest ticks ${i + 1}/4`)
 }
 ok(GIFT_OF.otto === 'spike' && GIFT_OF.bonn === 'pruner' && GIFT_OF.tess === 'seeds' && GIFT_OF.fennel === 'rinquest', 'gardens table: Otto spike, Bonn pruner, Tess seeds, Fennel the quest')
-ok(allHeard(t) && questLine(t)?.step === 'quest.b1.done', 'all four: Go back to Greg')
+ok(allHeard(t), 'all four heard')   // the quest's steps: first-steps.test.ts (M146)
 ok(gregScreen(t).kind === 'ask', 'all four heard: the gate ask')
 t = answerGate(t, false); ok(t.b2 === 'asked' && gregScreen(t).kind === 'ask', 'Not yet: asked again next talk')
-t = answerGate(t, true); ok(gregScreen(t).kind === 'open' && questLine(t)?.title === 'quest.b2.title', "I'll go: bark.open, A Favour for Greg")
+t = answerGate(t, true); ok(gregScreen(t).kind === 'open', "I'll go: bark.open")
 ok(JSON.stringify(rt(t)) === JSON.stringify(t), 'state round-trips')
 
 // Tess: exactly one grade-A seed of the eight, every roll
@@ -56,7 +53,7 @@ ok(jarFull(j.t, 11) && claimJar(j.t, 11).bait === JAR_BAIT, 'jar: full again the
 
 // migration
 const L = legacyTut()
-ok(!L.live && gregScreen(L).kind === 'open' && questLine(L) === null, 'legacy: done, no quest line')
+ok(!L.live && gregScreen(L).kind === 'open' && !firstStepsOn(L) && endFirstSteps(L) === L, 'legacy: done, First Steps off')
 ok(['grimoire', 'spike', 'pruner', 'seeds', 'rinquest'].every(x => !gift(L, x as never).fresh), 'legacy: nothing re-gifted')
 ok(adoptTut(null, true).live === false && adoptTut(null, false).live === true, 'no save: played before = legacy, brand new = fresh')
 ok(adoptTut({ v: 1, live: true, greg: { welcome: true }, heard: ['otto', 'zed'], gifts: ['spike', 'gun'], b2: 'x', baitDay: 'q' }, true).heard.join() === 'otto', 'garbage cleaned, a real save wins over the played-before guess')

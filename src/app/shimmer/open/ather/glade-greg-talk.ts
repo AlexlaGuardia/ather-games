@@ -9,12 +9,15 @@
 import type { TalkNode } from '../shared/npc-talk'
 import { ANSWERS } from './greg-talk'
 import { line } from './glade-tutorial-lines'
-import { gregScreen, heardWelcome, heardMoglins, heardSpirits, heardWilds, type Tut } from './glade-tutorial'
+import { answerGate, firstStepsOn, gregScreen, heardWelcome, heardMoglins, heardSpirits, heardWilds, type Tut } from './glade-tutorial'
 
-export type TutBranch = 'welcome' | 'moglins' | 'spirits' | 'wilds' | 'hub'
+/** M146: Beat 2 (greg.b2): the gate favour, its two answers */
+export type TutBranch = 'welcome' | 'moglins' | 'spirits' | 'wilds' | 'hub' | 'ask' | 'go' | 'wait'
+type Beat1 = 'welcome' | 'moglins' | 'spirits' | 'wilds'
+export const ASK_LINES = 6
 export interface TutCursor { b: TutBranch; i: number }
 /** How many signed lines each branch has (greg.b1.<branch>.1..N). */
-export const BRANCH_LINES: Readonly<Record<Exclude<TutBranch, 'hub'>, number>> = { welcome: 4, moglins: 3, spirits: 6, wilds: 5 }
+export const BRANCH_LINES: Readonly<Record<Beat1, number>> = { welcome: 4, moglins: 3, spirits: 6, wilds: 5 }
 /** The Spirits? line that hands the grimoire over ("This is a grimoire."), 0-based. */
 export const GRIMOIRE_AT = 2
 const CHOICE: Readonly<Record<'a' | 'b' | 'c', 'moglins' | 'spirits' | 'wilds'>> = { a: 'moglins', b: 'spirits', c: 'wilds' }
@@ -23,7 +26,16 @@ const CHOICE: Readonly<Record<'a' | 'b' | 'c', 'moglins' | 'spirits' | 'wilds'>>
 export function tutStart(t: Tut): TutCursor | null {
   if (!t.live) return null
   const s = gregScreen(t)
+  // M146: the gate favour, once all four are heard (never to a keeper past First Steps, nor one already at the settlement's work)
+  if (s.kind === 'ask') return firstStepsOn(t) && t.m70 === 'none' ? { b: 'ask', i: 0 } : null
   return s.kind === 'welcome' ? { b: 'welcome', i: 0 } : s.kind === 'hub' ? { b: 'hub', i: 0 } : null
+}
+
+/** M146: his hello while First Steps is on: the pending bark until the four are heard, then the gate bark. undefined = his own. */
+export function firstStepsHello(t: Tut): string | undefined {
+  if (!t.live) return undefined
+  if (t.greg.wilds && gregScreen(t).kind === 'pending') return line('greg.b1.bark.pending')
+  return firstStepsOn(t) && (t.b2 === 'accepted' || t.m70 !== 'none') ? line('greg.b2.bark.open') : undefined
 }
 
 export interface TutActs {
@@ -35,7 +47,7 @@ export interface TutActs {
   grimoire: () => boolean
 }
 
-const id = (b: Exclude<TutBranch, 'hub'>, i: number) => `greg.b1.${b}.${i + 1}`
+const id = (b: Beat1, i: number) => `greg.b1.${b}.${i + 1}`
 
 /** The hub's choices as talk options (and goodbye, so a keeper is never trapped in it). */
 function hubOptions(t: Tut, act: TutActs) {
@@ -50,6 +62,12 @@ function hubOptions(t: Tut, act: TutActs) {
 /** The node at cursor `c`. */
 export function tutNode(t: Tut, c: TutCursor, act: TutActs): TalkNode {
   if (c.b === 'hub') return { line: line('greg.b1.hub.back'), options: hubOptions(t, act) }
+  if (c.b === 'go' || c.b === 'wait') return { line: line(`greg.b2.${c.b}`), options: [{ label: ANSWERS.bye, pick: () => act.go(null) }] }
+  if (c.b === 'ask') {
+    const k = Math.max(0, Math.min(c.i, ASK_LINES - 1))
+    const answer = (go: boolean) => ({ label: line(go ? 'greg.b2.choice.go' : 'greg.b2.choice.wait'), pick: () => { act.set(answerGate(t, go)); act.go({ b: go ? 'go' : 'wait', i: 0 }) } })
+    return { line: line(`greg.b2.ask.${k + 1}`), options: k === ASK_LINES - 1 ? [answer(true), answer(false)] : [{ label: ANSWERS.more, pick: () => act.go({ b: 'ask', i: k + 1 }) }] }
+  }
   const n = BRANCH_LINES[c.b], i = Math.max(0, Math.min(c.i, n - 1)), last = i === n - 1
   if (c.b === 'welcome' && last) return { line: line(id('welcome', i)), options: hubOptions(t, act) }   // .4 offers Moglins? / Spirits?
   if (last) {
@@ -64,7 +82,7 @@ export function tutNode(t: Tut, c: TutCursor, act: TutActs): TalkNode {
 
 /** "And then?" on line `c.i`: commit whatever the NEXT line means, then move to it. */
 export function advance(t: Tut, c: TutCursor, act: TutActs): void {
-  if (c.b === 'hub') return
+  if (c.b === 'hub' || c.b === 'ask' || c.b === 'go' || c.b === 'wait') return
   const n = BRANCH_LINES[c.b], next = c.i + 1
   if (next >= n) return
   if (c.b === 'spirits' && next === GRIMOIRE_AT && !act.grimoire()) return   // bag full: stay on the line before (the caller says why)

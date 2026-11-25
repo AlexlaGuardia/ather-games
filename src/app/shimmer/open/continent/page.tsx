@@ -66,6 +66,7 @@ import { OpenSocial } from '../shared/play-together'
 import { coTalk, boardLine, refusalLine, paidLine, byeLine, loadCoSeen, saveCoSeen, CO_BARK } from '../business/co-lines'
 import type { Beat } from '../business/errand-lines'
 import type { Seat } from '../business/letters'
+import { useFirstSteps } from '../ather/use-first-steps'
 import { stageOf, errandEntries, birthSeat, gemsGiven } from '../business/errand'
 import { allOffers } from '../business/market'
 import { deedsTold, markDeedsTold, deedPointerEntries, TOLD_RADIUS } from '../business/deed-pointer'
@@ -1260,7 +1261,8 @@ function ContinentRideGame() {
   }, [atTown, ledger, setLedger])
   // THE FIRST ERRAND (business/errand.ts): the same journal line as the Ather, with the continent doors as its waymarks
   const errBirth = useBirth(), errLoadout = useLoadout(), errInv = useInv()
-  const errStage = stageOf(errBirth, errInv, errLoadout, typeof window !== 'undefined' && gemsGiven())
+  const fsOn = useFirstSteps()   // M146: no errand before First Steps is done
+  const errStage = fsOn ? 'none' as const : stageOf(errBirth, errInv, errLoadout, typeof window !== 'undefined' && gemsGiven())
   useEffect(() => {
     if (!R) return
     const seat = birthSeat(errBirth)

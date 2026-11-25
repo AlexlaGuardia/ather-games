@@ -126,5 +126,23 @@ const k: VeyraTalk = { at: 'kaels', asked: false, where: false }
 ok(veyraPick(k, 'next') === k, 'an option not offered does nothing')
 ok(veyraPick(veyraOpen('bark'), 'next') === 'done' && veyraOpen('bark').at === 'bark', 'the bark: one line, then done')
 
+// ── M146: held while First Steps is on ──
+{
+  const H = { packLying: false, now: 5, held: true }, F = { packLying: false, now: 9 }
+  const rd = readInvite(newChain(), true)
+  ok(rd.read && rd.step === 'invite' && !digActive(rd) && !flipPulse(rd) && !runeHoldPulse(rd), 'held: the note reads, no Dig')
+  ok(tick(rd, H).chain === rd, 'held: the tick waits')
+  const on = tick(rd, F); ok(on.chain.step === 'dig' && on.say === null && digActive(on.chain), 'back at Greg: The Dig starts, nobody pings a read note')
+  const dd = onDeath(newChain()); ok(tick(dd, H).say === null && tick(dd, H).chain === dd, 'held: a death, no ping')
+  const pg = tick(dd, F); ok(pg.say === 'ping' && pg.chain.step === 'dig', 'back at Greg: died and unread = the ping')
+  ok(tick(newChain(), F).say === null && tick(newChain(), F).chain.step === 'invite', 'back at Greg, alive and unread: nothing yet')
+  const both = readInvite(dd, true), b2 = tick(both, F); ok(b2.say === null && b2.chain.step === 'dig' && b2.chain.pinged, 'died and read: The Dig, no ping')
+  const dig = { ...newChain(), step: 'dig' as const, read: true }
+  ok(!flipPulse(dig, true) && !runeHoldPulse(dig, true) && onFlip(dig, 'athernyx', true) === dig && onGateOpen(dig, true).say === null && tick(dig, H).chain === dig, 'a Dig already on, held: no pulse, no hint')
+  ok(flipPulse(dig) && runeHoldPulse(dig), 'and back once First Steps is done')
+  ok(onYard(dig, true) === dig && onYard(dig).step === 'yard', 'held: the yard waits too')
+  const ng = { ...dig, read: false, pinged: true, pingAt: 0 }; ok(tick(ng, { ...H, now: NUDGE_MS + 1 }).say === null && tick(ng, { ...F, now: NUDGE_MS + 1 }).say === 'nudge', 'held: no nudge')
+}
+
 console.log(`opening-chain: ${n - fails}/${n}${fails ? ` · ${fails} FAILED` : ' · pass'}`)
 process.exit(fails ? 1 : 0)

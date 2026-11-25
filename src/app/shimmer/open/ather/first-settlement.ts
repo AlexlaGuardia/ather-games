@@ -11,7 +11,7 @@
 import type { TalkNode } from '../shared/npc-talk'
 import { ANSWERS } from './greg-talk'
 import { line, GLADE_LINES } from './glade-tutorial-lines'
-import { gift, type Tut } from './glade-tutorial'
+import { firstStepsOn, gift, type Tut } from './glade-tutorial'
 import { potionId } from './alchemy-set'
 import { seedId } from './farming'
 
@@ -48,13 +48,16 @@ export function pickTarget<N extends { id: string; x: number; z: number }>(infec
   return best
 }
 export const acceptM70 = (t: Tut, node: string | null): Tut => (t.m70 !== 'none' ? t : { ...t, m70: 'open', m70node: node })
-/** A champion went down. The quest's own node (or any, if none was picked) moves it to 'down'. */
-export function m70Down(t: Tut, nodeId: string): Tut {
+/** A champion went down. The quest's own node (or any, if none was picked) moves it to 'down'. M146, the skip path (M72): a
+ *  First Steps keeper who fells the settlement's own big one (`nearest` = pickTarget before it fell) without having asked. */
+export function m70Down(t: Tut, nodeId: string, nearest: string | null = null): Tut {
+  if (t.m70 === 'none' && firstStepsOn(t) && nearest === nodeId) return { ...t, m70: 'down', m70node: nodeId }
   if (t.m70 !== 'open') return t
   return t.m70node && t.m70node !== nodeId ? t : { ...t, m70: 'down' }
 }
 /** The journal's entry: title + step ids. null = nothing to show. */
 export function m70Quest(t: Tut): { title: string; step: string } | null {
+  if (firstStepsOn(t) || t.fs === 'done') return null   // M146: First Steps carries these steps, and ends at Greg
   if (t.m70 === 'open') return { title: 'quest.m70.title', step: 'quest.m70.step' }
   if (t.m70 === 'down') return { title: 'quest.m70.title', step: 'quest.m70.done' }
   if (t.m70 === 'thanked') return { title: 'quest.m70.after', step: 'quest.m70.after' }   // canon: its own quest-log line, not a Lamps Out step

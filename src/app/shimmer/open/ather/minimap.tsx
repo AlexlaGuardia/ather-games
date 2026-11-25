@@ -22,6 +22,7 @@ import { AREA_STATES } from './spread-map'
 import { composeTilePicture, mapSettlementsRev, type Region } from './tile-picture'
 import type { CompassPose } from '../shared/game-hud'
 import { D, type Frame } from './cluster'
+import { guides } from '../shared/journal'
 import { MEADOW_CELL, type Meadow } from './meadow'
 
 /** The cluster meadow as a picture, one pixel a cell: grass lighter up the hills, dirt paths, the square; the void and
@@ -46,7 +47,9 @@ const REACH = 120          // Wilds: metres from centre to edge
 const PLOT_REACH = 120     // plot: the keeper's neighbourhood (the 300 m island no longer fits whole at minimap scale)
 const COMP = 1000          // composed tile picture, px
 
-export function AtherMiniMap({ size, zone, world, wrev, fog, tileOff, pose, waymarks, regionsByTile, owned, onExpand, cluster }: {
+export function AtherMiniMap({ size, zone, world, wrev, fog, tileOff, pose, waymarks, regionsByTile, owned, onExpand, cluster, quest }: {
+  /** M146: First Steps is on: draw the journal's marks (the current step's), held to the edge when they are far */
+  quest?: boolean
   size: HudSize; zone: 'plot' | 'wilds'
   /** the streamed Wilds (wilds-world.ts): every loaded tile composes its own picture; a frame draws the ones in view */
   world: WildsWorld; wrev: number
@@ -64,6 +67,7 @@ export function AtherMiniMap({ size, zone, world, wrev, fog, tileOff, pose, waym
   const sigs = useRef(new Map<string, string>())
   const platePending = useRef(false), prvRef = useRef(0), [prv, setPrv] = useState(0)   // M44 part 3: lazy plates (plate.ts atherPlateLazy)
   const ver = useRef(0)
+  const questRef = useRef(quest); questRef.current = quest
   const clusterRef = useRef(cluster); clusterRef.current = cluster
 
   // compose each loaded tile's picture whenever what it shows changes: its plate, its node borders, the fog over it
@@ -98,7 +102,7 @@ export function AtherMiniMap({ size, zone, world, wrev, fog, tileOff, pose, waym
     const tick = () => {
       id = requestAnimationFrame(tick)
       const p = pose.current; if (!p) return
-      const key = `${zone},${Math.round(p.x * 2)},${Math.round(p.z * 2)},${Math.round(p.yaw * 30)},${ver.current},${owned.size},${clusterRef.current?.mates.length ?? 0}`
+      const key = `${zone},${Math.round(p.x * 2)},${Math.round(p.z * 2)},${Math.round(p.yaw * 30)},${ver.current},${owned.size},${clusterRef.current?.mates.length ?? 0},${questRef.current ? guides('wilds').markers.map(m => `${m.x | 0}:${m.z | 0}`).join() : ''}`
       if (key === last) return
       last = key
       const ctx = c.getContext('2d')!, S = c.width
@@ -112,6 +116,10 @@ export function AtherMiniMap({ size, zone, world, wrev, fog, tileOff, pose, waym
           const dx = S / 2 + (left - p.x) * kpx, dy = S / 2 + (top - p.z) * kpx, ds = TILE_M * kpx
           if (dx > S || dy > S || dx + ds < 0 || dy + ds < 0) continue
           ctx.drawImage(m, dx, dy, ds, ds)
+        }
+        if (questRef.current) for (const m of guides('wilds').markers) {
+          const qx = (m.x - p.x) * kpx, qz = (m.z - p.z) * kpx, lim = S / 2 - 12, f = Math.min(1, lim / Math.max(Math.abs(qx), Math.abs(qz), 1))
+          ctx.fillStyle = '#ff9a4a'; ctx.strokeStyle = '#1a1410'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(S / 2 + qx * f, S / 2 + qz * f, 7, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
         }
       } else {
         // LINKED (Alex 11-15: "my plot is still centered"): the map frames the whole cluster, centred on the shared

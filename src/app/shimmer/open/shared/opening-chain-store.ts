@@ -13,6 +13,7 @@ import { useEffect, useRef, useSyncExternalStore } from 'react'
 import { keeperKey } from '@/lib/keeper-local'
 import { hudSay } from './hud-say'
 import { giveInvite, givePage, type Inv } from './inventory'
+import { peekFirstSteps as held } from '../ather/glade-tutorial'   // M146: nothing here starts before First Steps is done
 import { KAEL_PAGE_NAME } from './kael-page-lines'
 import { getLoadout } from './loadout'
 import { MOREL_PING, MOREL_NUDGE, MOREL_DIG_HINT } from './morel-lines'
@@ -42,10 +43,10 @@ export const getChain = get
 const subscribe = (f: () => void) => { subs.add(f); return () => { subs.delete(f) } }
 export const useChain = () => useSyncExternalStore(subscribe, get, () => SERVER)
 
-export function chainRead() { put(readInvite(get())) }
+export function chainRead() { put(readInvite(get(), held())) }
 export function chainDeath() { put(onDeath(get())) }
-export function chainGateOpen() { const r = onGateOpen(get()); put(r.chain); say(r.say) }
-export function chainFlip(to: 'ather' | 'athernyx') { put(onFlip(get(), to)) }
+export function chainGateOpen() { const r = onGateOpen(get(), held()); put(r.chain); say(r.say) }
+export function chainFlip(to: 'ather' | 'athernyx') { put(onFlip(get(), to, held())) }
 export function chainReadPage() { put(readPage(get())) }
 export function chainVeyraSend() { put(onVeyraSend(get())) }
 /** ★ THE SHIP-REPAIR FLAG (M73 s3): Veyra sent the keeper to get the ship running. The repair quest (M108) and the
@@ -69,7 +70,7 @@ export function useChainYard(o: { inYard: () => boolean; getInv: () => Inv; setI
     installProbe()
     const t = setInterval(() => {
       let c = get()
-      if (ref.current.inYard()) c = onYard(c)
+      if (ref.current.inYard()) c = onYard(c, held())
       if (wantsPage(c)) {
         const inv = givePage(ref.current.getInv())
         if (inv) { ref.current.setInv(inv); c = pageFound(c); hudSay(PAGE_FOUND, 'info', 6) }   // a toast, not 'item' (the selected-slot line any door in reach replaces)
@@ -90,7 +91,7 @@ export function useOpeningChain(o: { packLying: () => boolean; getInv: () => Inv
       const c = get()
       // the note, once: retried each second while the bag is full (giveInvite returns null, nothing is marked)
       if (wantsInvite(c)) { const inv = giveInvite(ref.current.getInv()); if (inv) ref.current.setInv(inv) }
-      const r = tick(c, { packLying: ref.current.packLying(), now: Date.now() })
+      const r = tick(c, { packLying: ref.current.packLying(), now: Date.now(), held: held() })
       put(r.chain); say(r.say)
     }, 1000)
     return () => clearInterval(t)

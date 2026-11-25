@@ -32,7 +32,7 @@ function walk(t0: Tut, who: SettlerCursor['who'], opt: { target?: string | null;
 }
 const txt = (ids: string[]) => ids.map(i => GLADE_LINES[i].text)
 
-let t = freshTut()
+let t = { ...freshTut(), folded: true }   // M146: past First Steps (it carries these steps itself, first-steps.test.ts)
 ok(t.m70 === 'none' && !lampsLit(t) && m70Quest(t) === null, 'fresh: no quest, lamps dark')
 // barks while the big one stands (before and after the ask)
 ok(walk(t, 'borage').shown.join() === txt(['settler.bark.open']).join(), 'Borage: bark.open while it stands')
