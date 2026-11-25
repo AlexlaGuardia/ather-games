@@ -231,6 +231,7 @@ Steps (one worker each, in order; each keeps `beta-m7-saves` green):
 - **Rules:** only rows on this list. No new systems, no lore, nothing public. Canon gate + tests before every build.
 
 ## Inbox (Alex's brain dump: hub writes here at once, dated, his words; triaged into rows / queue / CANON_GAPS / killed)
+- 11-25 09:0x Alex (dialog): owner-only infection visible to his party guests = fine; usage = keep two agents going
 - 11-25 (agent find, reproduced by hub): spread-map.test red 1 of 50, 'legend word for word': the test strips 'Charted' before comparing with canon; likely canon's legend line now has it (not proven). Small: next play slice
 - 11-25 Alex (dialog): Glade pines in the water = remove where wet -> M160; filler scenery look judged in game tonight
 - 11-25 Alex (via Magii 587e67c, RULED): "we introduce a new currency dewls and these are gems that come from all the mining nodes as an accessory to the nodes drops with this currency the player can trade with this moglin ware that are determined mainly by the type of settlement and the moglins that reside there"; picks: Burrfolk wares cost dewls ONLY (item barter ends, changes M112); spent at Burrfolk stalls + camp only -> M159
@@ -343,7 +344,7 @@ Steps (one worker each, in order; each keeps `beta-m7-saves` green):
 - 11-23 08:4x Alex on Nyx + ships: agreed Nyx is thin; M73 opening chain next. On a flyable skyship: "I'm not on board for 3, I'm thinking it's just a gate to space maps" → DECIDED: NO flight system. A repaired ship = a GATE to space maps (board it, pick a destination, load the map; the Hask wreck is the first, its SOS = the destination-list question). Ship repair loop = canon ask to Magii.
 
 ## Alex's queue (🔒: look / feel / canon; clear it when you have a minute)
-- **M156 s2 party Wilds (11-25, LIVE):** feel. Until s3, a guest whose own node is already clear gets no champion there. Fogged map sections stay the guest's own. While M128 is owner-only, a guest of YOURS does see your infected / lost settlements: fine, or hide?
+- **M156 s2 party Wilds (11-25, LIVE):** feel. Until s3, a guest whose own node is already clear gets no champion there. Fogged map sections stay the guest's own. (Owner-only infection shown to your party guests: FINE, Alex 11-25.)
 - **M153 filler look (11-25):** docs/looks/m153-2026-11-25/filler/ (sheet + shore shots): OK? Shaded sides are dark like the trees'. Labels owed @lark (owner-only).
 - **M151 guns (11-25, LIVE):** hold on every gun: feel on a real PC + phone? The Roar alone loses a newcomer 31 of 200 champion fights (15.5%, was 199; trio 4): OK? Backbone sustained 41.9 vs Repeater ~34 (+23%): OK? (Roar's DPS is 78.7 held.)
 - **M153 Place mode s1a (11-25, LIVE in the builder, Glade):** try it: Fly, P = Place, E = inventory (55 pieces), right places, left picks up, wheel size, R turn, G snap, T step, X delete, M move, B blocks. Shots docs/looks/m153-2026-11-25/. Calls: tree sizes (Grove 6.2 m, Shimmer 7.0 m) and the four tints; dark canopies in Fly; gun bench in the palette?
