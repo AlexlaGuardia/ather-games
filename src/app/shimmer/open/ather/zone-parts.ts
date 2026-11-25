@@ -10,8 +10,8 @@
 // (the keeper's own pieces) never see them. Nothing to break, nothing to pick up. Only Publish changes them.
 // The tag (M114) rides along in the layer; zone-tags.ts gives each tagged zone its E point (M114 s2).
 import { FURNITURE } from './furniture'
-import { slabLift, panelChain, pieceRect, type Works, type Piece } from './rooms'
-import { isWholeQ } from './build-prefs'
+import { slabLift, onePieceBoxes, type Works, type Piece } from './rooms'
+import { CREATIVE_OPEN } from './build-catalog'
 import { cleanZones, type Zone } from '../../world/builder-zones'
 import type { Box, Shape } from '../terrain-world'
 
@@ -40,11 +40,7 @@ export function zoneParts(zones: readonly Zone[], ground: (x: number, z: number)
 
 /** the walker's boxes: solid parts only (you walk through a stool), a turned panel as a chain of thin boxes (rooms.ts pieceBoxes) */
 export function zonePartBoxes(parts: readonly ZonePart[]): Box[] {
-  return parts.filter(p => FURNITURE[p.item]?.solid).flatMap(p => {
-    const f = FURNITURE[p.item]
-    const ks = f.panel && !isWholeQ(p.q) ? panelChain(p.x, p.z, f.w, f.d, p.q) : [pieceRect(p.item, p.x, p.z, p.q)]
-    return ks.map(k => ({ x0: k.x0, x1: k.x1, z0: k.z0, z1: k.z1, y0: p.y - 0.5, y1: p.y + f.h }))
-  })
+  return parts.flatMap(p => onePieceBoxes({ ...p, open: CREATIVE_OPEN }, p.y))   // M169 s2: a cut piece blocks by its parts; a zone's door stands open (no E in a zone)
 }
 
 /** `shape` with the boxes added to its solids() (same box query: only those meeting the asked box) */

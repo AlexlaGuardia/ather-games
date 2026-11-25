@@ -8,6 +8,7 @@
 import type { Box } from '../terrain-world'
 import { settlementSolids } from './settlement-lots'
 import { FURNITURE } from './furniture'
+import { buildSolids } from './build-catalog'
 import { gladeHomeBoxes } from './glade-home'
 import { gladePeopleVersion } from './glade-people'
 import { gladeLotBoxes, jettyBoxes, gladeBlueprintVersion } from './glade-lots'
@@ -95,7 +96,7 @@ export const wildsStructures: Structures = (x0, z0, x1, z1) => {
 /** an xz rectangle */
 export type Foot = { x0: number; x1: number; z0: number; z1: number }
 export type PieceFoot = { id: string; rect: Foot; parts: Foot[]; train: boolean }
-type PlotPiece = { id: string; item: string; x: number; z: number; q?: number }
+type PlotPiece = { id: string; item: string; x: number; z: number; q?: number; open?: true }
 
 /** a body's footprint radius from its size (metres): half its nose-to-tail length, or (no length) half its height x 1.2 */
 export function bodyRadius(size: { height: number; length?: number }): number {
@@ -115,6 +116,8 @@ export function plotFootprints(pieces: readonly PlotPiece[]): PieceFoot[] {
   const out: PieceFoot[] = []
   for (const p of pieces) {
     const f = FURNITURE[p.item]; if (!f || isGround(p.item)) continue
+    const cut = buildSolids(f, !!p.open)   // M169 s2: a cut piece is in her way by its parts only: she walks through an open door, a doorway, an arch
+    if (cut) { cut.forEach((t, k) => { const r = turned(p.x, p.z, p.q ?? 0, t.x, t.z, t.w, t.d); out.push({ id: k ? `${p.id}#${k}` : p.id, rect: r, parts: [r], train: false }) }); continue }
     const q = p.q ?? 0, rect = turned(p.x, p.z, q, 0, 0, f.w, f.d), kind = f.train ? (f.play ?? 'leap') : null
     const parts = kind === 'leap' ? [-1, 1].map(k => turned(p.x, p.z, q, k * (f.w / 2 - 0.05), 0, 0.1, f.d))
       : kind === 'guard' ? [-1, 1].map(k => turned(p.x, p.z, q, k * (f.w / 2 - 0.1), 0, 0.22, f.d))

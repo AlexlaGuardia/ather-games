@@ -10,6 +10,7 @@ import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { FLORA_LOOKS } from '../../world/flora-placements'
 import { PieceBody, RoomMesh } from './workshop'
+import { CREATIVE_OPEN } from './build-catalog'   // M169 s2: a door / shutters stand open in Creative (no E there)
 import { GROUND_Y } from './plot'
 import { roomPad } from './glade-pads'
 import { isRoom, type GladeRoom } from '../../world/builder-props'
@@ -118,7 +119,7 @@ function RoomBody({ room }: { room: GladeRoom }) {
 function Template({ need, onBaked }: { need: { item: string } | { room: GladeRoom }; onBaked: (p: Part[]) => void }) {
   const ref = useRef<THREE.Group>(null)
   useLayoutEffect(() => { if (ref.current) onBaked(bake(ref.current)) }, [])   // eslint-disable-line react-hooks/exhaustive-deps
-  return <group ref={ref} visible={false}>{'room' in need ? <RoomBody room={need.room} /> : <PieceBody item={need.item} />}</group>
+  return <group ref={ref} visible={false}>{'room' in need ? <RoomBody room={need.room} /> : <PieceBody item={need.item} open={CREATIVE_OPEN} />}</group>
 }
 
 const UP = new THREE.Vector3(0, 1, 0)

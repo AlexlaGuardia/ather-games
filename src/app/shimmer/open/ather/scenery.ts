@@ -9,6 +9,7 @@ import { FLORA_LOOKS } from '../../world/flora-placements'
 import { PROP_MODELS } from '../../world/prop-models'
 import { CRYSTAL_KINDS, CRYSTAL_NAME } from './prospecting'
 import { FURNITURE, FURNITURE_ORDER, type BuildSub } from './furniture'
+import { buildSolids, CREATIVE_OPEN } from './build-catalog'
 import { panelChain, ROOMS } from './rooms'
 import { BENCH_IN, ROOM_SIZE, padLevel, plinthBoxes, roomPad } from './glade-pads'
 import { isWholeQ, quadBounds } from './build-prefs'
@@ -87,7 +88,8 @@ export const SCENERY: readonly SceneryKind[] = [
   ...Object.entries(PROP_MODELS).map(([id, m]): SceneryKind => { const z = PROP_SIZE[id] ?? PROP_DEFAULT
     return { k: `prop:${id}`, group: 'Props', label: words(id), w: z.h * z.w, d: z.h * z.d, h: z.h, solid: z.h >= BIG_PROP_H, model: { glb: m.url, fit: z.h, yaw: m.yaw, glow: m.glow } } }),
   ...FURNITURE_ORDER.map((id): SceneryKind => { const f = FURNITURE[id]
-    return { k: `piece:${id}`, group: f.build ? 'Build' : 'Furniture', ...(f.build ? { sub: f.build } : {}), label: f.name, w: f.w, d: f.d, h: f.h, solid: f.solid, panel: f.panel, model: { piece: id } } }),
+    const parts = buildSolids(f, CREATIVE_OPEN)   // M169 s2: a cut piece blocks by its parts (an open door, a doorway, an arch: none)
+    return { k: `piece:${id}`, group: f.build ? 'Build' : 'Furniture', ...(f.build ? { sub: f.build } : {}), label: f.name, w: f.w, d: f.d, h: f.h, solid: f.solid, panel: f.panel, ...(parts ? { arms: parts } : {}), model: { piece: id } } }),
 ]
 export const SCENERY_BY: ReadonlyMap<string, SceneryKind> = new Map(SCENERY.map(s => [s.k, s]))
 export const isSolid = (p: Pick<Prop, 'k' | 'solid'>) => { const K = SCENERY_BY.get(p.k); return K?.floats ? false : p.solid ?? K?.solid ?? false }

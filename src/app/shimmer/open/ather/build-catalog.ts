@@ -15,9 +15,87 @@ export const BUILD_PIECES: readonly string[] = buildCatalog().flatMap(g => g.ids
 /** a box of a piece: p = its middle (m, local, y up from the ground), s = its size, c = its colour */
 export interface PieceBox { p: readonly [number, number, number]; s: readonly [number, number, number]; c: string }
 const DARK = '#6b4a2a'
-/** the boxes a building piece is drawn with (null = not a box-built building piece: the game draws it its own way) */
-export function buildBoxes(f: PieceDef): PieceBox[] | null {
+/** M169 s2: the crystal pane's colour and a door / shutter leaf's (a shade under the goldwood round it, so a shut leaf reads) */
+export const PANE = '#bfe6f2', LEAF = '#b98a44'
+/** M169 s2: the cut pieces' sizes (athernyx concept-1672 building + textures NOTES, Magii 246c2cc / 9c9e688; the build's plot-walls.ts) */
+export const CUT = { doorH: 2.2, leafW: 0.94, leafH: 2.14, leafT: 0.06, frame: 0.06, sill: 1.0, winTop: 2.2, round: 0.45, roundY: 1.6, shutW: 0.5, shutH: 1.2, shutT: 0.05 } as const
+/** M169 s2: where nothing answers E (Creative's Place pieces, a zone's parts) a door's leaves and a window's shutters stand OPEN: a
+ *  shut door there would be a wall nobody could open */
+export const CREATIVE_OPEN = true as const
+/** a piece that opens and shuts on E (a door's leaves, a window's shutters) */
+export const opens = (f: PieceDef | undefined) => f?.shape === 'door' || f?.shape === 'shutters'
+const bx = (x: number, y: number, z: number, w: number, h: number, d: number, c: string): PieceBox => ({ p: [x, y, z], s: [w, h, d], c })
+/** the round pane's band as strips: each strip's middle height and the pane's half width there (wall fills the rest) */
+const ROUND_STRIPS = 5
+function roundBand(r: number, y0: number, n = ROUND_STRIPS) { const hgt = 2 * r / n
+  return Array.from({ length: n }, (_, k) => { const y = y0 - r + hgt * (k + 0.5); return { y, h: hgt, hw: Math.sqrt(Math.max(0, r * r - (y - y0) ** 2)) } }) }
+/** M169 s2: a cut piece's boxes (local; x along the wall, +z = its outer face; `open` = leaves / shutters open) */
+function cutBoxes(f: PieceDef, open: boolean): PieceBox[] {
+  const c = f.tint ?? WOOD_COLOR[f.wood], tr = f.tint ? '#7a3f2e' : DARK, { w, d, h } = f, out: PieceBox[] = []
+  const foot = () => out.push(bx(0, 0.09, 0, w + 0.02, 0.18, d + 0.04, tr)), cap = () => out.push(bx(0, h - 0.05, 0, w + 0.02, 0.1, d + 0.04, tr))
+  const lintel = (y0: number) => out.push(bx(0, (y0 + h) / 2, 0, w, h - y0, d, c))
+  const jambs = (y1: number) => [-1, 1].forEach(k => out.push(bx(k * (w / 2 - CUT.frame / 2), y1 / 2, 0, CUT.frame, y1, d, tr)))
+  const pane = (hw: number) => { lintel(CUT.winTop); out.push(bx(0, CUT.sill / 2, 0, w, CUT.sill, d, c)); foot(); cap()
+    const ph = CUT.winTop - CUT.sill, py = (CUT.sill + CUT.winTop) / 2
+    out.push(bx(0, py, 0, hw * 2, ph, 0.04, PANE), bx(0, py, 0, 0.04, ph, 0.06, tr))
+    ;[-1, 1].forEach(k => out.push(bx(k * (w / 2 - (w / 2 - hw) / 2), py, 0, w / 2 - hw, ph, d, tr)))
+    out.push(bx(0, CUT.sill - 0.03, 0.04, w, 0.06, d + 0.08, tr)) }
+  switch (f.shape) {
+    case 'door': case 'doorway': {
+      lintel(CUT.doorH); cap(); jambs(CUT.doorH); out.push(bx(0, 0.01, 0, w, 0.02, d, tr))
+      if (f.shape === 'door') for (const k of [-1, 1]) {   // two leaves; open = a quarter turn outward on the hinge at the jamb
+        const hx = k * (w / 2 - CUT.frame), y = 0.02 + CUT.leafH / 2
+        if (!open) out.push(bx(hx - k * CUT.leafW / 2, y, 0, CUT.leafW, CUT.leafH, CUT.leafT, LEAF), bx(hx - k * CUT.leafW / 2, y, CUT.leafT / 2 + 0.01, CUT.leafW - 0.14, 0.08, 0.02, tr))
+        else out.push(bx(hx - k * CUT.leafT / 2, y, d / 2 + CUT.leafW / 2, CUT.leafT, CUT.leafH, CUT.leafW, LEAF), bx(hx + k * 0.01, y, d / 2 + CUT.leafW / 2, 0.02, 0.08, CUT.leafW - 0.14, tr))
+      }
+      return out }
+    case 'window': pane(w / 2 - 0.08); return out
+    case 'shutters': {
+      pane(w / 2 - 0.08)
+      for (const k of [-1, 1]) {   // a pair on the outer face; open = folded back flat on the wall beside it (each covers 0.5 m of the next piece)
+        const x = open ? k * (w / 2 + CUT.shutW / 2) : k * CUT.shutW / 2, z = d / 2 + 0.03 + CUT.shutT / 2, y = (CUT.sill + CUT.winTop) / 2
+        out.push(bx(x, y, z, CUT.shutW - 0.01, CUT.shutH, CUT.shutT, LEAF), bx(x, y, z + CUT.shutT / 2 + 0.01, CUT.shutW - 0.1, 0.06, 0.02, tr))
+      }
+      return out }
+    case 'round': {
+      const r = CUT.round, y0 = CUT.roundY
+      out.push(bx(0, (y0 - r) / 2, 0, w, y0 - r, d, c)); lintel(y0 + r); foot(); cap()
+      for (const s of roundBand(r, y0)) { out.push(bx(0, s.y, 0, s.hw * 2, s.h, 0.04, PANE)); [-1, 1].forEach(k => out.push(bx(k * (w / 2 - (w / 2 - s.hw) / 2), s.y, 0, w / 2 - s.hw, s.h, d, c))) }
+      out.push(bx(0, y0, 0, 0.04, 2 * r, 0.06, tr), bx(0, y0, 0, 2 * r, 0.04, 0.06, tr))
+      return out }
+    case 'arch': {
+      const r = w / 2 - CUT.frame, y0 = CUT.doorH
+      jambs(y0); lintel(y0 + r); cap()
+      for (const s of roundBand(r, y0, 10).slice(5)) [-1, 1].forEach(k => out.push(bx(k * (w / 2 - (w / 2 - s.hw) / 2), s.y, 0, w / 2 - s.hw, s.h, d, c)))
+      return out }
+    case 'half': out.push(bx(0, h / 2, 0, w, h, d, c), bx(0, 0.09, 0, w + 0.02, 0.18, d + 0.04, tr), bx(0, h - 0.03, 0, w + 0.02, 0.06, d + 0.04, tr)); return out
+    case 'end': out.push(bx(0, h / 2, 0, w, h, d, c), bx(0, 0.09, 0, w + 0.04, 0.18, d + 0.04, tr), bx(0, h - 0.04, 0, w + 0.06, 0.08, d + 0.06, tr)); return out
+    case 'corner': {   // an L in a 1 x 1 m square: one arm along its back (local -z), one down its left (local -x), meeting in the corner
+      const t = 0.3, H = h
+      for (const [x, z, aw, ad] of [[0, -w / 2 + t / 2, w, t], [-w / 2 + t / 2, t / 2, t, d - t]] as const)
+        out.push(bx(x, H / 2, z, aw, H, ad, c), bx(x, 0.09, z, aw + 0.02, 0.18, ad + 0.04, tr), bx(x, H - 0.05, z, aw + 0.02, 0.1, ad + 0.04, tr))
+      return out }
+  }
+  return out
+}
+/** a part of a piece that BLOCKS the walker: local middle (x, z), size w x d, h tall from the floor */
+export interface SolidPart { x: number; z: number; w: number; d: number; h: number }
+/** M169 s2: what of a cut piece blocks (null = not a cut piece: its whole footprint, the old rule). A shut door's leaves block the
+ *  whole doorway; an open door, a doorway or an arch blocks nothing (the lintel is over a keeper's head). A window is a wall. */
+export function buildSolids(f: PieceDef, open = false): SolidPart[] | null {
+  if (!f.shape) return null
+  switch (f.shape) {
+    case 'door': return open ? [] : [{ x: 0, z: 0, w: f.w, d: f.d, h: f.h }]
+    case 'doorway': case 'arch': return []
+    case 'corner': return [{ x: 0, z: -f.w / 2 + 0.15, w: f.w, d: 0.3, h: f.h }, { x: -f.w / 2 + 0.15, z: 0.15, w: 0.3, d: f.d - 0.3, h: f.h }]
+    default: return [{ x: 0, z: 0, w: f.w, d: f.d, h: f.h }]
+  }
+}
+/** the boxes a building piece is drawn with (null = not a box-built building piece: the game draws it its own way). `open` = a
+ *  door's leaves / a window's shutters stand open (M169 s2). */
+export function buildBoxes(f: PieceDef, open = false): PieceBox[] | null {
   const c = WOOD_COLOR[f.wood]
+  if (f.shape) return cutBoxes(f, open)
   // M98b b2 wall panels: the wall itself in its material, a darker sill and a cap (three meshes: a run of panels stays cheap)
   if (f.panel) { const pc = f.tint ?? c, tr = f.tint ? '#7a3f2e' : DARK
     return [{ p: [0, f.h / 2, 0], s: [f.w, f.h, f.d], c: pc }, { p: [0, 0.09, 0], s: [f.w + 0.02, 0.18, f.d + 0.04], c: tr }, { p: [0, f.h - 0.05, 0], s: [f.w + 0.02, 0.1, f.d + 0.04], c: tr }] }

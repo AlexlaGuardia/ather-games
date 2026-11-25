@@ -9,10 +9,10 @@ const same = (a: readonly string[], b: readonly string[]) => a.length === b.leng
 
 // s1 = nothing new: today's 4 floor slabs + 4 wall panels, moved out of Furniture
 const cat = buildCatalog()
-ok(same(cat.map(g => g.sub), ['Floors', 'Walls']), `only the filled sub-categories show (${cat.map(g => g.sub)})`)
+ok(same(cat.map(g => g.sub), ['Floors', 'Walls', 'Doors', 'Windows', 'Openings + trim']), `only the filled sub-categories show (${cat.map(g => g.sub)})`)   // M169 s2: + Doors, Windows, Openings + trim
 ok(same(cat[0].ids, ['goldwood_slab', 'goldwood_slab_wide', 'stone_slab', 'stone_slab_wide']), 'Floors = the 4 slabs')
 ok(same(cat[1].ids, ['goldwood_panel', 'goldwood_panel_wide', 'brick_panel', 'brick_panel_wide']), 'Walls = the 4 panels')
-ok(FURNITURE_ORDER.every(id => !!FURNITURE[id].build === !!(FURNITURE[id].slab || FURNITURE[id].panel)), 'every slab and panel is a building piece, nothing else is (s1)')
+ok(FURNITURE_ORDER.every(id => !!FURNITURE[id].build === !!(FURNITURE[id].slab || FURNITURE[id].panel || FURNITURE[id].shape)), 'every slab, panel and cut piece (s2) is a building piece, nothing else is')
 ok(!FURNITURE.ruin_column.build, 'the Salvaged Column stays Furniture: a shop piece with no recipe cannot be planned and paid')
 ok(cat.every(g => (BUILD_SUBS as readonly string[]).includes(g.sub)), 'sub-categories are Alex\'s list')
 
@@ -29,9 +29,9 @@ ok(SCENERY_BY.size === SCENERY.length, 'no piece in two groups (one row per key)
 ok(BUILD_PIECES.every(id => SCENERY_BY.get(`piece:${id}`)?.group === 'Build'), 'saved keys unchanged: piece:<id>')
 
 // a piece added later shows in both places with no second list
-const plus: Record<string, PieceDef> = { ...FURNITURE, test_door: { name: 'T', blurb: '', recipe: [{ id: 'goldwood_plank', n: 1 }], w: 1, d: 0.2, h: 2, solid: true, wood: 'goldwood', panel: true, build: 'Doors' } }
-const cat2 = buildCatalog(plus, [...FURNITURE_ORDER, 'test_door'])
-ok(same(cat2.map(g => g.sub), ['Floors', 'Walls', 'Doors']) && same(cat2[2].ids, ['test_door']), 'a new `build` piece makes its sub-category appear')
+const plus: Record<string, PieceDef> = { ...FURNITURE, test_col: { name: 'T', blurb: '', recipe: [{ id: 'goldwood_plank', n: 1 }], w: 1, d: 0.2, h: 2, solid: true, wood: 'goldwood', panel: true, build: 'Columns' } }
+const cat2 = buildCatalog(plus, [...FURNITURE_ORDER, 'test_col'])
+ok(same(cat2.map(g => g.sub), ['Floors', 'Walls', 'Doors', 'Windows', 'Openings + trim', 'Columns']) && same(cat2[5].ids, ['test_col']), 'a new `build` piece makes its sub-category appear')   // s2: Doors is filled now, so the test piece is a column
 
 // every piece has an icon, drawn from the boxes the game draws it with
 for (const id of BUILD_PIECES) {

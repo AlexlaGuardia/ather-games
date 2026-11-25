@@ -5,6 +5,7 @@
 import { useEffect } from 'react'
 import { PieceBody } from './workshop'
 import type { ZonePart } from './zone-parts'
+import { CREATIVE_OPEN } from './build-catalog'   // M169 s2: a zone's door stands open
 
 export function ZonePartsView({ parts }: { parts: readonly ZonePart[] }) {
   // test hook (scripts/builder-zone-publish-check.mts): what the game drew
@@ -15,6 +16,6 @@ export function ZonePartsView({ parts }: { parts: readonly ZonePart[] }) {
   }, [parts])
   if (!parts.length) return null
   return <group name="zone-parts">{parts.map(p => (
-    <group key={p.key} position={[p.x, p.y, p.z]} rotation-y={-p.q * Math.PI / 2} userData={{ zonePart: p.key }}><PieceBody item={p.item} /></group>
+    <group key={p.key} position={[p.x, p.y, p.z]} rotation-y={-p.q * Math.PI / 2} userData={{ zonePart: p.key }}><PieceBody item={p.item} open={CREATIVE_OPEN} /></group>
   ))}</group>
 }

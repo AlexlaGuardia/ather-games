@@ -26,7 +26,7 @@ import { MoglinModel, furOf, type MoglinGarb } from '../shared/moglin-model'
 import {
   ROOMS, ROOM_ORDER, TABLE, canPlace, place, raised, progress, wallsOf, benchOf, footprint, loadWorks, saveWorks,
   WALL_H, benchBox, keepClear, tableAt, TABLE_ITEM, type Works, type Room, type RoomKind, type WorkNear,
-  stationOf, setStation, stockItemFromBag, stockItemFromBank, craftAt, jobRuns, toWorld, pieceRect, pieceBoxes, pieceFloor, canPlacePiece, placePiece, planPiece, plannedAt, unplan, withPlanned, turnPiece, retireRooms, type Piece,
+  stationOf, setStation, stockItemFromBag, stockItemFromBank, craftAt, jobRuns, toWorld, pieceRect, pieceBoxes, pieceFloor, canPlacePiece, placePiece, planPiece, plannedAt, unplan, withPlanned, turnPiece, retireRooms, toggleOpen, type Piece,
   ROOM_STORE_SLOTS, ROOM_KEEPS, roomAccepts, roomStore, stockRoom, stockRoomFromBag, takeFromRoom, makeBaitAt, benchCount, type StoreMove,
   CHEST_W, CHEST_D, CHEST_H, KEEPSTONE, KEEPSTONE_RECIPE, makeKeepstone, makeKeepstoneFrom, shortOf, haveFor, payCost, pickUpChest, allChests, chestBox, chestsStanding, canPlaceChest, placeChest, type Chest,
 } from './rooms'
@@ -44,7 +44,7 @@ import { stairBoxes, landingRails, stairCellSet, toggleStair, dirOfYaw, type Sta
 import { deckRect, planDecks, eraseDecks, deckBoxes, supported as deckSupported, builtDeckCells, DECK_T, type Decks } from './plot-decks'
 import { colBoxes, toggleCol, colAt, paintColumn, colColour, colStandsOn, parseCol, COL_T, type Cols, trimmedRect, COL_CAP } from './plot-cols'
 import { FURNITURE, REFINE, STONE_REFINE, BENCH_JOBS, KEEPSTONES, isPiece, ALC_LIVE, WOOD_COLOR, type Job } from './furniture'
-import { buildCatalog, buildBoxes } from './build-catalog'   // M169
+import { buildCatalog, buildBoxes, opens } from './build-catalog'   // M169
 import { BuildIcon } from './build-icon'
 import { AlchemyPanel } from './alchemy-panel'
 import { loadAssign, mayUse } from './train-assign'   // M118 s2: the keeper's assign-a-piece gate
@@ -1356,7 +1356,7 @@ function PlanterSpirit({ id }: { id: string }) {
   return look ? <SpiritOnPlanter sp={sp} look={look} y={0.53} fallback={orbMesh} nav={nav ?? undefined} id={id} dev={dev} /> : orbMesh
 }
 /** One piece, built from boxes in its wood's colour. Blockout look like the rooms. */
-export function PieceBody({ item, id }: { item: string; id?: string }) {
+export function PieceBody({ item, id, open }: { item: string; id?: string; /** M169 s2: a door's leaves / shutters stand open */ open?: boolean }) {
   const f = FURNITURE[item], c = WOODS[f.wood], dk = '#6b4a2a'
   const legs = (w: number, d: number, h: number, t = 0.07) => [[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([a, b], k) => <Bx key={k} p={[a * (w / 2 - t), h / 2, b * (d / 2 - t)]} s={[t, h, t]} c={c} />)
   switch (item) {
@@ -1389,7 +1389,7 @@ export function PieceBody({ item, id }: { item: string; id?: string }) {
     case 'alc_mixer': return <><Bx p={[0, 0.76, 0]} s={[f.w, 0.08, f.d]} c={c} />{legs(f.w - 0.1, f.d - 0.1, 0.72, 0.09)}<mesh position={[0.4, 0.88, 0]}><cylinderGeometry args={[0.3, 0.24, 0.36, 14]} /><meshLambertMaterial color="#4e4a47" /></mesh><mesh position={[0.4, 1.065, 0]} rotation-x={-Math.PI / 2}><circleGeometry args={[0.27, 14]} /><meshBasicMaterial color={f.glow} /></mesh><mesh position={[0.4, 0.5, 0]}><cylinderGeometry args={[0.12, 0.12, 0.1, 10]} /><meshBasicMaterial color="#8fe3ff" /></mesh>{[-0.55, -0.35, -0.15].map(x => <Bx key={x} p={[x, 0.85, 0.1]} s={[0.12, 0.1, 0.22]} c="#6f9a4a" />)}</>
     case 'alc_desk': return <><Bx p={[0, 0.72, 0]} s={[f.w, 0.07, f.d]} c={c} />{legs(f.w - 0.1, f.d - 0.1, 0.68, 0.08)}<Bx p={[0, 0.96, -f.d / 2 + 0.04]} s={[f.w, 0.48, 0.05]} c={c} /><Bx p={[0, 1.0, -f.d / 2 + 0.14]} s={[f.w - 0.1, 0.03, 0.18]} c={c} />{[-0.5, -0.3, -0.1, 0.1].map((x, k) => <mesh key={x} position={[x, 1.08, -f.d / 2 + 0.14]}><cylinderGeometry args={[0.04, 0.04, 0.13, 8]} /><meshBasicMaterial color={['#c9a8ff', '#8fe3ff', '#ff9a4a', '#9ae06a'][k]} /></mesh>)}<Bx p={[0.42, 0.88, 0.1]} s={[0.03, 0.26, 0.03]} c="#a4793e" /><mesh position={[0.42, 1.04, 0.1]}><torusGeometry args={[0.09, 0.015, 6, 16]} /><meshLambertMaterial color="#a4793e" /></mesh><mesh position={[0.42, 1.04, 0.1]}><circleGeometry args={[0.08, 14]} /><meshBasicMaterial color={f.glow} transparent opacity={0.45} side={THREE.DoubleSide} /></mesh></>
     default:
-      { const bx = buildBoxes(f)   // M98b slabs + panels: their boxes live in build-catalog.ts, which draws their icons from the same boxes
+      { const bx = buildBoxes(f, !!open)   // M98b slabs + panels: their boxes live in build-catalog.ts, which draws their icons from the same boxes
         if (bx) return <>{bx.map((b, k) => <Bx key={k} p={[...b.p]} s={[...b.s]} c={b.c} />)}</> }
       return <Bx p={[0, f.h / 2, 0]} s={[f.w, f.h, f.d]} c={c} />
   }
@@ -1402,7 +1402,7 @@ function Wobbly({ id, at, children }: { id: string; at?: [number, number, number
 /** `y` = the floor under it (M55: on the plinth inside a raised house). Wobbly only pivots, it does not lift. */
 function PieceMesh({ p, y = GROUND_Y }: { p: Piece; y?: number }) {
   if (p.item === 'lift') return <LiftMesh p={p} />
-  return <group position={[p.x, y, p.z]} rotation-y={-p.q * Math.PI / 2}><PieceBody item={p.item} id={p.id} /></group>
+  return <group position={[p.x, y, p.z]} rotation-y={-p.q * Math.PI / 2}><PieceBody item={p.item} id={p.id} open={!!p.open} /></group>
 }
 /** M143: a piece only planned: a see-through sheet of its size, like a planned wall */
 function PlannedPiece({ p, y }: { p: Piece; y: number }) {
@@ -1426,11 +1426,20 @@ function PieceGhost({ pose, owned, item, q, plan, from }: { pose: React.MutableR
   )
 }
 
+/** M169 s2: E at a door or shutters opens / shuts them, saved with the plot (no panel). false = not one of those: E goes on as before.
+ *  `at` = the keeper, who is never shut inside a doorway. Pick one up with three hits, or move it in the build mode. */
+export function openShut(id: string, at: { x: number; z: number }): boolean {
+  const r = toggleOpen(getW(), id, at); if (!r) return false
+  if ('why' in r) { hudSay(r.why, 'info'); return true }
+  setWorks(r.works); return true
+}
 // ── prompts + panels ──────────────────────────────────────────────────────────────────────────────────────────
 export function workPrompt(n: WorkNear): string {
   if (n.kind === 'table') return 'E · the planning table'
   if (n.kind === 'chest') return 'E · the Keepstone'
-  if (n.kind === 'piece') { const pc = getW().pieces.find(x => x.id === n.id); return `E · ${pc ? FURNITURE[pc.item].name : 'furniture'}` }
+  if (n.kind === 'piece') { const pc = getW().pieces.find(x => x.id === n.id)
+    if (pc && opens(FURNITURE[pc.item])) return `E · ${pc.open ? 'shut' : 'open'} the ${FURNITURE[pc.item].name.toLowerCase()}`   // M169 s2 (label: @lark placeholder)
+    return `E · ${pc ? FURNITURE[pc.item].name : 'furniture'}` }
   if (n.kind === 'raising') return `${ROOMS[n.room.kind].name} · going up (${Math.round(progress(n.room) * 100)}%)`
   return `E · the ${ROOMS[n.room.kind].name}`
 }

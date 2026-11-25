@@ -72,6 +72,11 @@ export interface PieceDef {
   /** BETA M169: a BUILDING piece: its sub-category of the one building catalog (BUILD_SUBS). A piece with this is PLANNED in the
    *  garden (the plan-mode catalog, paid at Build) AND sits under Build in Creative's Place palette: one field, both places. */
   build?: BuildSub
+  /** BETA M169 s2: a building piece cut as a DOOR, WINDOW or OPENING (build-catalog.ts buildBoxes draws it, buildSolids says what
+   *  blocks). 'door' and 'shutters' OPEN and SHUT on E on a plot (rooms.ts toggleOpen; Piece.open). Sizes: athernyx concept-1672
+   *  building + textures NOTES (Magii 246c2cc / 9c9e688): doorway 2 x 2.2 m, leaves 0.94 x 2.14, window band 1.0 to 2.2 m, round
+   *  pane 0.9 m at 1.6 m, shutter leaves 0.5 x 1.2 m, half wall = the railing's 1.0 m. Each stands on the 4.8 m wall panel grid. */
+  shape?: 'door' | 'window' | 'round' | 'shutters' | 'arch' | 'doorway' | 'half' | 'end' | 'corner'
   /** M110 s1: a TRAINING piece: party spirits may play at it as they please (spirit-trot.ts PLAY), each play nudging this ONE
    *  stat toward the form cap (spirit-stats.ts). Owner + ?spirits=3d only for now: the bench hides it otherwise. */
   train?: 'pwr' | 'grd' | 'agi' | 'vig'
@@ -122,6 +127,20 @@ export const FURNITURE: Readonly<Record<string, PieceDef>> = {
   goldwood_panel_wide: { name: 'Wide Goldwood Wall Panel', blurb: 'Two metres of goldwood wall in one piece.', recipe: [{ id: 'goldwood_plank', n: 3 }], w: 2, d: 0.3, h: 4.8, solid: true, wood: 'goldwood', panel: true, build: 'Walls' },
   brick_panel: { name: 'Brick Wall Panel', blurb: 'A metre of brick wall that stands on its own, at any angle.', recipe: [{ id: 'stone_brick', n: 2 }], w: 1, d: 0.3, h: 4.8, solid: true, wood: 'stone', panel: true, tint: '#a4573f', build: 'Walls' },
   brick_panel_wide: { name: 'Wide Brick Wall Panel', blurb: 'Two metres of brick wall in one piece.', recipe: [{ id: 'stone_brick', n: 3 }], w: 2, d: 0.3, h: 4.8, solid: true, wood: 'stone', panel: true, tint: '#a4573f', build: 'Walls' },
+  // BETA M169 s2 (Alex 11-25: doors, windows, openings): wall-height pieces that stand IN a run of panels (same 0.3 m thick, 4.8 m
+  //    tall, 1 m or 2 m long), so a window or a door is a panel of its own with its opening cut. The door is a 2 m piece (the build's
+  //    doorway is 2 m x 2.2 m) whose two leaves shut on E; only a shut leaf blocks. Costs (Jin's), on the panels' scale (2 planks a
+  //    metre of wall): a cut piece costs the wall it replaces, plus 1 crystal pane a window (plot-bom), plus a plank per pair of
+  //    leaves. Names = plain nouns; blurbs = placeholders for @lark.
+  door: { name: 'Door', blurb: 'A goldwood doorway with two leaves that open and shut.', recipe: [{ id: 'goldwood_plank', n: 5 }], w: 2, d: 0.3, h: 4.8, solid: true, wood: 'goldwood', shape: 'door', build: 'Doors' },
+  window: { name: 'Window', blurb: 'A metre of goldwood wall with a crystal pane in it.', recipe: [{ id: 'goldwood_plank', n: 2 }, { id: 'crystal_pane', n: 1 }], w: 1, d: 0.3, h: 4.8, solid: true, wood: 'goldwood', shape: 'window', build: 'Windows' },
+  round_window: { name: 'Round window', blurb: 'A metre of goldwood wall with a round crystal pane in it.', recipe: [{ id: 'goldwood_plank', n: 2 }, { id: 'crystal_pane', n: 1 }], w: 1, d: 0.3, h: 4.8, solid: true, wood: 'goldwood', shape: 'round', build: 'Windows' },
+  shutters: { name: 'Shutters', blurb: 'A window with a pair of goldwood shutters that open and shut.', recipe: [{ id: 'goldwood_plank', n: 3 }, { id: 'crystal_pane', n: 1 }], w: 1, d: 0.3, h: 4.8, solid: true, wood: 'goldwood', shape: 'shutters', build: 'Windows' },
+  arch: { name: 'Arch', blurb: 'Two metres of brick wall with a round-topped way through.', recipe: [{ id: 'stone_brick', n: 3 }], w: 2, d: 0.3, h: 4.8, solid: false, wood: 'stone', tint: '#a4573f', shape: 'arch', build: 'Openings + trim' },
+  doorway: { name: 'Doorway', blurb: 'Two metres of goldwood wall with an open way through.', recipe: [{ id: 'goldwood_plank', n: 3 }], w: 2, d: 0.3, h: 4.8, solid: false, wood: 'goldwood', shape: 'doorway', build: 'Openings + trim' },
+  half_wall: { name: 'Half wall', blurb: 'A metre of goldwood wall, waist high.', recipe: [{ id: 'goldwood_plank', n: 1 }], w: 1, d: 0.3, h: 1.0, solid: true, wood: 'goldwood', shape: 'half', build: 'Openings + trim' },
+  wall_end: { name: 'Wall end', blurb: 'A square goldwood post that finishes the end of a wall.', recipe: [{ id: 'goldwood_plank', n: 1 }], w: 0.4, d: 0.4, h: 4.88, solid: true, wood: 'goldwood', shape: 'end', build: 'Openings + trim' },
+  wall_corner: { name: 'Wall corner', blurb: 'Two goldwood wall pieces joined at a right angle.', recipe: [{ id: 'goldwood_plank', n: 4 }], w: 1, d: 1, h: 4.8, solid: true, wood: 'goldwood', shape: 'corner', build: 'Openings + trim' },
   lift: { name: 'Lift', blurb: 'A goldwood car on cords, a stone weight hung beside it. Pull the cord for a floor and up or down you go.', recipe: [{ id: 'goldwood_plank', n: 8 }, { id: 'stone_brick', n: 4 }], w: 1.0, d: 1.0, h: 2.0, solid: false, wood: 'goldwood', shaft: true },
   // ── UNIQUE pieces, Nyx-side (Alex 11-17: "unique pieces are SOLD FOR MARKS by the carpenter + other Nyx-side shops";
   //    Magii c52ba1c: which shops stock decor is ours, no new names). Made of the continent's canon goods (game/economy.md:

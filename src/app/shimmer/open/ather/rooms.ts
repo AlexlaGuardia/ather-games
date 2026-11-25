@@ -27,6 +27,7 @@ import { adoptDecks, type Decks } from './plot-decks'
 import { adoptFound, adoptFoundCells, floorAt } from './plot-found'
 import { cellMid, shaftBlocked, shaftTop } from './lift'
 import { normQ, quad, quadBounds, quadsHit, rectQuad, isWholeQ, type Rect } from './build-prefs'
+import { buildSolids, opens, type SolidPart } from './build-catalog'   // M169 s2: what of a cut piece blocks
 import { adoptWalls, adoptCarry, adoptRoof, adoptFloors, adoptPaid, wallRects, type Walls, type RoofStyle, type Floors } from './plot-walls'
 
 export type RoomKind = 'rinnshop' | 'farm' | 'cooking' | 'alchemy' | 'smith' | 'carpentry' | 'stonemason'
@@ -117,7 +118,7 @@ export interface Room {
  *  set inside: the basic one is a raw mana shard; found uniques set higher crystals, look only, never more space. */
 export interface Chest { id: string; x: number; z: number; q: number; placedAt: number; crystal?: string }
 /** A piece of furniture or decor standing on the plot (furniture.ts). Picked up, it is the bag item `item` again. */
-export interface Piece { id: string; item: string; x: number; z: number; q: number; placedAt: number; /** M48: a lift's car level (lift.ts); absent = the ground */ lv?: number }
+export interface Piece { id: string; item: string; x: number; z: number; q: number; placedAt: number; /** M48: a lift's car level (lift.ts); absent = the ground */ lv?: number; /** M169 s2: a door's leaves / a window's shutters stand open (E); absent = shut */ open?: true }
 export interface Works { v: 1; rooms: Room[]; chests: Chest[]; pieces: Piece[]; /** M143: pieces only PLANNED (slabs, panels): not solid, not near, nothing paid. Apart from `pieces`, so no reader can take one for real; Build moves them over */ planned?: Piece[]; /** M37: the keeper's own walls (plot-walls.ts); an older save has none */ walls?: Walls; /** M37 slice 2: the house's roof style */ roof?: RoofStyle; /** M37 slice 3: painted floor cells */ floors?: Floors; /** M37 slice 4: rooms whose floor and roof are built (room key to its m²); see plot-bom.ts */ paid?: Record<string, number>; /** M47: the floors above the ground one (plot-floors.ts); an older save has none = one storey */ upper?: Level[]; /** M54: ground-floor columns (plot-cols.ts) */ cols?: Cols; /** M56: ground-floor stairs (plot-stairs.ts) */ stairs?: Stairs; /** M56 (a): ground-floor open floor, patios (plot-decks.ts) */ decks?: Decks; /** M55: the house's foundation height (plot-found.ts), 0 / 0.6 / 1.2 */ found?: number; /** M96: the planning table has left its first spot (it is a placed piece now, or in the bag); see tableAt */ tableMoved?: true; /** M55 slice 2: per house, per room cell */ foundCells?: Record<string, number>; /** 11-22: a take-down's leftover fraction of a plank per item (plot-walls raze), carried to the next */ wallCarry?: Record<string, number> }
 /** M37: is this rectangle in a drawn wall (plot-walls.ts)? */
 const inDrawnWall = (w: Works, r: { x0: number; x1: number; z0: number; z1: number }, pad = 0) => wallRects(w.walls ?? {}).some(b => r.x0 - pad < b.x1 && r.x1 + pad > b.x0 && r.z0 - pad < b.z1 && r.z1 + pad > b.z0)
@@ -469,11 +470,28 @@ export function panelChain(x: number, z: number, w: number, d: number, q: number
   const n = Math.max(1, Math.ceil(w / d)), a = (normQ(q) * Math.PI) / 2, c = Math.cos(a), s = Math.sin(a), step = (w - d) / Math.max(1, n - 1)
   return Array.from({ length: n }, (_, i) => { const l = n === 1 ? 0 : -w / 2 + d / 2 + i * step; return quadBounds(x + l * c, z + l * s, d, d, q) })
 }
-export const pieceBoxes = (w: Works): Box[] => w.pieces.filter(p => FURNITURE[p.item]?.solid).flatMap(p => {
-  const f = FURNITURE[p.item], b = pieceFloor(w, p)   // M55: inside the house it stands on the foundation; M98b: on a slab, on the slab
+/** M169 s2: a cut piece's blocking parts as the walker's boxes on a floor at `base`: each part turned with the piece, a long one
+ *  off the axes as a chain (the panel rule) */
+export function partBoxes(parts: readonly SolidPart[], x: number, z: number, q: number, base: number): Box[] {
+  const a = (q * Math.PI) / 2, c = Math.cos(a), s = Math.sin(a)
+  return parts.flatMap(t => { const px = x + t.x * c - t.z * s, pz = z + t.x * s + t.z * c
+    const rs = isWholeQ(q) ? [quadBounds(px, pz, t.w, t.d, q)] : t.w >= t.d ? panelChain(px, pz, t.w, t.d, q) : panelChain(px, pz, t.d, t.w, q + 1)
+    return rs.map(k => ({ x0: k.x0, x1: k.x1, z0: k.z0, z1: k.z1, y0: base - 0.5, y1: base + t.h })) })
+}
+/** one placed piece's walker boxes on a floor at `base` (rooms + Creative zones share it: zone-parts.ts) */
+export function onePieceBoxes(p: Pick<Piece, 'item' | 'x' | 'z' | 'q' | 'open'>, base: number): Box[] {
+  const f = FURNITURE[p.item]; if (!f?.solid) return []
+  const parts = buildSolids(f, !!p.open); if (parts) return partBoxes(parts, p.x, p.z, p.q, base)
   const ks = f.panel && !isWholeQ(p.q) ? panelChain(p.x, p.z, f.w, f.d, p.q) : [pieceRect(p.item, p.x, p.z, p.q)]
-  return ks.map(k => ({ x0: k.x0, x1: k.x1, z0: k.z0, z1: k.z1, y0: b - 0.5, y1: b + f.h }))
-})
+  return ks.map(k => ({ x0: k.x0, x1: k.x1, z0: k.z0, z1: k.z1, y0: base - 0.5, y1: base + f.h }))
+}
+export const pieceBoxes = (w: Works): Box[] => w.pieces.flatMap(p => onePieceBoxes(p, pieceFloor(w, p)))   // M55: inside the house it stands on the foundation; M98b: on a slab, on the slab
+/** M169 s2: open or shut a door / shutters (E). Shutting refuses while the keeper at (x, z) stands in the doorway it closes. */
+export function toggleOpen(w: Works, id: string, at?: { x: number; z: number }): { works: Works } | { why: string } | null {
+  const p = w.pieces.find(x => x.id === id), f = p && FURNITURE[p.item]; if (!p || !opens(f)) return null
+  if (p.open && at && f!.shape === 'door' && onePieceBoxes({ ...p, open: undefined }, 0).some(b => at.x > b.x0 - 0.3 && at.x < b.x1 + 0.3 && at.z > b.z0 - 0.3 && at.z < b.z1 + 0.3)) return { why: 'Step out of the doorway first.' }
+  return { works: { ...w, pieces: w.pieces.map(x => { if (x.id !== id) return x; if (x.open) { const { open: _o, ...rest } = x; void _o; return rest } return { ...x, open: true as const } }) } }
+}
 /** M84 s2: a SITE other than the home plot (a Creative-mode building zone): `inside` replaces the held-ground check, and the
  *  plot's own fixtures (gate, Gregory, the table's keep-clear ring, the starter Keepstone) are not there. Every other rule holds. */
 export interface PieceSite { inside: (x: number, z: number) => boolean }

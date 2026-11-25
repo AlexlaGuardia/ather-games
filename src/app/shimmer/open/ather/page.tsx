@@ -53,7 +53,7 @@ import {
 import { PlotScene } from './plot-scene'
 import { HeldItem } from './held-item'
 import { heldUse, placesFromHand, useLabel } from './held-use'
-import { WorkshopScene, WorkshopPanel, PlacingBar, BuildBar, usePlacingKeys, isPlacing, holdFromHand, useWorks, workWalls, workPrompt, currentWorks, currentBank, setWorks } from './workshop'
+import { WorkshopScene, WorkshopPanel, PlacingBar, BuildBar, usePlacingKeys, isPlacing, holdFromHand, useWorks, workWalls, workPrompt, currentWorks, currentBank, setWorks, openShut } from './workshop'
 import { bankCount } from './garden-bank'
 import { currentFarm, setFarm, currentWater, setWater, farmNow } from './farm-room'
 import { BuildPointer, stepBuildCam, useBuildMode, useBuildKeys, isBuilding, exitBuild } from './build-mode'
@@ -1747,6 +1747,7 @@ function AtherSliceGame() {
         else if (n.kind === 'work' && n.near.kind === 'piece' && currentWorks().pieces.some(x => x.id === (n.near as { id: string }).id && x.item === 'lift') && callNearest()) return   // M61 s3: a guest calls a mate's lift too (a local ride, never saved)
         else if (n.kind === 'work' && n.near.kind === 'piece' && isVisiting() && (() => { const pc = currentWorks().pieces.find(x => x.id === (n.near as { id: string }).id), st = pc && FURNITURE[pc.item]?.alc; if (st) setPanel({ kind: 'brew', station: st }); return !!st })()) return   // M57 s3b: a guest takes brewing steps at a mate's alchemy set
         else if (n.kind === 'work' && guestRefuses(m => hudSay(m, 'info', 4))) return   // M61: a guest opens no station, store or piece
+        else if (n.kind === 'work' && n.near.kind === 'piece' && !isVisiting() && openShut(n.near.id, poseRef.current)) return   // M169 s2: E opens / shuts a door or shutters (the keeper's own plot)
         else if (n.kind === 'work') { if (n.near.kind !== 'raising') setPanel({ kind: 'work', near: n.near }) }
         else if (n.kind === 'folk') { if (n.id) openGladeFolk(n.id); else setPanel({ kind: 'folk', s: n.s }) }
         else if (n.kind === 'zone') {   // M114 s2: a tagged zone's E point
