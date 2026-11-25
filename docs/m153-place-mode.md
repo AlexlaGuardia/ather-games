@@ -20,7 +20,7 @@ G snap (1 / 0.5 / 0.25 / free), T turn step, R turn, undo, select + move, delete
 - Moonwell pool and the Glade's gate: FIXED. (Pool fix = M157.)
 - Houses, stations and people move SEPARATELY, each its own piece.
 - Rooms in the gardens: palette pieces Alex places, display only in the Glade (Bonn Carpentry, Otto Stonery, Tess Rinnshop, Greg
-  Cooking: Magii 69b8b7d, RULED-AFK, Alex still to confirm).
+  Cooking: Magii 69b8b7d, Alex confirmed 11-25).
 
 **Hub defaults (told to Alex, no objection; say so to change)**
 - Scenery scales 0.5 to 2; nodes keep true size. Trunks and big props block, bushes do not; a toggle per piece.
