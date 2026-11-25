@@ -160,7 +160,7 @@ try {
   ok(await cryAim(g) === CID, '11. the crystal node'); ok(!!(await saw(g, /prospect the Raw Mana \(7 mana\)/)), '11. 7 mana'); await shot(g, 'k1-crystal')
   await setMana(g, 100); const m0 = await A<number>(g, 'mana()'); await E(g); await workOut(g); const m1 = await A<number>(g, 'mana()')
   ok(!!(await saw(g, /\+20 Prospecting/)) && m0 - m1 > 5 && m0 - m1 <= 7.01, `11. gathered: +20 Prospecting, ${(m0 - m1).toFixed(1)} mana`)
-  ok((await lootOf(g)).some(d => d.item === 'raw_mana_shard') && (await lootOf(g)).some(d => d.item === 'blankstone'), '11. shards + blankstone on the ground'); await shot(g, 'k1-crystal-loot'); await collect(g, () => frame(g))
+  ok((await lootOf(g)).some(d => d.item === 'raw_mana_shard') && (await lootOf(g)).some(d => d.item === 'blankstone'), '11. shards + blankstone on the ground'); ok((await lootOf(g)).filter(d => d.item === 'dewl').reduce((a, d) => a + d.n, 0) === 1, '11b. M159: one dewl beside them'); await shot(g, 'k1-crystal-loot'); await collect(g, () => frame(g))
   ok((await count(g, 'raw_mana_shard')) >= 1, '11. picked up'); await cryAim(g); const w2 = await saw(g, /Raw Mana, growing back \([\d:]+\)\./); ok(hms(w2) > 23.5 * 3600, `11. "${w2}"`); await shot(g, 'k1-crystal-spent')
 
   // ── keeper 2: a fresh copy ── (one scene at a time: the box renders in software)
