@@ -187,6 +187,14 @@ export const DEV_PAGES: DevPage[] = [
     keywords: ['friends', 'bonn', 'otto', 'tess', 'glade', 'look', 'character'],
   },
   {
+    path: '/shimmer/dev/greg-blue',
+    title: 'The Greg and Blue Bench',
+    blurb: 'Gregory in his locked look, front, side and back, seated or walking, and Blue, his old Dewbear.',
+    group: 'glass',
+    era: 'live',
+    keywords: ['greg', 'gregory', 'blue', 'dewbear', 'glade', 'look', 'character'],
+  },
+  {
     path: '/shimmer/dev/hands',
     title: 'The Hands Tuner',
     blurb: 'Place the first-person hands in each key pose: rest, run, jump, cast.',

@@ -105,7 +105,7 @@ import { loadSpot, saveSpot, clearSpot, makeSpot, resumeFrom } from './last-spot
 import { GladeGreg, type GregTourState, type GregLive } from './glade-greg'
 import { biomeGround } from './hollow-goop'   // M34: what a Hollow's sheen borrows
 import { tourStops, giveGloveWord, TABLE_STOP, TABLE_KEEPER, GLOVE_GIVE, TOUR_NEXT, TOUR_SKIP, TOUR_DONE } from './greg-tour'
-import { FolkModel, folkLook } from '../shared/folk-model'
+import { GregModel } from '../shared/greg-model'
 import { getLoadout, setLoadout } from '../shared/loadout'
 import { TalkBubble, TalkChoices, type TalkNode } from '../shared/npc-talk'
 import { gemsGiven, markGemsGiven, stageOf, gregsGems, errandEntries, birthSeat } from '../business/errand'
@@ -1822,7 +1822,7 @@ function AtherSliceGame() {
         )}
         {folkTalk.node && folkTalk.bubbleAt && zone.kind !== 'plot' && <TalkBubble at={folkTalk.bubbleAt} name={folkTalk.name} line={folkTalk.node.line} scene={(folkTalk.node as { scene?: string }).scene} />}
         {zone.kind === 'plot' && tableVisit && !visitNow && (() => {   /* M61: your Greg never stands at a mate's table */ const g = TABLE_STOP.at, p = poseRef.current; return (
-          <group position={[g.x, plotHeightAt(g.x, g.z), g.z]} rotation-y={Math.atan2(p.x - g.x, p.z - g.z)}><FolkModel look={folkLook('gregory')} action={tourNode || talkNode ? 'talk' : 'idle'} /></group>) })()}
+          <group position={[g.x, plotHeightAt(g.x, g.z), g.z]} rotation-y={Math.atan2(p.x - g.x, p.z - g.z)}><GregModel action={tourNode || talkNode ? 'talk' : 'idle'} /></group>) })()}
         {(talkNode ?? tourNode) && (zone.kind === 'glade' || (tableVisit && !visitNow)) && <TalkBubble at={[gregHead.x, gregHead.y + 0.95, gregHead.z]} name="Gregory" line={(talkNode ?? tourNode)!.line} scene={(talkNode ?? tourNode)!.scene} />}
         {zone.kind === 'plot' && fennelAt && <Fennel spot={fennelAt} y={plotHeightAt(fennelAt.x, fennelAt.z)} talking={!!fennelNode} />}
         {zone.kind === 'plot' && !visitNow && <IdleMoglins w={works} />}   {/* P1 11-23: recruits with no room wait by the planning table */}

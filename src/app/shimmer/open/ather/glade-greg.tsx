@@ -2,8 +2,8 @@
 // GREGORY AT MOONWELL GLADE (BETA M30 part 2; canon 44bc0c1 + his look dd2f922). He left the keeper's plot: he sits just
 // outside his home at the Wilds' front door, in his LOCKED look (shared/folk-model.tsx NAMED_LOOKS.gregory: round, short,
 // spectacles, crinkly eyes, waistcoat over shirtsleeves, a pencil behind one ear), on a bench by the pool. E at him is the
-// conversation (greg-talk.ts) and, from it, the plot-ground screen. NOT drawn: Blue (spirits are not drawn in the overworld
-// in this build). Mount in the Wilds only; `loaded(x, z)` is the ground height or null while his tile is not streamed in.
+// conversation (greg-talk.ts) and, from it, the plot-ground screen. M166: he is shared/greg-model.tsx (the look Alex locked
+// 11-25) and Blue lies at the bench's end (glade-blue.tsx). Mount in the Wilds only; `loaded(x, z)` is the ground height or null while his tile is not streamed in.
 //
 // BETA M32 (11-19) GREG WALKS: on his tour (greg-tour.ts) he gets up and walks to each stop (shared/folk-path.ts), waits there
 // for the keeper (turning to them and waving if they lag), then calls `onArrive(i)` once they are near: page.tsx shows that
@@ -12,7 +12,10 @@
 import { useEffect, useRef, useState, type MutableRefObject } from 'react'
 import { useFrame } from '@react-three/fiber'
 import type * as THREE from 'three'
-import { FolkModel, folkLook, type FolkAction } from '../shared/folk-model'
+import type { FolkAction } from '../shared/folk-model'
+import { GregModel } from '../shared/greg-model'
+import { Blue } from './glade-blue'
+import { BLUE_AT } from './blue-look'
 import { stepWalk, startWalk, faceYaw, turnToward, TURN_RATE, type Walk, type Pt } from '../shared/folk-path'
 import { gregSpot } from './moonwell-glade'
 import { GladeHome } from './glade-home-view'
@@ -77,7 +80,7 @@ export function GladeGreg({ loaded, land, tour = null, hold = false, keeper, onA
   useEffect(() => {   // checks' hook (like __folk): READ where he stands (only set while he is drawn)
     if (y === null) return
     const W = window as unknown as { __greg?: unknown }
-    const pub = () => { const w = walk.current; W.__greg = { x: w.x, z: w.z, y: lastY.current, pose: modeRef.current === 'sit' ? 'sit' : 'stand', action: modeRef.current, look: 'gregory', tour: tour ? { ...tour, arrived: arrived.current } : null,
+    const pub = () => { const w = walk.current; W.__greg = { x: w.x, z: w.z, y: lastY.current, pose: modeRef.current === 'sit' ? 'sit' : 'stand', action: modeRef.current, look: 'gregory', blue: (() => { const c = Math.cos(s.yaw), n = Math.sin(s.yaw); return { x: s.x + BLUE_AT.x * c + BLUE_AT.z * n, z: s.z - BLUE_AT.x * n + BLUE_AT.z * c } })(), tour: tour ? { ...tour, arrived: arrived.current } : null,
       // the tour's stops AS THIS PAGE HAS THEM (a lot standing Alex's blueprint moves its Moglin to the door, setLotSpot; a check that
       // computes the stops in node has no blueprints and reads stops metres off: the sweep's 1.3-5.2 m 'Greg off his stops', 11-22)
       stops: tourStops().map(t => ({ id: t.id, at: t.at, look: t.look, zone: t.zone })) } }
@@ -93,9 +96,11 @@ export function GladeGreg({ loaded, land, tour = null, hold = false, keeper, onA
       {/* a plain bench: seat 0.48 m, two ends */}
       <mesh position={[0, BENCH_H - 0.03, 0.05]}><boxGeometry args={[1.5, 0.06, 0.6]} /><meshLambertMaterial color="#8a6a44" /></mesh>
       {[-0.65, 0.65].map(x => <mesh key={x} position={[x, (BENCH_H - 0.06) / 2, 0.05]}><boxGeometry args={[0.08, BENCH_H - 0.06, 0.5]} /><meshLambertMaterial color="#6f5436" /></mesh>)}
+      {/* M166: Blue, his old Dewbear, at the bench's end (he keeps it while Greg tours) */}
+      <group position={[BLUE_AT.x, 0, BLUE_AT.z]} rotation-y={BLUE_AT.yaw}><Blue /></group>
     </group>
     <group ref={g} position={[s.x, y, s.z]} rotation-y={s.yaw}>
-      <FolkModel look={folkLook('gregory')} pose={mode === 'sit' ? 'sit' : 'stand'} action={mode === 'sit' ? 'idle' : mode} />
+      <GregModel pose={mode === 'sit' ? 'sit' : 'stand'} action={mode === 'sit' ? 'idle' : mode} />
     </group>
     </>
   )

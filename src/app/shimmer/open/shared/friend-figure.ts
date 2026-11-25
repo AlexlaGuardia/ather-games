@@ -30,7 +30,7 @@ export const FRIEND_COLOR = {
   tess: { skin: '#ffdcc2', hair: '#221d1f', eye: '#5f5730', coat: '#e2c68e', coatIn: '#b09058', scarf: '#a587c2', trouser: '#484c52', boot: '#a8642b', leather: '#8a4726' },
 } as const
 export const TESS_BLUSH = '#d2917f'   // drawn unlit, so deeper here than it reads
-const SOLE = '#3a2a20', METAL = '#b9a888', DARK = '#1c1712'
+export const SOLE = '#3a2a20', METAL = '#b9a888', DARK = '#1c1712'
 
 // ── the mould: collect parts, merge with vertex colours; the ink hull pushes each part's smoothed normals out by INK_T ─────
 const SPH = new THREE.SphereGeometry(1, 14, 10)
@@ -102,26 +102,26 @@ export const ROUND = (() => {   // a soft box
   g.computeVertexNormals(); return g
 })()
 /** a hair lock: root at the origin, its tip up +y */
-const LOCK = new THREE.LatheGeometry([[0, 0], [0.5, 0.05], [0.55, 0.22], [0.45, 0.5], [0.25, 0.78], [0.08, 0.95], [0, 1]].map(([r, y]) => new THREE.Vector2(r, y)), 8)
-const CAP = (t: number) => new THREE.SphereGeometry(1, 22, 12, 0, Math.PI * 2, 0, t)
+export const LOCK = new THREE.LatheGeometry([[0, 0], [0.5, 0.05], [0.55, 0.22], [0.45, 0.5], [0.25, 0.78], [0.08, 0.95], [0, 1]].map(([r, y]) => new THREE.Vector2(r, y)), 8)
+export const CAP = (t: number) => new THREE.SphereGeometry(1, 22, 12, 0, Math.PI * 2, 0, t)
 
-function boot(m: Mould, color: string, y: number, h: number, r: number, foot: V3) {
+export function boot(m: Mould, color: string, y: number, h: number, r: number, foot: V3) {
   m.add(tube([[r * 0.95, y + 0.03], [r, y + h * 0.6], [r * 1.08, y + h]]), color)
   m.add(BOOTFOOT, color, [0, y + 0.034, foot[2] * 0.42], foot, [0, 0, 0])
   m.add(BOOTFOOT, SOLE, [0, y + 0.018, foot[2] * 0.42], [foot[0] * 1.04, 0.02, foot[2] * 1.03], [0, 0, 0], false)
   for (const k of [0, 1, 2]) m.add(ROUND, SOLE, [0, y + 0.075 + k * 0.026, r * 0.98 + (2 - k) * 0.012], [r * 0.42, 0.005, 0.008], [-0.4, 0, 0], false)
 }
 /** ears: the creator's petal, tip up and back (canon: small, pointed) */
-const ears = (m: Mould, skin: string, rx: number, y: number, size = 1) => { for (const s of [-1, 1]) m.add(EAR, skin, [s * rx * 1.04, y, -0.01], [0.05 * size, 0.15 * size, 0.03 * size], [-0.25, 0, s * -0.55]) }
+export const ears = (m: Mould, skin: string, rx: number, y: number, size = 1) => { for (const s of [-1, 1]) m.add(EAR, skin, [s * rx * 1.04, y, -0.01], [0.05 * size, 0.15 * size, 0.03 * size], [-0.25, 0, s * -0.55]) }
 /** the adult head: an egg drawn in to a chin */
 function headGeo(jaw: number) {
   const g = new THREE.SphereGeometry(1, 22, 16), P = g.attributes.position
   for (let k = 0; k < P.count; k++) { const y = P.getY(k); if (y < 0) { const f = 1 - jaw * Math.pow(-y, 1.5); P.setX(k, P.getX(k) * f); P.setZ(k, P.getZ(k) * (1 - jaw * 0.45 * -y)) } }
   g.computeVertexNormals(); return g
 }
-interface Face { rx: number; ry: number; skin: string; hair: string; eye: string; eyeW: number; eyeH: number; brow: number; lash: boolean; mouth: 'grin' | 'smile' | 'small'; nose: number }
+export interface Face { rx: number; ry: number; skin: string; hair: string; eye: string; eyeW: number; eyeH: number; brow: number; lash: boolean; mouth: 'grin' | 'smile' | 'small'; nose: number }
 /** Returns the flat meshes; the nose goes on the head mould. */
-function face(head: Mould, f: Face, jaw: number) {
+export function face(head: Mould, f: Face, jaw: number) {
   const on = new Mould(), eyes = new Mould(), rz = f.rx * 0.98, ez = rz * 0.93, ex = f.rx * 0.4, ey = -f.ry * 0.06
   head.add(headGeo(jaw), f.skin, [0, 0, 0], [f.rx, f.ry, rz])
   head.ball(f.skin, [0, -f.ry * 0.28, rz * 0.97], [0.018 * f.nose, 0.022 * f.nose, 0.024 * f.nose], undefined, false)
@@ -145,7 +145,7 @@ function face(head: Mould, f: Face, jaw: number) {
   else arc(0.028, 0.14, 1.6, my + 0.016)
   return { on, eyes, ey }
 }
-const hand = (m: Mould, color: string, y: number, r: number, s: number) => { m.ball(color, [0, y, 0.005], [r * 0.82, r * 1.25, r * 0.95]); m.ball(color, [-s * r * 0.4, y + r * 0.3, r * 0.85], [r * 0.34, r * 0.62, r * 0.36], [0.4, 0, 0]) }
+export const hand = (m: Mould, color: string, y: number, r: number, s: number) => { m.ball(color, [0, y, 0.005], [r * 0.82, r * 1.25, r * 0.95]); m.ball(color, [-s * r * 0.4, y + r * 0.3, r * 0.85], [r * 0.34, r * 0.62, r * 0.36], [0.4, 0, 0]) }
 function satchel(m: Mould, leather: string, at: V3, s: V3, yaw: number) {
   m.add(ROUND, leather, at, s, [0, yaw, 0.06])
   const fx = Math.sin(yaw), fz = Math.cos(yaw)
@@ -282,7 +282,7 @@ function tess(): FriendFigure {
   head.add(new THREE.ConeGeometry(1, 1, 10), C.coat, [0, 0.15, -0.215], [0.06, 0.13, 0.055], [-2.25, 0, 0], false)   // the hood's point, behind
   return done(body, head, arm, leg, F, HY, HIP, SH, 0.168, 0.095, 0.196)
 }
-function done(body: Mould, head: Mould, arm: (s: number) => Mould, leg: () => Mould, F: { on: Mould; eyes: Mould; ey: number }, HY: number, HIP: number, SH: number, armX: number, legX: number, ry: number): FriendFigure {
+export function done(body: Mould, head: Mould, arm: (s: number) => Mould, leg: () => Mould, F: { on: Mould; eyes: Mould; ey: number }, HY: number, HIP: number, SH: number, armX: number, legX: number, ry: number): FriendFigure {
   return {
     joints: {
       body: body.joint([0, 0, 0]), head: head.joint([0, HY, 0]),
