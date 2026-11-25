@@ -17,7 +17,7 @@
 import { OwnerReady } from '../shared/owner-ready'
 import { LoadScreen } from '../shared/load-screen'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import { subscribeVisit, currentVisit, isVisiting, startVisit, endVisit, noteVisit, shownOwned, plotZone, lobbyZoneOf, visitVerdict, guestRefuses, snapMoglins, type PlotSnap } from './plot-visit'   // BETA M61
+import { subscribeVisit, currentVisit, isVisiting, startVisit, endVisit, noteVisit, shownOwned, plotZone, lobbyZoneOf, visitVerdict, VISIT_ASK_MS, guestRefuses, snapMoglins, type PlotSnap } from './plot-visit'   // BETA M61
 import { usePlotVisitNet } from './plot-visit-net'
 import { usePartyBrew } from './party-brew-net'   // M57 s3b
 import { BrewingPanel } from './brewing-panel'
@@ -486,15 +486,15 @@ function AtherSliceGame() {
       if (!storedParty()) { noteVisit('refused:no-party'); hudSay('Join their party first: only party mates can visit a plot.', 'info', 5); return }
       // M156: nobody leaves for a plot its keeper is not standing on (no garden folded, in the Glade or the Wilds, offline)
       clearInterval(asking)
-      const t0 = performance.now()
+      let asks = 0
       const ask = () => {
-        const v = visitVerdict(hostHome(host), performance.now() - t0)
+        const v = visitVerdict(hostHome(host), VISIT_ASK_MS * asks++)
         if (v === 'wait') return
         clearInterval(asking)
         if (v === 'go') { startVisit(host, name); return }
         noteVisit('refused:not-home'); hudSay(`Could not reach ${name || 'a friend'}'s plot. They may have left it.`, 'info', 5)
       }
-      asking = setInterval(ask, 300); ask()
+      asking = setInterval(ask, VISIT_ASK_MS); ask()
     }
     setVisitHandler(go)
     const q = new URLSearchParams(window.location.search), h = q.get('visit')

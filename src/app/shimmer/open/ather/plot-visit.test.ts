@@ -166,7 +166,7 @@ const snap: PlotSnap = { works, owned: ['0,0', '0,1', '1,0'] }
     ok(z({ visiting: 'p_host', folded: false }) === 'open:plot:p_host' && z({ kind: 'wilds' }) === 'open:wilds', "a guest is on the host's plot; the Wilds are the Wilds")
     ok(visitVerdict(true, 0) === 'go', 'a host at home: go at once')
     ok(visitVerdict(false, 0) === 'wait' && visitVerdict(false, 5000) === 'no', 'a host elsewhere: a short grace, then no')
-    ok(visitVerdict(null, 5000) === 'wait' && visitVerdict(null, 13000) === 'no', 'a roster not in yet waits longer, then no')
+    ok(visitVerdict(null, 5000) === 'wait' && visitVerdict(null, 16000) === 'no', 'a roster not in yet waits longer, then no')
   }
 
   console.log(`plot-visit: ${pass}/${pass + fail}`)

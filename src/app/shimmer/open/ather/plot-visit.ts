@@ -28,8 +28,9 @@ export const GLADE_LOBBY = 'open:glade'
 export const lobbyZoneOf = (o: { kind: 'plot' | 'wilds' | 'glade'; folded: boolean; arriving: boolean; visiting: string | null; self: string }): string =>
   o.kind === 'wilds' ? 'open:wilds' : o.visiting ? plotZone(o.visiting) : o.kind === 'glade' ? GLADE_LOBBY : o.folded && !o.arriving ? plotZone(o.self) : ''
 /** M156: a visit is taken only to a host the roster has on their own plot. `home` null = not in the roster (yet): the roster lands a
- *  moment after a page load and a host may be reloading, so it waits before it says no. */
-export const VISIT_GRACE_MS = 4_000, VISIT_ROSTER_MS = 12_000
+ *  moment after a page load and a host may be reloading, so it waits before it says no.
+ *  Counted in asks, never wall-clock (as GIVE_UP_ASKS): a first page load stalls its thread for seconds before the roster is read. */
+export const VISIT_ASK_MS = 300, VISIT_GRACE_MS = 4_000, VISIT_ROSTER_MS = 15_000
 export const visitVerdict = (home: boolean | null, waitedMs: number): 'go' | 'wait' | 'no' =>
   home ? 'go' : waitedMs < (home === false ? VISIT_GRACE_MS : VISIT_ROSTER_MS) ? 'wait' : 'no'
 /** the host's socket id from a plot zone, or null for any other zone */
