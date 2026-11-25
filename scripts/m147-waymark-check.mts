@@ -71,7 +71,9 @@ try {
   await sleep(1500); const g1 = await ghost(); ok(g1?.ok && !(await p.$('[data-waymark-why]')), `cleared: green, no refusal (${JSON.stringify(g1)})`)
   await p.screenshot({ path: `${out}/green.png` })
   const a1 = await at()
-  if (!desk) { const t = await p.$('[data-touch="use"]'); ok(!!t, "phone: the Use button is there"); if (t) { const b = (await t.boundingBox())!; await p.touchscreen.tap(b.x + b.width / 2, b.y + b.height / 2) } } else await p.keyboard.press('KeyE')
+  // the phone's near button reads 'plant' for a held stone (held-use.ts useLabel); its 'Tap to start' card covers the screen until one tap
+  if (!desk && await p.evaluate(() => document.body.innerText.toLowerCase().includes('tap to start'))) { await p.touchscreen.tap(195, 420); await sleep(800) }
+  if (!desk) { const t = await p.$('[data-touch="plant"][data-touch-near]'); ok(!!t, "phone: the Use button (plant) is there"); if (t) { const b = (await t.boundingBox())!; await p.touchscreen.tap(b.x + b.width / 2, b.y + b.height / 2) } } else await p.keyboard.press('KeyE')
   await poll(async () => (await A('wm')).length === 2, 8000)
   const list = await A('wm') as any[], w = list[1]
   ok(list.length === 2 && (await A('wmBag')) === bag0 - 1, 'green: planted, one spent')
