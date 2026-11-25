@@ -131,8 +131,10 @@ function fight(o: Opt = {}) {
 {
   const seeds = Array.from({ length: 200 }, (_, i) => 1001 + i * 13)
   // M151 (Alex 11-25): the shipped newcomer (held Repeater at 0.22) dies 1 in 200, alone and with a trio: too few to weigh the trio by.
+  // Alex 11-25 re-pinned after M163 / M177: M163's leg ball took it to 0 / 0, M177's faster rounds (Repeater 40 -> 72 m/s) to
+  // 2 / 1 (600 seeds: 5 / 1, the same rate). Was 1 / 1.
   const now = summarise(seeds.map(s => championFight(s, 3))); SIM.trio = true; const nowT = summarise(seeds.map(s => championFight(s, 3))); SIM.trio = false
-  console.log(`  M151 as shipped: champion + brood died ${now.died}/200 ${now.secs}s, with a trio ${nowT.died}/200`); ok(now.died === 1 && nowT.died <= now.died, `M151: ${now.died} / ${nowT.died} (the numbers Alex picked: 1 / 1)`)
+  console.log(`  M151 as shipped: champion + brood died ${now.died}/200 ${now.secs}s, with a trio ${nowT.died}/200`); ok(now.died === 2 && nowT.died === 1, `M151: ${now.died} / ${nowT.died} (Alex 11-25 re-pinned after M163 / M177: 2 / 1)`)
   for (const k of Object.keys(SIM.ran) as (keyof typeof SIM.ran)[]) SIM.ran[k] = k === 'chaseMin' ? Infinity : 0
   // the trio's weight is measured on the harder fight, the gun before M151 (tapped, 0.16 s)
   const rep = RANGE_GUNS.find(g => g.id === 'repeater')!, cd = rep.fireCd, hold = M151.hold; rep.fireCd = 0.16; M151.hold = []

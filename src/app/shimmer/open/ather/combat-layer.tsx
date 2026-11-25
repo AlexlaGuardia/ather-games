@@ -9,6 +9,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { RANGE_GUNS, type RangeGun } from '../shared/gunplay'
+import { roundLook, streakOf } from '../shared/round-look'   // M177
 import { dialedGun, noteCycle } from '../shared/fp-gun'
 import { armedGun, sigilKey } from '../shared/gun-sigil'   // M93 s4: the fitted sigil tunes the drawn gun
 import { useLoadout } from '../shared/loadout'
@@ -883,9 +884,11 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
     if (rm) {
       const n = Math.min(C.rounds.length, 64)
       for (let i = 0; i < n; i++) {
-        const r = C.rounds[i]
-        p.set(r.x, r.y, r.z); s.set(r.vx, r.vy, r.vz).normalize(); q.setFromUnitVectors(fwd, s)
-        m4.compose(p, q, s.set(1, 1, 1)); rm.setMatrixAt(i, m4)
+        // M177: each gun's needle (shared/round-look.ts), its FRONT on the round, grown out of the barrel; thin, never sub-pixel
+        const r = C.rounds[i], v = Math.hypot(r.vx, r.vy, r.vz) || 1, ux = r.vx / v, uy = r.vy / v, uz = r.vz / v
+        const st = streakOf(roundLook(r.gun ?? C.gun.id), r.from ? Math.hypot(r.x - r.from.x, r.y - r.from.y, r.z - r.from.z) : 9, camera.position.distanceTo(p.set(r.x, r.y, r.z)))
+        p.set(r.x - ux * st.len / 2, r.y - uy * st.len / 2, r.z - uz * st.len / 2); q.setFromUnitVectors(fwd, s.set(ux, uy, uz))
+        m4.compose(p, q, s.set(st.w, st.w, st.len)); rm.setMatrixAt(i, m4)
       }
       rm.count = n; rm.instanceMatrix.needsUpdate = true
     }
@@ -928,7 +931,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
         <icosahedronGeometry args={[0.3, 0]} /><meshPhongMaterial color="#3a3c40" emissive="#8a8d92" specular="#ffffff" shininess={90} flatShading />
       </instancedMesh>
       <instancedMesh ref={roundsMesh} args={[undefined, undefined, 64]} frustumCulled={false}>
-        <boxGeometry args={[0.05, 0.05, 0.9]} /><meshBasicMaterial color="#fff2c4" />
+        <boxGeometry args={[1, 1, 1]} /><meshBasicMaterial color="#fff2c4" />
       </instancedMesh>
       <instancedMesh ref={dropsMesh} args={[undefined, undefined, 64]} frustumCulled={false}>
         <octahedronGeometry args={[0.22, 0]} /><meshPhongMaterial color="#9a9ca0" specular="#ffffff" shininess={90} flatShading emissive="#3a3c40" />

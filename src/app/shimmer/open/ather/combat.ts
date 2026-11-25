@@ -70,7 +70,9 @@ export interface Spit { x: number; y: number; z: number; vx: number; vy: number;
   ghost?: boolean }
 export interface Round { x: number; y: number; z: number; vx: number; vy: number; vz: number; life: number; dmg: number; crit: number
   /** M151: metres a hit shoves the body (a breacher's pellet, behind M151.shell) */
-  shove?: number }
+  shove?: number
+  /** M177: where it left and whose it is (the streak grows out of the barrel, drawn as that gun's): look only */
+  from?: { x: number; y: number; z: number }; gun?: string }
 export interface Drop { id: number; x: number; y: number; z: number; amount: number; age: number }
 
 export interface Keeper {
@@ -485,7 +487,8 @@ export function fire(c: Combat, eye: { x: number; y: number; z: number }, aim: {
     let dy = aim.y + (py * Math.cos(th) + qy * Math.sin(th)) * r
     let dz = aim.z + (pz * Math.cos(th) + qz * Math.sin(th)) * r
     const dl = Math.hypot(dx, dy, dz); dx /= dl; dy /= dl; dz /= dl
-    c.rounds.push({ x: eye.x + dx * 0.4, y: eye.y - 0.08 + dy * 0.4, z: eye.z + dz * 0.4, vx: dx * w.projSpeed, vy: dy * w.projSpeed, vz: dz * w.projSpeed, life: w.projLife, dmg: w.damage, crit: w.crit, ...(pellets > 1 ? { shove: shell!.shove } : {}) })
+    const x0 = eye.x + dx * 0.4, y0 = eye.y - 0.08 + dy * 0.4, z0 = eye.z + dz * 0.4
+    c.rounds.push({ x: x0, y: y0, z: z0, vx: dx * w.projSpeed, vy: dy * w.projSpeed, vz: dz * w.projSpeed, life: w.projLife, dmg: w.damage, crit: w.crit, ...(pellets > 1 ? { shove: shell!.shove } : {}), from: { x: x0, y: y0, z: z0 }, gun: w.id })
   }
   k.ammo--; k.sinceShot = 0; k.bloom = bloomAfterShot(w, k.bloom)
   c.events.push({ kind: 'fired' })
@@ -564,9 +567,21 @@ export function reload(c: Combat) {
  *  The end point is tested too; the start is where the shot was last frame, already above ground. */
 export const RAY_STEP = 4
 export function throughGround(T: Terrain, ax: number, ay: number, az: number, bx: number, by: number, bz: number): boolean {
+  return groundEntry(T, ax, ay, az, bx, by, bz) !== null
+}
+/** M175: WHERE along a→b (0..1) the segment first goes under the ground, or null when it stays above. The first sample under
+ *  is found on throughGround's RAY_STEP march, then bisected against the sample before it (to ~1/256 of a march step), so a
+ *  round can be tested against what stands in front of that point before the ground stops it. */
+export function groundEntry(T: Terrain, ax: number, ay: number, az: number, bx: number, by: number, bz: number): number | null {
   const L = Math.hypot(bx - ax, bz - az), n = Math.max(1, Math.ceil(L / RAY_STEP))
-  for (let k = 1; k <= n; k++) { const t = k / n; if (ay + (by - ay) * t < T.heightAt(ax + (bx - ax) * t, az + (bz - az) * t)) return true }
-  return false
+  const under = (t: number) => ay + (by - ay) * t < T.heightAt(ax + (bx - ax) * t, az + (bz - az) * t)
+  for (let k = 1; k <= n; k++) {
+    if (!under(k / n)) continue
+    let lo = (k - 1) / n, hi = k / n
+    for (let i = 0; i < 8; i++) { const m = (lo + hi) / 2; if (under(m)) hi = m; else lo = m }
+    return lo
+  }
+  return null
 }
 
 /** Closest approach of segment a→b to point p, squared. */
@@ -592,12 +607,18 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
   for (const r of c.rounds) {
     const ox = r.x, oy = r.y, oz = r.z
     r.x += r.vx * dt; r.y += r.vy * dt; r.z += r.vz * dt; r.life -= dt
-    if (throughGround(T, ox, oy, oz, r.x, r.y, r.z)) { r.life = 0; continue }
+    // M175: the ground CLIPS the step like a wall, it does not void it: a body in front of where the round goes under is still
+    // hit (a low crawler at 20 fps, where one 4.5 m step ended underground past it, was unhittable), one behind it never
+    const dug = groundEntry(T, ox, oy, oz, r.x, r.y, r.z)
+    if (dug !== null) { r.x = ox + (r.x - ox) * dug; r.y = oy + (r.y - oy) * dug; r.z = oz + (r.z - oz) * dug }
     // M117 s3: a wall stops it. Clip the step at the wall first, so a body in front of the wall is still hit, one behind it never
     const wall = T.structures ? segmentHit(T.structures, ox, oy, oz, r.x, r.y, r.z) : null
     if (wall) { r.x = wall.x; r.y = wall.y; r.z = wall.z }
+    // M175/M177: the near-cull reads the whole step (its middle, widened by half its length), not its end: a fast round's
+    // step is 5-15 m, and a body near the step's START was skipped
+    const mx = (ox + r.x) / 2, mz = (oz + r.z) / 2, half = Math.hypot(r.x - ox, r.z - oz) / 2
     const ch = c.champ
-    if (ch && Math.hypot(ch.x - r.x, ch.z - r.z) < 4) {
+    if (ch && Math.hypot(ch.x - mx, ch.z - mz) < 4 + half) {
       const head = segDist2(ox, oy, oz, r.x, r.y, r.z, ch.x, ch.y + CHAMP.headY, ch.z) < CHAMP.headR * CHAMP.headR
       if (head || segDist2(ox, oy, oz, r.x, r.y, r.z, ch.x, ch.y + CHAMP.bodyY, ch.z) < CHAMP.bodyR * CHAMP.bodyR * 1.6) {
         r.life = 0; hitChampion(c, T, ch, head, r.dmg, r.crit); continue
@@ -605,7 +626,7 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
     }
     let best: { h: Hollow; head: boolean } | null = null
     for (const h of c.hollows) {
-      if (h.hp <= 0 || Math.hypot(h.x - r.x, h.z - r.z) > 6) continue
+      if (h.hp <= 0 || Math.hypot(h.x - mx, h.z - mz) > 6 + half) continue
       if (h.kind === 'floater') {
         if (flitHit(h, ox, oy, oz, r.x, r.y, r.z)) {   // M120 s3c: core, wings, tail, legs (Alex 11-24)
           best = { h, head: false }; break }
@@ -637,6 +658,7 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
       if (killed) c.drops.push({ id: c.nextId++, x: h.x, y: T.heightAt(h.x, h.z), z: h.z, amount: dropOf(c, h), age: 0 })
     }
     if (wall && r.life > 0) { r.life = 0; impact(c, wall, 'round') }
+    else if (dug !== null) r.life = 0   // M175: into the ground, after the bodies in front of it had their chance
   }
   c.rounds = c.rounds.filter(r => r.life > 0)
   // a Hollow taken to 0 OUTSIDE this step (a cast lands between steps) dies like any other: event + drop. A round's kill

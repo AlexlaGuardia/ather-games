@@ -31,7 +31,17 @@ export const BACKBONE_DAMAGE = 10.4
 const base = (id: string) => WEAPONS.find(w => w.id === id)!
 /** M151 (Alex 11-25): every gun fires while held, so the Repeater's cadence is the open world's own: 0.22 s = 45 a second held. */
 export const REPEATER_CD = 0.22
-export const RANGE_GUNS: RangeGun[] = [
+/** M177 (Alex 11-25: "the visible projectile is still too bulky and slow"): the open world's rounds fly ~1.8x as fast (the newcomer sim's
+ *  pack fight stays past wilds-teeth's 7 s: at 2.4x it fell 8.5 -> 6.9 s, a faster round misses a moving Hollow less);
+ *  each gun's REACH (speed x life) is kept, so life = the old reach / the new speed. engine/weapons.ts (play3d's guns) is
+ *  untouched: the faster number is applied here, over its values. Before: repeater 40, spitter 34, backbone 46, roar 38,
+ *  lance 54, charred rifle 70 m/s. */
+export const M177_SPEED: Record<string, number> = { repeater: 72, spitter: 62, backbone: 82, roar: 68, lance: 100, 'charred-rifle': 125 }
+const quicken = (g: RangeGun): RangeGun => {
+  const v = M177_SPEED[g.id]
+  return v ? { ...g, projSpeed: v, projLife: (g.projSpeed * g.projLife) / v } : g
+}
+export const RANGE_GUNS: RangeGun[] = ([
   { ...base('repeater'), fireCd: REPEATER_CD, burst: 1, burstGap: 0, pellets: 1, shove: 0.05, color: '#e0a640' },
   { ...base('spitter'), burst: 1, burstGap: 0, pellets: 1, shove: 0.03, color: '#3fb8a8' },
   // BACKBONE (longbarrel) — the workhorse: canon "balanced 3-round burst, mid-range, medium heat".
@@ -63,7 +73,7 @@ export const RANGE_GUNS: RangeGun[] = [
     bloomDecay: 6, adsBloomScale: 0, kickPitch: 0.03, kickYaw: 0.006,
     converge: 60, headR: 0.09, trailR: 0.07, hipMove: 0.85, adsMove: 0.55,
     burst: 1, burstGap: 0, pellets: 1, shove: 0.2, color: '#6b4a2f', charge: 0.35, noSigil: true },
-]
+] as RangeGun[]).map(quicken)
 /** a burst gun's full cycle, first round to first round (its trigger held) */
 export const burstCycle = (g: { burst: number; burstGap: number; fireCd: number }) => (g.burst - 1) * g.burstGap + g.fireCd
 export const RHYTHM_DIALS = { gap: { min: 0.04, max: 0.16, step: 0.005 }, delay: { min: 0.3, max: 0.9, step: 0.01 } } as const
