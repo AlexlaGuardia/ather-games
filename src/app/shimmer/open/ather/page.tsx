@@ -169,8 +169,8 @@ import { useMorelHints } from '../shared/morel-hints'   // BETA M33 S2: stuck hi
 import { OpenOptions, useOptionsKeys, useOptionsOpen, setOptionsOpen } from '../options'
 import { useInv, setInv, getInv, hotbarEntries } from '../shared/bag'
 import { DeathPack, fallAndDrop, packLying } from './death-pack'
-import { withDewls } from './dewl'   // M159
 import { dropLoot, lootSpots, pilesOf } from './ground-loot'   // BETA M141
+import { withDewls } from './dewl'   // M159
 import { GroundLoot } from './ground-loot-view'
 import { WaymarkGhost } from './waymark-ghost'   // M147
 import { useOpeningChain, useChain, chainDeath, chainGateOpen, chainFlip } from '../shared/opening-chain-store'   // BETA M73: Ather to Nyx
