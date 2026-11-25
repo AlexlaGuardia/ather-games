@@ -23,7 +23,7 @@ const nodes = [{ id: 'nm155aaaa', k: 'node:goldwood', ...TREE, q: 0, s: 1 }, { i
 const SENT = { v: 1, live: true, greg: { welcome: true, moglins: true, spirits: true, wilds: true }, heard: [], gifts: ['grimoire'], b2: 'none', baitDay: null, folded: false }
 const OLD = { v: 1, live: false, greg: { welcome: true, moglins: true, spirits: true, wilds: true }, heard: ['otto', 'tess', 'bonn', 'fennel'], gifts: ['grimoire', 'spike', 'pruner', 'seeds', 'bait', 'rinquest'], b2: 'accepted', baitDay: null }
 type W = any
-async function keeper(tut: unknown) {
+async function keeper(tut: unknown, fast = true) {   // fast = the hints' clock x20; O runs on the real one (M33's errand hints are today's, and stay)
   const ctx = await br.createBrowserContext(); let g: Page | null = null
   const load = async () => {
     const was = g; g = await ctx.newPage(); if (was) await was.close().catch(() => {})
@@ -42,7 +42,7 @@ async function keeper(tut: unknown) {
       if (r.url().includes('/shimmer/open/glade-edits')) { const j: any = await (await fetch(`${url}/shimmer/open/glade-edits`)).json(); r.respond({ status: 200, contentType: 'application/json', body: JSON.stringify({ ...j, props: [...(j.props ?? []), ...nodes] }) }) }
       else r.continue()
     })
-    await p.goto(`${url}/shimmer/open/ather?hour=13&morel=fast`, { waitUntil: 'domcontentloaded', timeout: 180000 })
+    await p.goto(`${url}/shimmer/open/ather?hour=13${fast ? '&morel=fast' : ''}`, { waitUntil: 'domcontentloaded', timeout: 180000 })
     await p.waitForFunction(() => typeof (window as W).__ather?.travel === 'function' && !!(window as W).__ather?.gather, { timeout: 240000 })
     for (let i = 0; i < 40 && !(await p.evaluate(() => (window as W).__ather?.zone?.() === 'glade')); i++) { await p.evaluate(() => (window as W).__ather.travel({ kind: 'glade' })); await sleep(4000) }
     await sleep(8000); if (!desk) await p.touchscreen.tap(195, 500); await sleep(1500)
@@ -100,7 +100,7 @@ try {
     await g.close()
   }
   if (only.includes('O')) for (const [n, t] of [['an old save', OLD], ['a finished keeper', { ...SENT, gifts: OLD.gifts, heard: OLD.heard, b2: 'accepted', m70: 'thanked', fs: 'done' }]] as const) {
-    const k = await keeper(t), g = await k.load(); ok(await face(g, TOUGH, false), `O. ${n}: the Starwillow`); await E(g); await sleep(2000); ok(!!(await g.evaluate(() => (window as W).__ather.chan())), `O. ${n}: it works as before`); await E(g)
+    const k = await keeper(t, false), g = await k.load(); ok(await face(g, TOUGH, false), `O. ${n}: the Starwillow`); await E(g); await sleep(2000); ok(!!(await g.evaluate(() => (window as W).__ather.chan())), `O. ${n}: it works as before`); await E(g)
     await g.evaluate(() => (window as W).__ather.setMana(100)); await face(g, TREE, false); await E(g); for (let i = 0; i < 200 && await g.evaluate(() => (window as W).__ather.chan()); i++) { await frame(g); await sleep(60) }
     await face(g, TREE, false); await E(g); ok(await until(async () => /Goldwood, regrowing \(/.test(await text(g)), 6000), `O. ${n}: today's line`)
     ok((await up(g)).length === 0 && (await ls(g, 'open.morelintro.v1')) === null, `O. ${n}: no hint, no caption (${await up(g)})`); await g.close()
