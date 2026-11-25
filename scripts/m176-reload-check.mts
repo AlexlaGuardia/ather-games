@@ -89,7 +89,7 @@ try {
   const shut = async () => { for (let i = 0; i < 6 && (await S()).panel; i++) { await p.keyboard.press('Escape'); await sleep(700) } if (!phone) { await p.mouse.click(550, 350); await sleep(500) } }
   const beside = async (name: string, kind: string) => {
     await set(7, 50); await sleep(600)
-    const pr = await p.evaluate(() => document.body.innerText.includes('E · reload')); ok(pr, `${name}: the prompt reads E · reload`)
+    const pr = await poll(() => p.evaluate(() => document.body.innerText.includes('E · reload')), 8000)   // a 1-2 fps box: the HUD hears of the set clip a frame or two later; ok(pr, `${name}: the prompt reads E · reload`)
     await E(); s = await S(); ok((s.rel > 0 || s.ammo === s.clip) && !s.panel, `${name}: E reloads, opens nothing (${s.ammo}/${s.clip}, rel ${s.rel.toFixed(2)}, panel ${s.panel})`)
     ok(await poll(async () => { const s = await S(); return s.ammo === s.clip && s.rel === 0 }), `${name}: the clip fills here`); s = await S(); ok(s.mana < 50 - ECON.reloadMana + 3 && s.mana > 50 - ECON.reloadMana - 0.01, `${name}: paid once (${s.mana.toFixed(2)})`)
     ok(await near() === kind, `${name}: still on it`); if (out) await p.screenshot({ path: `${out}/${kind}.png` as `${string}.png` })
