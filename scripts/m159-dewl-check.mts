@@ -74,7 +74,8 @@ const mineOne = async (kind: string, strip = false): Promise<{ c: Cand; drops: {
       ok(!((await ls('open.gather.v1'))?.[`crystal:${c.id}`]?.drops ?? [{ id: 'dewl' }]).some((d: { id: string }) => d.id === 'dewl'), `${kind}: an old half-worked record, no dewls in its roll`)
       await A('mine()')
     }
-    for (let i = 0; i < 150 && !(await ls('open.mined.v1'))?.[c.id]; i++) { await A('setMana(100)'); await frame(); if (!(await A('chan()')) && !(await ls('open.mined.v1'))?.[c.id]) { await aimAt(p, c.x, c.z, 0.5); await A('mine()') } }
+    for (let i = 0; i < 400 && !(await ls('open.mined.v1'))?.[c.id]; i++) { await A('setMana(100)'); await p.evaluate(() => { const k = (window as any).__ather.combat?.()?.keeper; if (k) k.hp = 100 }); await frame(); if (!(await A('chan()')) && !(await ls('open.mined.v1'))?.[c.id]) { await aimAt(p, c.x, c.z, 0.5); await A('mine()') } }
+    if (!(await ls('open.mined.v1'))?.[c.id]) { console.log(`     (${kind} ${c.id}: never finished, ${await A('zone()')}, next)`); continue }   // Hollows took the keeper: not this check's subject
     return { c, drops: (await lootOf(p)).filter(d => d.id.startsWith(`crystal:${c.id}:`)) }
   }
   return null
