@@ -30,6 +30,7 @@ import { play as sfx } from '../shared/sfx'   // M36 batch 2: Hollow sounds (pro
 import { setAmmoFeed } from '../shared/morel'
 import { openNet, openPeers } from '../shared/open-mp'
 import { partyHost } from '../shared/party-host'
+import { CHAMP_ID, DOWN_AGAIN, DOWN_KIND, HAND_KIND, HAND_MS, SNAP_R, applyChamp, believeDown, champNetHit, encodeHand, shownOf, takeHand, type HitBudget, type Shown } from '../shared/fight-share'   // BETA M156 s3
 import { sharing, encodeSnap, applySnap, SNAP_KIND, SNAP_HZ, HIT_KIND, KILL_KIND, encodeHits, decodeHits, newDrops, decodeKills, layDrop, HURT_KIND, encodeHurt, decodeHurt, type Snap, type HitRow, type KillRow } from '../shared/fight-share'   // BETA M28 shared fights   // M33: Morel's bubble reads the gun straight from here
 import { goopMaterial, sharedGoop, groundEnv, releaseGroundEnvs, borrowedGround, greyAt, greyStep, BORROW } from './hollow-goop'
 import { sprout, poseSprout, lumpyGeometry, type SproutKind } from './hollow-body'   // M34: Alex's pick A, the rooted sprout   // M34: no light of its own; borrows the ground
@@ -529,13 +530,17 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
   // snapshot; the others draw it (C.remote). Solo = today's game exactly. The latest snapshot waits here for the frame loop.
   const net = useRef({ snap: null as Snap | null, fresh: false, snapT: 0, host: true, share: false, hostId: '',
     // slice 3: hits a guest owes the host, hits the host owes its sim, kills a guest owes its drops; the host's drop-watch
-    outHits: [] as { id: number; dmg: number }[], hitT: 0, inHits: [] as HitRow[], inKills: [] as KillRow[], seen: new Set<number>(), wasHost: false, inHurt: [] as number[] })
+    outHits: [] as { id: number; dmg: number }[], hitT: 0, inHits: [] as { from: string; row: HitRow }[], inKills: [] as KillRow[], seen: new Set<number>(), wasHost: false, inHurt: [] as number[],
+    // M156 s3: the champion shared
+    shown: null as Shown | null, inDowns: [] as { from: string; data: unknown }[], inHands: [] as { from: string; data: unknown }[], budget: new Map<string, HitBudget>(), hostAt: 0, again: [] as { at: number; to: string; data: unknown }[], hand: null as { n: string; b: number; h: number } | null })
   useEffect(() => {
     let off: (() => void) | null = null
     const hook = () => { const n = openNet(); if (!n || off) return; off = n.onRelay(m => {
       const N = net.current
       if (m.kind === SNAP_KIND && m.from === N.hostId) { N.snap = m.data as Snap; N.fresh = true }
-      else if (m.kind === HIT_KIND && N.host && N.share) N.inHits.push(...decodeHits(m.data).slice(0, 40 - N.inHits.length))
+      else if (m.kind === HIT_KIND && N.host && N.share) N.inHits.push(...decodeHits(m.data).slice(0, 40 - N.inHits.length).map(row => ({ from: m.from, row })))
+      else if (m.kind === DOWN_KIND && N.inDowns.length < 10) N.inDowns.push({ from: m.from, data: m.data })
+      else if (m.kind === HAND_KIND && N.inHands.length < 10) N.inHands.push({ from: m.from, data: m.data })
       else if (m.kind === KILL_KIND && m.from === N.hostId && !N.host) N.inKills.push(...decodeKills(m.data))
       else if (m.kind === HURT_KIND && m.from === N.hostId && !N.host && N.share) { const d = decodeHurt(m.data); if (d !== null && N.inHurt.length < 10) N.inHurt.push(d) }   // #1651
     }) }
@@ -544,6 +549,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
     g.__fight = { host: () => net.current.host, sharing: () => net.current.share, hostId: () => net.current.hostId,
       ids: () => c.current.hollows.map(h => ({ id: h.id, kind: h.kind, x: +h.x.toFixed(1), y: +h.y.toFixed(2), z: +h.z.toFixed(1), hp: Math.ceil(h.hp) })),
       eye: () => ({ x: camera.position.x, y: camera.position.y, z: camera.position.z }),   // where a round starts (checks aim from here)
+      champ: () => { const h = c.current.champ; return h ? { node: h.nodeId, bar: h.bar, hp: Math.ceil(h.hp), state: h.state, x: h.x, y: h.y, z: h.z, remote: !!c.current.remote } : null },   // M156 s3
       drops: () => c.current.drops.length, hp: () => Math.ceil(c.current.keeper.hp), others: () => (c.current.others ?? []).map(o => o.id) }   // checks' hook: READ only (#1651: hp, others)
     return () => { clearInterval(t); off?.(); delete g.__fight }
   }, [])   // M33: leaving the Wilds, Morel's bubble has no gun to read   // the keeper's walker reads c.pieces as solids (dynamic-solids.ts)
@@ -565,7 +571,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
 
   const nodesRef = useRef(nodes); nodesRef.current = nodes
   const settled = useRef(0)
-  useEffect(() => { if (!active) settled.current = 0 }, [active])
+  useEffect(() => { if (!active) { settled.current = 0; if (c.current.remote) c.current.champ = undefined } }, [active])   // M156 s3: a champion of the host's is not carried out of their Wilds
   // M34 heap (11-19): inactive = every Hollow unmounted (the early return below), so the cached ground envs are nobody's.
   // Free them after a moment, so a waymark fade inside the Wilds does not rebuild them for nothing.
   useEffect(() => { if (active) return; const t = setTimeout(releaseGroundEnvs, 5000); return () => clearTimeout(t) }, [active])
@@ -623,7 +629,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
       spawnHollow(c.current, T, x, z, kind)
     }, camAim: () => { const f = camera.getWorldDirection(new THREE.Vector3()); return { x: f.x, y: f.y, z: f.z, cx: camera.position.x, cy: camera.position.y, cz: camera.position.z } }, nodes: () => nodesRef.current, walls: (x0: number, z0: number, x1: number, z1: number) => T.structures ? [...T.structures(x0, z0, x1, z1)] : [], fall: () => { c.current.keeper.hp = 0; onEventsRef.current([{ kind: 'down' }]) }, drained: (x: number, z: number) => c.current.drained?.(x, z) ?? null, owner: (x: number, z: number) => ownerRef.current?.(x, z) ?? null,
       spend: (id: string) => { probeSpent.current.add(id) }, flit: flitProbe, drawnScale: (id: number) => DRAWN_SCALE.get(id) ?? null,   // M120 s2 checks: clear a node for THIS visit only (nothing saved)
-      wake: (i = 0) => { const n = nodesRef.current[i]; if (n && !c.current.champ) wakeChampion(c.current, T, n) } }
+      wake: (i = 0) => { const n = nodesRef.current[i]; if (n && !c.current.champ && !c.current.remote) wakeChampion(c.current, T, n) } }
     return () => { window.removeEventListener('mousedown', down); window.removeEventListener('mouseup', up); window.removeEventListener('contextmenu', menu) }
   }, [locked, frozen, camera, T, gl])
 
@@ -638,19 +644,23 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
     // frames after an arrival the camera still holds the last zone's spot (prod 11-15: the plot's threshold (0,10) sits
     // 22 m from the Wilds' centre node, and every arrival woke it from 600 m away)
     settled.current += dt
-    if (!C.champ && C.keeper.hp > 0 && settled.current > SETTLE) for (const n of nodesRef.current) {
-      if (!n.quiet && !spent.current.has(n.id) && !probeSpent.current.has(n.id) && Math.hypot(n.x - feet.x, n.z - feet.z) < WAKE_R) { wakeChampion(C, T, n); break }
-    }
+    const heard: CombatEvent[] = []   // M156 s3: what the host's word of the champion tells this keeper's page
     // M28: host or guest, decided from the live roster every frame (a leaver hands the Hollows to the next in line)
     {
       const n = openNet(), live = n && n.zone === 'open:wilds' ? n.live() : []
-      const N = net.current
+      const N = net.current, wasRemote = !!C.remote, wasHosting = N.share && N.host
       N.share = !!n && sharing(n.party, live)
       N.hostId = N.share ? partyHost(n!.self, live) : ''
       N.host = !N.share || N.hostId === n!.self
       C.remote = !N.host
+      const P = openPeers().current, peer = (id: string) => { const p = live.includes(id) ? P?.get(id) : undefined; return p ? { id, x: p.tx, y: p.ty, z: p.tz } : undefined }
+      const at = performance.now()
+      if (C.remote && wasHosting && C.champ) N.hand = encodeHand(C.champ)   // the host is back: the fight I kept for them
+      if (!wasHosting && N.share && N.host) N.hostAt = at
+      if (wasRemote && N.host && !n?.party) C.champ = undefined             // I left the party: its champion is not mine
+      if (N.hand && C.remote && n) { for (const d of [0, ...DOWN_AGAIN]) N.again.push({ at: at + d, to: N.hostId, data: { hand: N.hand } }); N.hand = null }
       if (C.remote) {
-        if (N.fresh && N.snap) { applySnap(C, T, N.snap); N.fresh = false }
+        if (N.fresh && N.snap) { applySnap(C, T, N.snap); heard.push(...applyChamp(C, T, N.snap.c, feet)); N.fresh = false; if (C.champ) N.shown = shownOf(N.shown, C.champ, N.hostId, at) }
         // slice 3: my hits go to the host (batched ~10/s, addressed); the host's kills become MY drops
         if (C.netHits?.length) N.outHits.push(...C.netHits)
         N.hitT -= dt
@@ -660,14 +670,33 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
         N.inKills = []; N.inHits = []; N.inHurt = []
         C.others = undefined
       } else {
-        for (const [id, dmg] of N.inHits) applyNetHit(C, id, dmg)   // a guest's round, applied like mine; a kill drops in the step below
+        C.events = []
+        for (const { from, row: [id, dmg] } of N.inHits) if (id === CHAMP_ID) champNetHit(C, T, peer(from), dmg, N.budget, at); else applyNetHit(C, id, dmg)   // a guest's round, applied like mine; a kill drops in the step below
+        heard.push(...C.events)   // M156 s3: what a guest's round did to the champion (stepCombat starts the list again)
         N.inHits = []; N.outHits = []; N.inKills = []; N.inHurt = []
         // #1651: my party mates here, by the spot the server last gave (not the drawn lerp): my Hollows hunt the nearest of us
-        if (N.share) { const P = openPeers().current, ids = new Set(live); C.others = []; if (P) for (const p of P.values()) if (ids.has(p.id)) C.others.push({ id: p.id, x: p.tx, y: p.ty, z: p.tz }) }
+        if (N.share) { const ids = new Set(live); C.others = []; if (P) for (const p of P.values()) if (ids.has(p.id)) C.others.push({ id: p.id, x: p.tx, y: p.ty, z: p.tz }) }
         else C.others = undefined
         if (N.share) { N.snapT -= dt; if (N.snapT <= 0) { N.snapT = 1 / SNAP_HZ; n!.relay(SNAP_KIND, encodeSnap(C, feet)) } }
       }
       C.netHits = []
+      // M156 s3: it is down: the host's word, believed once, for a keeper who was there
+      for (const d of N.inDowns) {
+        const node = believeDown(N.shown, d.from, d.data, feet, at); if (!node) continue
+        N.shown = { ...N.shown!, done: true }; C.champ = undefined
+        C.drops.push({ id: C.nextId++, x: N.shown.x, y: T.heightAt(N.shown.x, N.shown.z), z: N.shown.z, amount: CHAMP.chunk, age: 0 })   // each keeper's own, as alone
+        if (N.host) N.seen.add(C.nextId - 1)
+        heard.push({ kind: 'champ-down', nodeId: node, here: true })
+      }
+      if (N.share && N.host && at - N.hostAt < HAND_MS) for (const h of N.inHands) { const id = (h.data as { n?: unknown } | null)?.n; const k = nodesRef.current.find(x => x.id === id); if (k && !spent.current.has(k.id)) takeHand(C, h.data, peer(h.from), k) }
+      N.inDowns = []; N.inHands = []
+      if (N.again.length && n) { const due = N.again.filter(a => a.at <= at); if (due.length) { N.again = N.again.filter(a => a.at > at); for (const a of due) { const h = (a.data as { hand?: unknown }).hand; n.relay(h ? HAND_KIND : DOWN_KIND, h ?? a.data, a.to) } } }
+      // a champion rises out of an infected node when a keeper comes close: mine alone, in a party the host's, for any of us near it
+      if (!C.remote && !C.champ && C.keeper.hp > 0 && settled.current > SETTLE) for (const k of nodesRef.current) {
+        if (k.quiet || spent.current.has(k.id) || probeSpent.current.has(k.id)) continue
+        const d = Math.hypot(k.x - feet.x, k.z - feet.z)
+        if (d < WAKE_R || (C.others && d < SNAP_R && C.others.some(o => Math.hypot(k.x - o.x, k.z - o.z) < WAKE_R))) { wakeChampion(C, T, k); break }
+      }
     }
     if (!C.remote && popT.current <= 0) {   // the ground reading never waits for the settle (only the strays do): crawlers pool from the first frame
       // strays thicken round an infected node; during a champion fight the waves are the only adds
@@ -746,6 +775,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
       }
     }
     stepCombat(C, T, feet, dt)
+    C.events.push(...heard)
     if (SF && hp0) noteKeeper(SF, C, hp0)
     if (C.hollows.some(h => Math.hypot(h.x - feet.x, h.z - feet.z) < SKIT.hollowR)) noteHollowNear()   // M126 s2: Hollows about = no idle skits
     // slice 3: the host tells the party about every new drop (its kills and guests' kills alike); each keeper lays its own.
@@ -768,6 +798,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
         if (e.kind === 'hit') { const L = lastAt.current.get(e.id); sfx(e.killed ? 'hollow-disperse' : 'hollow-hit', L ? { at: { x: L.x, y: L.y + 0.8, z: L.z } } : {}) }   // M36
         if (e.kind === 'champ-down') {
           spent.current.add(e.nodeId)
+          for (const to of e.there ?? []) { openNet()?.relay(DOWN_KIND, { n: e.nodeId }, to); for (const d of DOWN_AGAIN) net.current.again.push({ at: performance.now() + d, to, data: { n: e.nodeId } }) }   // M156 s3
           // its ground goes quiet at once: the Hollows standing on it melt back into nothing (no drops; the chunk is the pay)
           const own = ownerRef.current
           if (own) C.hollows = C.hollows.filter(h => own(h.x, h.z) !== e.nodeId)

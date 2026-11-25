@@ -28,8 +28,14 @@ export function due(t: Tell, s: Infection, name: (id: string) => string): Due | 
     const obj = INFECT_CLUE[(t.clueOf[id] ?? 0) - 1]?.obj, key = `obj:${id}`
     if (obj && !t.said.includes(key)) return { key, text: obj, morel: false }
   }
+  { const d = dueGiven(t, s); if (d) return d }
   if (s.told >= CLUES && !t.open) return { key: 'open', text: INFECT_OPEN, morel: false }
   if (s.active) for (const k of ['start', 'hold', 'second'] as const) if (s.active.sent.includes(k)) { const d = ping(k, s.active.id); if (d) return d }
+  return null
+}
+/** M156 s3: the thing found where another keeper's infection fell (this keeper's own clue), once; also while in their Wilds */
+export function dueGiven(t: Tell, s: Infection): Due | null {
+  for (const n of s.given ?? []) { const text = INFECT_CLUE[n - 1]?.obj, key = `given:${n}`; if (text && !t.said.includes(key)) return { key, text, morel: false } }
   return null
 }
 export const told = (t: Tell, d: Due): Tell => (d.key === 'open' ? { ...t, open: true } : { ...t, said: [...t.said, d.key] })

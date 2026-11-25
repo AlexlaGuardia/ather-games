@@ -125,7 +125,7 @@ ok(!canPlant([], { tile: 't', x: 0, z: 0, biome: BIOME.shore, grounded: true, sw
   ok(/const ready = on && /.test(u) && (u.match(/loadInfection\(/g) ?? []).length === 5 && (u.match(/if \(!ready\) return\n/g) ?? []).length === 2 && /if \(!ready \|\| !state\) return null/.test(u) && /if \(!ready \|\| new URLSearchParams/.test(u) && /if \(net && ready\)/.test(u) && /const s = ready \? state : null/.test(u), 'off: no read, no clock, no hook')
   ok(!/loadInfection|saveInfection/.test(pg), 'the page never reads the save itself')
   ok(/infection\.lost\.length \? \{/.test(pg) && /if \(!infNodes\.length\) return nearNodes/.test(pg) && /!infNodes\.length \|\| !net \? nodeOwner/.test(pg), 'off: the same network, nodes and ground')
-  ok(/if \(!n\.quiet && /.test(cl) && /champ-down' && infectionRef\.current\.down\(e\.nodeId\)\) \{[^\n]*continue \}/.test(pg), 'no champion on lost ground; its champion never touches the spread ledger')
+  ok(/if \(k\.quiet \|\| [^\n]*\) continue\n[^]{0,300}wakeChampion\(C, T, k\)/.test(cl) && /champ-down' && infectionRef\.current\.down\(e\.nodeId\)\) \{[^\n]*continue \}/.test(pg), 'no champion on lost ground; its champion never touches the spread ledger')
   ok((ft.match(/if \(stopped\) return/g) ?? []).length === 3 && /panel\.s\.id === infection\.held/.test(pg), 'a swap, a trade and a gift are refused too')
   ok((u.match(/hudSay\(/g) ?? []).length === 1 && /saveTell\(told\(t, d\)\); hudSay\(d\.text/.test(u) && !/setToast/.test(u), 'the event has no words; the only words are a due line (infect-tell.ts, s2), written down as it is said') }
 console.log(`infection: ${pass} passed, ${fail} failed`)

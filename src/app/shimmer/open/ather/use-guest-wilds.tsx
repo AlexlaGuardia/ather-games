@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { openNet, OPEN_WILDS } from '../shared/open-mp'
 import { sharing } from '../shared/fight-share'
 import { noteHost, partyHost, partyOrder } from '../shared/party-host'
-import { decodeLedger, encodeLedger, LEDGER_KIND, RELAY_MAX, type HostLedger } from './guest-wilds'
+import { decodeLedger, encodeLedger, withDowns, LEDGER_KIND, RELAY_MAX, type HostLedger } from './guest-wilds'
 import type { WildsNode } from './nodes'
 import { storedParty } from '@/lib/party'
 
@@ -13,11 +13,14 @@ const LOOK_MS = 500, SEND_MS = 3000
 /** a page that lands in a party's Wilds leaves its own map alone this many looks (15 s; counted, a slow first load eats wall-clock)
  *  while it does not know yet whose Wilds it is in */
 const UNSURE_LOOKS = 30
+const DOWN_HOLD_MS = 15_000
 
-export interface GuestWilds { ledger: HostLedger | null; host: string | null; /** a guest, or not known yet: no look may write a save */ still: () => boolean }
+export interface GuestWilds { ledger: HostLedger | null; host: string | null; /** a guest, or not known yet: no look may write a save */ still: () => boolean; /** a shared champion fell: its ground reads clear before the host's ledger says so */ noteDown: (id: string) => void }
 export function useGuestWilds(allNodes: readonly WildsNode[], mine: () => HostLedger | null, inWilds: boolean): GuestWilds {
   const ids = useMemo(() => allNodes.map(n => n.id).sort(), [allNodes])
   const [got, setGot] = useState<{ host: string; ledger: HostLedger } | null>(null)
+  const [downs, setDowns] = useState<string[]>([])
+  const noteDown = useRef((id: string) => { setDowns(d => [...d, id]); setTimeout(() => setDowns(d => d.filter(k => k !== id)), DOWN_HOLD_MS) }).current
   const inWildsRef = useRef(inWilds); inWildsRef.current = inWilds
   const mineRef = useRef(mine); mineRef.current = mine
   const unsure = useRef(true)
@@ -56,5 +59,5 @@ export function useGuestWilds(allNodes: readonly WildsNode[], mine: () => HostLe
     return () => { delete g.__guest }
   }, [got])
   const gotRef = useRef(got); gotRef.current = got
-  return useMemo(() => ({ ledger: got?.ledger ?? null, host: got?.host ?? null, still: () => !!gotRef.current || (inWildsRef.current && unsure.current) }), [got]) // eslint-disable-line react-hooks/exhaustive-deps
+  return useMemo(() => ({ ledger: got ? withDowns(got.ledger, downs) : null, host: got?.host ?? null, still: () => !!gotRef.current || (inWildsRef.current && unsure.current), noteDown }), [got, downs]) // eslint-disable-line react-hooks/exhaustive-deps
 }

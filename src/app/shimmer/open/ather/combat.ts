@@ -65,7 +65,9 @@ export const FX = { slowMult: 0.45, vulnerableMult: 1.3, burnDps: 5 } as const
 /** A floater's spit: slow enough to see coming and side-step. */
 export interface Spit { x: number; y: number; z: number; vx: number; vy: number; vz: number; life: number; dmg?: number
   /** M120: a floater's shot SPLASHES where it lands: this much to a keeper inside FLOATER.splashR of the landing (a direct hit pays `dmg` instead) */
-  splash?: number }
+  splash?: number
+  /** M156 s3: drawn only (the host's shot, on a guest's screen) */
+  ghost?: boolean }
 export interface Round { x: number; y: number; z: number; vx: number; vy: number; vz: number; life: number; dmg: number; crit: number
   /** M151: metres a hit shoves the body (a breacher's pellet, behind M151.shell) */
   shove?: number }
@@ -202,6 +204,8 @@ export interface Combat {
   champ?: Champion
   /** Champions that went back under, by node: the bar each had reached. */
   dormant?: Record<string, number>
+  /** M156 s3: the health a handed-over one had left (used once, as it rises) */
+  dormantHp?: Record<string, number>
   /** Events this step, for the scene (sounds, flashes) and the page (grey matter, death). */
   events: CombatEvent[]
   /** M117 s3: shots (rounds + spits) stopped by a structure so far (checks read it; events clear every step) */
@@ -228,7 +232,8 @@ export type CombatEvent =
   | { kind: 'down' }
   | { kind: 'champ-wake'; nodeId: string }
   | { kind: 'champ-break'; nodeId: string; bar: number }
-  | { kind: 'champ-down'; nodeId: string }
+  /** M156 s3: `there` = the party mates present (host's word), `here` = was I (unset = alone, always) */
+  | { kind: 'champ-down'; nodeId: string; x?: number; z?: number; there?: string[]; here?: boolean }
   /** M117 s3: a round or a spit hit a structure here (it stops; nobody behind it is hurt) */
   | { kind: 'impact'; x: number; y: number; z: number; by: 'round' | 'spit' }
   /** M120: a floater's shot landed (ground or wall) and splashed here, FLOATER.splashR round */
@@ -739,7 +744,7 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
     const top = solidTop(c, p.x, p.z)
     if (top !== null && p.y < top) { p.life = 0; continue }   // stopped by a raised piece
     const bx = p.x - feet.x, bz = p.z - feet.z, by = p.y - (feet.y + 0.9)
-    if (k.hp > 0 && bx * bx + bz * bz < (FLOATER.spitR + 0.35 * (k.hit ?? 1)) ** 2 && Math.abs(by) < 1.0) {
+    if (!p.ghost && k.hp > 0 && bx * bx + bz * bz < (FLOATER.spitR + 0.35 * (k.hit ?? 1)) ** 2 && Math.abs(by) < 1.0) {
       p.life = 0; hurtKeeper(c, p.dmg ?? FLOATER.damage)
     }
     if (p.life > 0 && c.others) for (const o of c.others) {   // #1651: a spit can reach a party mate

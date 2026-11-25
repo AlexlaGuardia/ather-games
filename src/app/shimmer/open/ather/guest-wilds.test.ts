@@ -1,8 +1,8 @@
 // node test: npx tsx src/app/shimmer/open/ather/guest-wilds.test.ts (BETA M156 s2)
-import { encodeLedger, decodeLedger, guestInfection, guestMap, quietFor, MAX_LOST, RELAY_MAX, type HostLedger } from './guest-wilds'
+import { encodeLedger, decodeLedger, guestInfection, guestMap, withDowns, MAX_LOST, RELAY_MAX, type HostLedger } from './guest-wilds'
 import { pickHost } from '../shared/party-host'
 import { areaState, freshMap } from './spread-map'
-import type { WildsNode } from './nodes'
+import { infectId } from './infect-id'
 let fails = 0
 const ok = (c: boolean, m: string) => { console.log(`${c ? '✓' : '✗'} ${m}`); if (!c) fails++ }
 const ids = Array.from({ length: 963 }, (_, k) => `tile-${k % 40}:${k}`).sort()
@@ -20,8 +20,8 @@ const own = { ...freshMap(), seen: { a: 5, b: 6 }, grey: { b: 9 } }, frozen = JS
 const m = guestMap(own, { ...L, grey: ['a'] }, ['c'])
 ok(areaState(m, 'a', true) === 'hollow' && areaState(m, 'b', true) === 'charted' && areaState(m, 'c', false) === 'clear' && areaState(m, 'd', true) === 'unseen', "host's grey over the guest's own charting")
 ok(JSON.stringify(own) === frozen, "the guest's own map is not touched")
-const N = (id: string) => ({ id }) as WildsNode
-ok(quietFor([N('x'), N('y')], new Set(['y'])).map(n => !!n.quiet).join() === 'false,true', 'a champion rises for a guest only where their own ground is grey too')
+const D = withDowns(L, ['tile-1:1', infectId('s4-2')])
+ok(D.clean.includes('tile-1:1') && !D.grey.includes('tile-1:1') && D.held === null && withDowns(L, [L.clean[0]]) === L, 'a shared kill reads clear before the host ledger says so; said already = the same ledger')
 // who hosts
 const all = ['p_z', 'p_m', 'p_a']   // p_z started the party
 for (const me of all) ok(pickHost(me, all.filter(k => k !== me), all, null) === 'p_z', `${me}: the starter hosts, not the lowest id`)

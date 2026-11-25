@@ -1,14 +1,14 @@
 // ── A GUEST'S WILDS IS THE HOST'S (BETA M156 s2; Alex 11-25 "A, then B") ────────────────────────────────────────────────────
 // While partied in the Wilds, the host (shared/party-host.ts) sends which nodes they cleared, which the grey took back, and their
 // settlement infection; a guest DRAWS and plays by those. LOOKING WRITES NOTHING: the guest's ledgers are not touched, they come
-// back the moment the host is gone. s2's rule for a clear (shared champions + a clear for everyone are s3): a champion rises for a
-// guest only where the ground is grey in BOTH (`quietFor`), and one put down counts once, in the guest's OWN save, as it did before;
-// nothing a guest does reaches the host's ledger.
+// back the moment the host is gone. s3 (Alex "B"): the champion is the host's (shared/fight-share.ts) and one kill counts for every
+// keeper there: the host's node clears, and each guest there writes it in their OWN save (already clear there = nothing written;
+// not charted = charted by the clear, as a kill alone always did). A guest's message never writes the host's ledger.
 // ★ PURE. The socket half is use-guest-wilds.tsx.
 import type { Infection } from './infection'
 import { freshInfection } from './infection'
 import type { SpreadMap } from './spread-map'
-import type { WildsNode } from './nodes'
+import { infectId } from './infect-id'
 
 export const LEDGER_KIND = 'wilds.ledger'
 export interface HostLedger { clean: string[]; grey: string[]; season: number; held: string | null; lost: string[] }
@@ -38,5 +38,8 @@ export const guestInfection = (l: HostLedger, season: number): Infection =>
 /** the guest's own charting (what they have stood in, this visit too) under the host's grey */
 export const guestMap = (own: SpreadMap, l: HostLedger, visited: readonly string[]): SpreadMap =>
   ({ ...own, seen: { ...Object.fromEntries(visited.map(k => [k, 0])), ...own.seen }, grey: Object.fromEntries(l.grey.map(k => [k, 0])) })
-/** the nodes as a guest fights them: grey on the host's word, a champion only where the guest's own ground is grey too */
-export const quietFor = (nodes: readonly WildsNode[], own: ReadonlySet<string>): WildsNode[] => nodes.map(n => own.has(n.id) ? { ...n, quiet: true } : n)
+/** what fell a moment ago reads clear until the host's next ledger says so too (their 'grew' / 'cleared' toasts must not flicker) */
+export function withDowns(l: HostLedger, downs: readonly string[]): HostLedger {
+  const d = downs.filter(id => !l.clean.includes(id) || l.grey.includes(id))
+  return d.length ? { ...l, clean: [...new Set([...l.clean, ...d])].sort(), grey: l.grey.filter(id => !d.includes(id)), held: l.held && d.includes(infectId(l.held)) ? null : l.held } : l
+}

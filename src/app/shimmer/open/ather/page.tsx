@@ -144,7 +144,7 @@ import { MOGLIN_HEIGHT } from '../shared/moglin-model'
 import { useInfections } from './use-infection'   // M128 s1
 import { infectNodes, NO_NODES, infectedGround, championSpot } from './infection'
 import { infectId, INFECT_R } from './infect-id'
-import { guestInfection, guestMap, quietFor } from './guest-wilds'   // M156 s2
+import { guestInfection, guestMap } from './guest-wilds'   // M156 s2
 import { useGuestWilds } from './use-guest-wilds'
 import { builtFolkSpots } from './settlement-lots'
 import { live as liveSolids } from './dynamic-solids'
@@ -578,7 +578,6 @@ function AtherSliceGame() {
   const visited = useRef<string[]>([])   // sections stood in on this visit (shown, never saved)
   useEffect(() => { visited.current = []; smapPrev.current = null }, [guest.host])
   const viewMap = useCallback((m: SpreadMap): SpreadMap => guest.ledger ? guestMap(m, guest.ledger, visited.current) : m, [guest.ledger])
-  const ownClean = useMemo(() => new Set(spread?.clean ?? []), [spread])
   const catchUp = useCallback((cur: SpreadState) => {
     const now = clock(), settled = new Set([SETTLEMENT, ...(netRef.current?.settlements ?? [])].map(k => ownerAt(k.x, k.z)).filter((k): k is string => !!k))
     const r = netRef.current ? rollSections(smapRef.current, cur.clean, settled, now) : { m: smapRef.current, clean: cur.clean, turned: [] as string[] }   // no network read = no roll (it could not know the settlements)
@@ -606,7 +605,7 @@ function AtherSliceGame() {
     hudSay(`Day ${Math.floor((clock() - s.epoch) / GAME_DAY_MS)} · ${allNodes.length - s.clean.length}/${allNodes.length} infected${turned.length ? ` · +${turned.length} spread` : ''}`, 'info', 5)
   }, [allNodes, catchUp]) // eslint-disable-line react-hooks/exhaustive-deps
   const ownNodes = useMemo(() => spread ? allNodes.filter(n => !spread.clean.includes(n.id)) : [], [allNodes, spread])
-  const nodes = useMemo(() => { if (!guest.ledger) return ownNodes; const c = new Set(guest.ledger.clean); return quietFor(allNodes.filter(n => !c.has(n.id)), ownClean) }, [allNodes, ownNodes, ownClean, guest.ledger])
+  const nodes = useMemo(() => { if (!guest.ledger) return ownNodes; const c = new Set(guest.ledger.clean); return allNodes.filter(n => !c.has(n.id)) }, [allNodes, ownNodes, guest.ledger])
   // ownership is per tile (a node owns the nearest ground in ITS tile), the same rule the tile's borders are drawn with
   const nodeOwner = useMemo(() => ww && allNodes.length ? (x: number, z: number) => {
     const { tx, ty } = tileOf(x, z), t = ww.at(tx, ty); if (!t) return undefined
@@ -622,9 +621,9 @@ function AtherSliceGame() {
   ownInf.current = ownInfection
   const infection = useMemo(() => { if (!guest.ledger || !net) return ownInfection; const state = guestInfection(guest.ledger, net.season); return { ...ownInfection, state, held: state.active?.id ?? null, lost: state.lost } }, [ownInfection, guest.ledger, net])
   const infectionRef = useRef(infection); infectionRef.current = infection
-  const infKey = `${infection.held ?? ''}|${infection.lost.join()}|${guest.ledger ? ownInfection.held ?? '' : 'own'}`
+  const infKey = `${infection.held ?? ''}|${infection.lost.join()}`
   const infAll = useMemo(() => net && ww ? infectNodes(infectionRef.current.state, net.settlements, p => championSpot(p, builtFolkSpots(p, folkOf(p, net.season), net.season), (x, z) => ww.walkable(x, z)), (x, z) => { const { tx, ty } = tileOf(x, z); return ww.at(tx, ty)?.name ?? '' }, BIOME.meadow) : NO_NODES, [net, ww, wrev, infKey]) // eslint-disable-line react-hooks/exhaustive-deps
-  const infNodes = useMemo(() => guest.ledger && infAll.length ? infAll.map(n => n.id === infectId(ownInfection.held ?? '') ? n : { ...n, quiet: true }) : infAll, [infAll, guest.ledger, ownInfection.held])   // M156 s2: champions are each keeper's own until s3
+  const infNodes = infAll
   /** the settlements that stand (a lost one is gone until the season purge) */
   const standing = useMemo(() => net && infection.lost.length ? { ...net, settlements: net.settlements.filter(p => !infection.lost.includes(p.id)) } : net, [net, infKey]) // eslint-disable-line react-hooks/exhaustive-deps
   const standingRef = useRef(standing); standingRef.current = standing
@@ -679,7 +678,7 @@ function AtherSliceGame() {
   const onCombat = useCallback((evs: CombatEvent[]) => {
     let got = 0
     // M118 s1: Hollows dispersed with party spirits walking beside the keeper fill their growth bars (canon c01931e/05f3d0d)
-    const exp = evs.reduce((n, e) => n + (e.kind === 'hit' && e.killed ? GROWTH.KILL_EXP : e.kind === 'champ-down' ? GROWTH.CHAMP_EXP : 0), 0)
+    const exp = evs.reduce((n, e) => n + (e.kind === 'hit' && e.killed ? GROWTH.KILL_EXP : e.kind === 'champ-down' && e.here !== false ? GROWTH.CHAMP_EXP : 0), 0)
     if (exp > 0) {
       const beside = followIds().filter(inParty), grew = fightExp(beside, exp)
       if (grew.length) { const pots = getPots(); setToast(grew.map(id => { const p = pots[id]; return grownLine(p ? SPECIES_NAMES[speciesOf(p.seed)] : TRAIN_UI.unknown) }).join(' ')) }
@@ -689,13 +688,14 @@ function AtherSliceGame() {
       if (e.kind === 'reload-dry') { const t = performance.now() / 1000; if (t - dryAt.current > 2) { dryAt.current = t; hudSay(RELOAD_DRY_LINE, 'info') } }   // M78
       if (e.kind === 'champ-wake') setToast('Something heaves up out of the grey.')
       if (e.kind === 'champ-break') setToast(e.bar === 0 ? 'It sinks into the ooze, and more come crawling out.' : 'It sinks again. When it rises it moves wrong, wild.')
+      if (e.kind === 'champ-down' && guestRef.current.ledger) guestRef.current.noteDown(e.nodeId)   // M156 s3: one kill, the host's ground
       if (e.kind === 'champ-down' && infectionRef.current.down(e.nodeId)) { hudSay(clearLine(), 'info', 4); continue }   // M128: a settlement's infection, never the spread's ledger
       if (e.kind === 'champ-down') {
         setToast('The grey thins here. For now.')
         { const t0 = loadTut(), t1 = m70Down(t0, e.nodeId, pickTarget(nodesRef0.current)?.id ?? null); if (t1 !== t0) saveTut(t1) }   // M70 s1: Lamps Out's big one
-        { const m = tend(smapRef.current, e.nodeId, clock()); setSmap(m); smapPrev.current = smapPrev.current && { ...smapPrev.current, [e.nodeId]: 'clear' }; if (!guestRef.current.ledger) hudSay(clearLine(), 'info', 4) }   // M70 s2: its area reads Clear
-        const cur = spreadRef.current
-        if (cur) { const s = clearAt(cur, e.nodeId, clock()); saveSpread(s); setSpread(s) }
+        const cur = spreadRef.current, had = !!guestRef.current.ledger && !!cur?.clean.includes(e.nodeId)   // M156 s3: a guest whose own node is already clear: nothing to write
+        { if (!had) setSmap(tend(smapRef.current, e.nodeId, clock())); smapPrev.current = smapPrev.current && { ...smapPrev.current, [e.nodeId]: 'clear' }; hudSay(clearLine(), 'info', 4) }   // M70 s2: its area reads Clear
+        if (cur && !had) { const s = clearAt(cur, e.nodeId, clock()); saveSpread(s); setSpread(s) }
       }
       if (e.kind === 'down') {
         { const p = pos.current; fallAndDrop(p.x, heightRef.current(p.x, p.z), p.z) }   // M20: the bag stays where they fell (death-pack.tsx)
@@ -1611,7 +1611,7 @@ function AtherSliceGame() {
   // the journal: the nearest infected node is the keeper's open line on this side (re-aimed as you move; unchanged posts are free)
   useEffect(() => {
     const post = () => {
-      const open = nodes.filter(k => !k.quiet)   // M156 s2: a guest is sent only where a champion rises for them
+      const open = nodes
       if (!open.length) { postEntries('ather-nodes', []); return }
       const p = poseRef.current
       const n = open.reduce((a, b) => (Math.hypot(b.x - p.x, b.z - p.z) < Math.hypot(a.x - p.x, a.z - p.z) ? b : a))

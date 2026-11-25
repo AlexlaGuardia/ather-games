@@ -3,10 +3,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useIsOwner } from '@/app/_components/useIsOwner'
 import { infectedPlace } from './infect-id'
-import { begin, blank, fell, loadInfection, pickable, saveInfection, step, type InfectEvent, type Infection } from './infection'
+import { begin, blank, fell, guestClue, loadInfection, pickable, saveInfection, step, type InfectEvent, type Infection } from './infection'
 import { isRevealed, type Fog } from './explored'
 import type { Network, Settlement } from './network'
-import { due, heardSay, loadTell, note, refugees, refugeeSpots, saveTell, settlerSay, told, type Refugee, type Say } from './infect-tell'
+import { due, dueGiven, heardSay, loadTell, note, refugees, refugeeSpots, saveTell, settlerSay, told, type Refugee, type Say } from './infect-tell'
 import { championSpot } from './infection'
 import { folkOf, stillHome } from './settlement-folk'
 import { builtFolkSpots } from './settlement-lots'
@@ -71,7 +71,7 @@ export function useInfections(o: { net: Network | null; fog: Fog | null; tileOff
   }, [ready, commit, known])
   const down = useCallback((nodeId: string) => {
     const id = infectedPlace(nodeId), net = live.current.net; if (!id) return false
-    if (net && ready) { const r = fell(loadInfection(net.season), id, live.current.clock()); if (r.events.length) commit(r.s, r.events) }
+    if (net && ready) { const s = loadInfection(net.season), r = fell(s, id, live.current.clock()); if (r.events.length) commit(r.s, r.events); else if (live.current.guest) { const g = guestClue(s); if (g !== s) commit(g, []) } }   // M156 s3: the host's place, this keeper's next clue
     return true
   }, [commit, ready])
   useEffect(() => {   // checks only (m128-infection-check): the owner with ?infect=1. Moves the save's own clocks; starts a KNOWN settlement.
@@ -91,9 +91,9 @@ export function useInfections(o: { net: Network | null; fog: Fog | null; tileOff
   useEffect(() => {
     if (!ready) return
     const id = setInterval(() => {
-      const { net, canRead } = live.current; if (!net || document.visibilityState !== 'visible' || !canRead() || live.current.away()) return
+      const { net, canRead } = live.current; if (!net || document.visibilityState !== 'visible' || !canRead()) return
       const st = loadInfection(net.season), t = loadTell(net.season)   // re-read: another tab may have told it
-      const d = due(t, st, p => net.settlements.find(x => x.id === p)?.name ?? ''); if (!d) return
+      const d = live.current.away() ? dueGiven(t, st) : due(t, st, p => net.settlements.find(x => x.id === p)?.name ?? ''); if (!d) return
       saveTell(told(t, d)); hudSay(d.text, d.morel ? 'morel' : 'info', TELL_TTL)
     }, TELL_MS)
     return () => clearInterval(id)
