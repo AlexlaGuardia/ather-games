@@ -76,7 +76,9 @@ export interface PieceDef {
    *  blocks). 'door' and 'shutters' OPEN and SHUT on E on a plot (rooms.ts toggleOpen; Piece.open). Sizes: athernyx concept-1672
    *  building + textures NOTES (Magii 246c2cc / 9c9e688): doorway 2 x 2.2 m, leaves 0.94 x 2.14, window band 1.0 to 2.2 m, round
    *  pane 0.9 m at 1.6 m, shutter leaves 0.5 x 1.2 m, half wall = the railing's 1.0 m. Each stands on the 4.8 m wall panel grid. */
-  shape?: 'door' | 'window' | 'round' | 'shutters' | 'arch' | 'doorway' | 'half' | 'end' | 'corner'
+  shape?: 'door' | 'window' | 'round' | 'shutters' | 'arch' | 'doorway' | 'half' | 'end' | 'corner' | 'stair' | 'railing' | 'fence' | 'gate' | 'ramp'
+  /** BETA M169 s3: a stair's railings: on its left ('l'), its right ('r') or both ('lr'), as seen climbing it. Absent = none. */
+  rails?: 'l' | 'r' | 'lr'
   /** M110 s1: a TRAINING piece: party spirits may play at it as they please (spirit-trot.ts PLAY), each play nudging this ONE
    *  stat toward the form cap (spirit-stats.ts). Owner + ?spirits=3d only for now: the bench hides it otherwise. */
   train?: 'pwr' | 'grd' | 'agi' | 'vig'
@@ -141,6 +143,22 @@ export const FURNITURE: Readonly<Record<string, PieceDef>> = {
   half_wall: { name: 'Half wall', blurb: 'A metre of goldwood wall, waist high.', recipe: [{ id: 'goldwood_plank', n: 1 }], w: 1, d: 0.3, h: 1.0, solid: true, wood: 'goldwood', shape: 'half', build: 'Openings + trim' },
   wall_end: { name: 'Wall end', blurb: 'A square goldwood post that finishes the end of a wall.', recipe: [{ id: 'goldwood_plank', n: 1 }], w: 0.4, d: 0.4, h: 4.88, solid: true, wood: 'goldwood', shape: 'end', build: 'Openings + trim' },
   wall_corner: { name: 'Wall corner', blurb: 'Two goldwood wall pieces joined at a right angle.', recipe: [{ id: 'goldwood_plank', n: 4 }], w: 1, d: 1, h: 4.8, solid: true, wood: 'goldwood', shape: 'corner', build: 'Openings + trim' },
+  // BETA M169 s3 (Alex 11-25: "stairs with optional railings, fences and railings that match the stairs", ramps): a straight stair
+  //    climbs the 4.8 m wall top in 12 steps of 0.4 m rise and 0.5 m tread (under the walker's 0.5 m step; NOTES: 0.5 m deep, 2 m
+  //    wide, 6 m long), climbing toward its back (local -z). An upper floor (s4) laid on the wall tops is one slab's step above it.
+  //    Railings are separate pieces (no saved toggle, so Creative and the plan catalog place them as they are). One rail style for
+  //    the stair's sides, the railing and the fence: 0.1 m posts, a 0.1 m handrail 1.0 m up. Costs (Jin's): a tread a plank (the
+  //    plot stair's rule), a side's railing 3 more; railing 1 plank a metre (a third of a wall: the half wall's); fence 2 m 2 planks;
+  //    gate 2; ramp 10 (2 x 4 m, rising 1.2 m in 12 strips of 0.1 m). Names = plain nouns; blurbs = placeholders for @lark.
+  stair: { name: 'Stair', blurb: 'Twelve goldwood steps up to the top of a wall.', recipe: [{ id: 'goldwood_plank', n: 12 }], w: 2, d: 6, h: 4.8, solid: true, wood: 'goldwood', shape: 'stair', build: 'Stairs' },
+  stair_rail_left: { name: 'Stair, railing left', blurb: 'Twelve goldwood steps with a railing up the left side.', recipe: [{ id: 'goldwood_plank', n: 15 }], w: 2, d: 6, h: 4.8, solid: true, wood: 'goldwood', shape: 'stair', rails: 'l', build: 'Stairs' },
+  stair_rail_right: { name: 'Stair, railing right', blurb: 'Twelve goldwood steps with a railing up the right side.', recipe: [{ id: 'goldwood_plank', n: 15 }], w: 2, d: 6, h: 4.8, solid: true, wood: 'goldwood', shape: 'stair', rails: 'r', build: 'Stairs' },
+  stair_railed: { name: 'Stair, railings', blurb: 'Twelve goldwood steps with a railing up both sides.', recipe: [{ id: 'goldwood_plank', n: 18 }], w: 2, d: 6, h: 4.8, solid: true, wood: 'goldwood', shape: 'stair', rails: 'lr', build: 'Stairs' },
+  railing: { name: 'Railing', blurb: 'A metre of goldwood railing for the edge of a deck or a landing.', recipe: [{ id: 'goldwood_plank', n: 1 }], w: 1, d: 0.12, h: 1.04, solid: true, wood: 'goldwood', shape: 'railing', build: 'Railings + fences' },
+  railing_wide: { name: 'Wide railing', blurb: 'Two metres of goldwood railing.', recipe: [{ id: 'goldwood_plank', n: 2 }], w: 2, d: 0.12, h: 1.04, solid: true, wood: 'goldwood', shape: 'railing', build: 'Railings + fences' },
+  fence: { name: 'Fence', blurb: 'Two metres of goldwood fence, posts and rails.', recipe: [{ id: 'goldwood_plank', n: 2 }], w: 2, d: 0.12, h: 1.04, solid: true, wood: 'goldwood', shape: 'fence', build: 'Railings + fences' },
+  fence_gate: { name: 'Fence gate', blurb: 'A goldwood gate between two fence posts. It opens and shuts.', recipe: [{ id: 'goldwood_plank', n: 2 }], w: 1.2, d: 0.12, h: 1.04, solid: true, wood: 'goldwood', shape: 'gate', build: 'Railings + fences' },
+  ramp: { name: 'Ramp', blurb: 'A goldwood slope, two metres wide, up to a deck or a doorstep.', recipe: [{ id: 'goldwood_plank', n: 10 }], w: 2, d: 4, h: 1.2, solid: true, wood: 'goldwood', shape: 'ramp', build: 'Ramps + ladders' },
   lift: { name: 'Lift', blurb: 'A goldwood car on cords, a stone weight hung beside it. Pull the cord for a floor and up or down you go.', recipe: [{ id: 'goldwood_plank', n: 8 }, { id: 'stone_brick', n: 4 }], w: 1.0, d: 1.0, h: 2.0, solid: false, wood: 'goldwood', shaft: true },
   // ── UNIQUE pieces, Nyx-side (Alex 11-17: "unique pieces are SOLD FOR MARKS by the carpenter + other Nyx-side shops";
   //    Magii c52ba1c: which shops stock decor is ours, no new names). Made of the continent's canon goods (game/economy.md:

@@ -489,7 +489,7 @@ export const pieceBoxes = (w: Works): Box[] => w.pieces.flatMap(p => onePieceBox
 /** M169 s2: open or shut a door / shutters (E). Shutting refuses while the keeper at (x, z) stands in the doorway it closes. */
 export function toggleOpen(w: Works, id: string, at?: { x: number; z: number }): { works: Works } | { why: string } | null {
   const p = w.pieces.find(x => x.id === id), f = p && FURNITURE[p.item]; if (!p || !opens(f)) return null
-  if (p.open && at && f!.shape === 'door' && onePieceBoxes({ ...p, open: undefined }, 0).some(b => at.x > b.x0 - 0.3 && at.x < b.x1 + 0.3 && at.z > b.z0 - 0.3 && at.z < b.z1 + 0.3)) return { why: 'Step out of the doorway first.' }
+  if (p.open && at && (f!.shape === 'door' || f!.shape === 'gate') && onePieceBoxes({ ...p, open: undefined }, 0).some(b => at.x > b.x0 - 0.3 && at.x < b.x1 + 0.3 && at.z > b.z0 - 0.3 && at.z < b.z1 + 0.3)) return { why: 'Step out of the doorway first.' }
   return { works: { ...w, pieces: w.pieces.map(x => { if (x.id !== id) return x; if (x.open) { const { open: _o, ...rest } = x; void _o; return rest } return { ...x, open: true as const } }) } }
 }
 /** M84 s2: a SITE other than the home plot (a Creative-mode building zone): `inside` replaces the held-ground check, and the

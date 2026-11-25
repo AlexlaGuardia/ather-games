@@ -23,7 +23,17 @@ export const CUT = { doorH: 2.2, leafW: 0.94, leafH: 2.14, leafT: 0.06, frame: 0
  *  shut door there would be a wall nobody could open */
 export const CREATIVE_OPEN = true as const
 /** a piece that opens and shuts on E (a door's leaves, a window's shutters) */
-export const opens = (f: PieceDef | undefined) => f?.shape === 'door' || f?.shape === 'shutters'
+export const opens = (f: PieceDef | undefined) => f?.shape === 'door' || f?.shape === 'shutters' || f?.shape === 'gate'
+/** M169 s3: the stair (12 steps of RISE x TREAD climbing to the 4.8 m wall top, under the walker's 0.5 m step), the ramp (strips of
+ *  RAMP_RISE), and the ONE rail style the stair's sides, the railing, the fence and the gate share (post, handrail, height) */
+export const STAIR = { steps: 12, rise: 0.4, tread: 0.5 } as const
+export const RAMP = { strips: 12, rise: 0.1 } as const
+export const RAIL = { h: 1.0, post: 0.1, hand: 0.1, handT: 0.06, bal: 0.04, low: 0.15, lowT: 0.05, mid: 0.55 } as const
+/** a stair step's local box: n = 1..steps from the bottom (+z end), climbing toward -z */
+export const stepZ = (f: Pick<PieceDef, 'd'>, n: number, tread: number) => f.d / 2 - (n - 0.5) * tread
+/** the x of a stair's railing on side k (-1 left, +1 right, seen climbing toward -z: left = -x) */
+const railX = (f: Pick<PieceDef, 'w'>, k: number) => k * (f.w / 2 - RAIL.post / 2)
+const railSides = (f: PieceDef): number[] => f.rails === 'lr' ? [-1, 1] : f.rails === 'l' ? [-1] : f.rails === 'r' ? [1] : []
 const bx = (x: number, y: number, z: number, w: number, h: number, d: number, c: string): PieceBox => ({ p: [x, y, z], s: [w, h, d], c })
 /** the round pane's band as strips: each strip's middle height and the pane's half width there (wall fills the rest) */
 const ROUND_STRIPS = 5
@@ -70,6 +80,31 @@ function cutBoxes(f: PieceDef, open: boolean): PieceBox[] {
       return out }
     case 'half': out.push(bx(0, h / 2, 0, w, h, d, c), bx(0, 0.09, 0, w + 0.02, 0.18, d + 0.04, tr), bx(0, h - 0.03, 0, w + 0.02, 0.06, d + 0.04, tr)); return out
     case 'end': out.push(bx(0, h / 2, 0, w, h, d, c), bx(0, 0.09, 0, w + 0.04, 0.18, d + 0.04, tr), bx(0, h - 0.04, 0, w + 0.06, 0.08, d + 0.06, tr)); return out
+    case 'stair': {   // M169 s3: solid steps from the floor, a darker nosing on each; a railing side = a post every other step, a baluster
+      // between, a handrail stepping up with the treads
+      const { steps, rise, tread } = STAIR
+      for (let n = 1; n <= steps; n++) { const z = stepZ(f, n, tread), top = n * rise
+        out.push(bx(0, top / 2, z, w, top, tread, c), bx(0, top - 0.02, z + tread / 2 - 0.03, w, 0.04, 0.06, tr))
+        for (const k of railSides(f)) { const x = railX(f, k), p = n % 2 ? RAIL.post : RAIL.bal
+          out.push(bx(x, top + RAIL.h / 2, z, p, RAIL.h, p, c), bx(x, top + RAIL.h - RAIL.handT / 2, z, RAIL.hand, RAIL.handT, tread + 0.01, tr)) } }
+      return out }
+    case 'railing': case 'fence': {   // posts every metre; a railing: handrail, low rail, balusters; a fence: handrail, mid + low rails
+      const n = Math.max(1, Math.round(w))
+      for (let k = 0; k <= n; k++) { const x = -w / 2 + RAIL.post / 2 + k * (w - RAIL.post) / n; out.push(bx(x, RAIL.h / 2, 0, RAIL.post, RAIL.h, RAIL.post, c), bx(x, RAIL.h + 0.02, 0, RAIL.post + 0.02, 0.04, RAIL.post + 0.02, tr)) }
+      out.push(bx(0, RAIL.h - RAIL.handT / 2, 0, w, RAIL.handT, RAIL.hand, tr), bx(0, RAIL.low, 0, w - 0.02, RAIL.lowT, RAIL.lowT, c))
+      if (f.shape === 'fence') out.push(bx(0, RAIL.mid, 0, w - 0.02, RAIL.lowT, RAIL.lowT, c))
+      else for (let b = 0; b < n * 4; b++) { if (b % 4 === 0) continue; const x = -w / 2 + RAIL.post / 2 + b * (w - RAIL.post) / (n * 4); out.push(bx(x, (RAIL.low + RAIL.h) / 2, 0, RAIL.bal, RAIL.h - RAIL.low, RAIL.bal, c)) }
+      return out }
+    case 'gate': {   // two posts; the leaf between (a frame, two pickets) swings a quarter turn outward on the left post when open
+      ;[-1, 1].forEach(k => out.push(bx(k * (w / 2 - RAIL.post / 2), RAIL.h / 2, 0, RAIL.post, RAIL.h, RAIL.post, c), bx(k * (w / 2 - RAIL.post / 2), RAIL.h + 0.02, 0, RAIL.post + 0.02, 0.04, RAIL.post + 0.02, tr)))
+      const L = w - 2 * RAIL.post - 0.02, hx = -w / 2 + RAIL.post + 0.01, lh = RAIL.h - 0.1 - RAIL.low / 2, ly = RAIL.low / 2 + lh / 2
+      const leaf: [number, number, number, number][] = [[L / 2, RAIL.h - 0.1, L, 0.06], [L / 2, RAIL.low, L, 0.06], [0.03, ly, 0.06, lh], [L - 0.03, ly, 0.06, lh], [L / 3, ly, 0.05, lh], [2 * L / 3, ly, 0.05, lh]]
+      for (const [a, y, len, ht] of leaf) out.push(open ? bx(hx, y, d / 2 + a, 0.05, ht, len, LEAF) : bx(hx + a, y, 0, len, ht, 0.05, LEAF))
+      return out }
+    case 'ramp': {   // strips of RAMP.rise climbing toward -z, a darker edge strip down each side
+      const { strips, rise } = RAMP, run = d / strips
+      for (let n = 1; n <= strips; n++) { const z = stepZ(f, n, run), top = n * rise; out.push(bx(0, top / 2, z, w - 0.12, top, run, c)); [-1, 1].forEach(k => out.push(bx(k * (w / 2 - 0.03), top / 2 + 0.02, z, 0.06, top + 0.04, run, tr))) }
+      return out }
     case 'corner': {   // an L in a 1 x 1 m square: one arm along its back (local -z), one down its left (local -x), meeting in the corner
       const t = 0.3, H = h
       for (const [x, z, aw, ad] of [[0, -w / 2 + t / 2, w, t], [-w / 2 + t / 2, t / 2, t, d - t]] as const)
@@ -87,6 +122,12 @@ export function buildSolids(f: PieceDef, open = false): SolidPart[] | null {
   switch (f.shape) {
     case 'door': return open ? [] : [{ x: 0, z: 0, w: f.w, d: f.d, h: f.h }]
     case 'doorway': case 'arch': return []
+    case 'stair': { const out: SolidPart[] = []   // M169 s3: each step a column from the floor; a railing side a thin wall 1 m over each tread
+      for (let n = 1; n <= STAIR.steps; n++) { const z = stepZ(f, n, STAIR.tread), top = n * STAIR.rise
+        out.push({ x: 0, z, w: f.w, d: STAIR.tread, h: top }); for (const k of railSides(f)) out.push({ x: railX(f, k), z, w: RAIL.post, d: STAIR.tread, h: top + RAIL.h }) }
+      return out }
+    case 'ramp': return Array.from({ length: RAMP.strips }, (_, i) => ({ x: 0, z: stepZ(f, i + 1, f.d / RAMP.strips), w: f.w, d: f.d / RAMP.strips, h: (i + 1) * RAMP.rise }))
+    case 'gate': return open ? [-1, 1].map(k => ({ x: k * (f.w / 2 - RAIL.post / 2), z: 0, w: RAIL.post, d: f.d, h: f.h })) : [{ x: 0, z: 0, w: f.w, d: f.d, h: f.h }]
     case 'corner': return [{ x: 0, z: -f.w / 2 + 0.15, w: f.w, d: 0.3, h: f.h }, { x: -f.w / 2 + 0.15, z: 0.15, w: 0.3, d: f.d - 0.3, h: f.h }]
     default: return [{ x: 0, z: 0, w: f.w, d: f.d, h: f.h }]
   }
