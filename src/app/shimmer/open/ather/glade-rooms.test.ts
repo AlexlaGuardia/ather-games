@@ -5,9 +5,10 @@ import { GLADE_ROOMS, PROPS_MAX, addProp, changeProp, cleanProp, cleanProps, isR
 import { EMPTY_LAYER, cleanLayer } from '../../world/builder'
 import { setGladePeople } from './glade-people'
 import { gladePlaces } from './glade-places'
-import { BENCH_IN, PAD_FALL, ROOM_SIZE, fromRect, padGround, padLevel, roomPad, roomPads } from './glade-pads'
+import { BENCH_IN, PAD_FALL, ROOM_SIZE, fromRect, padGround, padLevel, rectPoints, rectsOverlap, roomPad, roomPads } from './glade-pads'
 import { gladePeople, GLADE_GATE } from './glade-cluster'
 import { GLADE_LOTS, gladeJetty } from './moonwell-glade'
+import { pondDepthIn } from './relief'
 import { gladeHome } from './glade-home'
 import { setGladeBlueprint, yarrowCrate } from './glade-lots'
 import { parseHouse } from './plot-blueprint'
@@ -69,10 +70,14 @@ for (let x = -150; x <= -60 && spots.length < 4; x += 5) for (let z = 110; z <= 
 }
 ok(spots.length === 4, `four stand (${spots.map(s => `${s.x},${s.z}`).join(' ')})`)
 const s0 = spots[0], no = (add: Prop[], why: RegExp, m: string) => { const r = problems(add); ok(r.length === 1 && why.test(r[0]), `${m}: ${r.join(' | ')}`) }
+const bench = fromRect(roomPad(s0)!, 0, ROOM_SIZE.carpentry.d / 2 - BENCH_IN), at = (u: number, v: number) => fromRect(roomPad(s0)!, u, v)
 no([{ ...s0, x: 350, z: 350 }], /^Carpentry room is in the void$/, 'void')
 no([{ ...s0, x: -122.5, z: 110.5 }], /Carpentry room is in the Moonwell/, 'pool')
 { const j = gladeJetty(); no([{ ...s0, x: (j.x0 + j.x1) / 2, z: (j.z0 + j.z1) / 2 }], /in the Moonwell/, 'jetty') }
 { const h = gladeHome(); no([{ ...s0, x: h.x, z: h.z }], /Carpentry room (stands in Greg's home|is on a slope)/, 'home') }
+{ const j = gladeJetty(), hit: string[] = []; for (const e of [[j.x0, j.z0, j.x0 - j.x1, j.z0 - j.z1], [j.x1, j.z1, j.x1 - j.x0, j.z1 - j.z0]]) for (let m = 2; m < 4.4; m += 0.2) { const k = Math.hypot(e[2], e[3]), x = e[0] + e[2] / k * m, z = e[1] + e[3] / k * m, p = roomPad({ ...s0, x, z })!; if (!rectPoints(p).some(q => pondDepthIn(q.x, q.z) > 0)) hit.push(`${rectsOverlap(p, { x: (j.x0 + j.x1) / 2, z: (j.z0 + j.z1) / 2, yaw: Math.atan2(j.x1 - j.x0, j.z1 - j.z0), w: j.w, d: Math.hypot(j.x1 - j.x0, j.z1 - j.z0) })}:${/in the Moonwell/.test(problems([{ ...s0, x, z }]).join())}`) }
+  console.log('  jetty end, dry:', hit.join(' ') || 'never'); ok(hit.every(h => h === 'true:true' || h === 'false:false'), 'the jetty, over dry ground') }
+{ const p = at(-3, -1.5), r = problems(putPlace([s0], 'jars', { x: p.x, z: p.z, q: 0 })); ok(r.some(q => /(Yarrow's jars stands in Carpentry room|Carpentry room stands in Yarrow's jars)/.test(q)), `the crate on its floor: ${r}`) }
 { const c = yarrowCrate()!.crate, r = problems([{ ...s0, x: c.x, z: c.z }]); ok(r.some(q => /Carpentry room stands in Yarrow's (house|jars)/.test(q)), `the crate: ${r}`) }
 no([s0, { ...R('cooking', s0.x + 5, s0.z, 0, 'pq2') }], /Carpentry room stands in Cooking room/, 'two rooms, said once')
 ok(!problems([s0, R('cooking', s0.x + 8, s0.z, 0, 'pq2')]).some(q => /stands in/.test(q)), 'edge to edge is fine')
@@ -83,10 +88,10 @@ ok(!problems([s0, R('cooking', s0.x + 8, s0.z, 0, 'pq2')]).some(q => /stands in/
 }
 { const tall = { ...L([]), edits: live.edits }, r = (setGladePeople(base), placeProblems({ ...tall, props: [...base, R('rinnshop', GLADE_GATE.x, GLADE_GATE.z)] }, gladePlaces(), nb)); ok(/Rinnshop is (in the gate|on a slope)/.test(r.join()), `gate: ${r}`) }
 // something solid in its furniture; a chair on its floor is fine
-const bench = fromRect(roomPad(s0)!, 0, ROOM_SIZE.carpentry.d / 2 - BENCH_IN), at = (u: number, v: number) => fromRect(roomPad(s0)!, u, v)
 no([s0, { id: 'pq3', k: 'filler:rock-large', ...bench, q: 0, s: 1 }], /Carpentry room stands in a solid piece/, 'a rock in the bench')
 ok(problems([s0, { id: 'pq3', k: 'filler:rock-large', ...at(-3, -1.5), q: 0, s: 1 }]).length === 0, 'a solid piece on its floor is not in its way')
 ok(problems([s0, { id: 'pq3', k: 'filler:rock-large', ...at(0, 0.2), q: 0, s: 1 }]).some(q => /Carpentry room has a bench nobody can stand at/.test(q)), 'a rock in front of the bench')
+ok(problems([s0, { id: 'pq3', k: 'filler:sign', ...at(0, 0.6), q: 0, s: 1 }]).some(q => /Carpentry room has a bench nobody can stand at/.test(q)), 'a sign at the bench')
 { const ring: Prop[] = []; for (let s = -7; s <= 7; s += 2) for (const [x, z, q] of [[s, -7, 0], [s, 7, 0], [-7, s, 1], [7, s, 1]]) ring.push({ id: `pr${ring.length}`, k: 'filler:fence', x: s0.x + x, z: s0.z + z, q, s: 2 })
   ok(problems([s0, ...ring]).some(q => /Carpentry room cannot be reached on foot/.test(q)), 'fenced in') }
 // a person in its bench is people's own line; on its floor they stand
