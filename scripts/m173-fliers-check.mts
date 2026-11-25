@@ -6,7 +6,7 @@
 //  3 three follow (owl, bat, fox): behind a keeper walking 4.2 m/s the owl and the bat fly, stood by they are down within 8 s.
 //  4 E on the owl, then the bat: her talk, Open = the panel's live avatar (a canvas with pixels, her own species).
 //  5 the Wilds: the three are rigged there, in the formation, in the fight brain; a real fight: a Hollow a spirit's slot answers, height read.
-//  6 0 page errors.   --perf: 8 bodies (2 of each), frame times, 3 runs (run before and after a deploy).   --shots dir.
+//  6 0 page errors.   --panel: 3 + 4 only. --perf: 8 bodies (2 of each), frame times, 3 runs (run before and after a deploy).   --shots dir.
 //   npx tsx scripts/m173-fliers-check.mts [--desktop] [--perf] [--shots dir] [--url ..]
 import puppeteer, { type Page } from 'puppeteer-core'
 import { mkdirSync } from 'fs'
@@ -57,7 +57,7 @@ try {
       console.log(`   perf ${tag} run ${r}: mean ${m.mean.toFixed(1)} ms (sd ${m.sd.toFixed(1)}), p50 ${m.p50.toFixed(1)}, p95 ${m.p95.toFixed(1)} (${m.n} frames, ${m.mounted} bodies of 8)`); await p.close() }
     await br.close(); process.exit(0)
   }
-  { const { p, got } = await open(4, []); await p.evaluate(() => (window as any).__ather.tp(-130, 108, 0))
+  if (!process.argv.includes('--panel')) { const { p, got } = await open(4, []); await p.evaluate(() => (window as any).__ather.tp(-130, 108, 0))
     ok(await gl(p, 4), '1. four rigged bodies, owl and bat among them, no orb'); await sleep(4000)
     const s = await p.evaluate(() => { const M = (window as any).__spiritModel; return { sp: M.species, h: Object.fromEntries([...M.rigs.values()].map((r: any) => [r.sp, r.h])), sk: [...M.rigs.values()].map((r: any) => new Set(Object.values(r.body.meshes).map((x: any) => x.skeleton.uuid)).size), mounted: M.mounted } })
     ok(s.mounted === 4 && s.sk.length === 4 && s.sk.every((x: number) => x === 1) && KIND.every(k => s.sp[k] === 1), `1. one of each, one skeleton each ${JSON.stringify(s.sp)}`)
@@ -83,12 +83,13 @@ try {
     await sleep(8000); await p.evaluate(() => { (window as any).__m173.r = {} }); await sleep(3000); const R2 = await rows(p)
     for (const [id, sp] of [['p0', 'owl'], ['p1', 'bat'], ['p2', 'fox']] as const) ok(R2[id].every(r => r.alt < 0.05 && r.clip !== 'run'), `3. stood by the ${sp} is down (${[...new Set(R2[id].map(r => r.clip))]}, ${Math.max(...R2[id].map(r => r.alt)).toFixed(3)} m)`)
     for (const sp of ['owl', 'bat']) { let up = false
-      for (let k = 0; k < 4 && !up; k++) { const m = await p.evaluate((q: string) => { const t = (window as any).__spiritModel.trots[q], s = (window as any).__ather.state(); return { x: t.x, y: t.y, z: t.z, kx: s.px ?? s.x, kz: s.pz ?? s.z } }, sp)
+      for (let k = 0; k < 8 && !up; k++) { const m = await p.evaluate((q: string) => { const t = (window as any).__spiritModel.trots[q], s = (window as any).__ather.state(); return { x: t.x, y: t.y, z: t.z, kx: s.px ?? s.x, kz: s.pz ?? s.z } }, sp)
         const d = Math.hypot(m.x - m.kx, m.z - m.kz); if (d > 2.4) { await p.evaluate((x: number, z: number) => (window as any).__ather.tp(x, z, 0), m.x + (m.kx - m.x) / d * 1.5, m.z + (m.kz - m.z) / d * 1.5); await sleep(1500) }
         const m2 = await p.evaluate((q: string) => { const t = (window as any).__spiritModel.trots[q]; return { x: t.x, z: t.z } }, sp); await aimAt(p, m2.x, m2.z, 0.28); await p.keyboard.press('e'); await sleep(1500)
         const talk = await p.evaluate(() => { const b = [...document.querySelectorAll<HTMLButtonElement>('[data-talk-option]')].find(e => /Open/.test(e.textContent ?? '')); b?.click(); return !!b }); await sleep(2500)
         up = talk && await p.evaluate((q: string) => !!document.querySelector(`[data-spirit-avatar="${q}"] canvas`), sp); if (!up) { await p.keyboard.press('Escape'); await sleep(800) } }
       ok(up, `4. E on the ${sp}: the panel's live avatar is her`); await sleep(3000); await shot(p, `panel-${sp}`); await p.keyboard.press('Escape'); await sleep(1200) }
+    if (process.argv.includes('--panel')) { await br.close(); console.log(fails ? `${fails} FAIL` : 'ALL PASS'); process.exit(fails ? 1 : 0) }
     await p.evaluate(() => (window as any).__ather.travel({ kind: 'waymark', w: { id: 'greg', tile: 'first-wilds', x: -300, y: 0, z: 300, biome: 2, made: 0 } }))
     await p.waitForFunction(() => (window as any).__ather.zone() === 'wilds' && !!(window as any).__ather.combat, { timeout: 120000 }); ok(await gl(p, 3), '5. the Wilds: the three are rigged'); await sleep(5000)
     ok(await p.evaluate(() => { const F = (window as any).__formation, S = (window as any).__spiritFight?.(); return ['p0', 'p1', 'p2'].every(i => F?.members.some((m: any) => m.id === i)) && S?.spirits.length === 3 }), '5. in the formation and in the fight brain')
