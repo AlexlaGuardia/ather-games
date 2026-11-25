@@ -66,7 +66,8 @@ const until = async (f: () => Promise<unknown>, ms = 30000) => { for (let t = 0;
 const scen = (o: Page) => o.evaluate(() => (window as W).__scenery?.()?.items ?? []) as Promise<any[]>
 try {
   const o = await enter(), before = await store(o), base: any[] = before.draft.props ?? []
-  const writes: string[] = []; o.on('request', r => { if (r.method() !== 'GET' && !r.url().includes('save-builder') && !/\/cdn-cgi\/rum|posthog\.com/.test(r.url()))   // page analytics write nothing of the game writes.push(`${r.method()} ${r.url().slice(0, 90)}`) })
+  // page analytics (cdn-cgi rum, posthog) write nothing of the game
+  const writes: string[] = []; o.on('request', r => { if (r.method() !== 'GET' && !r.url().includes('save-builder') && !/\/cdn-cgi\/rum|posthog\.com/.test(r.url())) writes.push(`${r.method()} ${r.url().slice(0, 90)}`) })
   await openFly(o); await key(o, 'KeyP'); await lock(o)
   const got = await props(o), drawn0 = await scen(o)
   ok(got.length >= base.length && base.every(b => JSON.stringify(got.find(p => p.id === b.id)) === JSON.stringify(b)), `1. the saved draft loads unchanged: ${base.length} pieces, ${drawn0.length} drawn`)
