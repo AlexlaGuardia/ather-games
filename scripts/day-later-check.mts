@@ -3,7 +3,7 @@
 //   turned separately, with the session recorder on / blocked, as player / owner. A row hangs when the page stops answering.
 //   Rows 'agree' (every clock tells the same time) must not hang; rows 'split' (only Date.now moved) are there to name the cause and are reported only.
 //   Nothing reaches PostHog's event / replay endpoints (answered in the browser).
-//   [OWNER_KEY=..] npx tsx scripts/day-later-check.mts [--url https://ather.games] [--only 2,5] [--repeat 3]
+//   [OWNER_KEY=..] npx tsx scripts/day-later-check.mts [--url https://ather.games] [--only 2,5] [--repeat 3] [--nodbg: no debugger, so no stack of a hung tab]
 import puppeteer, { type CDPSession, type Page } from 'puppeteer-core'
 import { fakeClock } from './lib/clock.mts'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
@@ -89,7 +89,7 @@ try {
     if (only.length && !only.includes(r.n)) continue
     if (r.owner && !KEY) { console.log(`- ${r.n}. ${r.name}: skipped, no OWNER_KEY`); continue }
     const ms = r.age * H, aged: Seed = { ls: Object.fromEntries(Object.entries(seed.ls).map(([k, v]) => [k, older(v, ms)])), ck: seed.ck.map(({ name, value, domain, path, secure, sameSite, expires }) => ({ name, value: older(value, ms), domain, path, secure, sameSite, ...(expires > 0 ? { expires } : {}) })) }
-    const t = await page({ ...r, seed: aged }); const dbg = await t.p.createCDPSession(); await dbg.send('Debugger.enable'); let v = await visit(t.p)
+    const t = await page({ ...r, seed: aged }); const dbg = await t.p.createCDPSession(); if (!process.argv.includes('--nodbg')) await dbg.send('Debugger.enable'); let v = await visit(t.p)
     if (v === 'ok' && r.clock === 'jump') { await t.p.evaluate((x: number) => (window as any).__clock(x), r.skip * H); v = await play(t.p, 60) }
     const ck = v === 'ok' ? await t.p.evaluate((n: number) => [Date.now(), new Date().getTime(), performance.timeOrigin + performance.now()].map(x => ((x - n) / 3_600_000).toFixed(1)).join(' / '), Date.now()) : '?'
     const st = v.startsWith('HANG') ? await stack(t.p, dbg) : ''
