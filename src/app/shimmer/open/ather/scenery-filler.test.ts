@@ -28,7 +28,8 @@ for (const q of [0, 1, 2, 3]) {
   const bs = boxes(P('fence-corner', { q })), hit = (lx: number, lz: number) => { const [x, z] = turned(lx, lz, q); return bs.some(b => 10 + x >= b.x0 && 10 + x <= b.x1 && 20 + z >= b.z0 && 20 + z <= b.z1) }
   ok(hit(0.9, 0) && hit(0, 0.9) && !hit(0.5, 0.5) && !hit(-0.5, 0) && !hit(0, -0.5), `corner, turn ${q}: both arms block, nothing else`)
 }
-ok(boxes(P('fence-corner', { q: 0.5 })).length > 4, 'a diagonal corner is two chains')
+{ const bs = boxes(P('fence-corner', { q: 0.5 })), at = (x: number, z: number) => bs.some(b => 10 + x >= b.x0 && 10 + x <= b.x1 && 20 + z >= b.z0 && 20 + z <= b.z1)
+  ok(at(0.6, 0.6) && at(-0.6, 0.6) && !at(0.6, -0.6) && !at(0, 0.7), 'a diagonal corner is two chains along the drawn arms') }
 // the DRAWN turn is the blocked turn (three's rotateY(-q * 90))
 { const g = fillerGeometry('fence-corner').rotateY(-1 * Math.PI / 2); g.computeBoundingBox(); const b = g.boundingBox!, [ax, az] = turned(1, 0, 1), [bx, bz] = turned(0, 1, 1); ok(az > 0.99 && bx < -0.99 && Math.abs(ax) < 1e-9 && Math.abs(bz) < 1e-9 && b.max.z > 0.99 && b.min.x < -0.99 && b.max.x < 0.2, 'turned() is the drawn turn') }
 // end to end
@@ -39,7 +40,7 @@ ok(e({ ...hand, q: 1 }, 11.2, 21.3) === '11.00,21.00', 'a quarter turned one tur
 ok(e({ k: 'filler:fence-corner', q: 2, s: 1 }, 12.1, 20.1) === '12.00,20.00', 'a corner piece joins by its arm')
 ok(e(hand, 10.1, 20.1) === 'none', 'never on top of the piece already there')
 ok(e(hand, 14, 23) === 'none' && e({ ...hand, k: 'filler:stump' }, 12, 20) === 'none' && e(hand, 12, 20, [P('stump')]) === 'none', 'far away, or not fences: the grid decides')
-ok(e({ ...hand, s: 1.5 }, 12.4, 20) === '12.50,20.00', 'sizes count')
+ok(e({ ...hand, s: 1.5 }, 12.4, 20) === '12.50,20.00' && e(hand, 12.4, 20, [P('fence', { s: 1.5 })]) === '12.50,20.00', 'sizes count, both ways')
 const dg = endSnap([P('fence', { q: 0.5 })], { ...hand, q: 0.5 }, 11.5, 21.5)!
 ok(!!dg && Math.abs(dg.x - 10 - Math.SQRT2) < 1e-9 && Math.abs(dg.z - 20 - Math.SQRT2) < 1e-9, 'on the diagonal too, off the grid')
 console.log(fails ? `\n${fails} FAILED` : '\nall pass'); process.exit(fails ? 1 : 0)

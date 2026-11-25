@@ -36,7 +36,7 @@ function stone(r: () => number, w: number, d: number, h: number, sink: number, m
   }
   g0.computeBoundingBox(); const b = g0.boundingBox!, s = b.getSize(new THREE.Vector3()), c = b.getCenter(new THREE.Vector3())
   g0.translate(-c.x, -b.min.y, -c.z).scale(w / s.x, (h + sink) / s.y, d / s.z).translate(0, -sink, 0)
-  const grey = lin('#8b857b'), dark = lin('#6d675f'), green = lin('#71874a')
+  const grey = lin('#a59e92'), dark = lin('#8a8378'), green = lin('#80994f')
   return paint(g0, (f, n) => { const t = Math.max(0, Math.min(1, f.y / h)), q = dark.clone().lerp(grey, 0.35 + t * 0.65).multiplyScalar(0.92 + r() * 0.16); return moss && n.y > 0.72 && f.y > h * 0.55 && r() < 0.7 ? q.lerp(green, 0.6) : q })
 }
 function rock(size: 's' | 'm' | 'l'): G {
@@ -47,7 +47,7 @@ function rock(size: 's' | 'm' | 'l'): G {
 }
 
 // ── logs: bark round, pale ends with a ring
-const BARK = '#5f4a2e', CUT = '#b48d58', RING = '#8f6b3e'
+const BARK = '#735a39', CUT = '#b48d58', RING = '#8f6b3e'
 function round(r: () => number, rad0: number, rad1: number, len: number, sides: number, segs: number, rough: number): G {   // along y, 0..len
   const g0 = new THREE.CylinderGeometry(rad1, rad0, len, sides, segs, true), p = g0.getAttribute('position'), push = new Map<string, number>()
   for (let k = 0; k < p.count; k++) { const id = [p.getX(k), p.getY(k), p.getZ(k)].map(n => n.toFixed(3)).join(); let m = push.get(id); if (m === undefined) { m = 1 - rough + r() * rough; push.set(id, m) }; p.setXYZ(k, p.getX(k) * m, p.getY(k) + len / 2, p.getZ(k) * m) }
@@ -63,7 +63,7 @@ function logFallen(): G {
   const body = join(parts).rotateZ(-Math.PI / 2).translate(-1.2, R * 0.82, 0)
   const twig = tone(round(r, 0.075, 0.05, 0.32, 6, 1, 0.05), BARK, r, 0.2).rotateX(0.75).rotateZ(-0.3).translate(0.35, R * 1.45, 0.1)
   const tip = tone(new THREE.CircleGeometry(0.05, 6).rotateX(-Math.PI / 2).translate(0, 0.32, 0), CUT, r, 0.05).rotateX(0.75).rotateZ(-0.3).translate(0.35, R * 1.45, 0.1)
-  const moss = [[-0.7, 0.34], [-0.25, 0.26], [0.75, 0.3]].map(([x, w]) => tone(new THREE.IcosahedronGeometry(0.2, 0).scale(w / 0.2, 0.22, 0.75).translate(x, R * 1.72, 0.02), '#71874a', r, 0.2))
+  const moss = [[-0.7, 0.34], [-0.25, 0.26], [0.75, 0.3]].map(([x, w]) => tone(new THREE.IcosahedronGeometry(0.2, 0).scale(w / 0.2, 0.22, 0.75).translate(x, R * 1.72, 0.02), '#80994f', r, 0.2))
   return join([body, twig, tip, ...moss])
 }
 function stump(): G {
@@ -75,8 +75,8 @@ function stump(): G {
 // ── post-and-rail fence. A straight piece is FENCE_LEN long and ends on a post each end; a neighbour's post is the same post, so the
 //    two run on as one fence (scenery.ts ends + endSnap put them there). Posts are square and true: two in one place show as one.
 export const FENCE_LEN = 2
-const WOOD = ['#8f6f48', '#86673f', '#987850']
-const post = (x: number, z: number): G => join([paint(new THREE.BoxGeometry(0.15, 1.35, 0.15).translate(x, 0.375, z), (f, n) => lin(n.y > 0.5 ? CUT : Math.abs(n.x) > 0.5 ? '#7a5d3a' : '#745838')), paint(new THREE.ConeGeometry(0.106, 0.08, 4).rotateY(Math.PI / 4).translate(x, 1.09, z), () => lin('#a5834f'))])
+const WOOD = ['#a07e54', '#97764a']
+const post = (x: number, z: number): G => join([paint(new THREE.BoxGeometry(0.15, 1.35, 0.15).translate(x, 0.375, z), (f, n) => lin(n.y > 0.5 ? CUT : Math.abs(n.x) > 0.5 ? '#8c6c45' : '#866641')), paint(new THREE.ConeGeometry(0.106, 0.08, 4).rotateY(Math.PI / 4).translate(x, 1.09, z), () => lin('#a5834f'))])
 function rails(r: () => number, len: number): G[] {   // from x 0 to len
   return [0.42, 0.82].map((y, k) => tone(box(len, 0.12, 0.07, len / 2, y, 0), WOOD[k], r, 0.1))
 }
@@ -84,7 +84,7 @@ function fence(): G { const r = rng(5); return join([post(-1, 0), post(1, 0), ..
 function fenceCorner(): G { const r = rng(6); return join([post(0, 0), post(1, 0), post(0, 1), ...rails(r, 1), ...rails(r, 1).map(g => g.rotateY(-Math.PI / 2))]) }
 // ── a blank sign: a post, a planked board, no words
 function sign(): G {
-  const r = rng(9), parts = [tone(box(0.13, 1.85, 0.13, 0, 0.625, -0.02), '#745838', r, 0.1)]
+  const r = rng(9), parts = [tone(box(0.13, 1.85, 0.13, 0, 0.625, -0.02), '#866641', r, 0.1)]
   for (let k = 0; k < 3; k++) parts.push(tone(box(1.1, 0.185, 0.06, (k - 1) * 0.012, 1.0 + k * 0.2, 0.075, (k - 1) * 0.008), ['#a5834f', '#ad8b57', '#9c7b49'][k], r, 0.05))
   for (const x of [-0.42, 0.42]) parts.push(tone(box(0.075, 0.6, 0.035, x, 1.2, 0.118), '#7a5d3a', r, 0.06))
   return join(parts)
@@ -102,15 +102,15 @@ function ring(r: () => number, n: number, rad: number, f: (k: number, a: number,
   for (let k = 0; k < n; k++) { const a = k * 2.39996 + r() * 0.4, q = rad * Math.sqrt((k + 0.4) / n); out.push(...f(k, a, Math.cos(a) * q, Math.sin(a) * q)) }
   return out
 }
-function grass(): G { const r = rng(17); return join(ring(r, 22, 0.24, (k, a, x, z) => [blade(r, 0.5 + r() * 0.32, 0.04, 0.22 + r() * 0.4, -a, x, z, '#4c7a2e', k % 3 ? '#8dbb4c' : '#a9c763')])) }
+function grass(): G { const r = rng(17); return join(ring(r, 22, 0.24, (k, a, x, z) => [blade(r, 0.5 + r() * 0.32, 0.04, 0.22 + r() * 0.4, -a, x, z, '#6a9a3f', k % 3 ? '#a6cf62' : '#c2dc7c')])) }
 function reeds(): G {
   const r = rng(23)
   const stems = ring(r, 9, 0.36, (k, a, x, z) => {
-    const h = 1.1 + r() * 0.5, tilt = 0.03 + r() * 0.07, out: G[] = [tone(new THREE.CylinderGeometry(0.014, 0.02, h + 0.2, 4, 1, true).translate(0, (h - 0.2) / 2, 0), '#6f8f45', r, 0.1)]
-    if (k % 4 !== 3) out.push(tone(new THREE.CylinderGeometry(0.042, 0.046, 0.24, 6).translate(0, h - 0.04, 0), '#6b4426', r, 0.16), tone(new THREE.ConeGeometry(0.012, 0.14, 4).translate(0, h + 0.15, 0), '#8a9a52', r, 0.1))
+    const h = 1.1 + r() * 0.5, tilt = 0.03 + r() * 0.07, out: G[] = [tone(new THREE.CylinderGeometry(0.014, 0.02, h + 0.2, 4, 1, true).translate(0, (h - 0.2) / 2, 0), '#86a657', r, 0.1)]
+    if (k % 4 !== 3) out.push(tone(new THREE.CylinderGeometry(0.042, 0.046, 0.24, 6).translate(0, h - 0.04, 0), '#8a5a33', r, 0.16), tone(new THREE.ConeGeometry(0.012, 0.14, 4).translate(0, h + 0.15, 0), '#8a9a52', r, 0.1))
     return out.map(g => g.rotateZ(-tilt).rotateY(-a).translate(x, 0, z))
   })
-  const leaves = ring(r, 17, 0.38, (_k, a, x, z) => [blade(r, 0.8 + r() * 0.5, 0.042, 0.12 + r() * 0.3, -a + r(), x, z, '#4a6f35', '#93b257')])
+  const leaves = ring(r, 17, 0.38, (_k, a, x, z) => [blade(r, 0.8 + r() * 0.5, 0.042, 0.12 + r() * 0.3, -a + r(), x, z, '#648c47', '#adc96e')])
   return join([...stems, ...leaves])
 }
 /** petals round a button; each head faces up and a little out */
@@ -124,7 +124,7 @@ function flowers(petal: string, heart: string, seed: number): G {
     out.push(...head.map(g => g.scale(s, s, s).rotateZ(-0.35).translate(0, h, 0)))
     return out.map(g => g.rotateY(-a).translate(x, 0, z))
   })
-  const leaves = ring(r, 14, 0.3, (_k, a, x, z) => [blade(r, 0.22 + r() * 0.12, 0.04, 0.5 + r() * 0.4, -a, x, z, '#46702f', '#7fae4d')])
+  const leaves = ring(r, 14, 0.3, (_k, a, x, z) => [blade(r, 0.22 + r() * 0.12, 0.04, 0.5 + r() * 0.4, -a, x, z, '#5f8f40', '#9cc962')])
   return join([...heads, ...leaves])
 }
 
