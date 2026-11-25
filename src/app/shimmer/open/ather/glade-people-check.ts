@@ -8,9 +8,10 @@ import { mateWalls } from './cluster'
 import { GLADE_FRAME, GLADE_GATE, GLADE_OWNED } from './glade-cluster'
 import { withPieces } from './dynamic-solids'
 import { withZoneParts, zoneParts, zonePartBoxes } from './zone-parts'
-import { sceneryBoxes, sceneryPlaced } from './scenery'
+import { SCENERY_BY, sceneryBoxes, sceneryPlaced } from './scenery'
+import { ROOM_PREFIX, isRoom } from '../../world/builder-props'
 import { gladeLayerGround, gladeWet, type GladeLayer } from './glade-layer'
-import { PAD_FALL, inRect, padGround, padLevel, rectPoints, rectsOverlap, type Ground } from './glade-pads'
+import { BENCH_IN, PAD_FALL, fromRect, inRect, padGround, padLevel, rectPoints, rectsOverlap, roomPads, type Ground, type RoomPad } from './glade-pads'
 import { gladePlaces, placeDoor, placeSolids, type GladePlace } from './glade-places'
 import { pondDepthIn } from './relief'
 import { gladeJetty } from './moonwell-glade'
@@ -24,7 +25,7 @@ export function gladeShapeOf(layer: GladeLayer): Shape {
     solidPieces(layer))
 }
 /** the owner's solid pieces: the building zones' parts and the scenery that blocks */
-const solidPieces = (layer: GladeLayer): Box[] => { const ground = gladeLayerGround(layer.edits); return [...zonePartBoxes(zoneParts(layer.zones ?? [], ground)), ...sceneryBoxes(sceneryPlaced(layer.props ?? [], padGround(layer.props, ground)))] }
+const solidPieces = (layer: GladeLayer, rooms = true): Box[] => { const ground = gladeLayerGround(layer.edits); return [...zonePartBoxes(zoneParts(layer.zones ?? [], ground)), ...sceneryBoxes(sceneryPlaced(layer.props ?? [], padGround(layer.props, ground), ground).filter(p => rooms || !isRoom(p)))] }
 
 /** how near the walk must end (E reaches 3 m) */
 export const WALK_REACH = 2.2
@@ -95,16 +96,21 @@ function doorway(w: ReturnType<typeof terrainWorld>, d: P, f: number): P[] {
   }
   return out
 }
+/** s1c-3: a garden room's furniture, and where a keeper stands at it (0.35 m clear of the deepest bench) */
+const roomSolids = (r: RoomPad, layer: GladeLayer, land: Ground): Box[] => sceneryBoxes(sceneryPlaced((layer.props ?? []).filter(p => p.id === r.id), land).map(p => ({ ...p, low: undefined })))
+const roomSpot = (r: RoomPad): P => fromRect(r, 0, r.d / 2 - BENCH_IN - 1.2)
 /** s1c-2: may the houses stand there? The same shape of answer as peopleProblems. A house nobody moved is only asked whether its door can
- *  still be reached, and whether a moved one stands in it: the rest is the Glade as built. */
+ *  still be reached, and whether a moved one stands in it: the rest is the Glade as built. s1c-3: the garden rooms are asked the same. */
 export function placeProblems(layer: GladeLayer, places: readonly GladePlace[] = gladePlaces(), newborn: P | null = null): string[] {
-  const shape = gladeShapeOf(layer), land = shape.ground, stand = padGround(layer.props, land), w = terrainWorld(shape), wet = gladeWet(layer), out: string[] = [], pieces = solidPieces(layer)
+  const shape = gladeShapeOf(layer), land = shape.ground, stand = padGround(layer.props, land), w = terrainWorld(shape), wet = gladeWet(layer), out: string[] = [], pieces = solidPieces(layer, false)
   const j = gladeJetty(), jetty = { x: (j.x0 + j.x1) / 2, z: (j.z0 + j.z1) / 2, yaw: Math.atan2(j.x1 - j.x0, j.z1 - j.z0), w: j.w, d: Math.hypot(j.x1 - j.x0, j.z1 - j.z0) }
   // a newborn spot that is itself wrong is peopleProblems' one line, not six doors
   const nf = newborn && Number.isFinite(land(newborn.x, newborn.z)) ? w.floorAt(newborn.x, newborn.z, stand(newborn.x, newborn.z), STEP) : null
   const reach = newborn && nf !== null && w.bodyFree(newborn.x, newborn.z, nf) && !wet(newborn.x, newborn.z) ? walkReach(shape, stand) : null, said = new Set<string>()
-  for (const p of places) {
-    const pts = p.moved ? rectPoints(p) : [], own = p.moved ? placeSolids(p.place, land) : [], crate = p.place === 'jars'
+  const all: (GladePlace | (RoomPad & { name: string; moved: true; place: null }))[] = [...places, ...roomPads(layer.props).map(r => ({ ...r, name: SCENERY_BY.get(ROOM_PREFIX + r.room)?.label ?? r.room, moved: true as const, place: null }))]
+  const solids = (p: (typeof all)[number]) => (p.place === null ? roomSolids(p, layer, land) : placeSolids(p.place, land))
+  for (const p of all) {
+    const pts = p.moved ? rectPoints(p) : [], own = p.moved ? solids(p) : [], crate = p.place === 'jars', room = p.place === null
     const no = (why: string) => { out.push(`${p.name} ${why}`) }
     if (p.moved) {
       if (pts.some(q => !Number.isFinite(land(q.x, q.z)))) { no('is in the void'); continue }
@@ -112,14 +118,14 @@ export function placeProblems(layer: GladeLayer, places: readonly GladePlace[] =
       if (pts.some(q => wet(q.x, q.z))) { no('is in the water'); continue }
       const v = padLevel(p, land); if (v.top - v.low > PAD_FALL) { no(`is on a slope (the ground falls ${(v.top - v.low).toFixed(1)} m under it, ${PAD_FALL} at most)`); continue }
       if (inRect(p, GLADE_GATE.x, GLADE_GATE.z, GATE_CLEAR)) { no('is in the gate'); continue }
-      const other = places.find(o => o !== p && (crate || o.place === 'jars' ? placeSolids(o.place, land).some(a => own.some(b => hits(a, b))) : rectsOverlap(p, o)))
+      const other = all.find(o => o !== p && (!room && o.place !== null && (crate || o.place === 'jars') ? solids(o).some(a => own.some(b => hits(a, b))) : rectsOverlap(p, o)))
       if (other) { const pair = [p.id, other.id].sort().join(); if (!said.has(pair)) { said.add(pair); no(`stands in ${other.name}`) } continue }
       if (own.some(b => pieces.some(q => hits(b, q)))) { no('stands in a solid piece'); continue }
     }
     if (crate && !p.moved) continue   // beside Yarrow's door, which is asked
-    const d = placeDoor(p.place), f = Number.isFinite(land(d.x, d.z)) ? w.floorAt(d.x, d.z, stand(d.x, d.z), STEP) : null
-    if (f === null || !w.bodyFree(d.x, d.z, f) || wet(d.x, d.z)) no(crate ? 'has no room in front of it' : 'has a door nobody can stand at')
-    else if (reach && newborn && !reach(newborn, doorway(w, d, f))) no(crate ? 'cannot be reached on foot from the newborn spot' : 'has a door nobody can reach on foot')
+    const d = p.place === null ? roomSpot(p) : placeDoor(p.place), f = Number.isFinite(land(d.x, d.z)) ? w.floorAt(d.x, d.z, stand(d.x, d.z), STEP) : null
+    if (f === null || !w.bodyFree(d.x, d.z, f) || wet(d.x, d.z)) no(room ? 'has a bench nobody can stand at' : crate ? 'has no room in front of it' : 'has a door nobody can stand at')
+    else if (reach && newborn && !reach(newborn, doorway(w, d, f))) no(crate || room ? 'cannot be reached on foot from the newborn spot' : 'has a door nobody can reach on foot')
   }
   return out
 }

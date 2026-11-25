@@ -2,7 +2,7 @@
 // A house the owner moved in Place mode stands LEVEL on the highest ground under its pad, on a plinth that reaches down to the lowest, so
 // no hill pokes through its floor. A step (half a metre) onto it is walked; a higher side is a wall; past PAD_FALL Publish refuses. A house
 // nobody moved is untouched by any of this (GLADE.y, as built). PURE, a leaf (moonwell-glade and the walker both sit on it).
-import { placeOf, yawOfQ, type Place, type Prop } from '../../world/builder-props'
+import { placeOf, roomOf, yawOfQ, type GladeRoom, type Place, type Prop } from '../../world/builder-props'
 import type { Box } from '../terrain-world'
 
 export type Ground = (x: number, z: number) => number
@@ -14,7 +14,10 @@ export const PLACE_SIZE: Readonly<Record<Place, { w: number; d: number }>> = {
   home: { w: 3.8, d: 3.8 }, jars: { w: 0.9, d: 0.6 },
   fennel: { w: 13.5, d: 8.5 }, hazel: { w: 13.5, d: 8.5 }, sax: { w: 13.5, d: 8.5 }, yarrow: { w: 13.5, d: 8.5 }, mallow: { w: 13.5, d: 8.5 },
 }
-/** how far the ground may fall under a house (m) */
+/** s1c-3: a garden room's floor (rooms.ts ROOMS w, d; the test holds them equal), and how far in from its back edge the bench stands */
+export const ROOM_SIZE: Readonly<Record<GladeRoom, { w: number; d: number }>> = { carpentry: { w: 8, d: 6 }, stonemason: { w: 8, d: 7 }, rinnshop: { w: 8, d: 6 }, cooking: { w: 8, d: 6 } }
+export const BENCH_IN = 1.4
+/** how far the ground may fall under a house or a room (m) */
 export const PAD_FALL = 1.5
 const GRID = 0.5
 export const toRect = (r: Rect, x: number, z: number) => { const c = Math.cos(r.yaw), s = Math.sin(r.yaw), dx = x - r.x, dz = z - r.z; return { u: dx * c - dz * s, v: dx * s + dz * c } }
@@ -51,16 +54,19 @@ export function plinthBoxes(r: Rect, top: number, low: number): Box[] {
   }
   return out
 }
-/** the pads a list of pieces moved */
+export interface RoomPad extends Rect { room: GladeRoom; id: string }
+export const roomPad = (p: Prop): RoomPad | null => { const r = roomOf(p.k); return r && { room: r, id: p.id, x: p.x, z: p.z, yaw: yawOfQ(p.q), ...ROOM_SIZE[r] } }
+export const roomPads = (props: readonly Prop[] | undefined): RoomPad[] => (props ?? []).flatMap(p => roomPad(p) ?? [])
+/** the houses a list of pieces moved */
 export function movedPads(props: readonly Prop[] | undefined): (Rect & { place: Place })[] {
   const out: (Rect & { place: Place })[] = []
   for (const p of props ?? []) { const k = placeOf(p.k); if (k) out.push({ place: k, x: p.x, z: p.z, yaw: yawOfQ(p.q), ...PLACE_SIZE[k] }) }
   return out
 }
-/** What people and pieces stand on: the land, or a moved lot's pad. No lot moved = the land itself (the same function). The WALKER asks
+/** What people and pieces stand on: the land, a moved lot's pad or a garden room's. No pad = the land itself (the same function). The WALKER asks
  *  the land and bumps the plinth's boxes instead (dynamic-solids). */
 export function padGround(props: readonly Prop[] | undefined, ground: Ground): Ground {
-  const pads = movedPads(props).filter(p => p.place !== 'home' && p.place !== 'jars').map(r => ({ r, top: NaN, asked: false }))
+  const pads = [...movedPads(props).filter(p => p.place !== 'home' && p.place !== 'jars'), ...roomPads(props)].map(r => ({ r, top: NaN, asked: false }))
   if (!pads.length) return ground
   return (x, z) => {
     let g = ground(x, z)

@@ -1092,7 +1092,7 @@ function PlanningTableBody() {
 }
 
 /** The room as it stands: its walls (the same boxes the walker hits), a floor, a roof, the bench. */
-function RoomMesh({ r, lift = 0 }: { r: Room; lift?: number }) {
+export function RoomMesh({ r, lift = 0 }: { r: Room; lift?: number }) {
   const walls = useMemo(() => wallsOf(r), [r])
   const f = footprint(r.kind, r.x, r.z, r.q), b = benchOf(r)
   const cx = (f.x0 + f.x1) / 2, cz = (f.z0 + f.z1) / 2, sx = f.x1 - f.x0, sz = f.z1 - f.z0, hWall = WALL_H

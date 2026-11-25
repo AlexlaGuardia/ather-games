@@ -17,7 +17,7 @@ import { cleanEdits, cleanWaters, ponds, type PondCell, type TileEdits, type Wat
 import { publishedZones } from './zone-parts'
 import { cleanProps, type Prop } from '../../world/builder-props'
 import { gladePeopleAnswered, setGladePeople } from './glade-people'
-import { inRect, movedPads } from './glade-pads'
+import { inRect, movedPads, roomPads } from './glade-pads'
 import type { Zone } from '../../world/builder-zones'
 import { gladeDeltaAt, sampleGladeBase, GLADE_BRUSH_TILE, GLADE_LAYER_TILE, GLADE_N, GLADE_CELL, GLADE_SIZE, GLADE_TILE_CENTER } from '../../world/glade-builder'
 
@@ -113,7 +113,7 @@ const FRAMES = new WeakMap<GladeLayer, Frame>()
  *  that reads the frame's trees has it. Nothing wet = GLADE_FRAME itself. Per layer, so water lowered or dried brings the tree back. */
 export function gladeFrame(layer: GladeLayer): Frame {
   const hit = FRAMES.get(layer); if (hit) return hit
-  const m = GLADE_FRAME.meadow, wet = gladeWet(layer), pads = movedPads(layer.props), treeNo: number[] = []   // M153 s1c-2: nor where a moved house stands
+  const m = GLADE_FRAME.meadow, wet = gladeWet(layer), pads = [...movedPads(layer.props), ...roomPads(layer.props)], treeNo: number[] = []   // M153 s1c-2: nor where a moved house or a garden room stands
   m?.trees.forEach((t, k) => { if (!pads.some(r => inRect(r, t.x, t.z, TREE_CLEAR)) && ![[0, 0], [TRUNK, 0], [-TRUNK, 0], [0, TRUNK], [0, -TRUNK]].some(([dx, dz]) => wet(t.x + dx, t.z + dz))) treeNo.push(k) })
   const f = !m || treeNo.length === m.trees.length ? GLADE_FRAME : { ...GLADE_FRAME, meadow: { ...m, trees: treeNo.map(k => m.trees[k]), treeNo } }
   FRAMES.set(layer, f); return f

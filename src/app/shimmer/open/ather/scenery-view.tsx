@@ -9,7 +9,10 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { FLORA_LOOKS } from '../../world/flora-placements'
-import { PieceBody } from './workshop'
+import { PieceBody, RoomMesh } from './workshop'
+import { GROUND_Y } from './plot'
+import { roomPad } from './glade-pads'
+import { isRoom, type GladeRoom } from '../../world/builder-props'
 import { clusterGeometry, CRYSTAL_LOOK } from './crystal-nodes'
 import { LOOK as TREE_LOOK } from './wilds-scene'
 import { crownOf } from './forestry'
@@ -91,10 +94,10 @@ function bakeNode(kind: string): Part[] {
 const block = (K: SceneryKind): Part[] => { const g = new THREE.BoxGeometry(K.box?.w ?? K.w, K.h, K.box?.d ?? K.d); g.translate(0, K.h / 2, 0); return [{ geometry: g, material: new THREE.MeshLambertMaterial({ color: '#8a7a5c' }) }] }
 
 /** the kind's baked parts; a furniture piece needs its template mounted once (`need`), the rest bake here */
-function useBaked(K: SceneryKind): { parts: Part[] | null; need: string | null; onBaked: (p: Part[]) => void } {
+function useBaked(K: SceneryKind): { parts: Part[] | null; need: { item: string } | { room: GladeRoom } | null; onBaked: (p: Part[]) => void } {
   const [, bump] = useState(0), parts = baked.get(K.k) ?? null
   useEffect(() => {
-    if (baked.has(K.k) || 'piece' in K.model) return
+    if (baked.has(K.k) || 'piece' in K.model || 'room' in K.model) return
     let live = true
     if ('crystal' in K.model) { baked.set(K.k, bakeCrystal(K.model.crystal as CrystalKind)); bump(n => n + 1); return }
     if ('node' in K.model) { baked.set(K.k, bakeNode(K.model.node)); bump(n => n + 1); return }
@@ -104,12 +107,17 @@ function useBaked(K: SceneryKind): { parts: Part[] | null; need: string | null; 
     w.then(p => { baked.set(K.k, p); if (live) bump(n => n + 1) })
     return () => { live = false }
   }, [K])
-  return { parts, need: !parts && 'piece' in K.model ? K.model.piece : null, onBaked: p => { baked.set(K.k, p); bump(n => n + 1) } }
+  return { parts, need: parts ? null : 'piece' in K.model ? { item: K.model.piece } : 'room' in K.model ? { room: K.model.room } : null, onBaked: p => { baked.set(K.k, p); bump(n => n + 1) } }
 }
-function Template({ item, onBaked }: { item: string; onBaked: (p: Part[]) => void }) {
+/** a garden room is the keeper plot's own room with nothing behind it: floor + furniture (a shell, rooms.ts M97) */
+function RoomBody({ room }: { room: GladeRoom }) {
+  const r = useMemo(() => ({ id: 'show', kind: room, x: 0, z: 0, q: 0, placedAt: 0, doneAt: 0, shell: true as const }), [room])
+  return <group position-y={-GROUND_Y}><RoomMesh r={r} /></group>
+}
+function Template({ need, onBaked }: { need: { item: string } | { room: GladeRoom }; onBaked: (p: Part[]) => void }) {
   const ref = useRef<THREE.Group>(null)
   useLayoutEffect(() => { if (ref.current) onBaked(bake(ref.current)) }, [])   // eslint-disable-line react-hooks/exhaustive-deps
-  return <group ref={ref} visible={false}><PieceBody item={item} /></group>
+  return <group ref={ref} visible={false}>{'room' in need ? <RoomBody room={need.room} /> : <PieceBody item={need.item} />}</group>
 }
 
 const UP = new THREE.Vector3(0, 1, 0)
@@ -130,8 +138,14 @@ function KindInstances({ K, items, ghost }: { K: SceneryKind; items: readonly Pl
     })
   }, [parts, items, ghost])
   useEffect(() => () => { for (const im of meshes) { im.dispose(); if (im.userData.ghost) (im.material as THREE.Material).dispose() } }, [meshes])
-  if (need) return <Template item={need} onBaked={onBaked} />
+  if (need) return <Template need={need} onBaked={onBaked} />
   return <>{meshes.map(im => <primitive key={im.uuid} object={im} />)}</>
+}
+
+/** a room on uneven ground: its floor goes down to the lowest of it */
+function RoomPlinth({ p }: { p: PlacedProp }) {
+  const r = isRoom(p) && p.low !== undefined && p.y - p.low > 0.02 ? roomPad(p) : null
+  return r ? <mesh position={[p.x, (p.y + 0.02 + p.low!) / 2, p.z]} rotation-y={r.yaw} raycast={() => {}} userData={{ roomPlinth: p.id }}><boxGeometry args={[r.w - 0.02, p.y + 0.02 - p.low!, r.d - 0.02]} /><meshLambertMaterial color="#b98d5a" /></mesh> : null
 }
 
 export function SceneryView({ items, ghost }: { items: readonly PlacedProp[]; ghost?: boolean }) {
@@ -150,5 +164,5 @@ export function SceneryView({ items, ghost }: { items: readonly PlacedProp[]; gh
     return () => { if (w.__scenery === f) delete w.__scenery }
   }, [items, ghost])
   if (!items.length) return null
-  return <group name={ghost ? 'scenery-ghost' : 'scenery'} ref={root}>{byKind.map(({ K, list }) => <KindInstances key={K.k} K={K} items={list} ghost={ghost} />)}</group>
+  return <group name={ghost ? 'scenery-ghost' : 'scenery'} ref={root}>{byKind.map(({ K, list }) => <KindInstances key={K.k} K={K} items={list} ghost={ghost} />)}{items.map(p => <RoomPlinth key={p.id} p={p} />)}</group>
 }

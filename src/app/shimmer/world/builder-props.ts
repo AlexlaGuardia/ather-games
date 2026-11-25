@@ -47,6 +47,13 @@ export function putPlace(ps: readonly Prop[], w: Place, at: { x: number; z: numb
   const c = cleanProp({ id: placeId(w), k: PLACE_PREFIX + w, x: at.x, z: at.z, q: at.q, s: 1 })
   return c ? [...ps.filter(p => p.id !== c.id), c] : [...ps]
 }
+// ── s1c-3: GARDEN ROOMS are palette pieces (`room:<kind>`, the keeper plot's own rooms: floor + furniture, display only): placed, moved and
+//    deleted like any piece (ids `p1` up, in the cap), always true size, no toggle. They stand level on a pad (open/ather/glade-pads.ts).
+export const ROOM_PREFIX = 'room:'
+export const GLADE_ROOMS = ['carpentry', 'stonemason', 'rinnshop', 'cooking'] as const
+export type GladeRoom = (typeof GLADE_ROOMS)[number]
+export const isRoom = (p: Pick<Prop, 'k'>) => p.k.startsWith(ROOM_PREFIX)
+export const roomOf = (k: string): GladeRoom | null => { const w = k.slice(ROOM_PREFIX.length) as GladeRoom; return k.startsWith(ROOM_PREFIX) && GLADE_ROOMS.includes(w) ? w : null }
 /** a piece that is always there: people and houses */
 export const isStanding = (p: Pick<Prop, 'k'>) => isWho(p) || isPlace(p)
 /** the pieces the cap counts: people and houses are extra */
@@ -79,6 +86,7 @@ export function cleanProp(v: unknown): Prop | null {
     const w = num(o.w) ? round(Math.min(WAIT_MAX_H, Math.max(WAIT_MIN_H, o.w)), 2) : NODE_WAIT_H
     return { id: o.id, k: o.k, x: round(o.x, 3), z: round(o.z, 3), q: num(o.q) ? wrapQ(o.q) : 0, s: 1, ...(w === NODE_WAIT_H ? {} : { w }) }
   }
+  if (isRoom({ k: o.k })) return roomOf(o.k) ? { id: o.id, k: o.k, x: round(o.x, 3), z: round(o.z, 3), q: num(o.q) ? wrapQ(o.q) : 0, s: 1 } : null
   return { id: o.id, k: o.k, x: round(o.x, 3), z: round(o.z, 3), q: num(o.q) ? wrapQ(o.q) : 0, s: num(o.s) ? clampScale(o.s) : 1, ...(typeof o.solid === 'boolean' ? { solid: o.solid } : {}) }
 }
 /** a layer JSON's props: junk dropped, one per id (the first), PROPS_MAX at most */

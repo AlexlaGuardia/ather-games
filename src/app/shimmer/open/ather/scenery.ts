@@ -9,15 +9,16 @@ import { FLORA_LOOKS } from '../../world/flora-placements'
 import { PROP_MODELS } from '../../world/prop-models'
 import { CRYSTAL_KINDS, CRYSTAL_NAME } from './prospecting'
 import { FURNITURE, FURNITURE_ORDER } from './furniture'
-import { panelChain } from './rooms'
+import { panelChain, ROOMS } from './rooms'
+import { BENCH_IN, ROOM_SIZE, padLevel, plinthBoxes, roomPad } from './glade-pads'
 import { isWholeQ, quadBounds } from './build-prefs'
-import { NODE_PREFIX, type Prop } from '../../world/builder-props'
+import { GLADE_ROOMS, NODE_PREFIX, ROOM_PREFIX, isRoom, type GladeRoom, type Prop } from '../../world/builder-props'
 import { NODE_CRYSTALS, NODE_CRYSTAL_S, NODE_TREES, nodeName, nodeTree, nodeTrunk } from './glade-nodes'
 import { crownOf } from './forestry'
 import type { Box } from '../terrain-world'
 
-export type SceneryGroup = 'Nodes' | 'Trees' | 'Bushes' | 'Plants' | 'Rocks and logs' | 'Fences and signs' | 'Crystals' | 'Props' | 'Furniture'
-export const SCENERY_GROUPS: readonly SceneryGroup[] = ['Nodes', 'Trees', 'Bushes', 'Plants', 'Rocks and logs', 'Fences and signs', 'Crystals', 'Props', 'Furniture']
+export type SceneryGroup = 'Nodes' | 'Rooms' | 'Trees' | 'Bushes' | 'Plants' | 'Rocks and logs' | 'Fences and signs' | 'Crystals' | 'Props' | 'Furniture'
+export const SCENERY_GROUPS: readonly SceneryGroup[] = ['Nodes', 'Rooms', 'Trees', 'Bushes', 'Plants', 'Rocks and logs', 'Fences and signs', 'Crystals', 'Props', 'Furniture']
 /** w, d, h = its size at scale 1 (m); `box` = the part that blocks (a tree's trunk), absent = the whole size; `fit` = model height.
  *  `panel` = long and thin: off the axes it blocks as a chain. `arms` = it blocks as these (local centres, each a panel) instead.
  *  `ends` = local points where a piece of the same family joins on (endSnap) */
@@ -26,7 +27,7 @@ export interface SceneryKind {
   w: number; d: number; h: number; solid: boolean
   box?: { w: number; d: number; h: number }; panel?: boolean
   arms?: readonly { x: number; z: number; w: number; d: number; h: number }[]; ends?: readonly (readonly [number, number])[]
-  model: { glb: string; fit: number; look?: string; yaw?: number; glow?: number } | { crystal: string } | { piece: string } | { filler: string } | { node: string }
+  model: { glb: string; fit: number; look?: string; yaw?: number; glow?: number } | { crystal: string } | { piece: string } | { filler: string } | { node: string } | { room: GladeRoom }
 }
 const words = (id: string) => { const s = id.replace(/[_-]+/g, ' '); return s[0].toUpperCase() + s.slice(1) }
 
@@ -63,11 +64,16 @@ export const FILLER: Readonly<Record<string, Omit<SceneryKind, 'k' | 'model'>>> 
   sign: { group: 'Fences and signs', label: 'Blank sign', w: 1.13, d: 0.23, h: 1.55, solid: true, box: { w: 0.3, d: 0.3, h: 1.5 } },
 }
 
+/** s1c-3: what blocks in a room (the plot's floor and furniture, workshop.tsx RoomMesh): its bench, or Cooking's hearth under its spit */
+const ROOM_BENCH = { w: 2.4, d: 0.8, h: 1 }, ROOM_HEARTH = { w: 2, d: 1.1, h: 1.3 }
+export const ROOM_H = 1.5
+
 export const SCENERY: readonly SceneryKind[] = [
   // s1b: gatherable nodes (glade-nodes.ts). Fly draws the body off these rows; the game draws and works them as the Wilds' own.
   ...NODE_TREES.map((kind): SceneryKind => { const t = { ...nodeTree(kind), y: 0, kind }, c = crownOf(t), h = c.cy + c.hh
     return { k: `${NODE_PREFIX}${kind}`, group: 'Nodes', label: `${nodeName(kind)} node`, w: c.r * 2, d: c.r * 2, h, solid: true, box: nodeTrunk(kind), model: { node: kind } } }),
   ...NODE_CRYSTALS.map((kind): SceneryKind => ({ k: `${NODE_PREFIX}${kind}`, group: 'Nodes', label: `${nodeName(kind)} node`, w: 1.2 * NODE_CRYSTAL_S, d: 1.2 * NODE_CRYSTAL_S, h: 1.35 * NODE_CRYSTAL_S, solid: false, model: { node: kind } })),
+  ...GLADE_ROOMS.map((r): SceneryKind => ({ k: `${ROOM_PREFIX}${r}`, group: 'Rooms', label: ROOMS[r].name, ...ROOM_SIZE[r], h: ROOM_H, solid: true, arms: [{ x: 0, z: ROOM_SIZE[r].d / 2 - BENCH_IN, ...(r === 'cooking' ? ROOM_HEARTH : ROOM_BENCH) }], model: { room: r } })),
   ...Object.entries(FLORA_LOOKS).map(([id, l]): SceneryKind => { const h = TREE_H * l.scale
     return { k: `tree:${id}`, group: 'Trees', label: `${words(id)} tree`, w: h * 0.5, d: h * 0.5, h, solid: true, box: { w: h * 0.12, d: h * 0.12, h: h * 0.45 }, model: { glb: '/models/flora/tree.glb', fit: h, look: id } } }),
   ...Object.entries(BUSHES).map(([id, b]): SceneryKind => ({ k: `bush:${id}`, group: 'Bushes', label: words(id), ...b, solid: false, model: { glb: `/models/flora/${id}.glb`, fit: b.h } })),
@@ -101,11 +107,14 @@ export function endSnap(props: readonly Prop[], hand: Pick<Prop, 'k' | 'q' | 's'
   return best
 }
 
-/** a piece standing on the ground */
-export interface PlacedProp extends Prop { y: number }
-export function sceneryPlaced(props: readonly Prop[], ground: (x: number, z: number) => number): PlacedProp[] {
+/** a piece standing on the ground; `low` = a room's: how deep its plinth goes */
+export interface PlacedProp extends Prop { y: number; low?: number }
+/** `ground` = what pieces stand on (glade-pads padGround), `land` = the bare land: a room stands level on the highest of it */
+export function sceneryPlaced(props: readonly Prop[], ground: (x: number, z: number) => number, land = ground): PlacedProp[] {
   const out: PlacedProp[] = []
-  for (const p of props) { if (!SCENERY_BY.has(p.k)) continue; const y = ground(p.x, p.z); if (Number.isFinite(y)) out.push({ ...p, y }) }
+  for (const p of props) { if (!SCENERY_BY.has(p.k)) continue
+    const r = isRoom(p) ? roomPad(p) : null; if (r) { const v = padLevel(r, land); if (Number.isFinite(v.top)) out.push({ ...p, y: v.top, low: v.low }); continue }
+    const y = ground(p.x, p.z); if (Number.isFinite(y)) out.push({ ...p, y }) }
   return out
 }
 /** the walker's boxes. A wall panel off the axes is a chain of thin boxes (rooms.ts), the rest the turned footprint's bounds. */
@@ -113,11 +122,12 @@ export function sceneryBoxes(items: readonly PlacedProp[]): Box[] {
   return items.flatMap(p => {
     const K = SCENERY_BY.get(p.k)
     if (!K || !isSolid(p)) return []
-    if (K.arms) return K.arms.flatMap(a => {
+    const pad = isRoom(p) && p.low !== undefined ? roomPad(p) : null, plinth = pad ? plinthBoxes(pad, p.y, p.low!) : []
+    if (K.arms) return plinth.concat(K.arms.flatMap(a => {
       const [ox, oz] = turned(a.x * p.s, a.z * p.s, p.q), x = p.x + ox, z = p.z + oz, w = a.w * p.s, d = a.d * p.s
       const rs = isWholeQ(p.q) ? [quadBounds(x, z, w, d, p.q)] : w >= d ? panelChain(x, z, w, d, p.q) : panelChain(x, z, d, w, p.q + 1)
       return rs.map(r => ({ x0: r.x0, x1: r.x1, z0: r.z0, z1: r.z1, y0: p.y - 0.5, y1: p.y + a.h * p.s }))
-    })
+    }))
     const b = K.box ?? K, w = b.w * p.s, d = b.d * p.s
     const ks = K.box ? [quadBounds(p.x, p.z, w, d, 0)] : K.panel && !isWholeQ(p.q) ? panelChain(p.x, p.z, w, d, p.q) : [quadBounds(p.x, p.z, w, d, p.q)]
     return ks.map(r => ({ x0: r.x0, x1: r.x1, z0: r.z0, z1: r.z1, y0: p.y - 0.5, y1: p.y + b.h * p.s }))
