@@ -4,7 +4,7 @@
 //   Rows 'agree' (every clock tells the same time) must not hang; rows 'split' (only Date.now moved) are there to name the cause and are reported only.
 //   Nothing reaches PostHog's event / replay endpoints (answered in the browser).
 //   [OWNER_KEY=..] npx tsx scripts/day-later-check.mts [--url https://ather.games] [--only 2,5]
-import puppeteer, { type Page } from 'puppeteer-core'
+import puppeteer, { type CDPSession, type Page } from 'puppeteer-core'
 import { fakeClock } from './lib/clock.mts'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), only = flag('--only', '').split(',').filter(Boolean).map(Number), KEY = process.env.OWNER_KEY ?? ''
@@ -20,6 +20,9 @@ const ROWS: Row[] = [
   { n: 5, name: 'save 30 d old, real clock', age: 720, clock: 'real', skip: 0, recorder: true, owner: false, agree: true },
   { n: 6, name: 'save as is, every clock +24.5 h', age: 0, clock: 'all', skip: 24.5, recorder: true, owner: false, agree: true },
   { n: 7, name: 'tab left open, every Date jumps +25 h mid-visit (a sleeping laptop)', age: 0, clock: 'jump', skip: 25, recorder: true, owner: false, agree: true },
+  { n: 13, name: 'tab left open, every Date jumps +25 h mid-visit', age: 0, clock: 'jump', skip: 25, recorder: false, owner: false, agree: true },
+  { n: 14, name: 'tab left open, every Date jumps +23 h mid-visit', age: 0, clock: 'jump', skip: 23, recorder: true, owner: false, agree: true },
+  { n: 15, name: 'tab left open, every Date jumps +1 h mid-visit', age: 0, clock: 'jump', skip: 1, recorder: true, owner: false, agree: true },
   { n: 8, name: 'save as is, Date.now only +24.5 h (the old check)', age: 0, clock: 'now-only', skip: 24.5, recorder: true, owner: false, agree: false },
   { n: 9, name: 'save as is, Date.now only +24.5 h', age: 0, clock: 'now-only', skip: 24.5, recorder: false, owner: false, agree: false },
   { n: 10, name: 'save as is, Date.now only +24.5 h', age: 0, clock: 'now-only', skip: 24.5, recorder: true, owner: true, agree: false },
@@ -75,7 +78,7 @@ async function play(p: Page, secs: number): Promise<string> {
   const t0 = Date.now(); while (Date.now() - t0 < secs * 1000) { if (!await alive(p)) return 'HANG in play'; await Promise.race([p.touchscreen.tap(195, 500), sleep(20000)]).catch(() => {}); await sleep(2500) }
   return await alive(p) ? 'ok' : 'HANG in play'
 }
-async function stack(p: Page) { const s: any = await Promise.race([(async () => { const c = await p.createCDPSession(); await c.send('Debugger.enable'); const ev = new Promise(r => c.once('Debugger.paused', (e: any) => r(e.callFrames.slice(0, 40).map((f: any) => f.functionName || '?').join(' < ')))); await c.send('Debugger.pause'); return ev })().catch(e => String(e)), sleep(15000).then(() => 'no stack')]); return String(s).slice(0, 500) }
+async function stack(p: Page, c: CDPSession) { const s: any = await Promise.race([(async () => { const ev = new Promise(r => c.once('Debugger.paused', (e: any) => r(e.callFrames.slice(0, 40).map((f: any) => f.functionName || '?').join(' < ')))); await c.send('Debugger.pause'); return ev })().catch(e => String(e)), sleep(15000).then(() => 'no stack')]); return String(s).slice(0, 900) }
 let bad = 0
 try {
   const s = await page({ recorder: true, owner: false, clock: 'real', skip: 0 }), sr = await visit(s.p); await sleep(5000)
@@ -86,10 +89,10 @@ try {
     if (only.length && !only.includes(r.n)) continue
     if (r.owner && !KEY) { console.log(`- ${r.n}. ${r.name}: skipped, no OWNER_KEY`); continue }
     const ms = r.age * H, aged: Seed = { ls: Object.fromEntries(Object.entries(seed.ls).map(([k, v]) => [k, older(v, ms)])), ck: seed.ck.map(({ name, value, domain, path, secure, sameSite, expires }) => ({ name, value: older(value, ms), domain, path, secure, sameSite, ...(expires > 0 ? { expires } : {}) })) }
-    const t = await page({ ...r, seed: aged }); let v = await visit(t.p)
+    const t = await page({ ...r, seed: aged }); const dbg = await t.p.createCDPSession(); await dbg.send('Debugger.enable'); let v = await visit(t.p)
     if (v === 'ok' && r.clock === 'jump') { await t.p.evaluate((x: number) => (window as any).__clock(x), r.skip * H); v = await play(t.p, 60) }
     const ck = v === 'ok' ? await t.p.evaluate((n: number) => [Date.now(), new Date().getTime(), performance.timeOrigin + performance.now()].map(x => ((x - n) / 3_600_000).toFixed(1)).join(' / '), Date.now()) : '?'
-    const st = v.startsWith('HANG') ? await stack(t.p) : ''
+    const st = v.startsWith('HANG') ? await stack(t.p, dbg) : ''
     const good = v === 'ok' && (!r.agree || !r.recorder || t.c.replay > 0); if (r.agree && !good) bad++
     console.log(`${good ? '✓' : r.agree ? '✗' : '·'} ${r.n}. ${r.agree ? 'agree' : 'split'} | ${r.owner ? 'owner' : 'player'} | recorder ${r.recorder ? 'on' : 'blocked'} (asked ${t.c.rec}, replay posts ${t.c.replay}) | clocks h ahead (Date.now / new Date / performance) ${ck} | ${r.name}: ${v}${v === 'ok' && !good ? ' BUT the recorder sent nothing' : ''}${st ? `\n      ${st}` : ''}`)
     // a hung tab would not close: its context is dropped without waiting

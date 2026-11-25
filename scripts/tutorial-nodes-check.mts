@@ -67,6 +67,7 @@ async function keeper(name: string): Promise<{ g: Page; load: () => Promise<Page
   const p = g as Page; p.on('pageerror', e => errs.push(`${name}: ` + String(e).slice(0, 200)))
   await p.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true }); await p.evaluateOnNewDocument('window.__name = (f) => f')
   await p.evaluateOnNewDocument(() => {
+    if (location.protocol === 'about:') return   // the blank page between two keepers has no storage
     if (!localStorage.getItem('chk')) { localStorage.setItem('chk', '1'); localStorage.setItem('ather:shimmer:birthRune', 'star')
       localStorage.setItem('open.tutorial.v1', JSON.stringify({ v: 1, live: false, greg: { welcome: true, moglins: true, spirits: true, wilds: true }, heard: ['otto', 'tess', 'bonn', 'fennel'], gifts: ['grimoire', 'spike', 'pruner', 'rinstick'] })) }
   })
