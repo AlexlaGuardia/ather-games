@@ -1,5 +1,5 @@
 // BETA M173 s1: ATHOWL + NOCTYX IN GAME, every keeper (non-owner), a SEEDED fresh profile (every non-GET stubbed; nothing saved anywhere).
-//  SETUP: four Spirit Beds, bloomed owl (p0), bat (p1), fox (p2), axolotl (p3), hour 14. Run at 390x844 and (--desktop) 1280x800.
+//  SETUP: four Spirit Beds, bloomed owl (p0), bat (p1), fox (p2), axolotl (p3), hour 14. Run at 390x844 and (--desktop) 900x600 (software GL draws 1280x800 at ~1 fps; --perf keeps it).
 //  1 garden: four rigged bodies, one skeleton each, the four rigged glbs 200, canon sizes (owl 0.50, bat 0.45; fox 0.70, axolotl as before).
 //  2 they roam: up to 3 min the owl and the bat each fly (run clip, up off the ground) and stand (idle / sit, 0 over the ground); the fox and
 //    the axolotl are never off it; no body's lowest sampled vertex under the ground by 3 cm.
@@ -12,7 +12,7 @@ import puppeteer, { type Page } from 'puppeteer-core'
 import { mkdirSync } from 'fs'
 import { aimAt } from './lib/aim.mts'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
-const url = flag('--url', 'https://ather.games'), shots = flag('--shots', ''), desk = process.argv.includes('--desktop'), tag = desk ? 'desktop' : '390'
+const url = flag('--url', 'https://ather.games'), shots = flag('--shots', ''), desk = process.argv.includes('--desktop'), perf = process.argv.includes('--perf'), tag = desk ? 'desktop' : '390'
 if (shots) mkdirSync(shots, { recursive: true })
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms)); let fails = 0
 const ok = (c: boolean, m: string) => { console.log(`${c ? 'PASS' : 'FAIL'} ${m}`); if (!c) fails++ }
@@ -23,7 +23,7 @@ const TUT = { v: 1, live: false, greg: { welcome: true, moglins: true, spirits: 
 const errs: string[] = []
 const br = await puppeteer.launch({ protocolTimeout: 600000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--mute-audio', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
 async function open(n: number, with_: string[]) {
-  const p: Page = await (await br.createBrowserContext()).newPage(); await p.setViewport(desk ? { width: 1280, height: 800 } : { width: 390, height: 844, isMobile: true, hasTouch: true })
+  const p: Page = await (await br.createBrowserContext()).newPage(); await p.setViewport(desk ? (perf ? { width: 1280, height: 800 } : { width: 900, height: 600 }) : { width: 390, height: 844, isMobile: true, hasTouch: true })
   const got: string[] = []; p.on('pageerror', e => errs.push(String(e).slice(0, 200))); p.on('response', r => { if (/open\/spirits\//.test(r.url())) got.push(`${r.url().split('/').pop()!.split('?')[0]} ${r.status()}`) })
   await p.evaluateOnNewDocument('window.__name = (f) => f')
   await p.evaluateOnNewDocument((s: any) => {
@@ -36,7 +36,7 @@ async function open(n: number, with_: string[]) {
   }, { pieces: beds(n), pots: pots(n), tut: TUT, w: with_ })
   await p.goto(`${url}/shimmer/open/ather?hour=14`, { waitUntil: 'load', timeout: 240000 })
   await p.waitForFunction(() => !!(window as any).__ather?.state && !!(window as any).__ather?.travel, { timeout: 240000 }); await sleep(4000)
-  if (desk) await p.mouse.click(640, 600); else await p.touchscreen.tap(195, 644); await sleep(500)
+  if (desk) await p.mouse.click(450, 450); else await p.touchscreen.tap(195, 644); await sleep(500)
   return { p, got }
 }
 const hide = (p: Page) => p.evaluate(() => { const h = [...document.querySelectorAll('div')].filter(d => d.textContent?.includes('Click to play')); for (const d of h.filter(d => !h.some(o => o !== d && d.contains(o)))) (d as HTMLElement).style.visibility = 'hidden' }).catch(() => {})
