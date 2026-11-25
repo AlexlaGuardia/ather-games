@@ -2,7 +2,7 @@
 // ── MOONWELL GLADE, SEEN (BETA M40 part 2, layout B): the green, the path to the waymark, each lot's pad + station blockout,
 // and Greg's jetty. Shapes from glade-lots.ts (the walker bumps the same parts). Flat colours, Lambert, like the rooms.
 import { useEffect, useMemo, useState } from 'react'
-import { useFrame } from '@react-three/fiber'
+import { useFrame, useThree } from '@react-three/fiber'
 import { gladePeopleVersion } from './glade-people'
 import type { Ground } from './glade-pads'
 import { GLADE_GREEN, GLADE_ANCHOR } from './moonwell'
@@ -35,13 +35,14 @@ export function useGladeStanding(): string {
 export function GladeLots({ ground }: { ground: Ground }) {
   const y = GROUND.y, standing = useGladeStanding()
   // M39: each lot fetches its blueprint (glade-<lot>) once; one that exists and fits stands instead of the blockout
-  const [, setBpRev] = useState(0)
+  const [, setBpRev] = useState(0), { scene } = useThree()
   useEffect(() => {
     let alive = true
     void loadGladeBlueprints(() => alive, () => setBpRev(n => n + 1))
     // M67 s1b-2: the closed Glade's own probe (glade-cluster-view.tsx) shares this name now: MERGE, never replace
     const gw = window as unknown as { __glade?: object }
-    gw.__glade = { ...(gw.__glade ?? {}), /* dev/check hook: stand a blueprint on a lot (visual + solids only, nothing saved) */ setBlueprint: (lot: string, j: unknown) => { const bp = j ? parseHouse(j) : null; setGladeBlueprint(lot, bp); setBpRev(n => n + 1); return !!bp }, blueprints: () => GLADE_LOTS.filter(l => !!gladeBlueprint(l.id)).map(l => l.id) }
+    gw.__glade = { ...(gw.__glade ?? {}), /* dev/check hook: stand a blueprint on a lot (visual + solids only, nothing saved) */ setBlueprint: (lot: string, j: unknown) => { const bp = j ? parseHouse(j) : null; setGladeBlueprint(lot, bp); setBpRev(n => n + 1); return !!bp }, blueprints: () => GLADE_LOTS.filter(l => !!gladeBlueprint(l.id)).map(l => l.id),
+      /* M153 s1c-2: where the houses are DRAWN (scripts/glade-places-check.mts) */ houses: () => { const out: { id: string; x: number; y: number; z: number; yaw: number }[] = []; scene.traverse(o => { const id = o.userData?.gladeHouse as string | undefined; if (id) { const p = new THREE.Vector3(), q = o.getWorldQuaternion(new THREE.Quaternion()); o.getWorldPosition(p); const f = new THREE.Vector3(0, 0, 1).applyQuaternion(q); out.push({ id, x: p.x, y: p.y, z: p.z, yaw: Math.atan2(f.x, f.z) }) } }); return out } }
     return () => { alive = false }
   }, [])
   const lots = useMemo(() => GLADE_LOTS.map(l => ({ ...lotAt(l.id)!, ...lotLevel(l.id, ground, y) })), [standing, ground, y])   // eslint-disable-line react-hooks/exhaustive-deps
@@ -71,7 +72,7 @@ export function GladeLots({ ground }: { ground: Ground }) {
       {/* the five lots: a pad, and the trade's station on it */}
       {lots.map(l => (
         <group key={l.id}>
-          <mesh position={[l.x, (l.top + 0.07 + l.low) / 2, l.z]} rotation-y={l.yaw} receiveShadow>
+          <mesh position={[l.x, (l.top + 0.07 + l.low) / 2, l.z]} rotation-y={l.yaw} receiveShadow userData={{ gladeHouse: l.id }}>
             <boxGeometry args={[l.w, l.top - l.low + 0.07, l.d]} /><meshLambertMaterial color={PAD} />
           </mesh>
           {gladeBlueprint(l.id) ? (() => { const bp = gladeBlueprint(l.id)!, g = placeBlueprint(bp, lotPad(l.id, l.top)).group; return <BlueprintStack bp={bp} x={g.x} z={g.z} y={l.top} rotY={g.rotY} /> })() : (STATIONS[l.id] ?? []).map((p, k) => { const c = partAt(l.id, p); return (
@@ -83,7 +84,7 @@ export function GladeLots({ ground }: { ground: Ground }) {
       ))}
       {/* Yarrow's teach-beat jars ride beside Yarrow's door when the blueprint replaced the blockout counter (yarrow-teach.ts) */}
       {crate && <group data-yarrow-jars>
-        <mesh position={[crate.crate.x, crate.y + crate.crate.h / 2, crate.crate.z]} rotation-y={crate.crate.yaw} castShadow receiveShadow><boxGeometry args={[crate.crate.w, crate.crate.h, crate.crate.d]} /><meshLambertMaterial color="#6d5038" /></mesh>
+        <mesh position={[crate.crate.x, crate.y + crate.crate.h / 2, crate.crate.z]} rotation-y={crate.crate.yaw} castShadow receiveShadow userData={{ gladeHouse: 'jars' }}><boxGeometry args={[crate.crate.w, crate.crate.h, crate.crate.d]} /><meshLambertMaterial color="#6d5038" /></mesh>
         {crate.jars.map((j, k) => <mesh key={k} position={[j.x, crate.y + crate.crate.h + j.h / 2, j.z]} rotation-y={crate.crate.yaw} castShadow><boxGeometry args={[j.w, j.h, j.w]} /><meshLambertMaterial color="#b7d8e6" /></mesh>)}
       </group>}
       {/* Greg's jetty: a plank deck from the bank out over the water, on posts */}

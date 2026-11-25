@@ -12,7 +12,7 @@ const ink = new THREE.MeshBasicMaterial({ color: '#1b140e', side: THREE.BackSide
 export function GladeHome({ y }: { y: number }) {
   const h = gladeHome(), R = HOME_R, wall = HOME_H - 0.9
   return (
-    <group position={[h.x, y, h.z]} rotation-y={h.yaw}>
+    <group position={[h.x, y, h.z]} rotation-y={h.yaw} userData={{ gladeHouse: 'home' }}>
       <mesh geometry={CYL} position={[0, wall / 2, 0]} scale={[R * 1.03, wall, R * 1.03]}><meshLambertMaterial color="#a9a294" /></mesh>
       <mesh geometry={CYL} position={[0, wall / 2, 0]} scale={[R * 1.1, wall, R * 1.1]} material={ink} />
       {/* moved onto a slope: the drum's foot reaches down to the low side */}
