@@ -76,7 +76,7 @@ const radAt = (prof: Prof, y: number) => {
   return y < prof[0][1] ? prof[0][0] : prof[prof.length - 1][0]
 }
 /** a belt / strap: a solid ribbon round a turned body (`zs` its depth). yAt gives its height at each angle; `t` stands proud. */
-function band(prof: Prof, zs: number, yAt: (a: number) => number, w: number, t = 0.014, seg = 36) {
+export function band(prof: Prof, zs: number, yAt: (a: number) => number, w: number, t = 0.014, seg = 36) {
   const p: number[] = [], idx: number[] = []
   for (let k = 0; k <= seg; k++) {
     const a = k / seg * Math.PI * 2, y = yAt(a)

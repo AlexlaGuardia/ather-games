@@ -1,6 +1,6 @@
 // BETA M154: npx tsx src/app/shimmer/open/shared/friend-figure.test.ts
 import * as THREE from 'three'
-import { FRIEND_IDS, FRIEND_CALLS, FRIEND_COLOR, friendFigure, isFriend } from './friend-figure'
+import { FRIEND_IDS, FRIEND_CALLS, FRIEND_COLOR, friendFigure, isFriend, band } from './friend-figure'
 import { gladeKeepers } from '../ather/glade-cluster'
 let n = 0
 const ok = (c: boolean, m: string) => { n++; if (!c) { console.error('✗ ' + m); process.exitCode = 1 } }
@@ -33,4 +33,8 @@ ok(L(FRIEND_COLOR.otto.skin) > 2 * L(FRIEND_COLOR.bonn.skin), 'Otto is fair (Ale
 ok(has(friendFigure('otto').joints.armL.toon, FRIEND_COLOR.otto.skin) && has(friendFigure('otto').joints.armL.toon, FRIEND_COLOR.otto.glove), 'fingerless gloves: skin and glove on one arm')
 ok(!has(friendFigure('tess').joints.legL.toon, FRIEND_COLOR.tess.skin), "Tess's trousers go into her boots: no ankle shows")
 ok(has(friendFigure('bonn').joints.legL.toon, FRIEND_COLOR.bonn.skin), "Bonn's are rolled above the boot")
+const vol = (g: THREE.BufferGeometry) => { const P = g.attributes.position, i = g.index!.array; let v = 0; for (let k = 0; k < i.length; k += 3) { const [a, b, c] = [0, 1, 2].map(q => new THREE.Vector3().fromBufferAttribute(P, i[k + q])); v += a.dot(b.cross(c)) / 6 } return v }
+ok(vol(band([[0.2, 0], [0.2, 1]], 0.7, () => 0.5, 0.05)) > 0, 'a strap is solid side out (inside out it drew as a black ring)')
+const count = (g: THREE.BufferGeometry, hex: string) => { const c = new THREE.Color(hex), a = g.attributes.color; let k = 0; for (let q = 0; q < a.count; q++) if (Math.abs(a.getX(q) - c.r) + Math.abs(a.getY(q) - c.g) + Math.abs(a.getZ(q) - c.b) < 1e-3) k++; return k }
+ok(count(o.joints.armL.toon, FRIEND_COLOR.otto.glove) > 350, 'the glove is the whole hand, not only its cuff')
 console.log(`friend-figure: ${n} checks${process.exitCode ? ' FAIL' : ' ok'}`)
