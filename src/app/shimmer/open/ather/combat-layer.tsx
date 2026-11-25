@@ -14,7 +14,7 @@ import { armedGun, sigilKey } from '../shared/gun-sigil'   // M93 s4: the fitted
 import { useLoadout } from '../shared/loadout'
 import { useBirth } from '../birth-gate'
 import { weaponDef } from '../../engine/weapons'
-import { newCombat, stepCombat, applyNetHit, applyNetHurt, skinOf, fire, reload, populate, revive, spawnHollow, SETTLE, topUpDue, HEAD_Y, fxOn, SHAMBLER, FLOATER, CRAWLER, crawlerScale, type Combat, type Terrain, type CombatEvent, type Hollow, type HollowKind, stepTrigger, dropBurst, heldGun, M151 } from './combat'
+import { newCombat, stepCombat, applyNetHit, applyNetHurt, skinOf, fire, reload, populate, revive, spawnHollow, SETTLE, topUpDue, HEAD_Y, fxOn, SHAMBLER, FLOATER, CRAWLER, crawlerScale, type Combat, type Terrain, type CombatEvent, type Hollow, type HollowKind, stepTrigger, dropBurst, swapGun, stepAway, canReload, heldGun, M151 } from './combat'
 import { live as liveSolids } from './dynamic-solids'
 import { noteCombat } from '../shared/idle-mode'
 import { noteHollowNear, SKIT } from '../shared/idle-skits'   // M126 s2
@@ -40,7 +40,7 @@ import { borrowedSky } from '../../voxel3d/sky-env'
 import { dayProgress, daylight } from '../../engine/day-cycle'
 
 export interface CombatHud {
-  hp: number; maxHp: number; ammo: number; clip: number; reloading: boolean; hurtAt: number; hitAt: number; gun: string
+  hp: number; maxHp: number; ammo: number; clip: number; reloading: boolean; reloadable: boolean; hurtAt: number; hitAt: number; gun: string
   /** the trigger is held on a drawn gun (BETA M33: Morel's ammo bubble shows while it is) */
   firing?: boolean
   /** The node champion's bars, when one is up: bar 0..2 is the one being worn down. */
@@ -539,7 +539,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
   armed?: boolean
   /** WHICH gun is drawn (the loadout's primary or secondary, Alex 11-18): its stats replace the last gun's on a swap */
   gunId?: string | null
-  /** bumped by the page when R is tapped with a single gun drawn: reload */
+  /** bumped by the page when E (the phone's reload button) asks: reload */
   reloadTick?: number
   /** casts the page has paid for (shared/casting.ts), run along the eye's aim on the next frame */
   casts?: React.MutableRefObject<CastSpec[]>
@@ -606,7 +606,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
   const held = useRef(false)   // M33: the left button really down (trigger is cleared per shot on a semi-auto)
   const pulled = useRef(false)   // M148: pressed since the last frame, so a tap shorter than a slow frame is still one burst
   const trigger = useRef(false), mouseAim = useRef(false), popT = useRef(0), hudT = useRef(0)
-  const hud = useRef<CombatHud>({ hp: 100, maxHp: 100, ammo: 12, clip: 12, reloading: false, hurtAt: -9, hitAt: -9, gun: c.current.gun.name, champ: null })
+  const hud = useRef<CombatHud>({ hp: 100, maxHp: 100, ammo: 12, clip: 12, reloading: false, reloadable: false, hurtAt: -9, hitAt: -9, gun: c.current.gun.name, champ: null })
   const roundsMesh = useRef<THREE.InstancedMesh>(null), dropsMesh = useRef<THREE.InstancedMesh>(null), spitsMesh = useRef<THREE.InstancedMesh>(null)
   const aim = useMemo(() => new THREE.Vector3(), [])
   const m4 = useMemo(() => new THREE.Matrix4(), []), q = useMemo(() => new THREE.Quaternion(), []), s = useMemo(() => new THREE.Vector3(), [])
@@ -620,19 +620,22 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
   useEffect(() => { if (active) return; const t = setTimeout(releaseGroundEnvs, 5000); return () => clearTimeout(t) }, [active])
   const armedRef = useRef(armed); armedRef.current = armed
   // the drawn gun: any range gun (gunplay.ts, which holds the Charred Rifle, Backbone, Roar too) or an engine weapon. A swap
-  // takes the new gun's stats and a full clip; a charge in progress is dropped.
+  // takes the new gun's stats and its own clip; a charge in progress is dropped.
   const charging = useRef(-1)
   // M93 s4: the gun's fitted sigil (Idris) tunes it. A new cut on the gun in hand re-tunes it in place (ammo kept); a swap
-  // takes the new gun with a full clip as before.
+  // takes the new gun with the clip it was put away with (M176).
   const loadout = useLoadout(), birth = useBirth(), tuneKey = gunId ? sigilKey(loadout, gunId, birth) : ''
   useEffect(() => {
     if (!gunId) return
     const row = RANGE_GUNS.find(x => x.id === gunId) ?? weaponDef(gunId)
     if (!row) return
     const g = armedGun('burst' in row ? dialedGun(row as RangeGun) : row, loadout, birth)   // M148: the gun tuner's burst rhythm, this browser's
-    if (c.current.gun.id === g.id) { c.current.gun = g; return }
-    c.current.gun = g; c.current.keeper.ammo = g.clip; c.current.keeper.reloading = 0; c.current.keeper.bloom = 0; charging.current = -1; dropBurst(c.current)
+    const same = c.current.gun.id === g.id
+    swapGun(c.current, g)   // M176: each gun keeps its own clip
+    if (!same) { charging.current = -1; dropBurst(c.current) }
   }, [gunId, tuneKey])   // eslint-disable-line react-hooks/exhaustive-deps
+  const carriedRef = useRef<string[]>([]); carriedRef.current = [loadout.primary, loadout.secondary].filter((x): x is string => !!x)
+  const offSig = useRef('')   // M176: what the page was last told off the Wilds
   const ownerRef = useRef(ownerOf); ownerRef.current = ownerOf
   const spent = useRef(new Set<string>())   // cleared this visit: never re-woken before the page drops it
   // once the page's list has caught up (the cleared node dropped out, or the spread brought one back), forget the bridge
@@ -648,11 +651,11 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
     revive(c.current); setIds([])
     if (!reviveKey) return
     const k = c.current.keeper
-    onHudRef.current({ ...hud.current, gun: c.current.gun.name, hp: k.hp, maxHp: k.maxHp, ammo: k.ammo, clip: c.current.gun.clip, reloading: false, champ: null })
+    onHudRef.current({ ...hud.current, gun: c.current.gun.name, hp: k.hp, maxHp: k.maxHp, ammo: k.ammo, clip: c.current.gun.clip, reloading: false, reloadable: false, champ: null })
   }, [reviveKey])
   // M78: a refused reload (short of mana) is said at once; stepCombat clears c.events each frame, so it never waits for the flush
   const sayDry = (C: Combat, n0: number) => { if (C.events.slice(n0).some(e => e.kind === 'reload-dry')) onEventsRef.current([{ kind: 'reload-dry' }]) }
-  useEffect(() => { if (reloadTick) { const C = c.current; C.mana = mana; const n0 = C.events.length; reload(C); sayDry(C, n0) } }, [reloadTick])   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (reloadTick) { const C = c.current; C.mana = mana; const n0 = C.events.length; reload(C); if (C.keeper.reloading > 0) playReload(); sayDry(C, n0) } }, [reloadTick])   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const down = (e: MouseEvent) => {
       if (e.button === 0 && locked.current && !frozen.current) { trigger.current = true; held.current = true; pulled.current = true }
@@ -661,7 +664,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
     const up = (e: MouseEvent) => { if (e.button === 0) { trigger.current = false; held.current = false } if (e.button === 2) mouseAim.current = false }
     const menu = (e: MouseEvent) => { if (locked.current) e.preventDefault() }   // right-click is the sights, never the browser menu
     window.addEventListener('contextmenu', menu)
-    // R is the STANCE's now (shared/stance.ts: draw / swap / hold to stow); a tap with one gun drawn reloads via reloadTick
+    // R is the STANCE's now (shared/stance.ts: draw / swap / hold to stow); E reloads via reloadTick (M176)
     window.addEventListener('mousedown', down); window.addEventListener('mouseup', up)
     // probes for tests and scripted shots
     const g = window as unknown as { __ather?: Record<string, unknown> }
@@ -677,9 +680,19 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
   }, [locked, frozen, camera, T, gl])
 
   useFrame((_, rawDt) => {
-    if (!active) return
-    const dt = Math.min(rawDt, 1 / 20), C = c.current
-    C.mana = mana; C.skin = skin   // M78 / M80: reloads pay from the keeper's bar (the page's manaRef object, stable)
+    const C = c.current
+    C.mana = mana
+    // M176: the guns not in hand, in every zone (real time: the dial is seconds, not frames). Off the Wilds nothing else steps a
+    // reload or tells the page about one.
+    stepAway(C, Math.min(rawDt, 1), armedRef.current, carriedRef.current, !active)
+    if (!active) {
+      const k = C.keeper, sig = `${C.gun.id}|${k.ammo}|${k.reloading > 0}|${canReload(C)}`
+      if (sig !== offSig.current) { offSig.current = sig; onHud({ ...hud.current, ...skinOf(C), gun: C.gun.name, hp: k.hp, maxHp: k.maxHp, ammo: k.ammo, clip: C.gun.clip, reloading: k.reloading > 0, reloadable: canReload(C), champ: null }) }
+      return
+    }
+    offSig.current = ''
+    const dt = Math.min(rawDt, 1 / 20)
+    C.skin = skin   // M78 / M80: reloads pay from the keeper's bar (the page's manaRef object, stable)
     { const f = frameStats(getLook()); C.keeper.hit = f.hit; C.keeper.takes = f.damage }   // M29: the keeper's FRAME
     const feet = { x: camera.position.x, y: camera.position.y - EYE, z: camera.position.z }
     popT.current -= dt
@@ -891,7 +904,7 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
       hudT.current = 0.08
       const k = C.keeper
       const ch = C.champ
-      onHud({ ...hud.current, ...skinOf(C), gun: C.gun.name, hp: k.hp, maxHp: k.maxHp, ammo: k.ammo, clip: C.gun.clip, reloading: k.reloading > 0,
+      onHud({ ...hud.current, ...skinOf(C), gun: C.gun.name, hp: k.hp, maxHp: k.maxHp, ammo: k.ammo, clip: C.gun.clip, reloading: k.reloading > 0, reloadable: canReload(C),
         firing: armedRef.current && !frozen.current && (held.current || trigger.current || touch.fire),   // raw input; morel.ts adds a wall-clock grace per round
         champ: ch ? { bar: ch.bar, hp: ch.hp, barHp: CHAMP.barHp, bars: CHAMP.bars, open: ch.state !== 'rise' && ch.state !== 'submerge' && ch.state !== 'home' } : null })
       setAmmoFeed({ ammo: k.ammo, clip: C.gun.clip, reloading: k.reloading > 0, firing: armedRef.current && !frozen.current && (held.current || trigger.current || touch.fire) })

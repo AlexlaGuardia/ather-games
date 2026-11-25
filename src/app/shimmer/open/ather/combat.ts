@@ -199,6 +199,9 @@ export interface Combat {
   pieces?: CombatPiece[]
   /** The veil's decoy (combat-casts.ts › runCast 'veil'): Hollows target it instead of the keeper while it lasts. */
   decoy?: CombatDecoy | null
+  /** M176: the clips of the guns not in hand, and how long the current gun has been stowed (seconds) */
+  rack?: Record<string, { gun: Combat['gun']; ammo: number; reloading: number; away: number }>
+  away?: number
   /** M127 s1b: a walker (by id) drawn off the keeper this frame by something it can chase but never reach: it walks at this
    *  spot while chasing and stops LURE_STOP m short. It never winds up, lunges or spits at it; the keeper in reach is still
    *  lunged at. Set by the caller every frame; unset = nobody is drawn off. */
@@ -515,6 +518,40 @@ export function stepTrigger(c: Combat, eye: { x: number; y: number; z: number },
 /** the burst in flight is dropped (gun put away, swapped, a panel open, the keeper down) */
 export function dropBurst(c: Combat) { c.keeper.burstLeft = 0; c.keeper.wasDown = false }
 
+/** M176: would an E press start a reload right now? A full clip, one already running or too little mana = no, and E interacts. */
+export function canReload(c: Combat): boolean {
+  const k = c.keeper
+  return k.hp > 0 && k.reloading <= 0 && k.ammo < c.gun.clip && (!c.mana || c.mana.cur >= ((c.gun as { reloadPay?: number }).reloadPay ?? ECON.reloadMana))
+}
+/** M176: the gun in hand changes. Each gun keeps its OWN clip: the one put away goes to the rack as it is (a reload already paid for
+ *  finishes there), the one drawn comes out as it went in; a gun never drawn this life is full. */
+export function swapGun(c: Combat, g: Combat['gun']) {
+  const k = c.keeper
+  if (c.gun.id === g.id) { c.gun = g; return }
+  const rack = (c.rack ??= {}), r = rack[g.id]
+  rack[c.gun.id] = { gun: c.gun, ammo: k.ammo, reloading: k.reloading, away: c.away ?? 0 }
+  delete rack[g.id]
+  c.gun = g; c.away = 0
+  k.ammo = r ? Math.min(r.ammo, g.clip) : g.clip; k.reloading = r?.reloading ?? 0; k.bloom = 0
+}
+/** M176: the guns NOT in hand. Out of hand for ECON.awayReload seconds, a carried gun (`carried`: the loadout's) reloads itself for
+ *  exactly a hand reload's mana, paid once; short = it waits. Runs in every zone. `drawn` = the current gun is in hand: its own
+ *  running reload is stepCombat's, so pass `tick` where that does not run (outside the Wilds). */
+export function stepAway(c: Combat, dt: number, drawn: boolean, carried: readonly string[], tick = false) {
+  const k = c.keeper
+  if (tick) stepReload(k, c.gun.clip, dt)
+  c.away = drawn ? 0 : (c.away ?? 0) + dt
+  if (k.hp <= 0) return
+  const own = (r: { ammo: number; reloading: number }, away: number, g: Combat['gun']) => {
+    if (r.reloading <= 0 && r.ammo < g.clip && away >= ECON.awayReload && carried.includes(g.id) && payReload(c.mana, (g as { reloadPay?: number }).reloadPay)) r.ammo = g.clip
+  }
+  own(k, c.away, c.gun)   // drawn: away is 0
+  for (const r of Object.values(c.rack ?? {})) { stepReload(r, r.gun.clip, dt); r.away += dt; own(r, r.away, r.gun) }
+}
+function stepReload(r: { ammo: number; reloading: number }, clip: number, dt: number) {
+  if (r.reloading > 0) { r.reloading -= dt; if (r.reloading <= 0) { r.reloading = 0; r.ammo = clip } }
+}
+
 export function reload(c: Combat) {
   const k = c.keeper
   if (k.reloading > 0 || k.ammo >= c.gun.clip) return
@@ -548,7 +585,7 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
   k.at = { x: feet.x, z: feet.z }   // M59: the skin under the keeper is read from here (hurtKeeper)
   k.sinceShot += dt; k.sinceHurt += dt
   k.bloom = bloomAfterRest(c.gun, k.bloom, dt)
-  if (k.reloading > 0) { k.reloading -= dt; if (k.reloading <= 0) { k.reloading = 0; k.ammo = c.gun.clip } }
+  stepReload(k, c.gun.clip, dt)
   if (k.sinceHurt > REGEN_DELAY && k.hp > 0) k.hp = Math.min(k.maxHp, k.hp + REGEN_RATE * dt)
 
   // rounds
@@ -868,6 +905,6 @@ const performanceSafeNow = (c: Combat) => (c.clock = (c.clock ?? 0))
 
 /** After the fold returns a downed keeper home: full health, a full clip, the Wilds' crowd forgets them. */
 export function revive(c: Combat) {
-  c.keeper.hp = c.keeper.maxHp; c.keeper.sinceHurt = 99; c.keeper.ammo = c.gun.clip; c.keeper.reloading = 0
+  c.keeper.hp = c.keeper.maxHp; c.keeper.sinceHurt = 99; c.keeper.ammo = c.gun.clip; c.keeper.reloading = 0; c.rack = undefined
   c.hollows = []; c.rounds = []; c.spits = []; c.fields = []; c.pieces = []; c.decoy = null; c.champ = undefined
 }

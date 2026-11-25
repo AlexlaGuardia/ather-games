@@ -30,7 +30,7 @@ export interface ItemDef {
   kind: 'gun' | 'placeable' | 'material' | 'tool'
 }
 export const OPEN_ITEMS: Record<string, ItemDef> = {
-  repeater: { name: 'Repeater', blurb: 'A sidearm. Twelve to a clip, R reloads. Only the Wilds give it work.', icon: '/open/icons/repeater.svg', stack: 1, kind: 'gun' },
+  repeater: { name: 'Repeater', blurb: 'A sidearm. Twelve to a clip, E reloads. Only the Wilds give it work.', icon: '/open/icons/repeater.svg', stack: 1, kind: 'gun' },
   // TODO @lark: flavour line (M93 s2; the blurb is a plain functional placeholder)
   sigil_blank: { name: 'Unattuned sigil', blurb: 'A blank sigil. Runes are cut into it at the Enchant Temple.', icon: '/open/icons/keepstone.svg', stack: 99, kind: 'material' },
   waymark: { name: 'Waymark Stone', blurb: 'Plant it on open ground in the Wilds and the fold map can take you back. Lift it to carry it again.', icon: '/open/icons/waymark.svg', stack: 12, kind: 'placeable' },

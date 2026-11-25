@@ -155,7 +155,7 @@ import { canPlant, plant, lift, loadWaymarks, saveWaymarks, groundOf, canTravel,
 import { loadFog, saveFog, reveal, type Fog } from './explored'
 import { WildsSpirits, useSpiritFight } from './wilds-spirits'   // M127 s1
 import { CombatLayer, type CombatHud, type SightLink } from './combat-layer'
-import type { CombatEvent, Terrain } from './combat'
+import { canReload, type CombatEvent, type Terrain } from './combat'
 import { ownerOf, nodeRegions, GAME_DAY_MS, SUB, type WildsNode } from './nodes'
 import { clearAt, hasSpread, loadSpread, saveSpread, loadSkew, saveSkew, type SpreadState } from './spread'
 import { loadMap, saveMap, freshMap, startRule, rollSections, areaState, uncover, tend, firstLook, changes, growLine, clearLine, firstLine, type SpreadMap, type AreaState } from './spread-map'   // M70 s2
@@ -177,7 +177,7 @@ import { useOpeningChain, useChain, chainDeath, chainGateOpen, chainFlip } from 
 import { flipPulse, runeHoldPulse } from '../shared/opening-chain'
 import { CloudReefs, CloudDeck, HorizonRing } from '../shared/cloud-edge'
 import { wildsReefPuffs, deckSquares } from './edge-clouds'
-import { STOWED, STOWED_SPEED, HOLD_MS, tapR, holdR, selectSlot, equipSlot, heldOf, litSlot, settle, type Stance } from '../shared/stance'
+import { STOWED, STOWED_SPEED, HOLD_MS, tapR, holdR, selectSlot, equipSlot, heldOf, litSlot, settle, weapons, type Stance } from '../shared/stance'
 import { ensureBasicTools, type EquippedTools } from '../../engine/tools'
 import type { SkillSet } from '../../engine/skills'
 import { PackMenu, PACK_KEYS, type PackTab } from '../pack'
@@ -371,6 +371,7 @@ function AtherSliceGame() {
   const stanceRef = useRef(stance); stanceRef.current = stance
   const stowedNow = useCallback(() => stanceRef.current.kind === 'stowed', [])   // M42: melee swings only with empty hands
   const [reloadTick, setReloadTick] = useState(0)
+  const eReloaded = useRef(false)   // M176: this E press was a reload
   const toolsRef = useRef<EquippedTools>(ensureBasicTools({})), skillsRef = useRef<SkillSet>(openSkills())
   const onCombatHud = useCallback((h: CombatHud) => { vitalsRef.current = { hp: h.hp, hpMax: h.maxHp, shield: h.skin ?? 0, shieldMax: h.skinMax ?? 0, skin: true, popAt: h.skinPopAt }; setChud(h) }, [])
   const [pitstops, setPitstops] = useState<Pitstop[]>([LANDING])
@@ -1368,13 +1369,14 @@ function AtherSliceGame() {
     const id = setInterval(() => { const f = touch.fire; if (f === was) return; was = f; if (f && !frozen.current) (isDish(held) ? eatHeld : drinkHeld)() }, 30)
     return () => clearInterval(id)
   }, [isTouch, held, eatHeld, drinkHeld])
-  // R: a TAP draws the primary / swaps / reloads, a HOLD (HOLD_MS) stows (shared/stance.ts). Timed off down → up so a
+  // R: a TAP draws the primary / swaps, a HOLD (HOLD_MS) stows (shared/stance.ts). Timed off down → up so a
   // hold stows the moment it qualifies, without waiting for the release.
   const panelRef = useRef(panel); panelRef.current = panel
   useEffect(() => {
     let t: ReturnType<typeof setTimeout> | null = null, held = false
     const down = (e: KeyboardEvent) => {
       if (e.code === 'Stow') { setStance(st => holdR(st)); return }   // the phone's stow button (pressKey('Stow'))
+      if (e.code === 'Reload') { if (stanceRef.current.kind === 'weapon' && !panelRef.current && !frozen.current) setReloadTick(n => n + 1); return }   // M176: the phone's reload button
       if (e.code !== 'KeyR' || e.repeat || panelRef.current || frozen.current) return
       held = false
       t = setTimeout(() => { held = true; setStance(st => holdR(st)) }, HOLD_MS)
@@ -1383,9 +1385,7 @@ function AtherSliceGame() {
       if (e.code !== 'KeyR' || !t) return
       clearTimeout(t); t = null
       if (held) return
-      const r = tapR(stanceRef.current, getInv())
-      setStance(r.stance)
-      if (r.reload) setReloadTick(n => n + 1)
+      setStance(tapR(stanceRef.current, getInv()))
     }
     window.addEventListener('keydown', down); window.addEventListener('keyup', up)
     return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); if (t) clearTimeout(t) }
@@ -1716,6 +1716,13 @@ function AtherSliceGame() {
       const n = near.current
       if ((fade || fading.current) && e.code === 'KeyE' && !e.repeat && zone.kind === 'glade' && n?.kind === 'gate') { gateQueued.current = true; return }   // M172
       if (fade) return
+      // M176: a gun out and a reload to make = E reloads, before any interact (full clip / running / no mana = E interacts as always).
+      // A HELD E stays the reload's: its repeats must not talk or open. A phone has its own reload button, so its USE never reloads.
+      if (e.code === 'KeyE') {
+        if (e.repeat && eReloaded.current) return
+        eReloaded.current = !isTouchOnly() && !frozen.current && stanceRef.current.kind === 'weapon' && !!heldRef.current && !!liveSolids.combat && canReload(liveSolids.combat)
+        if (eReloaded.current) { setReloadTick(n => n + 1); return }
+      }
       // M45: E uses what is in hand first (a placing from the hand is caught earlier, by workshop's usePlacingKeys)
       if (e.code === 'KeyE' && !e.repeat) {
         const u = zone.kind === 'glade' ? null : heldUse(heldRef.current, zone.kind === 'plot' ? 'plot' : 'wilds')
@@ -1784,9 +1791,10 @@ function AtherSliceGame() {
     ...(stance.kind !== 'stowed' ? [{ code: 'Stow', key: 'R', label: 'stow' }] : []),
     ...(zone.kind === 'plot' && stance.kind === 'stowed' && meleeReady ? [{ code: 'Melee', key: '✊', label: 'hit', near: true }] : []),   // M42: three hits pop it into the bag
     ...(zone.kind === 'wilds' ? [
-      { code: 'KeyR', key: 'R', label: stance.kind === 'weapon' ? 'swap · reload' : 'draw', near: true },
+      ...(stance.kind === 'weapon' ? [{ code: 'Reload', key: 'E', label: 'reload', near: true }] : []),   // M176: reload and swap are two buttons
+      ...(stance.kind !== 'weapon' || weapons(inv).length > 1 ? [{ code: 'KeyR', key: 'R', label: stance.kind === 'weapon' ? 'swap' : 'draw', near: true }] : []),
       { code: 'KeyH', key: 'H', label: 'home' },
-    ] : []),
+    ] : stance.kind === 'weapon' && chud?.reloadable ? [{ code: 'Reload', key: 'E', label: 'reload', near: true }] : []),
   ]
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#bcd6e6' }}>
@@ -1900,7 +1908,7 @@ function AtherSliceGame() {
         )
       })()}
       {prompt && !panel && !building && (
-        <div style={{ position: 'absolute', left: '50%', top: '58%', transform: 'translateX(-50%)', padding: '6px 12px', borderRadius: 6, background: 'rgba(12,16,20,0.65)', color: '#f4efe2', font: '13px system-ui', pointerEvents: 'none' }}>{prompt}</div>
+        <div style={{ position: 'absolute', left: '50%', top: '58%', transform: 'translateX(-50%)', padding: '6px 12px', borderRadius: 6, background: 'rgba(12,16,20,0.65)', color: '#f4efe2', font: '13px system-ui', pointerEvents: 'none' }}>{!isTouch && stance.kind === 'weapon' && chud?.reloadable ? 'E · reload' : prompt}</div>
       )}
       {wmWhy && !panel && !fade && (
         <div data-waymark-why style={{ position: 'absolute', left: '50%', top: '64%', transform: 'translateX(-50%)', maxWidth: 'min(86vw, 420px)', textAlign: 'center', padding: '6px 12px', borderRadius: 6, background: 'rgba(12,16,20,0.65)', color: '#ffb4a8', font: '13px system-ui', pointerEvents: 'none' }}>{wmWhy}</div>

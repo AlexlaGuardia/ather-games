@@ -8,7 +8,7 @@ All under 110 characters. Keys are the defaults (shared/keymap.ts); a player who
 ## Plain (12)
 
 - [plain][both] Hold F to charge your Mana Skin. It costs a little mana and soaks blows until it pops. <!-- vitals-economy.ts skin*, use-skin-charge.ts -->
-- [plain][both] R draws your gun. Tap again to swap or reload. Hold R to put it away. <!-- stance.ts -->
+- [plain][both] R draws your gun. Tap again to swap. Hold R to put it away. <!-- stance.ts -->
 - [plain][both] Hands free, you move a little faster, and a node gets the right tool on its own. <!-- stance.ts stowed -->
 - [plain][ather] Stand at one of your waymarks and press E to travel. <!-- ather/page.tsx header l.11 -->
 - [plain][ather] Press L at your own waymark to lift it back into your bag. <!-- ather/page.tsx KeyL -->

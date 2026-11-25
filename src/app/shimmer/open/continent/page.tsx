@@ -21,7 +21,7 @@ import { useChainYard, getChain, chainVeyraSend, useChain } from '../shared/open
 import { veyraDue, veyraOpen, veyraOptions, veyraPick, shipRepair, type VeyraTalk } from '../shared/opening-chain'
 import { VEYRA_UNIT1, VEYRA_PICK, VEYRA_NAME } from '../shared/veyra-lines'
 import { inKaelYard } from './kael-yard'
-import { STOWED, STOWED_SPEED, HOLD_MS, tapR, holdR, selectSlot, equipSlot, heldOf, litSlot, settle, type Stance } from '../shared/stance'
+import { STOWED, STOWED_SPEED, HOLD_MS, tapR, holdR, selectSlot, equipSlot, heldOf, litSlot, settle, weapons, type Stance } from '../shared/stance'
 import { itemDef, giveHousing, take, countOf } from '../shared/inventory'
 import { PackMenu, PACK_KEYS, type PackTab } from '../pack'
 import { QuestGuide } from '../quest-guide'
@@ -1371,7 +1371,7 @@ function ContinentRideGame() {
     { code: 'KeyI', key: 'I', label: 'pack' },
     ...(!hud.foot ? [{ code: 'KeyC', key: 'C', label: 'camera' }, { code: 'KeyG', key: 'G', label: 'garage' }] : []),
     ...(!hud.foot ? [{ code: 'KeyR', key: 'R', label: 'road' }]
-      : [{ code: 'KeyR', key: 'R', label: continentStance.current.kind === 'weapon' ? 'swap' : 'draw' }, ...(continentStance.current.kind !== 'stowed' ? [{ code: 'Stow', key: 'R', label: 'stow' }] : [])]),
+      : [...(rangeHolds() ? [{ code: 'Reload', key: 'E', label: 'reload', near: true }] : continentStance.current.kind !== 'weapon' || weapons(getInv()).length > 1 ? [{ code: 'KeyR', key: 'R', label: continentStance.current.kind === 'weapon' ? 'swap' : 'draw' }] : []), ...(continentStance.current.kind !== 'stowed' ? [{ code: 'Stow', key: 'R', label: 'stow' }] : [])]),
   ]
   const [garage, setGarage] = useState(false)
   useEffect(() => {
@@ -1556,16 +1556,16 @@ function ContinentRideGame() {
   useMorelHints({ stage: errStage, zone: 'continent', pos: () => ({ x: focus.current.x, z: focus.current.z }),
     busy: () => showMap || garage || !!board || bagOpen || vesselShop || !!deed || optionsOpen || !!talk })
   // ★ THE STANCE on the continent (shared/stance.ts, Alex 11-15, the same rules as the Ather): on foot you are STOWED
-  // by default and a little quicker; R taps draw the primary / swap / reload, a hold stows; 1-8 and the wheel pick a
+  // by default and a little quicker; R taps draw the primary / swap, a hold stows; 1-8 and the wheel pick a
   // hotbar item while no weapon is drawn. At the wheel the hands are busy: R is back to the road there. In the gun shop
-  // a rack gun is in hand (gun-range.tsx) and R reloads it, so the stance stands aside while you hold one.
+  // a rack gun is in hand (gun-range.tsx) and E reloads it, so the stance stands aside while you hold one.
   const [stance, setStance] = useState<Stance>(STOWED)
   continentStance.current = stance
   useEffect(() => { setStance(st => settle(st, inv)) }, [inv])
   const slot = litSlot(stance, inv)
   const setSlot = (i: number) => setStance(st => selectSlot(st, i, getInv()))
-  // R on foot: a TAP draws / swaps / reloads, a HOLD (HOLD_MS) stows, timed off down → up like the Ather. Not at the
-  // wheel (Driver's R is the road there), not in a menu, not with a rack gun in hand (the shop's R reloads it)
+  // R on foot: a TAP draws / swaps, a HOLD (HOLD_MS) stows, timed off down → up like the Ather. Not at the
+  // wheel (Driver's R is the road there), not in a menu, not with a rack gun in hand (R does nothing there: E reloads it, M176)
   const stanceBlocked = useRef(false)
   stanceBlocked.current = !hud.foot || showMap || garage || !!board || bagOpen || vesselShop || !!deed || optionsOpen
   // RINNING on the waking continent (Jin 2's continent/nyx-rinning.tsx): bait in hand, left mouse casts at aimed water
@@ -1583,13 +1583,13 @@ function ContinentRideGame() {
       if (e.code !== 'KeyR' || !t) return
       clearTimeout(t); t = null
       if (held) return
-      const r = tapR(continentStance.current, getInv())
-      if (r.stance.kind === 'weapon' && continentStance.current.kind !== 'weapon') {
-        const id = heldOf(r.stance, getInv())
+      const next = tapR(continentStance.current, getInv())
+      if (next.kind === 'weapon' && continentStance.current.kind !== 'weapon') {
+        const id = heldOf(next, getInv())
         // nothing on the continent can be shot at yet (the Wilds and the shop's lane are where guns fire): say so once
         if (id) hudSay(`${itemDef(id).name} drawn · nothing to aim at out here`, 'item')
       }
-      setStance(r.stance)
+      setStance(next)
     }
     window.addEventListener('keydown', down); window.addEventListener('keyup', up)
     return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); if (t) clearTimeout(t) }

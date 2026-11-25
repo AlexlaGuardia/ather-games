@@ -3,7 +3,7 @@
 // THE GUN SHOP's test lane, live (Alex 11-15: "a gunshop where each class of gun has a rack ... so i can go there and
 // test them one at a time"). cavern.ts places the shop (racks, firing line, targets); shared/gunplay.ts is the sim;
 // shared/tracers.tsx is the look. This file is the glue: walk to a rack, E takes its gun, click fires down the lane,
-// R reloads, and the plates swing and spark when they are hit. Leave the shop and the gun goes back on its rack (the
+// E reloads (M176), and the plates swing and spark when they are hit. Leave the shop and the gun goes back on its rack (the
 // market is not a range: guns are only drawn behind the counter).
 //
 // The page mounts <GunRange cave/> inside the Canvas and reads `useGunHud()` for the template's hotbar + status chips
@@ -15,12 +15,12 @@ import { useFrame, useThree, createPortal } from '@react-three/fiber'
 import * as THREE from 'three'
 import type { Cavern } from './cavern'
 import { caveRoomAt } from './cavern'
-import { gunForSlate, holdGun, stepGun, reloadGun, hitscan, stepPlates, PLATE, type GunState, type Round, type Target, type RangeGun } from './shared/gunplay'
+import { gunForSlate, holdGun, stepGun, reloadGun, canReloadGun, hitscan, stepPlates, PLATE, type GunState, type Round, type Target, type RangeGun } from './shared/gunplay'
 import { dialedGun } from './shared/fp-gun'
 import { Tracers, type TracerShot } from './shared/tracers'
 import { hudSay } from './shared/game-hud'
 import { RELOAD_DRY_LINE } from './shared/vitals-economy'
-import { touch } from './shared/touch'
+import { isTouchOnly, touch } from './shared/touch'
 import { postEntries } from './shared/journal'
 
 // ── the store the page's HUD reads ──────────────────────────────────────────────────────────────────────────────────
@@ -43,7 +43,7 @@ export function useGunHud() {
   const status = h.gun ? [{ label: cap(h.gun.name), value: h.reloading ? 'reloading' : `${h.ammo}/${h.gun.clip}`, accent: h.reloading }] : []
   return { entries, status, holding: !!h.gun }
 }
-/** True while a gun is in hand in the shop: R reloads instead of sending you back to the road. */
+/** True while a gun is in hand in the shop: E reloads before it does anything else, and the stance's R stands aside. */
 export const rangeHolds = () => !!hudState.gun
 /** ★ AIM DOWN SIGHTS (Alex 11-15). Hold right-click (phone: the aim button). The page asks two things every frame:
  *  the field of view to use (null = yours, not aiming), and how much to slow the look so the zoomed view does not
@@ -138,7 +138,7 @@ export function GunRange({ cave, mana }: { cave: Cavern; mana?: { cur: number } 
     const g = dialedGun(row)   // M148: this browser's burst rhythm
     gun.current = { ...holdGun(g), mana }; tally.current = { shots: 0, hits: 0, heads: 0, best: 0, quiet: 0 }
     setHud({ gun: g, ammo: g.clip, reloading: false })
-    hudSay(`${cap(g.name)} · ${g.slot.toLowerCase()} · ${g.burst > 1 ? `${g.burst}-round burst` : g.pellets > 1 ? `${g.pellets} pellets` : g.auto ? 'full auto' : 'semi-auto'} · hold to fire, right-click aims, R reloads`, 'item')
+    hudSay(`${cap(g.name)} · ${g.slot.toLowerCase()} · ${g.burst > 1 ? `${g.burst}-round burst` : g.pellets > 1 ? `${g.pellets} pellets` : g.auto ? 'full auto' : 'semi-auto'} · hold to fire, right-click aims, E reloads`, 'item')
   }
   const putBack = (why: string) => {
     if (!gun.current) return
@@ -184,15 +184,26 @@ export function GunRange({ cave, mana }: { cave: Cavern; mana?: { cur: number } 
         if (gun.current?.gun.slot === near.current) putBack('swapped out')
         else take(near.current)
       }
-      if (e.code === 'KeyR' && gun.current) { const d0 = gun.current.dry ?? 0; reloadGun(gun.current); if ((gun.current.dry ?? 0) > d0) sayDry(); setHud({ reloading: gun.current.reloading > 0 }) }
     }
+    const doReload = () => { const g = gun.current; if (!g) return; const d0 = g.dry ?? 0; reloadGun(g); if ((g.dry ?? 0) > d0) sayDry(); setHud({ reloading: g.reloading > 0 }) }
+    // M176: E reloads the rack gun before any interact (capture, so it is ahead of every page listener): a full clip, a reload
+    // running or no mana = E goes on to the rack / door. The phone has its own button (code 'Reload'); its E buttons never reload.
+    let mine = false
+    const early = (e: KeyboardEvent) => {
+      if (e.code === 'Reload') { doReload(); return }
+      if (e.code !== 'KeyE') return
+      if (e.repeat) { if (mine) e.stopImmediatePropagation(); return }
+      mine = !!gun.current && !isTouchOnly() && locked() && canReloadGun(gun.current)
+      if (mine) { e.stopImmediatePropagation(); doReload() }
+    }
+    window.addEventListener('keydown', early, true)
     window.addEventListener('mousedown', down); window.addEventListener('mouseup', up); window.addEventListener('keydown', key); window.addEventListener('contextmenu', noMenu)
     // probes for a scripted check on prod
     ;(window as unknown as { __range?: unknown }).__range = {
       take, fire: (on: boolean) => { trigger.current = on }, aim: (on: boolean) => { aimHeld.current = on }, ads: () => adsT, state: () => ({ held: gun.current?.gun.id ?? null, ammo: gun.current?.ammo, rounds: shots.length, hits: targets.current.map(t => t.hits) }),
       shop: () => shop,
     }
-    return () => { window.removeEventListener('mousedown', down); window.removeEventListener('mouseup', up); window.removeEventListener('keydown', key); window.removeEventListener('contextmenu', noMenu); adsT = 0; setHud({ gun: null, inShop: false }) }
+    return () => { window.removeEventListener('mousedown', down); window.removeEventListener('mouseup', up); window.removeEventListener('keydown', key); window.removeEventListener('contextmenu', noMenu); window.removeEventListener('keydown', early, true); adsT = 0; setHud({ gun: null, inShop: false }) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gl])
 

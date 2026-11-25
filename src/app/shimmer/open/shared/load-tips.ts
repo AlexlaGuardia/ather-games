@@ -7,7 +7,7 @@ export interface LoadTip { text: string; register: TipRegister; side: TipSide }
 /** DRAFT, pending Alex sign-off. Do not edit the text without lark. */
 export const LOAD_TIPS: readonly LoadTip[] = [
   { text: "Hold F to charge your Mana Skin. It costs a little mana and soaks blows until it pops.", register: 'plain', side: 'both' },
-  { text: "R draws your gun. Tap again to swap or reload. Hold R to put it away.", register: 'plain', side: 'both' },
+  { text: "R draws your gun. Tap again to swap. Hold R to put it away.", register: 'plain', side: 'both' },
   { text: "Hands free, you move a little faster, and a node gets the right tool on its own.", register: 'plain', side: 'both' },
   { text: "Stand at one of your waymarks and press E to travel.", register: 'plain', side: 'ather' },
   { text: "Press L at your own waymark to lift it back into your bag.", register: 'plain', side: 'ather' },

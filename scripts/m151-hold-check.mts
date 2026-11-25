@@ -1,7 +1,7 @@
 // BETA M151: EVERY gun fires while held, on prod, in the Ather (phone 390x844 fire button + desktop mouse). Fresh anonymous profiles, every
 // non-GET stubbed. Per gun: 1 held = round after round on its own cadence (combat clock; Repeater 0.22 s)  2 released = it stops
 //   3 a tap = one round (the Backbone: one burst)  4 held through the clip's end: one reload, its own length, then it fires on, the mana paid
-//   5 Repeater: R mid-hold reloads at once, then fires on  6 Roar: 9 pellets a round, and they shove a Hollow back  7 0 page errors
+//   5 Repeater: E mid-hold reloads at once, then fires on  6 Roar: 9 pellets a round, and they shove a Hollow back  7 0 page errors
 //   npx tsx scripts/m151-hold-check.mts [--url ...] [--out dir] [--only phone|desktop] [--gun id]
 import puppeteer, { type Page } from 'puppeteer-core'
 import { RANGE_GUNS } from '../src/app/shimmer/open/shared/gunplay'
@@ -74,9 +74,9 @@ async function run(phone: boolean, g: (typeof RANGE_GUNS)[number]) {
   ok(on && gap >= want - 0.055 && gap <= want + 0.16, `4. ${L}: the reload (${g.reloadTime} s) interrupts and the held trigger resumes (${gap.toFixed(2)} s)`)
   if (side) { // 5 R mid-hold
     await rest(1.6); await fill(); await rest(0.5); await clear(); await press(); await poll(async () => (await count()) >= 2, 30000)
-    await p.keyboard.down('KeyR'); await sleep(80); await p.keyboard.up('KeyR')
+    if (phone) await p.evaluate(() => (document.querySelector('[data-touch="reload"]') as HTMLElement).click()); else { await p.keyboard.down('KeyE'); await sleep(80); await p.keyboard.up('KeyE') }   // M176: E (the phone's reload button), not R
     const re = await poll(async () => (await gun(p)).rel > 0, 8000), k0 = await count(), dur = await (async () => { const t = await clock(); await poll(async () => (await gun(p)).rel <= 0, 30000); return (await clock()) - t })()
-    ok(re, `5. ${L}: R mid-hold reloads`); ok(await poll(async () => (await count()) > k0, 20000), `5. ${L}: then fires on (reload seen ${dur.toFixed(2)} s)`); await lift()
+    ok(re, `5. ${L}: E mid-hold reloads`); ok(await poll(async () => (await count()) > k0, 20000), `5. ${L}: then fires on (reload seen ${dur.toFixed(2)} s)`); await lift()
   }
   if (g.id === 'roar') { // 6 the shove
     const moved: number[] = []

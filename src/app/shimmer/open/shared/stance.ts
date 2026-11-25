@@ -8,7 +8,7 @@
 //   weapon  — R drew it: the primary (first gun in the bag) or, after another tap, the secondary (the second gun)
 //   item    — a hotbar slot picked with the wheel or 1-8 while not holding a weapon
 //
-//   R tap   : stowed / item → the primary · weapon → the other weapon, or a RELOAD when there is no second gun
+//   R tap   : stowed / item → the primary · weapon → the other weapon (one gun: nothing). It never reloads (M176: E does)
 //   R hold  : anything → stowed
 //   1-8         : stowed / item → that slot (a gun in it draws as the weapon; an empty slot stows) · weapon → ignored
 //   wheel roll  : lights a CURSOR on the bar, equips nothing (Alex 11-16: "with a roll of the scrollwheel the hotbar
@@ -35,13 +35,11 @@ export function weapons(_inv?: Inv): string[] {
   return [l.primary, l.secondary].filter((x): x is string => !!x)
 }
 
-export type RTap = { stance: Stance; reload: boolean }
-export function tapR(st: Stance, inv: Inv): RTap {
+export function tapR(st: Stance, inv: Inv): Stance {
   const w = weapons(inv)
-  if (!w.length) return { stance: st, reload: false }
-  if (st.kind !== 'weapon') return { stance: { kind: 'weapon', which: 0 }, reload: false }
-  if (w.length > 1) return { stance: { kind: 'weapon', which: st.which === 0 ? 1 : 0 }, reload: false }
-  return { stance: st, reload: true }
+  if (!w.length) return st
+  if (st.kind !== 'weapon') return { kind: 'weapon', which: 0 }
+  return w.length > 1 ? { kind: 'weapon', which: st.which === 0 ? 1 : 0 } : st
 }
 export const holdR = (_st: Stance): Stance => STOWED
 

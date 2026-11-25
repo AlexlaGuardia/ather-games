@@ -25,6 +25,8 @@ export const ECON = {
   potionCd: 15,
   /** mana one reload costs, any gun (gunplay.ts › reloadMana 11/14/12 stays play3d's number; it would be ~30 s of refill here) */
   reloadMana: 3,
+  /** M176: seconds a gun must be out of hand before it reloads itself (at the same mana a hand reload costs; short = it waits) */
+  awayReload: 4,
   /** M80 hold F: the keeper's own Mana Skin. Most skin a charge holds */
   skinCap: 50,
   /** skin bought per mana (Alex: 2 mana per 10 skin) */

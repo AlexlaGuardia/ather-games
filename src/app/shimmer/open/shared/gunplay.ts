@@ -8,7 +8,7 @@
 // folds them into engine/weapons.ts. ⚠ Nothing in this file edits a weapons.ts value.
 
 import { WEAPONS, canFire, spreadDeg, bloomAfterShot, bloomAfterRest, coneDirection, type WeaponDef } from '../../engine/weapons'
-import { payReload } from './vitals-economy'
+import { ECON, payReload } from './vitals-economy'
 
 export interface RangeGun extends WeaponDef {
   /** rounds per trigger pull, fireCd apart is the BURST gap below; 1 = single */
@@ -92,6 +92,9 @@ export interface GunState {
 }
 export const holdGun = (gun: RangeGun): GunState =>
   ({ gun, ammo: gun.clip, reloading: 0, sinceShot: 99, bloom: 0, burstLeft: 0, burstT: 0, wasDown: false })
+
+/** M176: would an E press start a reload? (full, running or short of mana = no) */
+export const canReloadGun = (g: GunState) => g.reloading <= 0 && g.ammo < g.gun.clip && (!g.mana || g.mana.cur >= ((g.gun as { reloadPay?: number }).reloadPay ?? ECON.reloadMana))
 
 export function reloadGun(g: GunState) {
   if (g.reloading > 0 || g.ammo >= g.gun.clip) return

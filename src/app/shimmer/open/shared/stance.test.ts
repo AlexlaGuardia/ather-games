@@ -1,4 +1,4 @@
-// The stance (Alex 11-15): stowed by default; R tap draws / swaps / reloads, R hold stows; 1-8 / the wheel pick a hotbar
+// The stance (Alex 11-15): stowed by default; R tap draws / swaps, R hold stows; 1-8 / the wheel pick a hotbar
 // item while no weapon is drawn. ★ 11-18 (Alex): the weapons are the loadout's PRIMARY + SECONDARY (the Character tab), never
 // bag items. Run: npx tsx src/app/shimmer/open/shared/stance.test.ts
 import { newInv, SLOTS, type Inv } from './inventory'
@@ -15,22 +15,22 @@ const wield = (l: typeof none) => setLoadout(l)
 
 ok(STOWED.kind === 'stowed' && STOWED_SPEED > 1 && HOLD_MS >= 200, 'stance: not stowed by default, or stowed is not quicker')
 wield(none); ok(weapons(bag).join() === 'repeater', 'weapons: a new keeper starts with the Repeater (Alex 11-18), worn as the sidearm')
-ok(tapR(STOWED, bag).stance.kind === 'weapon' && heldOf(tapR(STOWED, bag).stance, bag) === 'repeater', 'R: a new keeper draws the starting Repeater')
+ok(tapR(STOWED, bag).kind === 'weapon' && heldOf(tapR(STOWED, bag), bag) === 'repeater', 'R: a new keeper draws the starting Repeater')
 wield(kael); ok(weapons(bag).join() === `${KAEL_PRIMARY},${KAEL_SECONDARY}`, `weapons: Kael's chest gives primary + secondary (${weapons(bag)})`)
 // R tap
-wield(equip(none, 'secondary', null)); ok(tapR(STOWED, bag).stance.kind === 'stowed', 'R: drew a weapon with nothing equipped')
+wield(equip(none, 'secondary', null)); ok(tapR(STOWED, bag).kind === 'stowed', 'R: drew a weapon with nothing equipped')
 wield(oneGun)
 let r = tapR(STOWED, bag)
-ok(r.stance.kind === 'weapon' && r.stance.which === 0 && !r.reload && heldOf(r.stance, bag) === KAEL_SECONDARY, 'R: with only the sidearm, a tap did not draw it')
-r = tapR(r.stance, bag)
-ok(r.reload && r.stance.kind === 'weapon', 'R: with one gun, a second tap did not reload')
+ok(r.kind === 'weapon' && r.which === 0 && heldOf(r, bag) === KAEL_SECONDARY, 'R: with only the sidearm, a tap did not draw it')
+r = tapR(r, bag)
+ok(r.kind === 'weapon' && r.which === 0, 'R: with one gun, a second tap must change nothing (M176: R never reloads)')
 wield(kael)
 r = tapR(STOWED, bag)
-ok(heldOf(r.stance, bag) === KAEL_PRIMARY, 'R: the first tap did not draw the primary')
-r = tapR(r.stance, bag)
-ok(r.stance.kind === 'weapon' && r.stance.which === 1 && heldOf(r.stance, bag) === KAEL_SECONDARY && !r.reload, 'R: with two guns, a tap did not swap to the secondary')
-ok((tapR(r.stance, bag).stance as { which: number }).which === 0, 'R: a tap on the secondary did not swap back')
-ok(tapR({ kind: 'item', slot: 0 }, bag).stance.kind === 'weapon', 'R: a tap while holding an item did not draw the primary')
+ok(heldOf(r, bag) === KAEL_PRIMARY, 'R: the first tap did not draw the primary')
+r = tapR(r, bag)
+ok(r.kind === 'weapon' && r.which === 1 && heldOf(r, bag) === KAEL_SECONDARY, 'R: with two guns, a tap did not swap to the secondary')
+ok((tapR(r, bag) as { which: number }).which === 0, 'R: a tap on the secondary did not swap back')
+ok(tapR({ kind: 'item', slot: 0 }, bag).kind === 'weapon', 'R: a tap while holding an item did not draw the primary')
 // R hold
 ok(holdR({ kind: 'weapon', which: 1 }).kind === 'stowed' && holdR({ kind: 'item', slot: 1 }).kind === 'stowed', 'R: a hold did not stow')
 // 1-8 / the wheel: bag items only
