@@ -1,5 +1,5 @@
 'use client'
-// <NamedMoglin id />: a Moglin by its id. The named ones (moglin-figure.ts: Hazel, Sax, Yarrow in the Glade, BETA M162) draw in
+// <NamedMoglin id />: a Moglin by its id. The named ones (moglin-figure.ts: the Glade's five, BETA M162) draw in
 // their locked looks; every other id is the plain chibi in its id's own coat, as before. Same poses (moglinPose), one rig.
 import { useRef } from 'react'
 import { useFrame } from '@react-three/fiber'

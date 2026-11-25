@@ -22,7 +22,7 @@ try {
   const hide = () => p.evaluate(() => { const h = [...document.querySelectorAll('div')].filter(d => d.textContent?.includes('Click to play')); for (const d of h.filter(x => !h.some(o => o !== x && x.contains(o)))) (d as HTMLElement).style.visibility = 'hidden' })
   for (const k of ks.filter(k => !only || k.id.endsWith(only))) {
     const at = (d: number) => p.evaluate((x, z, y) => (window as any).__ather.gladeAt(x, z, y), k.x + Math.sin(k.yaw) * d, k.z + Math.cos(k.yaw) * d, Math.atan2(Math.sin(k.yaw), Math.cos(k.yaw)))
-    await at(2.2); await sleep(5000); await hide(); console.log(`${k.id}: ${await p.evaluate(() => (window as any).__ather.calls())} draw calls at 2.2 m`); await p.screenshot({ path: `${out}/glade-${k.id.split(':').pop()}-${tag}.png` as `${string}.png` })
+    await at(2.2); await sleep(5000); await hide(); console.log(`${k.id}: ${await p.evaluate(() => (window as any).__ather.calls())} draw calls at 2.2 m (she stands ${k.x.toFixed(2)}, ${k.z.toFixed(2)} yaw ${k.yaw.toFixed(2)}; keeper ${JSON.stringify(await p.evaluate(() => { const s = (window as any).__ather.state; return s?.pos ? [+s.pos.x.toFixed(2), +s.pos.z.toFixed(2), +(s.yaw ?? 0).toFixed(2)] : null }))})`); await p.screenshot({ path: `${out}/glade-${k.id.split(':').pop()}-${tag}.png` as `${string}.png` })
     await at(1.8)
     const near = await p.waitForFunction(id => { const n = (window as any).__ather.near(); return n?.kind === 'folk' || n?.kind === 'gfennel' }, { timeout: 30000 }, k.id).then(() => true, () => false)
     // gladeAt is an ARRIVAL: the veil comes up and a press under it is ignored, so wait for it to have lifted

@@ -4,7 +4,9 @@
 // rinstick's quest starts and ends in that talk. BUILD (Jin): Fennel stands just outside the Rinnshop door, beside it,
 // facing out, for as long as the quest is open (rinquest.ts › fennelHere); the chibi Moglin rig the settlements use, with
 // an apron for the kitchen (a build pick, look = Alex's call). The talk itself is use-rinquest.ts › fennelTalk.
-import { MoglinModel, furOf, MOGLIN_HEIGHT } from '../shared/moglin-model'
+// M162 s2: she is drawn in her locked look (moglin-figure.ts › fennel), the same Fennel the Glade stands.
+import { MOGLIN_HEIGHT } from '../shared/moglin-model'
+import { MoglinLookModel } from '../shared/moglin-look-model'
 import { ROOMS, toWorld, raised, type Works } from './rooms'
 
 /** Where Fennel stands: beside the first raised Rinnshop's door, 1.4 m out and 1.8 m to the side, facing away from the room.
@@ -19,7 +21,7 @@ export const FENNEL_HEAD = MOGLIN_HEIGHT.chibi
 export function Fennel({ spot, y, talking }: { spot: { x: number; z: number; yaw: number }; y: number; talking: boolean }) {
   return (
     <group position={[spot.x, y, spot.z]} rotation-y={spot.yaw}>
-      <MoglinModel build="chibi" action={talking ? 'wave' : 'idle'} garb="apron" tone={furOf('fennel')} seed={3.1} />
+      <MoglinLookModel who="fennel" action={talking ? 'wave' : 'idle'} seed={3.1} />
     </group>
   )
 }

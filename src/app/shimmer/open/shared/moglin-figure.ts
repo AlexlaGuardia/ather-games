@@ -6,8 +6,8 @@ import * as THREE from 'three'
 import { Mould, buf, turn, tube, band, radAt, BOOTFOOT, ROUND, type Prof, type V3, type FriendJoint } from './friend-figure'
 import type { MoglinAction } from './moglin-model'
 
-export type MoglinLook = 'hazel' | 'sax' | 'yarrow'
-export const MOGLIN_LOOKS: readonly MoglinLook[] = ['hazel', 'sax', 'yarrow']
+export type MoglinLook = 'hazel' | 'sax' | 'yarrow' | 'fennel' | 'mallow'
+export const MOGLIN_LOOKS: readonly MoglinLook[] = ['hazel', 'sax', 'yarrow', 'fennel', 'mallow']
 /** the Glade's folk ids are `moonwell:<name>` (moonwell-glade.ts); nobody else has a look of their own */
 export const moglinLook = (id: string): MoglinLook | null => MOGLIN_LOOKS.find(k => id === `moonwell:${k}`) ?? null
 
@@ -34,6 +34,8 @@ export const LOOK_COLOR = {
   hazel: { fur: '#b57230', light: '#fff0d2', eye: '#6b3f1c', cloth: '#a98552', clothDark: '#7d5f38', belt: '#5c3820', cord: '#a8855c', toggle: '#7a5230', plank: '#d9ab66', plankEdge: '#a97a3e' },
   sax: { fur: '#cf8a48', light: '#fbf0da', eye: '#7a4a20', cloth: '#a85f30', clothDark: '#7a3a1b', belt: '#4a3528', toggle: '#4f3322', stone: '#fff6e6' },
   yarrow: { fur: '#ffce8c', light: '#fff0d0', eye: '#4a2e1c', cloth: '#84632f', clothDark: '#5f4520', cord: '#96713f', jar: '#c4703a', cork: '#f3d8a6' },
+  fennel: { fur: '#c4a548', light: '#fff3d6', eye: '#6b4320', cloth: '#f4ead2', clothDark: '#c9b78e', flour: '#fffdf6', bowl: '#8a5a34', bowlIn: '#5e3b22', batter: '#e9cf94', spoon: '#a06a3c' },
+  mallow: { fur: '#d2a15c', light: '#fff4dc', eye: '#6a4222', cloth: '#c79bb8', clothDark: '#9a7190', leather: '#7a5233', leatherDark: '#573823', toggle: '#c9a36a', board: '#c2a36b', mark: '#5a4630' },
 } as const
 const INK = '#1c1712', NOSE = '#dd7a68', EAR_IN = '#de8474', EAR_DARK = '#4a2a1e', BLUSH = '#ec8a5e'
 const T = 0.0075   // the ink line
@@ -144,7 +146,23 @@ const toggle = (m: Mould, color: string, p: V3) => { m.ball(color, p, [0.017, 0.
 function tassel(m: Mould, color: string, p: V3, len: number, lean: number) {
   m.add(tube([[0.009, 0], [0.011, len * 0.5], [0.009, len]], 8), color, [p[0], p[1] - len, p[2]], [1, 1, 1], [0, 0, lean]); m.ball(color, [p[0], p[1] - len, p[2]], [0.013, 0.011, 0.012]); m.add(new THREE.ConeGeometry(0.017, 0.035, 8), color, [p[0], p[1] - len - 0.02, p[2]])
 }
-interface Look { wide: number; stride: number; holds: MoglinFigure['holds']; dress: (m: Mould, P: Prof) => void }
+/** a closed ribbon laid round the head: its lower / upper edge (lat) at each yaw, `t` proud */
+function headBand(lo: (a: number) => number, hi: (a: number) => number, t: number, U = 44) {
+  const p: number[] = [], i: number[] = [], K = 5
+  for (let u = 0; u <= U; u++) { const a = u / U * Math.PI * 2, b0 = lo(a), b1 = hi(a)
+    for (const [b, l] of [[b0, t * 0.7], [(b0 + b1) / 2, t], [b1, t * 0.7], [b1, -0.006], [b0, -0.006]] as const) p.push(...S(a, b, l)) }
+  for (let u = 0; u < U; u++) for (let k = 0; k < K; k++) { const A = u * K + k, B = u * K + (k + 1) % K, C = A + K, D = B + K; i.push(A, C, B, B, C, D) }
+  const g = buf(p, i); g.computeVertexNormals(); return g
+}
+/** a tied knot: two loops and two tails, facing +z at `p` */
+function bow(m: Mould, color: string, p: V3, k: number, tails = 0.07) {
+  for (const s of [-1, 1]) {
+    m.add(ROUND, color, [p[0] + s * 0.034 * k, p[1] + 0.006 * k, p[2]], [0.03 * k, 0.019 * k, 0.012 * k], [0, s * 0.25, s * 0.35])
+    m.add(ROUND, color, [p[0] + s * 0.02 * k, p[1] - tails * 0.5 * k, p[2] + 0.004], [0.014 * k, tails * 0.55 * k, 0.008 * k], [0.12, 0, s * 0.3])
+  }
+  m.ball(color, p, [0.016 * k, 0.016 * k, 0.014 * k])
+}
+interface Look { wide: number; stride: number; holds: MoglinFigure['holds']; dress: (m: Mould, P: Prof) => void; head?: (m: Mould) => void }
 
 const DRESS: Record<MoglinLook, Look> = {
   // canvas apron (bib + shoulder straps, open behind below the belt), a cord belt tied in front; square planks on both paws
@@ -193,6 +211,57 @@ const DRESS: Record<MoglinLook, Look> = {
     for (const a of [-1.05, -0.5, 0.5, 1.05]) jar(a, 0.16, 0.92, 0.042)
     jar(-0.72, 0.34, 0.7, 0.026)   // in the vest
   } },
+  // plump; a headscarf, a neckerchief tied in front, a floured apron on the front of her; the bowl in her paws, the big spoon in it
+  fennel: { wide: 1.1, stride: 0.7, holds: { pitch: -0.98, roll: 0.06 }, dress: (m, P) => {
+    const C = LOOK_COLOR.fennel, BIB = slice(P, 0.2, 0.37, 0.014), SK: Prof = [[0.208, 0.098], [0.203, 0.15], [0.19, 0.215]]
+    cloth(m, BIB, C.cloth, -0.62, 0.62); cloth(m, SK, C.cloth, -1.05, 1.05)
+    stitch(m, SK, 0.11, C.clothDark, -0.98, 0.98, 16)
+    m.add(band(grow(P, 1, 0.006), ZS, () => 0.213, 0.02, 0.012), C.cloth)   // the apron's string
+    bow(m, C.cloth, at(P, Math.PI, 0.213, 0.024).map((v, k) => k === 2 ? v - 0.004 : v) as V3, 0.8, 0.06)
+    for (const [a, y, w] of [[-0.82, 0.13, 0.02], [0.78, 0.155, 0.016], [0.9, 0.118, 0.012], [-0.45, 0.355, 0.012]] as const) m.add(ROUND, C.flour, at(a < -0.5 || a > 0.5 ? SK : BIB, a, y, 0.002), [w, w * 0.8, 0.003], [0, a, 0.4], false)
+    // the neckerchief: round her neck, knotted under the chin
+    m.add(band(grow(P, 1, 0.012), ZS, a => 0.392 - 0.012 * Math.cos(a), 0.04, 0.018), C.cloth)
+    bow(m, C.cloth, [0, 0.368, at(P, 0, 0.37, 0.04)[2]], 1.05, 0.062)
+    // the bowl, tipped a little to show, and the spoon standing in it toward her left paw
+    const B: V3 = [0, 0.178, 0.262], tip: V3 = [0.2, 0, 0]
+    m.add(turn([[0.0, 0], [0.058, 0.004], [0.098, 0.036], [0.117, 0.078], [0.121, 0.106], [0.11, 0.106], [0.104, 0.07], [0.07, 0.03], [0.0, 0.022]], 0, Math.PI * 2, 22), C.bowl, B, [1, 1, 0.9], tip)
+    m.add(turn([[0.0, 0.066], [0.1, 0.066]], 0, Math.PI * 2, 18), C.batter, B, [1, 1, 0.9], tip, false)
+    m.add(turn([[0.1, 0.066], [0.107, 0.1]], 0, Math.PI * 2, 18), C.bowlIn, B, [1, 1, 0.9], tip, false)
+    m.add(tube([[0.011, 0], [0.013, 0.2], [0.016, 0.225]], 8), C.spoon, [0.03, 0.245, 0.262], [1, 1, 1], [0.1, 0, -0.95])
+    m.ball(C.spoon, [0.03, 0.247, 0.262], [0.03, 0.012, 0.022], [0.1, 0, -0.95])
+  }, head: m => {
+    const C = LOOK_COLOR.fennel, tilt = (a: number) => 0.16 * (1 - Math.cos(a))   // lower behind, under the ears' roots
+    m.add(headBand(a => 0.7 - tilt(a), a => 1.0 - tilt(a) * 0.8, 0.016), C.cloth)
+    m.add(headBand(a => 0.84 - tilt(a) * 0.9, a => 0.86 - tilt(a) * 0.9, 0.0175, 30), C.clothDark, undefined, undefined, undefined, false)   // its fold
+    const k = S(Math.PI, 0.5, 0.02); bow(m, C.cloth, [k[0], k[1], k[2] - 0.004], 0.85, 0.07)
+  } },
+  // a mauve shawl knotted at the throat, open in front; a satchel on its strap at her right hip (a wooden toggle); the tally board in both paws
+  mallow: { wide: 1, stride: 0.85, holds: { pitch: -0.8, roll: 0.22 }, dress: (m, P) => {
+    const C = LOOK_COLOR.mallow, G = 0.8
+    const CAPE: Prof = [[0.176, 0.222], [0.172, 0.262], [0.15, 0.318], [0.118, 0.366], [0.094, 0.402]]
+    const shawl = (pr: Prof, color: string, ink = true) => { const loop: Prof = [...pr, ...[...pr].reverse().map(([r, y]) => [r - 0.012, y] as const), pr[0]]; m.add(turn(loop, G, Math.PI * 2 - G, 30), color, [0, 0, 0], [1.2, 1, 0.98], [0, 0, 0], ink) }
+    shawl(CAPE, C.cloth)
+    for (const a of [G, Math.PI * 2 - G]) m.add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(CAPE.map(([r, y]) => new THREE.Vector3(Math.sin(a) * (r - 0.006) * 1.2, y, Math.cos(a) * (r - 0.006) * 0.98))), 8, 0.009, 5), C.cloth)
+    for (let k = 0; k < 5; k++) { const a = Math.PI + (k - 2) * 0.42; m.add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([[0.105, 0.39], [0.14, 0.34], [0.171, 0.275], [0.177, 0.23]].map(([r, y]) => new THREE.Vector3(Math.sin(a) * (r + 0.001) * 1.2, y, Math.cos(a) * (r + 0.001) * 0.98))), 8, 0.004, 4), C.clothDark, undefined, undefined, undefined, false) }   // its folds
+    m.add(band(grow(P, 1, 0.016), ZS, a => 0.396 - 0.014 * Math.cos(a), 0.044, 0.02), C.cloth)   // the roll at her neck
+    const kz = at(P, 0, 0.375, 0.046)[2]
+    m.ball(C.cloth, [0, 0.374, kz], [0.022, 0.02, 0.018]); m.add(new THREE.TorusGeometry(0.011, 0.004, 5, 12), C.clothDark, [0, 0.374, kz + 0.016], [1, 1, 1], [0, 0, 0], false)
+    for (const s of [-1, 1]) m.add(ROUND, C.cloth, [s * 0.018, 0.338, kz - 0.004], [0.014, 0.03, 0.008], [0.1, 0, s * 0.35])
+    // the satchel at her right hip (-x), its strap over that shoulder
+    const b = at(P, -1.5, 0.19, 0.062), yaw = -1.5
+    m.add(ROUND, C.leather, b, [0.062, 0.052, 0.03], [0, yaw, 0.05])
+    m.add(ROUND, C.leatherDark, [b[0] + Math.sin(yaw) * 0.022, b[1] + 0.022, b[2] + Math.cos(yaw) * 0.022], [0.066, 0.032, 0.016], [0, yaw, 0.05])
+    const tg: V3 = [b[0] + Math.sin(yaw) * 0.04, b[1] - 0.002, b[2] + Math.cos(yaw) * 0.04]
+    m.add(tube([[0.006, -0.018], [0.008, 0], [0.006, 0.018]], 8), C.toggle, tg, [1, 1, 1], [Math.PI / 2, 0, 0.2]); m.add(new THREE.TorusGeometry(0.012, 0.0035, 5, 12), C.leatherDark, tg, [1, 1.3, 1], [0, yaw, 0], false)
+    const q: V3[] = [[b[0] + 0.012, b[1] + 0.045, b[2] + 0.05], [-0.186, 0.33, 0.07], [-0.152, 0.398, 0.012], [-0.17, 0.34, -0.085], [b[0] + 0.012, b[1] + 0.045, b[2] - 0.05]]
+    m.add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(q.map(v => new THREE.Vector3(...v))), 18, 0.011, 6), C.leather, undefined, [1, 1, 1])
+    // the tally board: a grid on its top half, three lines under it
+    const T0: V3 = [0, 0.255, 0.186], rx = -0.13, R = new THREE.Matrix4().makeRotationX(rx)
+    m.add(new THREE.BoxGeometry(1, 1, 1), C.board, T0, [0.132, 0.2, 0.014], [rx, 0, 0])
+    const on = (x: number, y: number, w: number, h: number) => { const v = new THREE.Vector3(x, y, 0.0076).applyMatrix4(R); m.add(ROUND, C.mark, [T0[0] + v.x, T0[1] + v.y, T0[2] + v.z], [w, h, 0.0006], [rx, 0, 0], false) }
+    for (let k = 0; k < 5; k++) { on(-0.04 + k * 0.02, 0.042, 0.0013, 0.04); on(0, 0.002 + k * 0.02, 0.041, 0.0013) }
+    for (const [y, w] of [[-0.036, 0.038], [-0.054, 0.03], [-0.072, 0.038]] as const) on(0, y, w, 0.0011)
+  } },
 }
 function build(id: MoglinLook): MoglinFigure {
   const C = LOOK_COLOR[id], L = DRESS[id], P = grow(TORSO, L.wide), body = new Mould(T), HIP = 0.13, SX = 0.128 * L.wide, SY = 0.35
@@ -210,7 +279,7 @@ function build(id: MoglinLook): MoglinFigure {
     for (const k of [-1, 1]) m.add(ROUND, INK, [k * 0.0135, -0.185, 0.026], [0.0024, 0.013, 0.012], [0.6, 0, 0], false)
     for (let k = 0; k < 3; k++) lock(m, C.fur, [s * 0.036, -0.05 - k * 0.035, -0.012], [s, -0.9, -0.5], 0.042, 0.035)
     return m }
-  const h = headParts(C)
+  const h = headParts(C); L.head?.(h.head)
   return {
     joints: {
       body: body.joint([0, 0, 0]), head: h.head.joint([0, 0.41, 0]),
