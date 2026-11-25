@@ -11,7 +11,7 @@ let pass = 0, fail = 0
 const ok = (c: unknown, m: string) => { if (c) pass++; else { fail++; console.log('FAIL', m) } }
 const canon = readFileSync('/root/athernyx/CANON/game/shimmer-quest-glade-tutorial.md', 'utf8')
 const cl = (id: string) => canon.split('\n').find(l => l.startsWith(`- \`${id}\``))!.replace(/^- `[^`]+`\s*(\[[^\]]*\]\s*)?/, '').replace(/^[A-Z]+:\s*/, '')
-ok(LEGEND().filter(w => w !== 'Charted').join(' · ') === cl('spread.map.legend') && LEGEND().join() === 'Unseen,Charted,Clear,Hollow ground', `legend word for word (${LEGEND().join(' · ')})`)
+ok(LEGEND().join(' · ') === cl('spread.map.legend').replace(/\s*\*\(.*\)\*$/, '') && LEGEND().join() === 'Unseen,Charted,Clear,Hollow ground', `legend word for word (${LEGEND().join(' · ')})`)
 ok(growLine('Mana Springs') === cl('spread.hud.grow').replace('{PLACE}', 'Mana Springs') && growLine('X') === 'Hollow ground is spreading near X.', 'grow toast, {PLACE} filled')
 ok(clearLine() === cl('spread.hud.clear'), 'clear toast')
 ok(firstLine() === cl('spread.map.first'), 'first-look line (Chamomile)')
