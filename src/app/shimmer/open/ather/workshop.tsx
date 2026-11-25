@@ -43,7 +43,9 @@ import { floorAt, liftOf, setHouseFound, houseFoundDelta, plinthBoxes, doorSteps
 import { stairBoxes, landingRails, stairCellSet, toggleStair, dirOfYaw, type Stairs, type Turn } from './plot-stairs'
 import { deckRect, planDecks, eraseDecks, deckBoxes, supported as deckSupported, builtDeckCells, DECK_T, type Decks } from './plot-decks'
 import { colBoxes, toggleCol, colAt, paintColumn, colColour, colStandsOn, parseCol, COL_T, type Cols, trimmedRect, COL_CAP } from './plot-cols'
-import { FURNITURE, REFINE, STONE_REFINE, BENCH_JOBS, PLAN_PIECES, KEEPSTONES, isPiece, ALC_LIVE, type Job } from './furniture'
+import { FURNITURE, REFINE, STONE_REFINE, BENCH_JOBS, KEEPSTONES, isPiece, ALC_LIVE, WOOD_COLOR, type Job } from './furniture'
+import { buildCatalog, buildBoxes } from './build-catalog'   // M169
+import { BuildIcon } from './build-icon'
 import { AlchemyPanel } from './alchemy-panel'
 import { loadAssign, mayUse } from './train-assign'   // M118 s2: the keeper's assign-a-piece gate
 import { PlanterPanel, GrimoirePanel, getPots, setPots, settlePlanter, useBook, type BankStore } from './spirit-panels'
@@ -728,10 +730,10 @@ function Catalog({ onPick }: { onPick: () => void }) {
   const inv = useInv(), bank = useBank(), lvl = forestryLevel()
   const pickPiece = (item: string) => { setBuildTool('look'); setPlanLevel(0); setPlacing({ kind: 'piece', item, q: 0, plan: true }); onPick() }   // M143
   const pick = (t: 'walls' | 'paint' | 'door' | 'window', m?: WallMat, fp?: FloorPat, rail = false) => { setPlacing(null); if (m) { wallMat = m } if (t === 'walls') wallRail = rail; if (fp) { paintPat = fp; paintCol = FLOOR_PATS[fp].color } wdEmit(); setBuildTool(t); onPick() }
-  const card = (key: string, label: string, sub: string, lit: boolean, onClick: () => void, swatch?: string) => (
+  const card = (key: string, label: string, sub: string, lit: boolean, onClick: () => void, swatch?: string, icon?: React.ReactNode) => (
     <button key={key} type="button" data-cat={key} data-lit={lit} disabled={!lit} onClick={onClick}
-      style={{ border: 0, borderRadius: 10, padding: '7px 8px', textAlign: 'left', cursor: lit ? 'pointer' : 'default', background: lit ? 'rgba(255,250,235,.96)' : 'rgba(255,250,235,.5)', boxShadow: `inset 0 0 0 1px ${H.rule}`, opacity: lit ? 1 : 0.6, display: 'grid', gridTemplateColumns: swatch ? '18px 1fr' : '1fr', gap: 7, alignItems: 'center', minWidth: 0 }}>
-      {swatch && <i style={{ width: 18, height: 18, borderRadius: 4, background: swatch, display: 'inline-block' }} />}
+      style={{ border: 0, borderRadius: 10, padding: '7px 8px', textAlign: 'left', cursor: lit ? 'pointer' : 'default', background: lit ? 'rgba(255,250,235,.96)' : 'rgba(255,250,235,.5)', boxShadow: `inset 0 0 0 1px ${H.rule}`, opacity: lit ? 1 : 0.6, display: 'grid', gridTemplateColumns: icon ? '32px 1fr' : swatch ? '18px 1fr' : '1fr', gap: 7, alignItems: 'center', minWidth: 0 }}>
+      {icon ?? (swatch && <i style={{ width: 18, height: 18, borderRadius: 4, background: swatch, display: 'inline-block' }} />)}
       <span style={{ minWidth: 0 }}>
         <span style={{ display: 'block', font: '700 12px system-ui', color: H.ink }}>{label}</span>
         <span style={{ display: 'block', fontSize: 10.5, color: H.ink, opacity: 0.75, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub}</span>
@@ -759,9 +761,12 @@ function Catalog({ onPick }: { onPick: () => void }) {
       </div>
       <div data-cat-group="pieces" style={{ display: 'grid', gap: 5 }}>
         <div style={{ font: '700 11px system-ui', letterSpacing: '.12em', textTransform: 'uppercase', color: H.ink, opacity: 0.7 }}>Slabs and panels · set anywhere, built from the list</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 6 }}>
-          {PLAN_PIECES.map(id => card(`piece:${id}`, FURNITURE[id].name, FURNITURE[id].recipe.map(c => `${haveFor(inv, bank, c.id)} / ${c.n} ${itemDef(c.id).name}`).join(' · '), true, () => pickPiece(id), FURNITURE[id].tint ?? (FURNITURE[id].wood === 'stone' ? WALL_MATS.stucco.color : WALL_MATS.goldwood.color)))}
-        </div>
+        {buildCatalog().map(g => <div key={g.sub} data-build-sub={g.sub} style={{ display: 'grid', gap: 4 }}>
+          <div style={{ font: '700 10.5px system-ui', color: H.ink, opacity: 0.6 }}>{g.sub}</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 6 }}>
+            {g.ids.map(id => card(`piece:${id}`, FURNITURE[id].name, FURNITURE[id].recipe.map(c => `${haveFor(inv, bank, c.id)} / ${c.n} ${itemDef(c.id).name}`).join(' · '), true, () => pickPiece(id), undefined, <BuildIcon id={id} size={32} />))}
+          </div>
+        </div>)}
       </div>
     </div>
   )
@@ -1275,7 +1280,7 @@ function ChestGhost({ pose, owned, q, item }: { pose: React.MutableRefObject<Pos
   )
 }
 
-const WOODS: Record<string, string> = { goldwood: '#d9a957', shimmeroak: '#a77a52', starwillow: '#c8d2e8', dawnwood: '#c9774a', iron: '#4e4a47', stone: '#bdb6a6' }
+const WOODS = WOOD_COLOR   // M169: furniture.ts (the build catalog's icons draw with it too)
 const Bx = ({ p, s, c }: { p: [number, number, number]; s: [number, number, number]; c: string }) => <mesh position={p}><boxGeometry args={s} /><meshLambertMaterial color={c} /></mesh>
 /** M107 (every keeper since the M107 ship; training toys owner + ?spirits=3d): where the planter's spirit may go. Home = the planter, its ring 0.9..1.5 m (the planter's
  *  corners sit at 0.64 m) = the home beat. s2 (Magii RULED 11-23, athernyx 8b45c92: a bloomed spirit walks the whole garden):
@@ -1384,12 +1389,8 @@ export function PieceBody({ item, id }: { item: string; id?: string }) {
     case 'alc_mixer': return <><Bx p={[0, 0.76, 0]} s={[f.w, 0.08, f.d]} c={c} />{legs(f.w - 0.1, f.d - 0.1, 0.72, 0.09)}<mesh position={[0.4, 0.88, 0]}><cylinderGeometry args={[0.3, 0.24, 0.36, 14]} /><meshLambertMaterial color="#4e4a47" /></mesh><mesh position={[0.4, 1.065, 0]} rotation-x={-Math.PI / 2}><circleGeometry args={[0.27, 14]} /><meshBasicMaterial color={f.glow} /></mesh><mesh position={[0.4, 0.5, 0]}><cylinderGeometry args={[0.12, 0.12, 0.1, 10]} /><meshBasicMaterial color="#8fe3ff" /></mesh>{[-0.55, -0.35, -0.15].map(x => <Bx key={x} p={[x, 0.85, 0.1]} s={[0.12, 0.1, 0.22]} c="#6f9a4a" />)}</>
     case 'alc_desk': return <><Bx p={[0, 0.72, 0]} s={[f.w, 0.07, f.d]} c={c} />{legs(f.w - 0.1, f.d - 0.1, 0.68, 0.08)}<Bx p={[0, 0.96, -f.d / 2 + 0.04]} s={[f.w, 0.48, 0.05]} c={c} /><Bx p={[0, 1.0, -f.d / 2 + 0.14]} s={[f.w - 0.1, 0.03, 0.18]} c={c} />{[-0.5, -0.3, -0.1, 0.1].map((x, k) => <mesh key={x} position={[x, 1.08, -f.d / 2 + 0.14]}><cylinderGeometry args={[0.04, 0.04, 0.13, 8]} /><meshBasicMaterial color={['#c9a8ff', '#8fe3ff', '#ff9a4a', '#9ae06a'][k]} /></mesh>)}<Bx p={[0.42, 0.88, 0.1]} s={[0.03, 0.26, 0.03]} c="#a4793e" /><mesh position={[0.42, 1.04, 0.1]}><torusGeometry args={[0.09, 0.015, 6, 16]} /><meshLambertMaterial color="#a4793e" /></mesh><mesh position={[0.42, 1.04, 0.1]}><circleGeometry args={[0.08, 14]} /><meshBasicMaterial color={f.glow} transparent opacity={0.45} side={THREE.DoubleSide} /></mesh></>
     default:
-      // M98b b2 wall panels: the wall itself in its material, a darker sill and a cap (three meshes: a run of panels stays cheap)
-      if (f.panel) { const pc = f.tint ?? c, tr = f.tint ? '#7a3f2e' : dk; return <><Bx p={[0, f.h / 2, 0]} s={[f.w, f.h, f.d]} c={pc} /><Bx p={[0, 0.09, 0]} s={[f.w + 0.02, 0.18, f.d + 0.04]} c={tr} /><Bx p={[0, f.h - 0.05, 0]} s={[f.w + 0.02, 0.1, f.d + 0.04]} c={tr} /></> }
-      // M98b floor slabs: a slab with a seam every metre (wood: planks run along w; stone: a flag grid)
-      if (f.slab) return <><Bx p={[0, f.h / 2, 0]} s={[f.w, f.h, f.d]} c={c} />
-        {Array.from({ length: Math.round(f.w * (f.wood === 'stone' ? 1 : 3)) - 1 }, (_, k) => { const n = Math.round(f.w * (f.wood === 'stone' ? 1 : 3)); return <Bx key={`x${k}`} p={[-f.w / 2 + (k + 1) * f.w / n, f.h + 0.003, 0]} s={[0.025, 0.006, f.d - 0.02]} c={f.wood === 'stone' ? '#8a8274' : dk} /> })}
-        {f.wood === 'stone' && Array.from({ length: Math.round(f.d) - 1 }, (_, k) => <Bx key={`z${k}`} p={[0, f.h + 0.003, -f.d / 2 + (k + 1)]} s={[f.w - 0.02, 0.006, 0.025]} c={f.wood === 'stone' ? '#8a8274' : dk} />)}</>
+      { const bx = buildBoxes(f)   // M98b slabs + panels: their boxes live in build-catalog.ts, which draws their icons from the same boxes
+        if (bx) return <>{bx.map((b, k) => <Bx key={k} p={[...b.p]} s={[...b.s]} c={b.c} />)}</> }
       return <Bx p={[0, f.h / 2, 0]} s={[f.w, f.h, f.d]} c={c} />
   }
 }

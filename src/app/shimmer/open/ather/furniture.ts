@@ -33,6 +33,11 @@ export const STONE_REFINE: readonly Job[] = [
   { id: 'crystal-pane', label: 'Cut a pane', in: [{ id: 'raw_mana_shard', n: 1 }], out: { id: 'crystal_pane', n: 2 } },
 ]
 
+/** BETA M169 (Alex 11-25): the building catalog's sub-categories, in his words and order. One that holds no piece yet is not shown. */
+export const BUILD_SUBS = ['Floors', 'Walls', 'Doors', 'Windows', 'Openings + trim', 'Columns', 'Stairs', 'Railings + fences', 'Ramps + ladders', 'Roofs + ceilings', 'Foundations + decks', 'Chimney'] as const
+export type BuildSub = typeof BUILD_SUBS[number]
+/** the colour of each wood a piece is made of (workshop.tsx PieceBody draws with it; build-catalog.ts icons too) */
+export const WOOD_COLOR: Readonly<Record<string, string>> = { goldwood: '#d9a957', shimmeroak: '#a77a52', starwillow: '#c8d2e8', dawnwood: '#c9774a', iron: '#4e4a47', stone: '#bdb6a6' }
 /** A piece of furniture or decor: its bag row, its recipe, and how it stands on the plot. */
 import type { AlcStation } from './alchemy-set'
 export interface PieceDef {
@@ -64,6 +69,9 @@ export interface PieceDef {
    *  (rooms.ts pieceBoxes), never one fat axis box. `tint` = its colour when it is not a wood's (brick). */
   panel?: true
   tint?: string
+  /** BETA M169: a BUILDING piece: its sub-category of the one building catalog (BUILD_SUBS). A piece with this is PLANNED in the
+   *  garden (the plan-mode catalog, paid at Build) AND sits under Build in Creative's Place palette: one field, both places. */
+  build?: BuildSub
   /** M110 s1: a TRAINING piece: party spirits may play at it as they please (spirit-trot.ts PLAY), each play nudging this ONE
    *  stat toward the form cap (spirit-stats.ts). Owner + ?spirits=3d only for now: the bench hides it otherwise. */
   train?: 'pwr' | 'grd' | 'agi' | 'vig'
@@ -104,16 +112,16 @@ export const FURNITURE: Readonly<Record<string, PieceDef>> = {
   //    Stone Brick (no cord item exists in the bag). Blurb = placeholder for @lark.
   // M98b (Alex 11-23: "freehand place one slab and then snap on the rest to that one"): free-build floor slabs. A room
   // floor's cost (1 plank or brick per m², plot-bom.ts). Blurbs are placeholders for @lark.
-  goldwood_slab: { name: 'Goldwood Floor Slab', blurb: 'A square metre of goldwood floor. Set it anywhere, at any angle.', recipe: [{ id: 'goldwood_plank', n: 1 }], w: 1, d: 1, h: 0.12, solid: true, wood: 'goldwood', slab: true },
-  goldwood_slab_wide: { name: 'Wide Goldwood Floor Slab', blurb: 'Four square metres of goldwood floor in one piece.', recipe: [{ id: 'goldwood_plank', n: 4 }], w: 2, d: 2, h: 0.12, solid: true, wood: 'goldwood', slab: true },
-  stone_slab: { name: 'Stone Floor Slab', blurb: 'A square metre of cut stone floor.', recipe: [{ id: 'stone_brick', n: 1 }], w: 1, d: 1, h: 0.12, solid: true, wood: 'stone', slab: true },
-  stone_slab_wide: { name: 'Wide Stone Floor Slab', blurb: 'Four square metres of cut stone floor in one piece.', recipe: [{ id: 'stone_brick', n: 4 }], w: 2, d: 2, h: 0.12, solid: true, wood: 'stone', slab: true },
+  goldwood_slab: { name: 'Goldwood Floor Slab', blurb: 'A square metre of goldwood floor. Set it anywhere, at any angle.', recipe: [{ id: 'goldwood_plank', n: 1 }], w: 1, d: 1, h: 0.12, solid: true, wood: 'goldwood', slab: true, build: 'Floors' },
+  goldwood_slab_wide: { name: 'Wide Goldwood Floor Slab', blurb: 'Four square metres of goldwood floor in one piece.', recipe: [{ id: 'goldwood_plank', n: 4 }], w: 2, d: 2, h: 0.12, solid: true, wood: 'goldwood', slab: true, build: 'Floors' },
+  stone_slab: { name: 'Stone Floor Slab', blurb: 'A square metre of cut stone floor.', recipe: [{ id: 'stone_brick', n: 1 }], w: 1, d: 1, h: 0.12, solid: true, wood: 'stone', slab: true, build: 'Floors' },
+  stone_slab_wide: { name: 'Wide Stone Floor Slab', blurb: 'Four square metres of cut stone floor in one piece.', recipe: [{ id: 'stone_brick', n: 4 }], w: 2, d: 2, h: 0.12, solid: true, wood: 'stone', slab: true, build: 'Floors' },
   // M98b b2: free-build wall panels. Size = a drawn wall's (plot-walls WALL_T 0.3 x WALL_H 4.8; build-prefs.test asserts it, this
   // file may not import). Cost = a drawn wall's 1.5 per metre, rounded up per panel. Blurbs are placeholders for @lark.
-  goldwood_panel: { name: 'Goldwood Wall Panel', blurb: 'A metre of goldwood wall that stands on its own, at any angle.', recipe: [{ id: 'goldwood_plank', n: 2 }], w: 1, d: 0.3, h: 4.8, solid: true, wood: 'goldwood', panel: true },
-  goldwood_panel_wide: { name: 'Wide Goldwood Wall Panel', blurb: 'Two metres of goldwood wall in one piece.', recipe: [{ id: 'goldwood_plank', n: 3 }], w: 2, d: 0.3, h: 4.8, solid: true, wood: 'goldwood', panel: true },
-  brick_panel: { name: 'Brick Wall Panel', blurb: 'A metre of brick wall that stands on its own, at any angle.', recipe: [{ id: 'stone_brick', n: 2 }], w: 1, d: 0.3, h: 4.8, solid: true, wood: 'stone', panel: true, tint: '#a4573f' },
-  brick_panel_wide: { name: 'Wide Brick Wall Panel', blurb: 'Two metres of brick wall in one piece.', recipe: [{ id: 'stone_brick', n: 3 }], w: 2, d: 0.3, h: 4.8, solid: true, wood: 'stone', panel: true, tint: '#a4573f' },
+  goldwood_panel: { name: 'Goldwood Wall Panel', blurb: 'A metre of goldwood wall that stands on its own, at any angle.', recipe: [{ id: 'goldwood_plank', n: 2 }], w: 1, d: 0.3, h: 4.8, solid: true, wood: 'goldwood', panel: true, build: 'Walls' },
+  goldwood_panel_wide: { name: 'Wide Goldwood Wall Panel', blurb: 'Two metres of goldwood wall in one piece.', recipe: [{ id: 'goldwood_plank', n: 3 }], w: 2, d: 0.3, h: 4.8, solid: true, wood: 'goldwood', panel: true, build: 'Walls' },
+  brick_panel: { name: 'Brick Wall Panel', blurb: 'A metre of brick wall that stands on its own, at any angle.', recipe: [{ id: 'stone_brick', n: 2 }], w: 1, d: 0.3, h: 4.8, solid: true, wood: 'stone', panel: true, tint: '#a4573f', build: 'Walls' },
+  brick_panel_wide: { name: 'Wide Brick Wall Panel', blurb: 'Two metres of brick wall in one piece.', recipe: [{ id: 'stone_brick', n: 3 }], w: 2, d: 0.3, h: 4.8, solid: true, wood: 'stone', panel: true, tint: '#a4573f', build: 'Walls' },
   lift: { name: 'Lift', blurb: 'A goldwood car on cords, a stone weight hung beside it. Pull the cord for a floor and up or down you go.', recipe: [{ id: 'goldwood_plank', n: 8 }, { id: 'stone_brick', n: 4 }], w: 1.0, d: 1.0, h: 2.0, solid: false, wood: 'goldwood', shaft: true },
   // ── UNIQUE pieces, Nyx-side (Alex 11-17: "unique pieces are SOLD FOR MARKS by the carpenter + other Nyx-side shops";
   //    Magii c52ba1c: which shops stock decor is ours, no new names). Made of the continent's canon goods (game/economy.md:
@@ -149,9 +157,9 @@ export const stockOf = (front: string) => FURNITURE_ORDER.filter(id => FURNITURE
 /** M57: the alchemy set stays off the carpentry bench until E at a piece opens its station (workshop.tsx); flip when wired. */
 export const ALC_LIVE = true   // FLIPPED 2026-11-21 (Alex via Magii: "turn alchemy on"; hub call). One-line revert.
 export const PIECE_JOBS: readonly Job[] = FURNITURE_ORDER.filter(id => FURNITURE[id].recipe.length > 0 && (ALC_LIVE || !FURNITURE[id].alc)).map(id => ({ id, label: FURNITURE[id].name, in: FURNITURE[id].recipe, out: { id, n: 1 } }))
-/** BETA M143 (Alex 11-24): the free-build slabs and wall panels are PLANNED (the plan-mode catalog, paid at Build), not crafted. Their
+/** BETA M143 (Alex 11-24): the free-build slabs and wall panels (M169: every `build` piece) are PLANNED (the plan-mode catalog, paid at Build), not crafted. Their
  *  jobs stay known (PIECE_JOBS) so one already running at a bench finishes; the bench just no longer offers them. */
-export const isPlanned = (id: string) => !!(FURNITURE[id]?.slab || FURNITURE[id]?.panel)
+export const isPlanned = (id: string) => !!FURNITURE[id]?.build   // M169: every building piece (slabs + panels today)
 export const PLAN_PIECES = FURNITURE_ORDER.filter(isPlanned)
 export const BENCH_JOBS: readonly Job[] = PIECE_JOBS.filter(j => !isPlanned(j.id))
 /** How many pieces a plot holds (a keeper furnishes, not fills). */

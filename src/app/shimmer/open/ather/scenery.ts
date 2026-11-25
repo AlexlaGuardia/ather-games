@@ -8,7 +8,7 @@
 import { FLORA_LOOKS } from '../../world/flora-placements'
 import { PROP_MODELS } from '../../world/prop-models'
 import { CRYSTAL_KINDS, CRYSTAL_NAME } from './prospecting'
-import { FURNITURE, FURNITURE_ORDER } from './furniture'
+import { FURNITURE, FURNITURE_ORDER, type BuildSub } from './furniture'
 import { panelChain, ROOMS } from './rooms'
 import { BENCH_IN, ROOM_SIZE, padLevel, plinthBoxes, roomPad } from './glade-pads'
 import { isWholeQ, quadBounds } from './build-prefs'
@@ -17,14 +17,15 @@ import { NODE_CRYSTALS, NODE_CRYSTAL_S, NODE_TREES, nodeName, nodeTree, nodeTrun
 import { crownOf } from './forestry'
 import type { Box } from '../terrain-world'
 
-export type SceneryGroup = 'Nodes' | 'Rooms' | 'Trees' | 'Bushes' | 'Plants' | 'Rocks and logs' | 'Fences and signs' | 'Crystals' | 'Props' | 'Furniture'
-export const SCENERY_GROUPS: readonly SceneryGroup[] = ['Nodes', 'Rooms', 'Trees', 'Bushes', 'Plants', 'Rocks and logs', 'Fences and signs', 'Crystals', 'Props', 'Furniture']
+// M169: 'Build' = the building catalog (furniture.ts `build`, build-catalog.ts), shown by its sub-categories (`sub`), apart from Furniture
+export type SceneryGroup = 'Nodes' | 'Rooms' | 'Trees' | 'Bushes' | 'Plants' | 'Rocks and logs' | 'Fences and signs' | 'Crystals' | 'Props' | 'Build' | 'Furniture'
+export const SCENERY_GROUPS: readonly SceneryGroup[] = ['Nodes', 'Rooms', 'Trees', 'Bushes', 'Plants', 'Rocks and logs', 'Fences and signs', 'Crystals', 'Props', 'Build', 'Furniture']
 /** w, d, h = its size at scale 1 (m); `box` = the part that blocks (a tree's trunk), absent = the whole size; `fit` = model height.
  *  `panel` = long and thin: off the axes it blocks as a chain. `arms` = it blocks as these (local centres, each a panel) instead.
  *  `floats` = it lies on water, only there, and never blocks (floatSpot).
  *  `ends` = local points where a piece of the same family joins on (endSnap) */
 export interface SceneryKind {
-  k: string; group: SceneryGroup; label: string
+  k: string; group: SceneryGroup; label: string; sub?: BuildSub
   w: number; d: number; h: number; solid: boolean; floats?: true
   box?: { w: number; d: number; h: number }; panel?: boolean
   arms?: readonly { x: number; z: number; w: number; d: number; h: number }[]; ends?: readonly (readonly [number, number])[]
@@ -86,7 +87,7 @@ export const SCENERY: readonly SceneryKind[] = [
   ...Object.entries(PROP_MODELS).map(([id, m]): SceneryKind => { const z = PROP_SIZE[id] ?? PROP_DEFAULT
     return { k: `prop:${id}`, group: 'Props', label: words(id), w: z.h * z.w, d: z.h * z.d, h: z.h, solid: z.h >= BIG_PROP_H, model: { glb: m.url, fit: z.h, yaw: m.yaw, glow: m.glow } } }),
   ...FURNITURE_ORDER.map((id): SceneryKind => { const f = FURNITURE[id]
-    return { k: `piece:${id}`, group: 'Furniture', label: f.name, w: f.w, d: f.d, h: f.h, solid: f.solid, panel: f.panel, model: { piece: id } } }),
+    return { k: `piece:${id}`, group: f.build ? 'Build' : 'Furniture', ...(f.build ? { sub: f.build } : {}), label: f.name, w: f.w, d: f.d, h: f.h, solid: f.solid, panel: f.panel, model: { piece: id } } }),
 ]
 export const SCENERY_BY: ReadonlyMap<string, SceneryKind> = new Map(SCENERY.map(s => [s.k, s]))
 export const isSolid = (p: Pick<Prop, 'k' | 'solid'>) => { const K = SCENERY_BY.get(p.k); return K?.floats ? false : p.solid ?? K?.solid ?? false }
