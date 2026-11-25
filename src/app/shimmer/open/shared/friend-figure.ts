@@ -27,8 +27,9 @@ const INK_T = 0.011   // the outline's thickness (m), the same on every part (th
 export const FRIEND_COLOR = {
   bonn: { skin: '#a9653c', hair: '#3b2a20', eye: '#3f9a4c', tunic: '#dba11c', cuff: '#b9ad93', trouser: '#6b4630', boot: '#cf8f1c', leather: '#70401f' },
   otto: { skin: '#ffd2b0', hair: '#c8824a', eye: '#7a4f2c', shirt: '#5f8048', apron: '#a8682c', kerchief: '#c4592c', trouser: '#4b4d5a', boot: '#75432c', leather: '#54321f', glove: '#5d4230' },
-  tess: { skin: '#ffdcc2', hair: '#221d1f', eye: '#8f6f2e', coat: '#e2c68e', coatIn: '#b09058', scarf: '#a587c2', trouser: '#484c52', boot: '#a8642b', leather: '#8a4726' },
+  tess: { skin: '#ffdcc2', hair: '#221d1f', eye: '#665631', coat: '#e2c68e', coatIn: '#b09058', scarf: '#a587c2', trouser: '#484c52', boot: '#a8642b', leather: '#8a4726' },
 } as const
+export const TESS_BLUSH = '#d2917f'   // drawn unlit, so deeper here than it reads
 const SOLE = '#3a2a20', METAL = '#b9a888', DARK = '#1c1712'
 
 // ── the mould: collect parts, merge with vertex colours; the ink hull pushes each part's smoothed normals out by INK_T ─────
@@ -258,7 +259,7 @@ function tess(): FriendFigure {
     m.add(tube([[0.074, -0.37], [0.064, -0.2], [0.055, -0.08], [0.054, -0.02], [0.044, 0.022], [0.022, 0.042]]), C.coat); m.add(tube([[0.074, -0.4], [0.082, -0.385], [0.08, -0.32]]), C.coat)
     hand(m, C.skin, -0.445, 0.042, s); return m }
   const F = face(head, { rx: 0.163, ry: 0.196, skin: C.skin, hair: C.hair, eye: C.eye, eyeW: 0.037, eyeH: 0.042, brow: 0.008, lash: true, mouth: 'small', nose: 0.85 }, 0.34)
-  for (const s of [-1, 1]) F.on.ball('#f0c0b2', [s * 0.088, -0.07, 0.126], [0.026, 0.014, 0.008], [0, s * 0.6, 0], false)
+  for (const s of [-1, 1]) F.on.ball(TESS_BLUSH, [s * 0.088, -0.07, 0.126], [0.026, 0.014, 0.008], [0, s * 0.6, 0], false)
   ears(head, C.skin, 0.168, -0.045, 0.9)
   // dark hair under the hood: a close cap, a parted fringe, a bob to the jaw behind the ears
   head.add(CAP(Math.PI * 0.5), C.hair, [0, 0.015, -0.012], [0.176, 0.196, 0.176], [-0.22, 0, 0], false)

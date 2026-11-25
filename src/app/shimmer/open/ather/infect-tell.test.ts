@@ -2,9 +2,9 @@
 // BETA M128 s2: the signed script word for word against canon, and who is told what, once.
 import { existsSync, readFileSync } from 'node:fs'
 import { INFECT_CARRY, INFECT_CLUE, INFECT_OPEN, INFECT_SAVED, MOREL_INFECT } from './infect-lines'
-import { carried, due, freshTell, heardSay, loadTell, note, parseTell, refugees, refugeeSpots, saveTell, settlerSay, told, type Due, type Tell } from './infect-tell'
+import { carried, due, freshTell, guestSay, heardSay, noteGuest, loadTell, note, parseTell, refugees, refugeeSpots, saveTell, settlerSay, told, type Due, type Tell } from './infect-tell'
 import { GLEANER_POST, isGleaner } from './gleaner'
-import { pickable, begin, fell, freshInfection, purge, step, CLUES, INFECT_WEEK_MS as W, type Infection } from './infection'
+import { pickable, begin, fell, guestClue, waitsHome, parseInfection, freshInfection, purge, step, CLUES, INFECT_WEEK_MS as W, type Infection } from './infection'
 import { folkTalk, ASK, type FolkTalkActs } from './folk-talk'
 import { folkOf, freshTrust } from './settlement-folk'
 import { LISTEN } from './yarrow-teach'
@@ -73,6 +73,25 @@ t2 = heardSay(t2, say, 1); same([t2.heard, t2.met], [[1], [A, B]], 'the thanks s
 { const lostOne = { ...freshInfection(1), lost: [A], told: 0, assigned: 1 }, n = begin(purge(lostOne, 2), 's2-1', t0), nt = parseTell({ ...freshTell(1), said: ['lost:x'], heard: [3], clueOf: { [A]: 1 }, met: [A] }, 2)
   same([nt.said, nt.clueOf, nt.met, nt.heard], [[], {}, [], [3]], 'the purge: places go, heard clues stay'); same([n.active!.clue, carried(n), refugees(nt, n, () => folkOf(P(A), 1)).length], [2, [1], 0], 'carried across the season, its folk\'s place gone')
   same(heardSay(nt, settlerSay(nt, n, 's2-1', true, [])!, 1).heard, [3, 1], 'a resident\'s clue counts as heard'); same(settlerSay(nt, n, 's2-1', true, [])!.lines, [INFECT_CLUE[0].folk], 'a resident never says the opener: told by the place\'s spokesman') }
+// ── M156 s4: a guest's two halves, and the 7th ──
+{ const s0 = { ...freshInfection(1), told: 2, assigned: 2 }, s1 = guestClue(s0); let g = noteGuest({ ...freshTell(1), heard: [1, 2] }, s0, s1, 'H', A)
+  same(guestSay(g, 'H', A), { lines: [INFECT_CLUE[2].folk], clues: [3] }, 'a settler of the host\'s place: the guest\'s OWN clue, the folk line alone')
+  ok(!guestSay(g, 'H', B) && !guestSay(g, 'K', A) && !guestSay(g, null, A), 'no other place, no other host, not at home'); ok(noteGuest(g, s1, s1, 'H', B) === g, 'nothing new = the same object')
+  g = parseTell(JSON.parse(JSON.stringify(g)), 1); ok(!!guestSay(g, 'H', A), 'kept over a reload'); ok(parseTell(g, 2).at === undefined, 'the purge: places go')
+  const own = begin(s1, B, t0), home = fell(own, B, t0 + 1).s; same(settlerSay(g, home, B, false, [])!.lines, [INFECT_SAVED, INFECT_CLUE[2].folk, INFECT_CLUE[3].folk], 'left unheard: at their own next saved place')
+  const h = heardSay(g, guestSay(g, 'H', A)!, 1); same(h.heard, [1, 2, 3], 'heard'); ok(!guestSay(h, 'H', A), 'never twice there'); same(settlerSay(h, home, B, false, [])!.lines, [INFECT_SAVED, INFECT_CLUE[3].folk], 'nor at home')
+  const hh = heardSay(g, settlerSay(g, home, B, false, [])!, 3); ok(!guestSay(hh, 'H', A), 'heard at home: not at the host\'s either') }
+{ const six = { ...freshInfection(1), told: 6, assigned: 6, next: t0 }, s7 = guestClue(six), g = noteGuest(freshTell(1), six, s7, 'H', A), st = (x: Infection, now: number) => step(x, { season: 1, now, played: 0, known: [B], rng: () => 0 })
+  ok(s7.told === 7 && waitsHome(s7), 'the 7th as a guest waits for home'); same(drain(g, s7)[1], [], 'no opening line'); same(guestSay(g, 'H', A)!.lines, [INFECT_CLUE[6].folk], 'its folk half is said at once')
+  const r = st(s7, t0 + 1); same([r.s.active?.id, r.s.active?.clue], [B, 0], 'infections go on: one has to be cleared at home'); ok(drain(freshTell(1), r.s)[1].every(x => x.key !== 'open'), 'not while it is held')
+  const R = parseInfection(JSON.parse(JSON.stringify(purge(r.s, 2))), 2); ok(waitsHome(R), 'still waiting over a reload and a purge')
+  const f = fell(r.s, B, t0 + 2); ok(f.events.filter(e => e.kind === 'open').length === 1 && !waitsHome(f.s), 'cleared at home: open'); same(drain(freshTell(1), f.s)[1].map(x => x.text), [INFECT_OPEN], 'then the line, once'); ok(!st(f.s, t0 + 9 * W).s.active, 'and no infection starts again')
+  const again = parseInfection(JSON.parse(JSON.stringify(purge(f.s, 2))), 2); ok(!waitsHome(again), 'the opening holds over a reload and a purge')
+  const a = fell(r.s, B, t0 + 2, true); ok(a.s.saved.join() === B && waitsHome(a.s) && !a.events.some(e => e.kind === 'open'), 'their own place falling in the host\'s Wilds is not a clear at home')
+  const held7 = begin(six, B, t0), aw = fell(held7, B, t0 + 1, true); ok(aw.s.told === 7 && waitsHome(aw.s) && !aw.events.some(e => e.kind === 'open'), 'their own 7th, told away: waits'); ok(drain(freshTell(1), aw.s)[1].every(x => x.key !== 'open'), '...unsaid')
+  const n = fell(held7, B, t0 + 1); ok(!waitsHome(n.s) && n.events.some(e => e.kind === 'open'), 'their own 7th at home: at once, as before')
+  const lost = { ...six, assigned: 7, lost: [A] }, l7 = guestClue(lost); ok(waitsHome(l7) && carried(l7).length === 0 && guestClue(l7) === l7, 'a lost 7th given as a guest: the same wait, nothing carried, never an 8th') }
+ok(!readFileSync(new URL('./page.tsx', import.meta.url), 'utf8').includes('heaves up out of the grey'), 'never signed: stays off')
 // ── the talk ──
 { const folk = folkOf(P(A), 1), act = (seen: unknown[]): FolkTalkActs => ({ go: x => { seen.push(x) }, give: () => {}, recruit: () => {}, bye: () => {} }), c = { folk, home: folk, trust: freshTrust(), have: () => 0, room: 1 }, st = { fid: folk[0].id, screen: 'hello' as const }, seen: any[] = []
   const plain = folkTalk(c, st, act([])); ok(plain.line === folk[0].dream, 'off: the dream'); same(folkTalk({ ...c, infect: null }, st, act([])), plain, 'null = the old talk')

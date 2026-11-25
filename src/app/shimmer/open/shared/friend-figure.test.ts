@@ -1,6 +1,6 @@
 // BETA M154: npx tsx src/app/shimmer/open/shared/friend-figure.test.ts
 import * as THREE from 'three'
-import { FRIEND_IDS, FRIEND_CALLS, FRIEND_COLOR, friendFigure, isFriend, band } from './friend-figure'
+import { TESS_BLUSH, FRIEND_IDS, FRIEND_CALLS, FRIEND_COLOR, friendFigure, isFriend, band } from './friend-figure'
 import { gladeKeepers } from '../ather/glade-cluster'
 let n = 0
 const ok = (c: boolean, m: string) => { n++; if (!c) { console.error('✗ ' + m); process.exitCode = 1 } }
@@ -28,6 +28,7 @@ for (const id of FRIEND_IDS) {
 const [b, o, t] = FRIEND_IDS.map(friendFigure)
 ok(o.shoulderW > 1.5 * Math.max(b.shoulderW, t.shoulderW), 'Otto is the broad one')
 ok(o.crown > b.crown && b.shoulderW < 0.4, 'Bonn is small for her age still')
+{ const b = new THREE.Color(TESS_BLUSH), e = new THREE.Color(FRIEND_COLOR.tess.eye); ok(has(friendFigure('tess').face, TESS_BLUSH) && b.r > b.g * 2 && b.b > b.g * 0.6, "Tess's blush is pink, never near-white"); ok(e.g > e.r * 0.6 && e.r > e.g && e.b < e.g * 0.35, 'her eyes: hazel (olive-brown), not amber') }
 const L = (h: string) => { const c = new THREE.Color(h); return c.r + c.g + c.b }
 ok(L(FRIEND_COLOR.otto.skin) > 2 * L(FRIEND_COLOR.bonn.skin), 'Otto is fair (Alex 11-25), Bonn warm brown')
 ok(has(friendFigure('otto').joints.armL.toon, FRIEND_COLOR.otto.skin) && has(friendFigure('otto').joints.armL.toon, FRIEND_COLOR.otto.glove), 'fingerless gloves: skin and glove on one arm')

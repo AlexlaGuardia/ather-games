@@ -620,7 +620,7 @@ function AtherSliceGame() {
   // the countries on the fold map, and which one the keeper stands in (HUD), off the same nearest-node rule
   // M128 s1: THE WEEKLY INFECTIONS (infection.ts; owner-only: use-infection.tsx). A held settlement = a champion + Hollow ground round
   // its homes; a lost one = the ground alone. With none, every value below IS the old one (same object).
-  const ownInfection = useInfections({ away: () => guestRef.current.still(), guest: !!guest.ledger, net, fog, tileOff, clock, pos, inWilds: zone.kind === 'wilds', fighting: () => liveSolids.combat?.champ?.nodeId ?? null, walkable: (x, z) => !!ww && ww.walkable(x, z), canRead: () => !frozen.current && !fading.current })
+  const ownInfection = useInfections({ away: () => guestRef.current.still(), guest: !!guest.ledger, host: guest.host, net, fog, tileOff, clock, pos, inWilds: zone.kind === 'wilds', fighting: () => liveSolids.combat?.champ?.nodeId ?? null, walkable: (x, z) => !!ww && ww.walkable(x, z), canRead: () => !frozen.current && !fading.current })
   ownInf.current = ownInfection
   const infection = useMemo(() => { if (!guest.ledger || !net) return ownInfection; const state = guestInfection(guest.ledger, net.season); return { ...ownInfection, state, held: state.active?.id ?? null, lost: state.lost } }, [ownInfection, guest.ledger, net])
   const infectionRef = useRef(infection); infectionRef.current = infection
@@ -689,7 +689,6 @@ function AtherSliceGame() {
     for (const e of evs) {
       if (e.kind === 'pickup') { got += e.amount; sfx('pickup-grey-matter') }
       if (e.kind === 'reload-dry') { const t = performance.now() / 1000; if (t - dryAt.current > 2) { dryAt.current = t; hudSay(RELOAD_DRY_LINE, 'info') } }   // M78
-      if (e.kind === 'champ-wake') setToast('Something heaves up out of the grey.')
       if (e.kind === 'champ-break') setToast(e.bar === 0 ? 'It sinks into the ooze, and more come crawling out.' : 'It sinks again. When it rises it moves wrong, wild.')
       if (e.kind === 'champ-down' && guestRef.current.ledger) guestRef.current.noteDown(e.nodeId)   // M156 s3: one kill, the host's ground
       if (e.kind === 'champ-down' && infectionRef.current.down(e.nodeId)) { hudSay(clearLine(), 'info', 4); continue }   // M128: a settlement's infection, never the spread's ledger

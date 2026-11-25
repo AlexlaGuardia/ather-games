@@ -7,13 +7,13 @@
 //   the thanks), so no clue can be missed for good. Heard clues and the opening carry across seasons, places do not.
 // ★ PURE but for the guarded load/save (garden-tied like infection.ts). Off (not the owner) nothing here is called.
 import { gardenKey } from '@/lib/keeper-local'
-import { CLUES, type Infection, type Ping } from './infection'
+import { CLUES, waitsHome, type Infection, type Ping } from './infection'
 import { INFECT_CARRY, INFECT_CLUE, INFECT_OPEN, INFECT_SAVED, MOREL_INFECT } from './infect-lines'
 import type { Folk } from './settlement-folk'
 import type { Settlement } from './network'
 import type { Spot } from './folk-spots'
 
-export interface Tell { v: 1; season: number; /** lines said: `start:<sid>`, ..., `obj:<sid>` */ said: string[]; /** which clue a place held (0 = none) */ clueOf: Record<string, number>; /** places whose folk have thanked the keeper, lost places whose folk gave the opener */ met: string[]; /** clues heard from folk, 1..7 */ heard: number[]; open: boolean }
+export interface Tell { v: 1; season: number; /** lines said: `start:<sid>`, ..., `obj:<sid>` */ said: string[]; /** which clue a place held (0 = none) */ clueOf: Record<string, number>; /** places whose folk have thanked the keeper, lost places whose folk gave the opener */ met: string[]; /** clues heard from folk, 1..7 */ heard: number[]; open: boolean; /** M156 s4: where a clue came as a guest: clue -> `<host>|<place>`, whose settlers say its folk half */ at?: Record<string, string> }
 export const freshTell = (season: number): Tell => ({ v: 1, season, said: [], clueOf: {}, met: [], heard: [], open: false })
 export interface Due { key: string; text: string; morel: boolean }
 
@@ -29,7 +29,7 @@ export function due(t: Tell, s: Infection, name: (id: string) => string): Due | 
     if (obj && !t.said.includes(key)) return { key, text: obj, morel: false }
   }
   { const d = dueGiven(t, s); if (d) return d }
-  if (s.told >= CLUES && !t.open) return { key: 'open', text: INFECT_OPEN, morel: false }
+  if (s.told >= CLUES && !waitsHome(s) && !t.open) return { key: 'open', text: INFECT_OPEN, morel: false }
   if (s.active) for (const k of ['start', 'hold', 'second'] as const) if (s.active.sent.includes(k)) { const d = ping(k, s.active.id); if (d) return d }
   return null
 }
@@ -68,6 +68,15 @@ export function settlerSay(t: Tell, s: Infection, place: string, last: boolean, 
   const thanks = !t.met.includes(place)
   return thanks || left.length ? { lines: [...(thanks ? [INFECT_SAVED] : []), ...left.map(c => INFECT_CLUE[c - 1].folk)], clues: left, met: place } : null
 }
+/** M156 s4: the clues between two states came at `place`, in `host`'s Wilds. Same object = none did. */
+export const noteGuest = (t: Tell, was: Infection, now: Infection, host: string, place: string): Tell =>
+  now.told > was.told ? { ...t, at: { ...t.at, ...Object.fromEntries(Array.from({ length: now.told - was.told }, (_, k) => [was.told + 1 + k, `${host}|${place}`])) } } : t
+/** M156 s4 (RULED athernyx 4bdec6b): a settler of the HOST's cleared place says the guest's own clue, till it is heard (there or,
+ *  settlerSay's path, at home). The folk line alone: the thanks are the host's. */
+export function guestSay(t: Tell, host: string | null, place: string): Say | null {
+  const c = host ? Object.keys(t.at ?? {}).map(Number).filter(k => t.at![k] === `${host}|${place}` && !t.heard.includes(k)).sort((a, b) => a - b) : []
+  return c.length ? { lines: c.map(k => INFECT_CLUE[k - 1].folk), clues: c } : null
+}
 /** A line of it was said: the clue is heard, the place met. `upTo` = how many of `lines` the keeper has seen. */
 export function heardSay(t: Tell, say: Say, upTo: number): Tell {
   const off = say.lines.length - say.clues.length, got = say.clues.filter((c, k) => off + k < upTo && !t.heard.includes(c))
@@ -97,7 +106,8 @@ export function parseTell(v: unknown, season: number): Tell {
   const heard = Array.isArray(o.heard) ? [...new Set(o.heard.filter(c => Number.isInteger(c) && c >= 1 && c <= CLUES))] : [], open = o.open === true
   if (o.season !== season) return { ...freshTell(season), heard, open }   // the purge: places go, clues stay
   const clueOf = Object.fromEntries(Object.entries(o.clueOf && typeof o.clueOf === 'object' ? o.clueOf : {}).filter(([, c]) => Number.isInteger(c) && c >= 0 && c <= CLUES))
-  return { v: 1, season, said: strs(o.said), clueOf, met: strs(o.met), heard, open }
+  const at = Object.fromEntries(Object.entries(o.at && typeof o.at === 'object' ? o.at : {}).filter(([c, p]) => INFECT_CLUE[Number(c) - 1] && typeof p === 'string'))
+  return { v: 1, season, said: strs(o.said), clueOf, met: strs(o.met), heard, open, ...(Object.keys(at).length ? { at } : {}) }
 }
 export function loadTell(season: number): Tell { try { return parseTell(JSON.parse(localStorage.getItem(gardenKey(KEY)) ?? 'null'), season) } catch { return freshTell(season) } }
 export function saveTell(t: Tell): void { try { localStorage.setItem(gardenKey(KEY), JSON.stringify(t)) } catch { /* private window */ } }

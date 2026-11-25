@@ -6,7 +6,7 @@ import { infectedPlace } from './infect-id'
 import { begin, blank, fell, guestClue, loadInfection, pickable, saveInfection, step, type InfectEvent, type Infection } from './infection'
 import { isRevealed, type Fog } from './explored'
 import type { Network, Settlement } from './network'
-import { due, dueGiven, heardSay, loadTell, note, refugees, refugeeSpots, saveTell, settlerSay, told, type Refugee, type Say } from './infect-tell'
+import { due, dueGiven, guestSay, heardSay, loadTell, note, noteGuest, refugees, refugeeSpots, saveTell, settlerSay, told, type Refugee, type Say } from './infect-tell'
 import { championSpot } from './infection'
 import { folkOf, stillHome } from './settlement-folk'
 import { builtFolkSpots } from './settlement-lots'
@@ -32,13 +32,13 @@ function tell(events: readonly InfectEvent[], net: Network) {
 export interface InfectionView { state: Infection | null; held: string | null; lost: readonly string[]; down: (nodeId: string) => boolean; talk: InfectTalk | null }
 /** what the infections have a settlement's folk say (use-folk-talk.tsx) */
 export interface InfectTalk { spots: (s: Settlement) => readonly Spot[]; nameOf: (id: string) => string; say: (s: Settlement, fid: string, last: boolean) => Say | null; heard: (say: Say, upTo: number) => void }
-const NONE: readonly string[] = []
+const NONE: readonly string[] = [], NO_SPOTS: readonly Spot[] = []
 
-export function useInfections(o: { net: Network | null; fog: Fog | null; tileOff: { x: number; z: number }; clock: () => number; pos: React.MutableRefObject<{ x: number; z: number }>; inWilds: boolean; /** M156 s2: in another keeper's Wilds (or not known yet): this keeper's own infection stands still, nothing read out or written */ away: () => boolean; guest: boolean; fighting: () => string | null; walkable: (x: number, z: number) => boolean; /** the keeper can read a line now (no panel, no arrival veil) */ canRead: () => boolean }): InfectionView {
+export function useInfections(o: { net: Network | null; fog: Fog | null; tileOff: { x: number; z: number }; clock: () => number; pos: React.MutableRefObject<{ x: number; z: number }>; inWilds: boolean; /** M156 s2: in another keeper's Wilds (or not known yet): this keeper's own infection stands still, nothing read out or written */ away: () => boolean; guest: boolean; /** M156 s4: whose Wilds it is (null = own) */ host: string | null; fighting: () => string | null; walkable: (x: number, z: number) => boolean; /** the keeper can read a line now (no panel, no arrival veil) */ canRead: () => boolean }): InfectionView {
   const on = useInfectionsOn()
   const [state, setState] = useState<Infection | null>(null)
   const live = useRef(o); live.current = o
-  const guest = o.guest
+  const guest = o.guest, host = o.host
   const log = useRef<InfectEvent[]>([])
   const ready = on && !!o.net && !!o.fog
   const jot = (s: Infection) => { const t = loadTell(s.season), n = note(t, s); if (n !== t) saveTell(n) }   // which clue a place holds, before the engine forgets it
@@ -71,7 +71,9 @@ export function useInfections(o: { net: Network | null; fog: Fog | null; tileOff
   }, [ready, commit, known])
   const down = useCallback((nodeId: string) => {
     const id = infectedPlace(nodeId), net = live.current.net; if (!id) return false
-    if (net && ready) { const s = loadInfection(net.season), r = fell(s, id, live.current.clock()); if (r.events.length) commit(r.s, r.events); else if (live.current.guest) { const g = guestClue(s); if (g !== s) commit(g, []) } }   // M156 s3: the host's place, this keeper's next clue
+    if (net && ready) { const s = loadInfection(net.season), away = live.current.guest, r = fell(s, id, live.current.clock(), away), n = r.events.length ? r.s : away ? guestClue(s) : s   // M156 s3: the host's place, this keeper's next clue
+      if (away && live.current.host) { const t = loadTell(net.season), k = noteGuest(t, s, n, live.current.host, id); if (k !== t) saveTell(k) }   // s4: and where its folk half is said
+      if (n !== s) commit(n, r.events) }
     return true
   }, [commit, ready])
   useEffect(() => {   // checks only (m128-infection-check): the owner with ?infect=1. Moves the save's own clocks; starts a KNOWN settlement.
@@ -100,7 +102,9 @@ export function useInfections(o: { net: Network | null; fog: Fog | null; tileOff
   }, [ready])
   const talk = useMemo<InfectTalk | null>(() => {
     if (!ready || !state) return null
-    if (guest) return null   // M156 s2: the folk of another keeper's Wilds carry no line of this one's story
+    const heard = (say: Say, upTo: number) => { const t = loadTell(live.current.net!.season), n = heardSay(t, say, upTo); if (n !== t) saveTell(n) }
+    // M156 s2: the folk of another keeper's Wilds carry no line of this one's story; s4: but the one this keeper was given there
+    if (guest) return { spots: () => NO_SPOTS, nameOf: () => '', say: s => guestSay(loadTell(live.current.net!.season), live.current.host, s.id), heard }
     const at = () => ({ st: loadInfection(live.current.net!.season), t: loadTell(live.current.net!.season) })
     const here = (s: Settlement): Refugee[] => { const { st, t } = at(); if (st.active?.id !== s.id) return []
       const places = live.current.net!.settlements, v = loadVillage()
@@ -115,9 +119,9 @@ export function useInfections(o: { net: Network | null; fog: Fog | null; tileOff
       nameOf: id => { const held = live.current.net!.settlements.find(p => p.id === at().st.active?.id); return (held && here(held).find(r => r.id === id)?.name) || '' },
       say: (s, fid, last) => { const { st, t } = at(), h = here(s), r = h.find(x => x.id === fid)
         return r ? { lines: r.lines, clues: [r.clue], met: r.from } : settlerSay(t, st, s.id, last, h) },
-      heard: (say, upTo) => { const { t } = at(), n = heardSay(t, say, upTo); if (n !== t) saveTell(n) },
+      heard,
     }
-  }, [ready, state, guest])
+  }, [ready, state, guest, host])
   useEffect(() => { refugeeDrawn.at = talk?.spots ?? (() => []); return () => { refugeeDrawn.at = () => [] } }, [talk])
   const s = ready ? state : null
   return useMemo(() => ({ state: s, held: s?.active?.id ?? null, lost: s?.lost ?? NONE, down, talk }), [s, down, talk])

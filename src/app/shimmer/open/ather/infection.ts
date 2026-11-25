@@ -30,7 +30,7 @@ export type Ping = 'start' | 'hold' | 'second' | 'lost'
 export interface Active { id: string; at: number; /** played ms since the second week began */ online: number; /** the clue it holds, 0 = none left to hand out */ clue: number; sent: Ping[] }
 /** `told` = clues the keeper has been given, in order; `assigned` = clues handed to a settlement so far. assigned > told = carried
  *  by folk who got away (they are told, in order, at the next settlement cleared). */
-export interface Infection { v: 1; season: number; /** when the next may start; null = no settlement discovered yet */ next: number | null; active: Active | null; saved: string[]; lost: string[]; told: number; assigned: number; /** M156 s3: clues given at a clear in another keeper's Wilds (said once each, infect-tell.ts) */ given?: number[] }
+export interface Infection { v: 1; season: number; /** when the next may start; null = no settlement discovered yet */ next: number | null; active: Active | null; saved: string[]; lost: string[]; told: number; assigned: number; /** M156 s3: clues given at a clear in another keeper's Wilds (said once each, infect-tell.ts) */ given?: number[]; /** M156 s4: a place of their own fell at home with all seven told (read only when the 7th came as a guest) */ opened?: true }
 export type InfectEvent = { kind: Ping | 'saved'; id: string; clue: number } | { kind: 'open'; id: string; clue: number }
 
 export const freshInfection = (season: number): Infection => ({ v: 1, season, next: null, active: null, saved: [], lost: [], told: 0, assigned: 0 })
@@ -42,7 +42,10 @@ export const spentIds = (s: Infection): string[] => [...s.saved, ...s.lost, ...(
 export const pickable = (s: Settlement): boolean => /^s\d+-\d+$/.test(s.id) && s.id !== GLADE.id && !DIGGER_SURE.includes(s.id) && Math.hypot(s.x - FIRST.x, s.z - FIRST.z) > 200
 
 /** The season purge: the clues carry, everything else goes. A held settlement's clue was never told: it is handed out again. */
-export const purge = (s: Infection, season: number): Infection => ({ ...freshInfection(season), told: s.told, assigned: Math.max(s.told, s.assigned - (s.active?.clue ? 1 : 0)), ...(s.given ? { given: s.given } : {}) })
+export const purge = (s: Infection, season: number): Infection => ({ ...freshInfection(season), told: s.told, assigned: Math.max(s.told, s.assigned - (s.active?.clue ? 1 : 0)), ...(s.given ? { given: s.given } : {}), ...(s.opened ? { opened: true as const } : {}) })
+/** M156 s4 (RULED athernyx 4bdec6b, "2a"): the 7th came as a guest = the way down waits for the next settlement cleared at HOME.
+ *  Till then infections go on (that settlement has to come), and nothing that needs all seven may start. */
+export const waitsHome = (s: Infection): boolean => s.told >= CLUES && !s.opened && !!s.given?.includes(CLUES)
 
 export interface StepIn {
   season: number; now: number
@@ -79,7 +82,7 @@ export function step(s0: Infection, i: StepIn): { s: Infection; events: InfectEv
   }
   if (s.next === null) return { s: i.known.length ? { ...s, next: i.now + INFECT_WEEK_MS } : s, events }
   if (s.next > i.now + INFECT_WEEK_MS) s = { ...s, next: i.now + INFECT_WEEK_MS }   // the clock went back
-  if (i.now < s.next! || i.mayStart === false || s.told >= CLUES) return { s, events }
+  if (i.now < s.next! || i.mayStart === false || (s.told >= CLUES && !waitsHome(s))) return { s, events }
   const id = pick(s, i.known, i.rng)
   if (!id) return { s, events }
   const b = begin(s, id, i.now)
@@ -97,13 +100,16 @@ export function begin(s: Infection, id: string, now: number): Infection {
 /** one per in-game week: the next week's start on this one's own grid */
 export const nextAfter = (at: number, now: number): number => at + INFECT_WEEK_MS * Math.max(1, Math.floor((now - at) / INFECT_WEEK_MS) + 1)
 
-/** its champion went down: saved for good; its clue and every carried one are told, in order */
-export function fell(s: Infection, id: string, now: number): { s: Infection; events: InfectEvent[] } {
+/** its champion went down: saved for good; its clue and every carried one are told, in order. `away` = it fell in another keeper's
+ *  Wilds: saved all the same, but a 7th told there (it leaves no thing) waits for home like any guest's. */
+export function fell(s: Infection, id: string, now: number, away = false): { s: Infection; events: InfectEvent[] } {
   const a = s.active
   if (!a || a.id !== id) return { s, events: [] }
   const told = s.assigned, events: InfectEvent[] = [{ kind: 'saved', id, clue: a.clue }]
-  if (told >= CLUES && s.told < CLUES) events.push({ kind: 'open', id, clue: CLUES })
-  return { s: { ...s, active: null, saved: [...s.saved, id], told, next: nextAfter(a.at, now) }, events }
+  const all = told >= CLUES, waited = waitsHome(s), opens = !away && all && (waited || s.told < CLUES)
+  if (opens) events.push({ kind: 'open', id, clue: CLUES })
+  const wait = away && all && s.told < CLUES ? { given: [...(s.given ?? []), CLUES] } : {}
+  return { s: { ...s, active: null, saved: [...s.saved, id], told, next: nextAfter(a.at, now), ...wait, ...(opens && waited ? { opened: true as const } : {}) }, events }
 }
 
 /** M156 s3 (RULED athernyx 4bdec6b): THERE when another keeper's infection fell = this keeper's OWN next clue, never the host's number.
@@ -154,7 +160,7 @@ export function parseInfection(v: unknown, season: number): Infection {
   const told = int(o.told, CLUES), assigned = Math.max(told, int(o.assigned, CLUES)), saved = strs(o.saved), lost = strs(o.lost).filter(k => !saved.includes(k))
   const a = o.active, active: Active | null = a && typeof a === 'object' && typeof a.id === 'string' && Number.isFinite(a.at) && !saved.includes(a.id) && !lost.includes(a.id)
     ? { id: a.id, at: a.at, online: Number.isFinite(a.online) ? Math.max(0, a.online) : 0, clue: int(a.clue, CLUES), sent: strs(a.sent) as Ping[] } : null
-  const s: Infection = { v: 1, season: o.season!, next: Number.isFinite(o.next) ? o.next! : null, active, saved, lost, told, assigned, ...(Array.isArray(o.given) && o.given.length ? { given: [...new Set(o.given.filter(k => Number.isInteger(k) && k >= 1 && k <= CLUES))] } : {}) }
+  const s: Infection = { v: 1, season: o.season!, next: Number.isFinite(o.next) ? o.next! : null, active, saved, lost, told, assigned, ...(Array.isArray(o.given) && o.given.length ? { given: [...new Set(o.given.filter(k => Number.isInteger(k) && k >= 1 && k <= CLUES))] } : {}), ...(o.opened === true ? { opened: true as const } : {}) }
   return s.season === season ? s : purge(s, season)
 }
 export function loadInfection(season: number): Infection { try { return parseInfection(JSON.parse(localStorage.getItem(gardenKey(KEY)) ?? 'null'), season) } catch { return freshInfection(season) } }
