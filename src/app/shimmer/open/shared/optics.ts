@@ -9,7 +9,7 @@
 // ★ Zoom is a FOCAL-LENGTH ratio, not a field-of-view ratio. A 2x makes things look twice as big, which is tan(fov/2) halved,
 // NOT fov halved (at a 70° base, fov/2 = 35° but true 2x = 38.6°; the error grows with the base). adsFov does the trig.
 
-export type OpticId = 'reddot' | 'scope2' | 'scope3'
+export type OpticId = 'reddot' | 'scope2' | 'scope3' | 'prism3'   // prism3: M149, worn by no gun until slice 2
 export interface Optic {
   id: OpticId
   /** the magnification a player reads on it */
@@ -18,12 +18,15 @@ export interface Optic {
   zoom: number
   /** true = full ADS looks through a scope ring (the model gives way); false = you look over the gun at a dot on its glass */
   scoped: boolean
+  /** M149: the zoom is shown INSIDE the sight's own lens (fp-gun draws it); the keeper's view only punches in this much (viewFov) */
+  view?: number
   name: string
 }
 export const OPTICS: Record<OpticId, Optic> = {
   reddot: { id: 'reddot', mag: 1, zoom: 1.1, scoped: false, name: 'Red dot (1x)' },
   scope2: { id: 'scope2', mag: 2, zoom: 2, scoped: true, name: 'Scope (2x)' },
   scope3: { id: 'scope3', mag: 3, zoom: 3, scoped: true, name: 'Scope (3x)' },
+  prism3: { id: 'prism3', mag: 3, zoom: 3, scoped: false, view: 1.1, name: 'Prism (3x)' },
 }
 /** Alex's defaults, by Slate: breachers (shotguns), shortbarrels (SMGs) and sidearms get the red dot; longbarrels a 2x; reachers
  *  (the snipers) a 3x. The sidearm is Jin's call (Alex named shotguns + SMGs). An unknown Slate falls back to the red dot. */
@@ -38,6 +41,12 @@ export function adsFov(baseFov: number, o: Optic, t = 1): number {
   const k = Math.max(0, Math.min(1, t)), z = 1 + (o.zoom - 1) * k
   return (2 * Math.atan(Math.tan((baseFov * RAD) / 2) / z)) / RAD
 }
+/** M149: the CAMERA's field of view in the sights: the optic's own zoom, except a prism, whose zoom lives in its lens. Slice 2 points
+ *  the walker's camera here; for every optic worn today it is adsFov exactly. */
+export const viewFov = (baseFov: number, o: Optic, t = 1) => adsFov(baseFov, o.view ? { ...o, zoom: o.view } : o, t)
+/** M149: the lens's own vertical field of view for a true `mag` picture: a glass `h` tall at `dist`, its scene `mag` times as big as
+ *  the naked view shows it there */
+export const lensFov = (h: number, dist: number, mag: number) => (2 * Math.atan(h / 2 / dist / mag)) / RAD
 /** How much to slow the look in the sights so a zoomed view does not whip: the ratio of the two half-angle tangents (the
  *  "same feel at every zoom" rule, which is 1/zoom exactly). */
 export const adsLookScale = (baseFov: number, o: Optic, t = 1) => Math.tan((adsFov(baseFov, o, t) * RAD) / 2) / Math.tan((baseFov * RAD) / 2)

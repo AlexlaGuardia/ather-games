@@ -25,8 +25,9 @@ import * as THREE from 'three'
 import { useThree } from '@react-three/fiber'
 import { buildHand, tintMittens, ORDER, SEAT_COLOR } from './open-hands'
 import { gemGlow } from './morel'   // M33: the gem on the gun hand pulses as the rounds change
-import { OPTICS, opticOf, throughScope, type Optic } from './optics'
+import { OPTICS, opticOf, throughScope, lensFov, type Optic } from './optics'
 import { box, type Part, type Model } from './gun-kit'
+import { modelGeometry, KIT_MATS } from './gun-kit-geo'
 import { MARKS, TINTS, drawMark, markGlow, defaultLook, type SightLook } from './sight-marks'
 import { getSightLooks, lookFor } from './sight-looks'
 import { withRhythm, type RangeGun } from './gunplay'
@@ -81,11 +82,12 @@ export const VM: GunTune = { ...GUN_DEFAULTS }
 export interface Rhythm { BURST_GAP?: number; BURST_DELAY?: number }
 export const GUN_TUNE_KEY = 'open:gun-tune.v2'
 export const GUN_TUNE_KEYS = Object.keys(GUN_DEFAULTS) as (keyof GunTune)[]
+let holds: Record<string, Partial<GunTune>> = {}   // M149 preview only: how an UNTUNED gun's new model sits, under every baked / saved tune
 let tuned: Record<string, Partial<GunTune> & Rhythm> = {}, curGun = ''
 /** what a gun is WITHOUT this browser's moves (the tuner greys a value that matches it) */
 export const defaultsFor = (id: string): GunTune => ({ ...GUN_DEFAULTS, ...(GUN_BAKED[id] ?? {}) })
 function apply() {
-  const t = { ...defaultsFor(curGun), ...(tuned[curGun] ?? {}) }
+  const t = { ...GUN_DEFAULTS, ...(holds[curGun] ?? {}), ...(GUN_BAKED[curGun] ?? {}), ...(tuned[curGun] ?? {}) }
   for (const k of GUN_TUNE_KEYS) VM[k] = typeof t[k] === 'number' && Number.isFinite(t[k]) ? t[k]! : GUN_DEFAULTS[k]
 }
 /** the gun in hand changed (fp-gun's step calls this; the tuner calls it when you pick a gun) */
@@ -143,7 +145,9 @@ const MODELS: Record<string, Model> = {
 const CHARRED: Model = { ...MODELS.LONGBARREL, parts: [...MODELS.LONGBARREL.parts, box([0.026, 0.01, -0.2], [0.004, 0.012, 0.3], 'ember')] }
 // M81 blockout preview (/shimmer/dev/gun-kit ONLY; nothing in the game calls it): a gun id drawn with a kit model (gun-kit.ts) instead
 let preview: Record<string, Model> = {}, previewStamp = 0
-export function previewGunModel(id: string, m: Model | null): void { if (m) preview = { ...preview, [id]: m }; else { const { [id]: _, ...rest } = preview; preview = rest } previewStamp++ }
+export function previewGunModel(id: string, m: Model | null, hold?: Partial<GunTune>): void { if (m) preview = { ...preview, [id]: m }; else { const { [id]: _, ...rest } = preview; preview = rest } previewStamp++
+  if (m && hold) holds = { ...holds, [id]: hold }; else { const { [id]: _h, ...rest } = holds; holds = rest }
+  if (id === curGun) apply() }
 // M81 s2: a kit gun (Backbone, Charred Rifle) draws its kit model with the keeper's FITTED sight (gun-fit.ts, saved in the loadout)
 export const modelOf = (g: Pick<RangeGun, 'id' | 'slot'>): Model => preview[g.id] ?? fittedModel(getLoadout(), g.id) ?? (g.id === 'charred-rifle' ? CHARRED : MODELS[g.slot] ?? MODELS.LONGBARREL)
 /** the optic in hand: a model that carries its own sight (a kit model) names it; else the gun's */
@@ -152,7 +156,7 @@ const opticIn = (m: Model, g: RangeGun): Optic => (m.optic ? OPTICS[m.optic] : o
 /** The sight line in the gun's own frame: centre of the optic's glass (where the dot is), above the receiver. */
 export const sightOf = (m: Model, o: Optic) => ({ y: m.eye ?? m.top + (o.scoped ? 0.032 : 0.028), z: m.sightZ })
 /** Where the gun group sits so its sight lies on the camera axis ADS_DIST ahead: the dot is dead centre by construction. */
-export const adsPos = (m: Model, o: Optic) => { const s = sightOf(m, o); return [0, -s.y * VM.S, -VM.ADS_DIST - s.z * VM.S] as const }
+export const adsPos = (m: Model, o: Optic) => { const s = sightOf(m, o); return [0, -s.y * VM.S, -VM.ADS_DIST * (m.adsK ?? 1) - s.z * VM.S] as const }
 
 // ── the ADS store the page reads (zoom, look slow-down, the cone) and the scope ring renders from ──
 let adsT = 0, optic: Optic | null = null, look: SightLook | null = null, glow = 0
@@ -171,6 +175,12 @@ function buildModel(m: Model, color: string, o: Optic, mats: Record<Part['c'], T
     const mesh = new THREE.Mesh(geo, mat); mesh.position.set(...p); if (r) mesh.rotation.set(...r); mesh.renderOrder = ORDER; mesh.frustumCulled = false; g.add(mesh)
   }
   ;(mats.body as THREE.MeshStandardMaterial).color.set(color)
+  if (m.merge) {   // M149: one mesh per colour; the crystal, its picture and its cuts draw over the metal in that order
+    const over: Partial<Record<Part['c'], number>> = { glass: 0.1, lens: 0.1, view: 0.2, etch: 0.3, dot: 0.4 }
+    for (const [c, geo] of modelGeometry(m)) { add(geo, mats[c], [0, 0, 0]); g.children[g.children.length - 1].renderOrder = ORDER + (over[c] ?? 0) }
+    g.scale.setScalar(VM.S)
+    return g
+  }
   const HALF: [number, number, number] = [Math.PI / 2, 0, 0]
   for (const p of m.parts) {
     if (p.shape === 'cyl' || p.shape === 'tube') add(new THREE.CylinderGeometry(p.s[0] / 2, p.s[0] / 2, p.s[2], 14, 1, p.shape === 'tube'), mats[p.c], p.o, HALF)
@@ -211,7 +221,7 @@ export interface FpGunInput {
 export interface FpGunApi { step: (i: FpGunInput, dt: number) => void }
 
 export const FpGun = forwardRef<FpGunApi>(function FpGun(_, ref) {
-  const { camera } = useThree()
+  const { camera, gl, scene } = useThree()
   const mats = useMemo(() => {
     const std = (color: string, extra: Partial<THREE.MeshStandardMaterialParameters> = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.75, transparent: true, opacity: 1, ...extra })
     return {
@@ -219,7 +229,11 @@ export const FpGun = forwardRef<FpGunApi>(function FpGun(_, ref) {
       ember: std('#ff7a2e', { emissive: new THREE.Color('#ff7a2e'), emissiveIntensity: 1.2 }),
       glass: new THREE.MeshBasicMaterial({ color: '#cfe8f2', transparent: true, opacity: 0.16, depthWrite: false }),   // ground Ather crystal
       dot: new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false, toneMapped: false, blending: THREE.AdditiveBlending }),   // the etching (map set per look)
-    } as Record<Part['c'], THREE.Material>
+      ...Object.fromEntries(Object.entries(KIT_MATS).map(([k, v]) => [k, std(v.color, v)])),   // M149: the new family (drawn by no gun yet)
+      etch: new THREE.MeshBasicMaterial({ color: '#3a3f44', transparent: true, opacity: 0.75, depthWrite: false }),
+      lens: std('#aebcc4', { roughness: 0.15 }),
+      view: new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }),
+    } as unknown as Record<Part['c'], THREE.Material>
   }, [])
   const rig = useMemo(() => {
     const root = new THREE.Group(), held = new THREE.Group()
@@ -236,11 +250,40 @@ export const FpGun = forwardRef<FpGunApi>(function FpGun(_, ref) {
   useEffect(() => { const c = OPT.accent[keeperLook.accent]; tintMittens(rig.R, c); tintMittens(rig.L, c) }, [keeperLook.accent, rig])   // M29: the keeper's mittens hold the gun
   const st = useRef({ phase: 0, kick: 0, punch: 0, lastFired: -Infinity })
   const markTex = useRef<{ key: string; tex: THREE.CanvasTexture | null }>({ key: '', tex: null })
-  const setMark = (lk: SightLook) => {
-    const key = `${lk.mark}:${lk.tint}`; if (markTex.current.key === key || typeof document === 'undefined') return
-    const c = document.createElement('canvas'); c.width = c.height = 64
+  // M149: the prism's eyepiece. The scene once more through a narrow camera into a small texture, drawn inside the sight's own glass.
+  // Built on first use, so a keeper with no prism never pays for it; nothing in the game carries one yet.
+  const eye = useRef<{ rt: THREE.WebGLRenderTarget; cam: THREE.PerspectiveCamera } | null>(null)
+  const lensCost = useRef({ ms: 0, calls: 0, tris: 0, px: 0 })
+  const drawLens = (m: Model, o: Optic) => {
+    const vm = mats.view as THREE.MeshBasicMaterial
+    const a = m.lens ? Math.max(0, (adsT - 0.55) / 0.45) : 0
+    vm.opacity = a; if (!a || !m.lens) return
+    const [w, h] = m.lens, px = Math.min(gl.domElement.width, gl.domElement.height) < 900 ? 256 : 448
+    if (!eye.current) {
+      eye.current = { rt: new THREE.WebGLRenderTarget(px, Math.round(px * h / w), { type: THREE.HalfFloatType, samples: 0 }), cam: new THREE.PerspectiveCamera() }
+      vm.map = eye.current.rt.texture; vm.needsUpdate = true
+    }
+    const { rt, cam } = eye.current, main = camera as THREE.PerspectiveCamera
+    if (rt.width !== px) rt.setSize(px, Math.round(px * h / w))
+    cam.position.copy(main.position); cam.quaternion.copy(main.quaternion)
+    // the punch-in already shows `view` of it, so the glass adds the rest: a true 3x against the keeper's own view
+    cam.near = main.near; cam.far = main.far; cam.layers.mask = main.layers.mask; cam.aspect = w / h
+    cam.fov = lensFov(h * VM.S, VM.ADS_DIST * (m.adsK ?? 1), o.mag / (o.view ?? 1)); cam.updateProjectionMatrix(); cam.updateMatrixWorld()
+    const t0 = performance.now(), shadows = gl.shadowMap.autoUpdate, was = gl.getRenderTarget(), vis = rig.root.visible, c0 = gl.info.render.calls, auto = gl.info.autoReset
+    rig.root.visible = false; gl.shadowMap.autoUpdate = false
+    if (auto) gl.info.reset()
+    const base = auto ? 0 : c0, tb = auto ? 0 : gl.info.render.triangles
+    gl.info.autoReset = false
+    gl.setRenderTarget(rt); gl.clear(); gl.render(scene, cam); gl.setRenderTarget(was)
+    gl.info.autoReset = auto
+    lensCost.current = { ms: performance.now() - t0, calls: gl.info.render.calls - base, tris: gl.info.render.triangles - tb, px: rt.width * rt.height }
+    gl.shadowMap.autoUpdate = shadows; rig.root.visible = vis
+  }
+  const setMark = (lk: SightLook, fine: boolean) => {
+    const key = `${lk.mark}:${lk.tint}${fine ? ':fine' : ''}`; if (markTex.current.key === key || typeof document === 'undefined') return
+    const c = document.createElement('canvas'); const px = fine ? 128 : 64; c.width = c.height = px
     const ctx = c.getContext('2d'); if (!ctx) return
-    drawMark(ctx, lk.mark, 64, TINTS[lk.tint].hex)
+    drawMark(ctx, lk.mark, px, TINTS[lk.tint].hex, fine ? 0.022 : 0.045)
     markTex.current.tex?.dispose(); const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace
     markTex.current = { key, tex }; const m = mats.dot as THREE.MeshBasicMaterial; m.map = tex; m.needsUpdate = true
   }
@@ -266,7 +309,7 @@ export const FpGun = forwardRef<FpGunApi>(function FpGun(_, ref) {
       // the sights: ease in / out; reloading drops you out
       const aiming = i.aiming && !i.reloading
       adsT = Math.max(0, Math.min(1, adsT + (aiming ? d / VM.ADS_IN : -d / VM.ADS_OUT)))
-      look = i.look ?? lookFor(getSightLooks(), i.gun.id, o.scoped); setMark(look)   // the keeper's own cut (Character tab), else the plain default
+      look = i.look ?? lookFor(getSightLooks(), i.gun.id, o.scoped || m.cut === 'cross'); setMark(look, !!m.lens)   // the keeper's own cut (Character tab), else the plain default
       // the etching lights faintly while mana runs through a drawn gun, and flares as a round leaves or a charge builds
       glow = markGlow(true, i.now, i.firedAt, i.charging ?? 0); (mats.dot as THREE.MeshBasicMaterial).opacity = glow
       optic = o; publish()
@@ -292,16 +335,17 @@ export const FpGun = forwardRef<FpGunApi>(function FpGun(_, ref) {
         VM.HIP_Z + (a[2] - VM.HIP_Z) * e + (s.kick * VM.KICK_Z + s.punch * 0.03) * (1 - 0.6 * e))
       rig.held.rotation.set((s.kick * VM.KICK_PITCH + s.punch * 0.05) * (1 - 0.5 * e), 0, 0)
       rig.root.position.copy(camera.position); rig.root.quaternion.copy(camera.quaternion)   // this frame's camera
+      if (m.lens) drawLens(m, o)
       rig.root.visible = !throughScope(o, adsT)   // the scope ring takes the screen; the model gives way
     },
   }), [camera, rig, mats])
   useEffect(() => { loadGunTune() }, [])   // this browser's tune from /shimmer/dev/guns
   useEffect(() => {
-    ;(window as unknown as { __fpGun?: unknown }).__fpGun = { ads: () => adsT, optic: () => optic?.id ?? null, shown: () => rig.root.visible, key: () => rig.key, mark: () => (look ? `${look.mark}:${look.tint}` : null), glow: () => glow, kick: () => st.current.punch, pos: () => rig.held.position.toArray() }
+    ;(window as unknown as { __fpGun?: unknown }).__fpGun = { ads: () => adsT, optic: () => optic?.id ?? null, shown: () => rig.root.visible, key: () => rig.key, mark: () => (look ? `${look.mark}:${look.tint}` : null), glow: () => glow, kick: () => st.current.punch, lens: () => lensCost.current, ...(process.env.NODE_ENV !== 'production' ? { preview: previewGunModel, info: () => ({ ...gl.info.render }) } : {}), pos: () => rig.held.position.toArray() }
     return () => {
       adsT = 0; optic = null; publish()
       rig.root.traverse(o => { if (o instanceof THREE.Mesh) o.geometry.dispose() })
-      Object.values(mats).forEach(m => m.dispose()); markTex.current.tex?.dispose()
+      Object.values(mats).forEach(m => m.dispose()); markTex.current.tex?.dispose(); eye.current?.rt.dispose(); eye.current = null
     }
   }, [rig, mats])
   return <primitive object={rig.root} />

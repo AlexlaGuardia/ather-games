@@ -14,6 +14,8 @@ import * as THREE from 'three'
 import { FpGun, ScopeRing, loadGunTune, previewGunModel, type FpGunApi } from '../../open/shared/fp-gun'
 import { RANGE_GUNS } from '../../open/shared/gunplay'
 import { EYE_STAND } from '../../open/shared/locomotion'
+import { Family } from './family'
+import { V2_GUNS, V2_SIGHTS, type V2GunId, type V2SightId } from '../../open/shared/gun-kit-v2'
 import { KIT_GUNS, KIT_SIGHTS, kitModel, sightsFor, type KitGunId, type KitSightId, type Model, type PartColor } from '../../open/shared/gun-kit'
 
 type View = 'sheet' | 'turn' | 'hip' | 'aim'
@@ -76,6 +78,9 @@ function Driver({ api, gunId, aiming }: { api: React.RefObject<FpGunApi | null>;
 export default function GunKit() {
   const [q, setQ] = useState<URLSearchParams | null>(null)
   useEffect(() => { setQ(new URLSearchParams(window.location.search)) }, [])
+  // M149: ?family=side|one|sights|third, the locked family's bench (off the page's own views)
+  const fam = q?.get('family'), g = q?.get('gun') ?? '', s = q?.get('sight') ?? ''
+  if (fam) { const gun = (g in V2_GUNS ? g : 'backbone') as V2GunId; return <div style={{ height: '100dvh' }}><Family view={fam} gun={gun} sight={(s in V2_SIGHTS ? s : V2_GUNS[gun].own) as V2SightId} yaw={Number(q!.get('yaw') ?? Math.PI / 2)} /></div> }
   return q ? <Kit q={q} /> : <div style={{ height: '100dvh', background: '#14131a' }} />
 }
 
@@ -98,7 +103,7 @@ function Kit({ q }: { q: URLSearchParams }) {
       <aside style={{ width: 'min(300px, 100%)', overflowY: 'auto', padding: '10px 12px', borderRight: '1px solid #2c2a38', color: '#ddd6ea' }}>
         <h1 className="gx-title" style={{ margin: 0, fontSize: 14, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#e8e3d8' }}>The Gun Kit</h1>
         <p style={{ margin: '4px 0 10px', fontSize: 11, color: '#9a94a8', lineHeight: 1.5 }}>
-          Blockout (M81): each gun on a rail, each sight its own piece. Hip and Aim use the game&apos;s rig and the gun&apos;s hand tune.
+          <a href="?family=side" style={{ color: '#e8b04a' }}>The locked family (M149)</a>. Blockout (M81): each gun on a rail, each sight its own piece. Hip and Aim use the game&apos;s rig and the gun&apos;s hand tune.
         </p>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
           {VIEWS.map(v => <button key={v.id} data-view={v.id} onClick={() => setView(v.id)} style={{ ...chip, opacity: view === v.id ? 1 : 0.45 }}>{v.label}</button>)}

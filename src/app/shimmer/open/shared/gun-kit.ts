@@ -12,9 +12,21 @@
 import type { OpticId } from './optics'
 
 export type PartColor = 'body' | 'dark' | 'metal' | 'ember' | 'glass' | 'dot'
+  | KitColor   // M149: the new family's own colours (gun-kit-v2.ts); no model drawn today uses one
+/** M149 (dead grey, unlit, dull bronze): iron / slot (inset) / bronze / core (the grey crystal) / stamp, soot, cell, strap (the Prototype) /
+ *  etch (a cut line in a lens) / lens (a prism's eyepiece crystal) / view (the zoomed picture inside it, lit only in the sights) */
+export type KitColor = 'iron' | 'slot' | 'bronze' | 'core' | 'stamp' | 'soot' | 'cell' | 'strap' | 'etch' | 'lens' | 'view'
 /** box: s = size xyz. cyl: s[0] = diameter, s[2] = length, along z. tube: an open cyl (no caps). disc: s[0] = diameter, facing +z. */
-export type Part = { o: [number, number, number]; s: [number, number, number]; c: PartColor; shape?: 'box' | 'cyl' | 'tube' | 'disc' }
-export type Model = { parts: Part[]; grip: [number, number, number]; fore: [number, number, number]; top: number; sightZ: number; eye?: number; optic?: OpticId }
+export type Part = { o: [number, number, number]; s: [number, number, number]; c: PartColor; shape?: 'box' | 'cyl' | 'tube' | 'disc' | 'poly' | 'plate'
+  /** M149, all optional (no model before it sets one). axis: which way a cyl / poly runs (cyl: z, poly: x). seg: a cyl's sides. end: a cyl's
+   *  other diameter (its +axis end), or a poly's far (-z) end scale. rot: a turn about x. pts: a poly's outline ([z, y] along x, [x, y]
+   *  along z), s[0] = its depth; bevel = its chamfer; hole = an outline cut through it. plate: s = w, h, flat, facing +z. */
+  axis?: 'x' | 'y' | 'z'; seg?: number; end?: number; rot?: number; pts?: [number, number][]; hole?: [number, number][]; bevel?: number }
+export type Model = { parts: Part[]; grip: [number, number, number]; fore: [number, number, number]; top: number; sightZ: number; eye?: number; optic?: OpticId
+  /** M149: one mesh per colour instead of one per part (cheap draw calls) */ merge?: boolean
+  /** M149: how close the eye comes to this sight, as a share of the gun's own ADS_DIST dial (1 = the dial) */ adsK?: number
+  /** M149: a prism's eyepiece, width and height of the glass: the zoomed picture is drawn inside it */ lens?: [number, number]
+  /** M149: the sight's own cut when the keeper has picked none */ cut?: 'dot' | 'cross' }
 export const box = (o: Part['o'], s: Part['s'], c: PartColor = 'body'): Part => ({ o, s, c })
 const cyl = (o: Part['o'], d: number, len: number, c: PartColor, shape: 'cyl' | 'tube' = 'cyl'): Part => ({ o, s: [d, d, len], c, shape })
 const disc = (o: Part['o'], d: number, c: 'glass' | 'dot'): Part => ({ o, s: [d, d, 0], c, shape: 'disc' })

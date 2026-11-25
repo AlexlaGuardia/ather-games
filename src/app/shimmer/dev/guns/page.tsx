@@ -15,11 +15,12 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
-import { FpGun, ScopeRing, VM, GUN_DEFAULTS, setGunTune, resetGunTune, loadGunTune, selectGunTune, defaultsFor, dialedGun, setRhythm, noteCycle, type FpGunApi, type GunTune } from '../../open/shared/fp-gun'
+import { FpGun, ScopeRing, VM, GUN_DEFAULTS, setGunTune, resetGunTune, loadGunTune, selectGunTune, defaultsFor, dialedGun, previewGunModel, setRhythm, noteCycle, type FpGunApi, type GunTune } from '../../open/shared/fp-gun'
 import { RANGE_GUNS, RHYTHM_DIALS, burstCycle, holdGun, stepGun, type GunState, type RangeGun } from '../../open/shared/gunplay'
 import { playShot } from '../../open/shared/gun-sound'
-import { opticOf } from '../../open/shared/optics'
+import { OPTICS, viewFov, opticOf } from '../../open/shared/optics'
 import { EYE_STAND } from '../../open/shared/locomotion'
+import { V2_GUNS, V2_SIGHTS, v2Model, type V2GunId, type V2SightId } from '../../open/shared/gun-kit-v2'
 import { SoundBench } from './sound-bench'
 
 type Preview = 'hip' | 'aim' | 'run' | 'fire'
@@ -81,6 +82,12 @@ function Driver({ api, gun, preview, paused }: { api: React.RefObject<FpGunApi |
   return null
 }
 
+/** the new sights' small punch-in (a prism's zoom is in its lens, not the view); today's models keep the bare lens as before */
+function Fov({ fov }: { fov: number }) {
+  useFrame(({ camera }) => { const c = camera as import('three').PerspectiveCamera; if (Math.abs(c.fov - fov) > 0.01) { c.fov = fov; c.updateProjectionMatrix() } }, -1)
+  return null
+}
+
 export default function GunTuner() {
   const api = useRef<FpGunApi>(null)
   const [gunId, setGunId] = useState(RANGE_GUNS[0].id)
@@ -88,6 +95,22 @@ export default function GunTuner() {
   const [paused, setPaused] = useState(false)
   const [, bump] = useState(0)
   const [copied, setCopied] = useState(false)
+  // M149: the new family beside today's, this page only (the game never reads it). Off unless picked here or by ?set=new
+  const [fresh, setFresh] = useState(false), [pick, setPick] = useState<V2SightId | null>(null)
+  useEffect(() => {   // ?gun= &preview= &set=new &sight= (the look-sheet shots)
+    const q = new URLSearchParams(window.location.search)
+    if (RANGE_GUNS.some(g => g.id === q.get('gun'))) setGunId(q.get('gun')!)
+    if (PREVIEWS.some(p => p.id === q.get('preview'))) setPreview(q.get('preview') as Preview)
+    if (q.get('set') === 'new') setFresh(true)
+    if (q.get('sight') && q.get('sight')! in V2_SIGHTS) setPick(q.get('sight') as V2SightId)
+  }, [])
+  const v2 = fresh && gunId in V2_GUNS ? V2_GUNS[gunId as V2GunId] : null, sight = v2 ? (pick && v2.sights.includes(pick) ? pick : v2.own) : null
+  useEffect(() => {
+    if (!v2 || !sight) return
+    previewGunModel(v2.id, v2Model(v2.id, sight), v2.hold); bump(n => n + 1)
+    return () => { previewGunModel(v2.id, null); bump(n => n + 1) }
+  }, [v2, sight])
+  const fov = preview === 'aim' && sight ? viewFov(75, OPTICS[V2_SIGHTS[sight].optic]) : 75
   useEffect(() => { loadGunTune(); bump(n => n + 1) }, [])
   const row = RANGE_GUNS.find(g => g.id === gunId) ?? RANGE_GUNS[0], gun = dialedGun(row)
   // per gun (11-19): picking a gun loads ITS numbers into the sliders
@@ -96,7 +119,7 @@ export default function GunTuner() {
 
   return (
     <div style={{ height: '100dvh', display: 'flex', background: '#14131a' }}>
-      <aside style={{ width: 300, overflowY: 'auto', padding: '10px 12px', borderRight: '1px solid #2c2a38', color: '#ddd6ea' }}>
+      <aside data-panel style={{ width: 300, overflowY: 'auto', padding: '10px 12px', borderRight: '1px solid #2c2a38', color: '#ddd6ea' }}>
         <h1 className="gx-title" style={{ margin: 0, fontSize: 14, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#e8e3d8' }}>The Gun Tuner</h1>
         <p style={{ margin: '4px 0 10px', fontSize: 11, color: '#9a94a8', lineHeight: 1.5 }}>
           The game&apos;s lens and held gun. Sliders save to this browser and the open world uses them at once. Copy values and paste them to Jin to make them the default.
@@ -104,6 +127,13 @@ export default function GunTuner() {
         <select data-gun value={gunId} onChange={e => setGunId(e.target.value)} style={{ ...chip, width: '100%', marginBottom: 8 }}>
           {RANGE_GUNS.map(g => <option key={g.id} value={g.id}>{g.name} · {g.slot.toLowerCase()} · {opticOf(g).id}</option>)}
         </select>
+        {gunId in V2_GUNS && (
+          <div data-v2 style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+            <button data-set="today" onClick={() => setFresh(false)} style={{ ...chip, opacity: fresh ? 0.45 : 1 }}>Today</button>
+            <button data-set="new" onClick={() => setFresh(true)} style={{ ...chip, opacity: fresh ? 1 : 0.45 }}>New model</button>
+            {v2 && v2.sights.map(s => <button key={s} data-sight={s} onClick={() => setPick(s)} style={{ ...chip, opacity: s === sight ? 1 : 0.45 }}>{V2_SIGHTS[s].name}</button>)}
+          </div>
+        )}
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
           {PREVIEWS.map(p => <button key={p.id} data-preview={p.id} onClick={() => setPreview(p.id)} style={{ ...chip, opacity: preview === p.id ? 1 : 0.45 }}>{p.label}</button>)}
           <button onClick={() => setPaused(!paused)} style={{ ...chip, opacity: paused ? 1 : 0.45 }}>{paused ? 'Paused' : 'Pause'}</button>
@@ -155,6 +185,7 @@ export default function GunTuner() {
           <mesh rotation={[-Math.PI / 2, 0, 0]}><planeGeometry args={[400, 400]} /><meshStandardMaterial color="#86a35a" roughness={1} /></mesh>
           {[-6, -3, 3, 6].map(x => <mesh key={x} position={[x, 0.75, -12]}><boxGeometry args={[0.3, 1.5, 0.3]} /><meshStandardMaterial color="#8a6a3c" /></mesh>)}
           <mesh position={[0, EYE_STAND, -20]}><boxGeometry args={[0.6, 0.6, 0.1]} /><meshStandardMaterial color="#c0503a" /></mesh>
+          <Fov fov={fov} />
           <FpGun ref={api} />
           <Driver api={api} gun={gun} preview={preview} paused={paused} />
         </Canvas>

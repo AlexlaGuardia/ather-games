@@ -35,9 +35,9 @@ export function markGlow(drawn: boolean, now: number, firedAt: number, charging:
 }
 
 /** Draw a cut into a 2D context, centred, `size` px across. Works on a canvas (the lens) the same as anywhere else. */
-export function drawMark(ctx: { beginPath(): void; arc(x: number, y: number, r: number, a: number, b: number): void; moveTo(x: number, y: number): void; lineTo(x: number, y: number): void; fill(): void; stroke(): void; lineWidth: number; lineCap: string; fillStyle: string | CanvasGradient | CanvasPattern; strokeStyle: string | CanvasGradient | CanvasPattern }, id: MarkId, size: number, color: string) {
+export function drawMark(ctx: { beginPath(): void; arc(x: number, y: number, r: number, a: number, b: number): void; moveTo(x: number, y: number): void; lineTo(x: number, y: number): void; fill(): void; stroke(): void; lineWidth: number; lineCap: string; fillStyle: string | CanvasGradient | CanvasPattern; strokeStyle: string | CanvasGradient | CanvasPattern }, id: MarkId, size: number, color: string, w = 0.045) {
   const h = size / 2, X = (x: number) => h + x * h, Y = (y: number) => h - y * h
-  ctx.fillStyle = color; ctx.strokeStyle = color; ctx.lineWidth = Math.max(1.5, size * 0.045); ctx.lineCap = 'round'
+  ctx.fillStyle = color; ctx.strokeStyle = color; ctx.lineWidth = Math.max(1.5, size * w); ctx.lineCap = 'round'
   for (const s of MARKS[id].strokes) {
     ctx.beginPath()
     if (s.k === 'dot') { ctx.arc(h, h, s.r * h, 0, Math.PI * 2); ctx.fill() }
