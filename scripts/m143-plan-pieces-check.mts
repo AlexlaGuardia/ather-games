@@ -133,7 +133,10 @@ async function run(PHONE: boolean) {
   ok(await p.evaluate(() => document.querySelector<HTMLButtonElement>('[data-act="build-plan"] button')?.disabled === true), `4. ${N}: short = cannot Build`)
   await load(); ok((await planned()).length === 3 && await stores() === bag0, `4. ${N}: the plan is there after a reload`)
   
-  const pn = (await planned())[2]; await p.evaluate((x: number, z: number) => (window as any).__ather.tp(x, z, 0), pn.x, pn.z + 1.2); await sleep(1500); await p.keyboard.down('w'); await sleep(1800); await p.keyboard.up('w'); await sleep(300)
+  const pn = (await planned())[2]; await p.evaluate((x: number, z: number) => (window as any).__ather.tp(x, z, 0), pn.x, pn.z + 1.2); await sleep(1500); // 11-25: held for ground, not for a fixed 1.8 s: desktop draws ~2.6 frames / s here and a frame's step is capped, so 1.8 s covered
+  // 1.2 m with NO panel at all (105.05). A standing panel stops the keeper at 105.45 for good, so a solid one still reads red (20 s cap).
+  const kz = () => p.evaluate(() => { const s = (window as any).__ather.state(); return (s.pz ?? s.z) as number })
+  await p.keyboard.down('w'); await poll(async () => (await kz()) < pn.z - 0.3, 20000); await p.keyboard.up('w'); await sleep(300)
   const walked = await p.evaluate(() => { const s = (window as any).__ather.state(); return { x: s.px ?? s.x, z: s.pz ?? s.z } }); ok(walked.z < pn.z - 0.3, `4. ${N}: the planned panel is walked through (z ${walked.z?.toFixed?.(2)} past ${pn.z})`)
   // 5
   ok(await fly(), `   ${N}: plan mode`); await p.evaluate((x: number, z: number) => (window as any).__build.to(x, z, 0), X0 + 2.5, RZ); await sleep(400)
