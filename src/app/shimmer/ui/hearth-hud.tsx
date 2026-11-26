@@ -540,12 +540,20 @@ export function HearthLip({ face, vitals, mana, tools }: {
 export type ToolPip = { family: string; level: number; xpPct: number; active: boolean
   /** M184: false = an EMPTY pip (the tool not handed yet); stage 0 worn, 1..3 upgrades; ringPct / ringColor = the upgrade's ring */
   held?: boolean; stage?: number; ringPct?: number | null; ringColor?: string | null }
-export function HearthToolPips({ face, pips }: { face: HudFace; pips: readonly ToolPip[] }) {
+export function HearthToolPips({ face, pips, onPick, picked = null }: { face: HudFace; pips: readonly ToolPip[]
+  /** M184 s2: tap a pip = the tool panel; omitted = inert */
+  onPick?: (family: string) => void; picked?: string | null }) {
   const t = HUD_FACES[face]
   const R = 9, C = 2 * Math.PI * R
+  // a pip as a button: a 34 px touch target round the 22 px pip (the lip is tight, so it overlaps its neighbours' air)
+  const tap = (p: ToolPip, el: React.ReactElement) => !onPick ? el : (
+    <button key={p.family} type="button" data-dial-btn={p.family} aria-label={p.family} aria-expanded={picked === p.family}
+      onClick={e => { e.stopPropagation(); onPick(p.family) }}
+      className={`pointer-events-auto relative grid place-items-center -m-1.5 p-1.5 rounded-full transition-transform duration-150 active:scale-110 ${picked === p.family ? 'scale-110 brightness-125' : ''}`}>{el}</button>
+  )
   return (
     <div className="flex items-center gap-1 shrink-0">
-      {pips.map(p => p.held === false ? (
+      {pips.map(p => tap(p, p.held === false ? (
         <div key={p.family} title={p.family} data-pip={p.family} data-held="0" className="relative w-[22px] h-[22px] rounded-full"
              style={{ background: t.well, opacity: 0.55, outline: `1px dashed ${face === 'full' ? 'rgba(58,39,22,.4)' : 'rgba(255,255,255,.35)'}`, outlineOffset: -3 }} />
       ) : (
@@ -563,7 +571,7 @@ export function HearthToolPips({ face, pips }: { face: HudFace; pips: readonly T
           </svg>
           <span className="relative text-[9px] font-extrabold tabular-nums" style={{ ...hearthBody, color: t.count }}>{p.level}</span>
         </div>
-      ))}
+      )))}
     </div>
   )
 }

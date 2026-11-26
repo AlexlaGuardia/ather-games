@@ -42,6 +42,8 @@ import { ToolGlyph } from '../../hud/hud-corner'
 import { type EquippedTools } from '../../engine/tools'
 import { OPEN_TOOL_FAMILIES } from '../../ui/tool-stage'
 import { loadTools, TOOLS_EVENT } from '../ather/rinsticks'
+import { toolPanel } from '../ather/tool-panel'
+import { ToolPanelView } from './tool-panel-view'
 import { createSkillSet, type SkillSet } from '../../engine/skills'
 import type { Vitals } from '../../engine/vitals'
 import { hudSay, linesAt, subscribe, type Line } from './hud-say'
@@ -202,6 +204,10 @@ export function GameHud({ size, pose, marks, vitals, mana, tools, skills, entrie
     addEventListener(TOOLS_EVENT, on); return () => removeEventListener(TOOLS_EVENT, on)
   }, [tools])
   const basicSkills = useRef<SkillSet>(createSkillSet())
+  // M184 s2: a dial clicked / tapped opens its TOOL PANEL (same dial again closes it)
+  const [picked, setPicked] = useState<ToolFamily | null>(null)
+  const pick = React.useCallback((f: ToolFamily) => setPicked(p => (p === f ? null : f)), [])
+  const closePanel = React.useCallback(() => setPicked(null), [])
   // ★ the server has no save, so it draws the orb with a fresh keeper's tools + skills; the first client render must match it
   // (a leveled keeper's real levels on that render were a hydration mismatch, React #418, 11-18). Real ones after mount.
   const [mounted, setMounted] = useState(false)
@@ -264,7 +270,8 @@ export function GameHud({ size, pose, marks, vitals, mana, tools, skills, entrie
     return (
       <div className={`contents ${HEARTH_FONT_VARS}`}>
         <HearthHudLayer face={FACE} size="phone" entries={entries} sel={shown} held={null} dimmed={dimmed} onSelect={onSelect}
-          objective={null} vitals={vitals} mana={mana} tools={T} skills={S} activeTool={null} glyph={glyph} mapFrame={false} families={OPEN_TOOL_FAMILIES} />
+          objective={null} vitals={vitals} mana={mana} tools={T} skills={S} activeTool={null} glyph={glyph} mapFrame={false} families={OPEN_TOOL_FAMILIES} onTool={pick} toolPicked={picked} />
+        {picked && T.current && <ToolPanelView panel={toolPanel(T.current, picked)} phone onClose={closePanel} />}
         {/* 11-18 (play's 390x844 shot): the screen-centred compass ran under the minimap; slide it left just enough */}
         <HearthCompass face={FACE} pose={pose} marks={marks} size="phone" centerX={phoneCompassX} />
         <XpBar face={FACE} size="phone" centerX={phoneCompassX} top={8 + XP_BELOW_COMPASS} />
@@ -296,13 +303,14 @@ export function GameHud({ size, pose, marks, vitals, mana, tools, skills, entrie
       <HearthClock face={FACE} box={box} />
       <StatusChips items={status} top={statusTop} right={box.right} />
       <div className="fixed bottom-4 left-4 pointer-events-none" style={{ zIndex: 32 }}><HearthVitals face={FACE} vitals={vitals} /></div>
-      <div className="contents" style={{ zIndex: 32 }}><CornerFixed size={size} mana={mana} readouts={readouts} /></div>
+      <div className="contents" style={{ zIndex: 32 }}><CornerFixed size={size} mana={mana} readouts={readouts} onPick={pick} picked={picked} /></div>
+      {picked && T.current && <ToolPanelView panel={toolPanel(T.current, picked)} phone={false} onClose={closePanel} />}
       {casts && <CastPlates casts={casts} />}
     </div>
   )
 }
 
-function CornerFixed({ size, mana, readouts }: { size: HudSize; mana: React.RefObject<Mana | null>; readouts: ReturnType<typeof toolReadout>[] }) {
+function CornerFixed({ size, mana, readouts, onPick, picked }: { size: HudSize; mana: React.RefObject<Mana | null>; readouts: ReturnType<typeof toolReadout>[]; onPick: (f: ToolFamily) => void; picked: ToolFamily | null }) {
   // the layer's Corner is `absolute bottom-4 right-4`; a fixed wrapper makes it screen-anchored on any page
-  return <div className="fixed inset-0 pointer-events-none" style={{ zIndex: 32 }}><Corner face={FACE} size={size} mana={mana} readouts={readouts} glyph={glyph} /></div>
+  return <div className="fixed inset-0 pointer-events-none" style={{ zIndex: 32 }}><Corner face={FACE} size={size} mana={mana} readouts={readouts} glyph={glyph} onPick={onPick} picked={picked} /></div>
 }

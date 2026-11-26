@@ -120,11 +120,14 @@ function Socket({ face, r, glyph }: { face: HudFace; r: ReturnType<typeof toolRe
 /** The bottom-right corner: vessel + rim + arch. hud-corner's geometry (152px gauge, arc radius
  *  clamp(108px,16vw,122px), bearings 180/137/93/50). Compact shrinks the whole corner to ~96px. */
 /** The mana orb with the tool sockets fanned round it (bottom-right). Exported for the open world's template. */
-export function Corner({ face, size, mana, readouts, glyph }: {
+export function Corner({ face, size, mana, readouts, glyph, onPick, picked = null }: {
   face: HudFace; size: HudSize
   mana: React.RefObject<{ cur: number; max: number; regen: number } | null>
   readouts: ReturnType<typeof toolReadout>[]
   glyph?: (f: ToolFamily) => React.ReactNode
+  /** M184 s2: a dial is a button (hover reacts, click = the tool panel); omitted = the dials stay inert */
+  onPick?: (f: ToolFamily) => void
+  picked?: ToolFamily | null
 }) {
   // four sockets at hud-corner's bearings; three (the open world, M184) spread over the same arc
   const ANGLES = readouts.length === 3 ? [180, 115, 50] : [180, 137, 93, 50]
@@ -142,7 +145,12 @@ export function Corner({ face, size, mana, readouts, glyph }: {
                 left: `calc(var(--tool-arc-r) * ${Math.cos(rad).toFixed(4)})`,
                 top: `calc(var(--tool-arc-r) * ${(-Math.sin(rad)).toFixed(4)})`,
                 transform: 'translate(-50%, -50%)',
-              }}><Socket face={face} r={r} glyph={glyph} /></div>
+              }}>{onPick
+                ? <button type="button" data-dial-btn={r.family} aria-label={r.dial.name ?? r.family} aria-expanded={picked === r.family}
+                    onClick={e => { e.stopPropagation(); onPick(r.family) }}
+                    className={`pointer-events-auto block w-full h-full rounded-full cursor-pointer transition-transform duration-150 hover:scale-110 hover:brightness-125 focus-visible:scale-110 ${picked === r.family ? 'scale-110 brightness-125' : ''}`}>
+                    <Socket face={face} r={r} glyph={glyph} /></button>
+                : <Socket face={face} r={r} glyph={glyph} />}</div>
             )
           })}
         </div>
@@ -152,7 +160,10 @@ export function Corner({ face, size, mana, readouts, glyph }: {
 }
 
 // ── the layer ────────────────────────────────────────────────────────────────────────────────
-export function HearthHudLayer({ face = 'full', size: sizeIn, entries, sel, held, dimmed, onSelect, objective, vitals, mana, buffs, tools, skills, activeTool, glyph, door = false, topLeftFrom = 0, clock = true, mapFrame = true, slots = true, families = TOOL_FAMILIES }: {
+export function HearthHudLayer({ face = 'full', size: sizeIn, entries, sel, held, dimmed, onSelect, objective, vitals, mana, buffs, tools, skills, activeTool, glyph, door = false, topLeftFrom = 0, clock = true, mapFrame = true, slots = true, families = TOOL_FAMILIES, onTool, toolPicked = null }: {
+  /** M184 s2: tap / click a dial or pip = the tool panel (the host draws it) */
+  onTool?: (f: ToolFamily) => void
+  toolPicked?: ToolFamily | null
   /** which tool families get a dial (the open world: its three, M184). Default: all four */
   families?: readonly ToolFamily[]
   /** The host has an options door under the map (the world does) — the clock steps left of it. */
@@ -202,7 +213,7 @@ export function HearthHudLayer({ face = 'full', size: sizeIn, entries, sel, held
   const pips: ToolPip[] = readouts.map(r => ({ family: r.family, level: r.level, xpPct: r.xpPct, active: r.active, held: r.dial.held, stage: r.dial.stage, ringPct: r.dial.ringPct, ringColor: r.dial.ringColor }))
   // Compact's lip carries health only (the orb still stands), so with no health there is no lip.
   const lip = size === 'compact' ? (vitals ? <HearthLip face={face} vitals={vitals} /> : undefined)
-    : size === 'phone' ? <HearthLip face={face} vitals={vitals} mana={mana} tools={<HearthToolPips face={face} pips={pips} />} />
+    : size === 'phone' ? <HearthLip face={face} vitals={vitals} mana={mana} tools={<HearthToolPips face={face} pips={pips} onPick={onTool as ((f: string) => void) | undefined} picked={toolPicked} />} />
     : undefined
   return (
     // ⚠ THE FONT VARS RIDE ON A `display:contents` WRAPPER. Every hearth menu applies them on its own
@@ -220,7 +231,7 @@ export function HearthHudLayer({ face = 'full', size: sizeIn, entries, sel, held
         top={size !== 'phone' ? undefined : (topLeftFrom ? topLeftFrom + 6 : 12) + (objective ? 46 : 0)} />}
       {size === 'wide' && vitals && <div className="absolute bottom-4 left-4 pointer-events-none"><HearthVitals face={face} vitals={vitals} /></div>}
       <HearthHotbar face={face} size={size} entries={entries} sel={sel} held={held} dimmed={dimmed} onSelect={onSelect} lip={lip} slots={slots} />
-      {size !== 'phone' && <Corner face={face} size={size} mana={mana} readouts={readouts} glyph={glyph} />}
+      {size !== 'phone' && <Corner face={face} size={size} mana={mana} readouts={readouts} glyph={glyph} onPick={onTool} picked={toolPicked} />}
     </div>
   )
 }
