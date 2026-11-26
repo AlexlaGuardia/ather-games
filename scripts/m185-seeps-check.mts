@@ -3,7 +3,7 @@
 // A fresh anonymous context, a keeper holding the GOLDWOOD spike:
 //   1. the spike panel lists the three seeps with the Goldwood numbers: small 5 ok, medium 9 ok, large 16 ok
 //   2. in the Wilds (--no-wilds skips): for each size a seep stands in the tiles; aimed, the prompt says "<Size> Mana Seep (n mana)"
-//      (never spring / well); worked to the end it pays raw mana shards into the bag, a large more than a small
+//      (never spring / well); worked to the end it pays raw mana shards (on the ground beside it, M141, or pulled into the bag), a large more than a small
 //   3. the reset: a worked seep says "growing back"; once its reset is past (the saved time moved back) it is workable again
 //   npx tsx scripts/m185-seeps-check.mts [--url https://ather.games] [--no-wilds] [--phone-only] [--desk-only]
 import puppeteer, { type Page } from 'puppeteer-core'
@@ -51,7 +51,11 @@ const readPanel = (p: Page) => p.evaluate(() => {
   if (!e) return null
   return { name: e.querySelector('[data-panel-name]')?.textContent ?? '', rows: [...e.querySelectorAll('[data-node-row]')].map(r => { const x = (r as HTMLElement).dataset; return `${x.nodeRow}:${x.mana}:${x.verdict}` }) }
 })
-const shards = (p: Page) => p.evaluate(() => { try { return (JSON.parse(localStorage.getItem('open.inv.v1') ?? 'null')?.slots ?? []).filter((s: any) => s?.id === 'raw_mana_shard').reduce((a: number, s: any) => a + s.n, 0) } catch { return -1 } })
+// a finished node pays onto the GROUND beside it (M141 ground-loot.ts), and a drop within 2 m comes to the keeper: count both
+const shards = (p: Page) => p.evaluate(() => { try {
+  const bag = (JSON.parse(localStorage.getItem('open.inv.v1') ?? 'null')?.slots ?? []).filter((s: any) => s?.id === 'raw_mana_shard').reduce((a: number, s: any) => a + s.n, 0)
+  const ground = Object.keys(localStorage).filter(k => k.startsWith('open.loot.v1')).flatMap(k => { const v = JSON.parse(localStorage.getItem(k) ?? 'null'); return Array.isArray(v) ? v : v?.drops ?? [] }).filter((l: any) => l?.item === 'raw_mana_shard').reduce((a: number, l: any) => a + l.n, 0)
+  return bag + ground } catch { return -1 } })
 const SIZES = [['seep_s', 'Small Mana Seep', 5], ['seep_m', 'Medium Mana Seep', 9], ['seep_l', 'Large Mana Seep', 16]] as const
 
 for (const [vp, w, h] of (phoneOnly ? [['phone', 390, 844]] : deskOnly ? [['desktop', 1280, 800]] : [['phone', 390, 844], ['desktop', 1280, 800]]) as [string, number, number][]) {
@@ -85,6 +89,10 @@ for (const [vp, w, h] of (phoneOnly ? [['phone', 390, 844]] : deskOnly ? [['desk
   ok(!!pn && !pn.rows.some(r => /spring|well/i.test(r)), `${vp}: no row says spring or well`)
   if (process.env.SHOT_DIR) await p.screenshot({ path: `${process.env.SHOT_DIR}/m185s2-panel-${vp}.png` }).catch(() => {})
   await p.keyboard.press('Escape'); await sleep(500)
+  // the Escape that shuts the panel can also open Options (no pointer lock headless), and Options FREEZES the game: a channel
+  // then never drains (the s2 '+0' wall, 11-26). Shut Options the way a player would, and prove it is shut.
+  for (let i = 0; i < 4 && await p.evaluate(() => /Resume[\s\S]{0,40}Tooltips/.test(document.body.innerText)); i++) { await p.keyboard.press('Escape'); await sleep(600) }
+  ok(!(await p.evaluate(() => /Resume[\s\S]{0,40}Tooltips/.test(document.body.innerText))), `${vp}: Options is shut before the Wilds (an open menu freezes the game)`)
 
   // 2 + 3. the Wilds
   if (!noWilds) {
