@@ -281,6 +281,7 @@ Steps (one worker each, in order; each keeps `beta-m7-saves` green):
 - **Rules:** only rows on this list. No new systems, no lore, nothing public. Canon gate + tests before every build.
 
 ## Inbox (Alex's brain dump: hub writes here at once, dated, his words; triaged into rows / queue / CANON_GAPS / killed)
+- 11-26 16:2x Alex on Marlotl v1: 'the main thing I'm looking at here is the head and eyes looks bit weird can we give that another try' -> Marlotl v2 head + eyes
 - 11-26 16:1x Alex (Nyx shop list amend): 'the shops im thinking are Cafe's, Furniture, Clothing, Manatech centers (smithy).. and then the suppliers: are smokehouses for meats, lumberyards for wood and quarry offices for stone' -> M211 (+ M205 farmers market)
 - 11-26 16:0x Alex: 'add a farmers market supplier for rootbulb and capgrain, good idea..' -> M205: the Nyx supplier = a FARMERS MARKET (needs the M115 supplier panel)
 - 11-26 15:4x Alex on Vulnix v3: 'yea that will work.. whos next?' -> Vulnix ✅; VULNYX LINE DONE (4/4 own creatures); next Manalotl line
