@@ -2,7 +2,7 @@
 // (never the keeper's own save). One bloomed Vulnyx on one planter.
 //  OWNER  1 `?form=mana|storm|earth|water`: she draws as Vulnara / Vulnarc / Vulnore / Vulnix (that glb asked for and mounted, the base
 //         one not), rigged (one skeleton, idle clip on), grown past her base (0.70 m) by her own size dial (formGrow:
-//         ~0.84 m at 1.2; M202 v2 Vulnore + Vulnara ~0.98 m at 1.4); a still of each. --forms earth,mana = only those.
+//         ~0.84 m at 1.2; M202 v2 Vulnore + Vulnara + Vulnarc ~0.98 m at 1.4); a still of each. --forms earth,mana = only those.
 //  PLAYER 2 `?form=storm` without the owner cookie: her base Vulnyx, no form glb asked for (the preview is owner-only).   3 0 page errors.
 //   OWNER_KEY=... npx tsx scripts/m202-forms-check.mts [--shots dir] [--url https://ather.games]
 import puppeteer, { type Page } from 'puppeteer-core'
@@ -66,6 +66,11 @@ for (const el of SPIRIT_ELEMENTS.filter(e => !only.length || only.includes(e))) 
   const want = 0.70 * formGrow(L.name)
   ok(!!m && m.h > want * 0.9 && m.h < want * 1.1, `1 ${el}: grown past her base 0.70 m to ~${want.toFixed(2)} m: ${m?.h.toFixed(3)} m standing (look h ${m?.look.toFixed(3)})`)
   if (shots && m) { await p.evaluate((x: number, z: number) => (window as any).__ather.tp(x + 1.4, z + 1.1, 0), m.x, m.z); await sleep(900)
+    // after the tp she walks to the keeper: aim only once she has SETTLED (two reads 0.5 s apart within 2 cm; 12 s cap), else the still
+    // frames the place she left (the Vulnara still showed only her brush)
+    let last = { x: 1e9, z: 1e9 }
+    for (let k = 0; k < 24; k++) { await sleep(500); const q = await p.evaluate(() => { const r = [...(window as any).__spiritModel.rigs.values()][0]; return { x: r.x, z: r.z } })
+      if (Math.hypot(q.x - last.x, q.z - last.z) < 0.02) break; last = q }
     const m2 = await p.evaluate(() => { const r = [...(window as any).__spiritModel.rigs.values()][0]; return { x: r.x, z: r.z } }); await aimAt(p, m2.x, m2.z, 0.35); await hideCard(p)
     await p.screenshot({ path: `${shots}/${L.name}-390.png` }) }
   await p.browserContext().close()
