@@ -42,7 +42,7 @@ type Doc = { garden: { keys: Record<string, string> }; keepers: { id: string; ke
 const serverDoc = async () => { const j = await (await asKeeper('/api/saves/open')).json() as { doc: Doc | null; rev: number }; return j }
 const others = () => ro ? sha(JSON.stringify([
   ro.prepare("SELECT s.user_id, s.game, s.rev, s.data FROM saves s JOIN accounts a ON a.user_id = s.user_id WHERE s.user_id != ? AND a.username LIKE 'dummy\\_%' ESCAPE '\\' ORDER BY s.user_id, s.game").all(acct.user_id),
-  ro.prepare('SELECT * FROM cluster_members ORDER BY user_id').all(), ro.prepare('SELECT user_id, data FROM cluster_gardens WHERE user_id != ? ORDER BY user_id').all(acct.user_id)]))   // the keeper's own snapshot is the game's upload : 'no-db'
+  ro.prepare('SELECT * FROM cluster_members ORDER BY user_id').all(), ro.prepare('SELECT user_id, data FROM cluster_gardens WHERE user_id != ? ORDER BY user_id').all(acct.user_id)])) : 'no-db'   // the keeper's own cluster snapshot is the game's upload, not the reset : 'no-db'
 
 const ARGS = ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader']
 const br: Browser = await puppeteer.launch({ protocolTimeout: 300000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ARGS })
