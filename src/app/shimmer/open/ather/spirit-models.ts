@@ -63,6 +63,8 @@ export type SpiritLook = {
   trot: Partial<TrotDials>
   /** M132 s2: the glb carries bones + clips (spirit-rig.ts); without it the model is the unrigged one */
   rig?: RigLook
+  /** M202: this look is a SECOND FORM (the element she evolved by); always rigged */
+  form?: SpiritElement
 }
 
 const MANALOTL_TROT: Partial<TrotDials> = {
@@ -244,8 +246,35 @@ export const SPIRIT_RIGS: Partial<Record<Species, SpiritLook>> = {
   hummingbird: { ...SPIRIT_MODELS.hummingbird!, url: '/open/spirits/hovari-rigged.glb', rig: HOVARI_RIG,
     glow: { part: 'shimmer', emissive: '#b8fff0', lo: 0.35, hi: 0.6, hz: 0.5 } },
 }
-/** the look to draw: the rigged one where there is one and `on` */
-export const rigLook = (sp: Species, look: SpiritLook, on: boolean): SpiritLook => (on ? SPIRIT_RIGS[sp] ?? look : look)
+/** the look to draw: the rigged one where there is one and `on`. A second form IS rigged: it stays as it is with `on`, and
+ *  with `?rig=0` (the old unrigged bodies, a frame-measure switch) she falls back to her species' old model. */
+export const rigLook = (sp: Species, look: SpiritLook, on: boolean): SpiritLook =>
+  (look.form ? (on ? look : SPIRIT_MODELS[sp] ?? look) : on ? SPIRIT_RIGS[sp] ?? look : look)
+
+// ── M202 s1 THE SECOND FORMS, Vulnyx line first (Magii + Alex 11-26, athernyx b0f1d0d: model + rig all 40, awakened held).
+// Sculpted in code off the live Vulnyx (same body, so the M132 rig plan fits as is) and coloured / marked from the LOCKED art
+// /root/athernyx/assets/stage2/ 001 Vulnara, 011 Vulnarc, 012 Vulnore, 013 Vulnix (docs/looks/m202-vulnyx-2026-11-26).
+// SIZE: canon (spirits-species.md, Spirit Scale) rules every evolution grows the spirit and leaves the metre figure to the
+// build: a second form draws FORM_GROW x her base's grown height (Vulnyx 0.70 -> 0.84 m). Tints = each picture's coat.
+export type SpiritElement = 'mana' | 'storm' | 'earth' | 'water'
+export const SPIRIT_ELEMENTS: readonly SpiritElement[] = ['mana', 'storm', 'earth', 'water']
+export const FORM_GROW = 1.2
+const secondForm = (sp: Species, form: SpiritElement, name: string, emissive: string, hull: string): SpiritLook => {
+  const b = SPIRIT_RIGS[sp]!
+  return { ...b, name, form, url: `/open/spirits/${name}-rigged.glb`, h: b.h * FORM_GROW, skin: { emissive, emissiveI: 0.14 }, hull: { color: hull, opacity: 0.38 },
+    trot: grownTrot(b.trot, b.h, b.h * FORM_GROW) }
+}
+export const SECOND_FORMS: Partial<Record<Species, Record<SpiritElement, SpiritLook>>> = {
+  fox: {
+    mana: secondForm('fox', 'mana', 'vulnara', '#b49cff', '#e8dcff'),
+    storm: secondForm('fox', 'storm', 'vulnarc', '#a8d2ff', '#dcecff'),
+    earth: secondForm('fox', 'earth', 'vulnore', '#ffae4a', '#ffe2b4'),
+    water: secondForm('fox', 'water', 'vulnix', '#6fe6f0', '#c8f6ff'),
+  },
+}
+/** M202: her second form's look when she has evolved (`element` set) and her species has its forms modelled, else null */
+export const formLook = (s: Species | null | undefined, el: SpiritElement | null | undefined): SpiritLook | null =>
+  (s && el ? SECOND_FORMS[s]?.[el] ?? null : null)
 
 /** The species' model, or null = the gold orb. */
 export const spiritModelFor = (s: Species | null | undefined): SpiritLook | null => (s ? SPIRIT_MODELS[s] ?? null : null)

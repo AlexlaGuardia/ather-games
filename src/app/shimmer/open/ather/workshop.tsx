@@ -56,8 +56,8 @@ import { BLOOM_MS, speciesOf, homeOf, growingIn, spiritsAt, shownAt } from './sp
 import { partyIds, calledIds, subscribeParty } from './spirit-party'   // M124 s1: who is drawn at a bed
 import { followIds, subscribeFollow } from './spirit-follow'
 import { BLOOMED_SPIRIT_LINE, planterBoxHint } from './planter-lines'
-import { SpiritOnPlanter, useSpiritsDev } from './spirit-model'
-import { spiritModelFor } from './spirit-models'
+import { SpiritOnPlanter, useFormPreview, useSpiritsDev } from './spirit-model'
+import { formLook, spiritModelFor } from './spirit-models'
 import { plotFootprints, footDist, footBlocked, bodyRadius, type Foot, type PieceFoot } from './obstacles'   // M117 s1
 import { GROWN } from '../../sprites/creature-size'
 import type { Species } from '../../spirits/spirit'
@@ -1363,7 +1363,8 @@ function PlanterSpirit({ id }: { id: string }) {
   const orb = useRef<THREE.Mesh>(null)
   // M102 Manalotl wire-in: the bloomed pot's OWN species' model (spirit-models.ts), or the gold orb when it has none yet.
   // M107 ship (Alex 11-23): the model + her roam are for every keeper now.
-  const sp = p?.bloomed ? speciesOf(p.seed) : null, look = spiritModelFor(sp)
+  // M202 s1: an evolved spirit (pot.element) draws her SECOND FORM where her species' forms are modelled; `?form=` = the owner preview
+  const preview = useFormPreview(), sp = p?.bloomed ? speciesOf(p.seed) : null, look = formLook(sp, p?.element ?? preview) ?? spiritModelFor(sp)
   const nav = useMemo(() => (look && sp ? planterNav(id, dev, spiritBodyR(sp)) : null), [look, id, dev, sp])   // M107: she roams the garden
   useFrame(({ clock }) => { if (orb.current) orb.current.position.y = 1.0 + Math.sin(clock.elapsedTime * 1.6) * 0.06 })
   const orbMesh = <mesh ref={orb} position-y={1.0}><sphereGeometry args={[0.16, 14, 10]} /><meshBasicMaterial color={f.glow} transparent opacity={0.85} /></mesh>

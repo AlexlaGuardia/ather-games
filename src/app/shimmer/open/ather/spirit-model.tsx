@@ -20,7 +20,7 @@ import { spiritCheer } from './spirit-feed'   // M109 s2: fed = her happy beat
 import { inParty, spiritCall, subscribeParty } from './spirit-party'   // M109 s3: called home from the grimoire; s4: the party keeps near
 import { isTrainStat, trainPlay } from './spirit-stats'   // M110 s1: a finished play at a training piece = a small gain
 
-import { SPIRIT_MODELS, groundLift, lowPoints, rigLook, type SpiritLook } from './spirit-models'
+import { SPIRIT_ELEMENTS, SPIRIT_MODELS, groundLift, lowPoints, rigLook, type SpiritElement, type SpiritLook } from './spirit-models'
 import { groundMoved, rigClip, type RigClip } from './spirit-rig'   // M132 s2
 import { GROUNDED, flyClip, flyStep, travels, type FlyState } from './spirit-fly'   // M173
 import { hullPush, makeRigBody, rigCount, type RigBody } from './spirit-rig-body'
@@ -58,8 +58,23 @@ export function useSpiritRig(): boolean {
 // pose (the M107 asserts read it), `trots[species]` = each species' latest pose.
 type TrotProbe = { x: number; y: number; z: number; mode: string; home: { x: number; z: number }; rMin: number; rMax: number; beats: number; homes: number; tilt: number; h: number; hWorld?: number; len?: number; keepMax?: number; cheers: number; yMax: number; calling: boolean; near: boolean; plays: number; playing: string | null; playYMax: number; braceMax: number }
 type RigProbe = { id: string; sp: Species; h: number; yaw: number; x: number; y: number; z: number; mode: string; v: number; /** M173: a flier's metres off the ground (0 walking) */ alt: number; body: RigBody }
-type Probe = { rigs: Map<string, RigProbe>; rigCount: typeof rigCount; mounted: number; url: string; h: number; species: Record<string, number>; trot?: TrotProbe; trots: Record<string, TrotProbe> }
-const probe = (): Probe => { const w = window as unknown as { __spiritModel?: Probe }; return (w.__spiritModel ??= { mounted: 0, url: VULNYX_URL, h: VULNYX_H, species: {}, trots: {}, rigs: new Map(), rigCount }) }
+type Probe = { rigs: Map<string, RigProbe>; rigCount: typeof rigCount; mounted: number; url: string; h: number; species: Record<string, number>; urls: Record<string, number>; trot?: TrotProbe; trots: Record<string, TrotProbe> }
+const probe = (): Probe => { const w = window as unknown as { __spiritModel?: Probe }; return (w.__spiritModel ??= { mounted: 0, url: VULNYX_URL, h: VULNYX_H, species: {}, urls: {}, trots: {}, rigs: new Map(), rigCount }) }
+
+/** M202 s1 OWNER PREVIEW of the second forms while no player path evolves a spirit yet (M201): `?form=mana|storm|earth|water`
+ *  draws every evolvable garden spirit in that form, for the owner only (/api/owner). Players never see it. */
+let formQ: SpiritElement | null | undefined
+let ownerP: Promise<boolean> | null = null
+export function useFormPreview(): SpiritElement | null {
+  const [on, setOn] = useState(false)
+  formQ ??= (() => { if (typeof window === 'undefined') return null; const f = new URLSearchParams(window.location.search).get('form'); return (SPIRIT_ELEMENTS as readonly string[]).includes(f ?? '') ? f as SpiritElement : null })()
+  useEffect(() => {
+    if (!formQ) return; let alive = true
+    ;(ownerP ??= fetch('/api/owner', { cache: 'no-store' }).then(r => (r.ok ? r.json() : { owner: false })).then(d => !!d.owner).catch(() => false)).then(v => { if (alive) setOn(v) })
+    return () => { alive = false }
+  }, [])
+  return on ? formQ : null
+}
 
 let grad: THREE.DataTexture | null = null
 const gradTex = () => { if (grad) return grad; grad = new THREE.DataTexture(new Uint8Array([110, 110, 110, 255, 185, 185, 185, 255, 255, 255, 255, 255]), 3, 1, THREE.RGBAFormat); grad.minFilter = grad.magFilter = THREE.NearestFilter; grad.needsUpdate = true; return grad }
@@ -165,8 +180,8 @@ function SpiritModel({ sp, look, nav, id, avatar, dev }: { sp: Species; look: Sp
     trot.onPlayed((toy, stat) => { if (isTrainStat(stat)) trainPlay(id, sp, stat, toy) })   // M118 s2: only where she is assigned
     return () => trot.onPlayed(null)
   }, [trot, id, sp, dev])
-  useEffect(() => { if (avatar) return; const p = probe(); p.mounted++; p.species[sp] = (p.species[sp] ?? 0) + 1
-    return () => { p.mounted--; p.species[sp]--; if (!p.species[sp]) delete p.trots[sp]; if (!p.species.fox) p.trot = undefined } }, [sp, avatar])
+  useEffect(() => { if (avatar) return; const p = probe(), u = look.url; p.mounted++; p.species[sp] = (p.species[sp] ?? 0) + 1; p.urls[u] = (p.urls[u] ?? 0) + 1
+    return () => { p.mounted--; p.species[sp]--; if (!--p.urls[u]) delete p.urls[u]; if (!p.species[sp]) delete p.trots[sp]; if (!p.species.fox) p.trot = undefined } }, [sp, avatar, look.url])
   useFrame(({ clock }, dt) => {
     const t = clock.elapsedTime; time.value = t
     if (parts?.glow && look.glow) { const G = look.glow; parts.glow.emissiveIntensity = G.lo + (G.hi - G.lo) * (0.5 + 0.5 * Math.sin(t * Math.PI * 2 * G.hz)) }
