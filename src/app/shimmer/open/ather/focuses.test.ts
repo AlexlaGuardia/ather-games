@@ -15,6 +15,11 @@ ok(Object.values(FOCUSES).flat().every(id => TOOL_DEFS[id].recipe.every(c => !!O
 const worn = makeBasicTool('forestry')!, gold = { toolId: 'goldwood_blade', usesRemaining: 50, xpBonus: 1.1 }, star = { toolId: 'starwillow_blade', usesRemaining: 9, xpBonus: 1.35 }
 ok(rungOf(worn) === 1 && rungOf(undefined) === 1 && rungOf(gold) === 1 && rungOf(star) === 3, 'rung: worn and Goldwood 1, Starwillow 3 (M136)')
 ok(reachOf(worn) === 2 && reachOf(gold) === 2 && reachOf(star) === 4, 'reach: rung 1 works tiers 1 and 2 cleanly, each rung one more (M136)')
+// M185 s1 (Alex 11-26): a crafted spike is one rung over the worn one (worn 1, Goldwood 2, Shimmeroak 3, Starwillow 4), and a
+// crystal's tier is its need, so a spike reaches its rung: the worn spike stays the weakest
+const spk = (id: string) => ({ toolId: id, usesRemaining: 1, xpBonus: TOOL_DEFS[id].xpBonus })
+ok(['worn_spike', 'goldwood_spike', 'shimmeroak_spike', 'starwillow_spike'].map(id => rungOf(spk(id))).join() === '1,2,3,4', 'rung: spikes worn 1, Goldwood 2, Shimmeroak 3, Starwillow 4')
+ok(['worn_spike', 'goldwood_spike', 'shimmeroak_spike', 'starwillow_spike'].map(id => reachOf(spk(id))).join() === '1,2,3,4', 'reach: a spike reaches its rung')
 ok(bonusXp(worn, 40) === 0 && bonusXp(gold, 40) === 4 && bonusXp(star, 40) === 14, 'xp: the bonus is the engine\'s xpBonus')
 ok(focusName(undefined, 'prospecting') === 'Worn Spike' && focusName(gold, 'forestry') === 'Goldwood Pruner', 'names')
 
@@ -22,15 +27,16 @@ const carp: Room = { id: 'carpentry-1', kind: 'carpentry', x: 0, z: 0, q: 0, pla
 const mason: Room = { id: 'stonemason-1', kind: 'stonemason', x: 9, z: 0, q: 0, placedAt: 0, doneAt: 0, store: [] }
 const W: Works = { ...freshWorks(), rooms: [carp, mason] }
 const T0 = ensureBasicTools({})
-ok(BENCH.forestry === 'carpentry' && BENCH.prospecting === 'stonemason', 'bench: the proposal moved without the test')
+ok(BENCH.forestry === 'carpentry' && BENCH.prospecting === 'carpentry', 'bench: M185 s1 (RULED c73ab4e) the spike shaft is wood, made at the carpenter')
 const m = makeFocus(W, carp.id, bag(['goldwood_plank', 4], ['goldwood_bark', 3]), T0, 'goldwood_blade')
 ok(m.ok && m.tools.forestry?.toolId === 'goldwood_blade' && m.tools.forestry.usesRemaining === TOOL_DEFS.goldwood_blade.durability, 'make: no fresh Goldwood Blade equipped')
 ok(m.ok && countOf(m.inv, 'goldwood_plank') === 2 && countOf(m.inv, 'goldwood_bark') === 0 && !m.works.rooms[0].store?.length, 'make: not store-first (3 planks from the room, 2 from the bag)')
 ok(m.ok && m.tools.prospecting?.toolId === T0.prospecting?.toolId, 'make: a blade touched the spike slot')
 ok(!makeFocus(W, mason.id, bag(['goldwood_plank', 9], ['goldwood_bark', 9]), T0, 'goldwood_blade').ok, 'bench: a blade made at the Stonery')
 ok(!makeFocus(W, carp.id, bag(['goldwood_plank', 1]), T0, 'goldwood_blade').ok, 'make: short inputs not refused')
-const s = makeFocus(W, mason.id, bag(['raw_mana_shard', 8]), T0, 'mana_spike')
-ok(s.ok && s.tools.prospecting?.toolId === 'mana_spike' && countOf(s.inv, 'raw_mana_shard') === 0, 'make: the Mana Spike at the Stonery')
+ok(!makeFocus(W, mason.id, bag(['goldwood_plank', 9], ['raw_mana_shard', 9]), T0, 'goldwood_spike').ok, 'bench: a spike made at the Stonery (M185: the carpenter now)')
+const s = makeFocus(W, carp.id, bag(['goldwood_plank', 4], ['raw_mana_shard', 6]), T0, 'goldwood_spike')
+ok(s.ok && s.tools.prospecting?.toolId === 'goldwood_spike' && countOf(s.inv, 'raw_mana_shard') === 0 && countOf(s.inv, 'goldwood_plank') === 3, 'make: the Goldwood Spike at the carpenter (shaft + raw mana shards)')
 // M133: tools are permanent, so the bench refuses (spending nothing) a lower tier and the same one again; a higher one is made
 const full = bag(['goldwood_plank', 9], ['goldwood_bark', 9])
 const better = { ...T0, forestry: { toolId: 'shimmeroak_blade', usesRemaining: 4, xpBonus: 1.2 } }

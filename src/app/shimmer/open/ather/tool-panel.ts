@@ -8,11 +8,11 @@
 //   the rinstick: rinsticks.ts › easeOf (no nodes; it works the water).
 import { TOOL_DEFS, type EquippedTools } from '../../engine/tools'
 import { toolDial } from '../../ui/tool-stage'
-import { TREE_DIAL, CRYSTAL_DIAL, manaNeed, gatherSecs, cycleBudget, type GatherDial } from './gather-dials'
+import { TREE_DIAL, manaNeed, gatherSecs, cycleBudget, type GatherDial } from './gather-dials'
 import { rungOf } from './focuses'
 import { easeOf } from './rinsticks'
 import { TREE_KINDS, TREE_NAME, SAPLING_CHANCE, MAST_CHANCE, logItem, saplingItem } from './forestry'
-import { CRYSTAL_KINDS, CRYSTAL_NAME, TIER, BLANKSTONE, CRYSTAL_ITEM } from './prospecting'
+import { CRYSTAL_KINDS, CRYSTAL_NAME, TIER, BLANKSTONE, CRYSTAL_ITEM, crystalDial } from './prospecting'
 import { DEWL, DEWLS_BY_TIER } from './dewl'
 import { itemDef } from '../shared/inventory'
 
@@ -49,16 +49,16 @@ export function treeRows(rung: number): NodeRow[] {
     `${nm(logItem(k))} 2-4 · ${nm(saplingItem(k))} ${pct(SAPLING_CHANCE[k])} · ${nm('mast')} ${pct(MAST_CHANCE)}`))
 }
 export function crystalRows(rung: number): NodeRow[] {
-  // one row per tier (the elements share one dial); the hidden one is left out (it is found, not listed)
-  const out: NodeRow[] = []
-  for (const tier of [1, 2, 3, 4] as const) {
-    const kinds = CRYSTAL_KINDS.filter(k => k !== 'egg' && TIER[k] === tier) as Exclude<typeof CRYSTAL_KINDS[number], 'egg'>[]
-    if (!kinds.length) continue
-    const name = kinds.length > 1 ? kinds.map(k => CRYSTAL_NAME[k].replace(/ Crystal$/, '')).join(' / ') + ' Crystal' : CRYSTAL_NAME[kinds[0]]
-    const gem = kinds.length > 1 ? 'Crystal 1' : `${nm(CRYSTAL_ITEM[kinds[0]])} ${kinds[0] === 'raw' ? '1-3' : '1'}`
-    out.push(row(name, CRYSTAL_DIAL[tier], rung, `${nm(BLANKSTONE)} 1-2 · ${gem} · ${nm(DEWL)} ${DEWLS_BY_TIER[tier]}`))
-  }
-  return out
+  // M185 s1: one row per node kind, so the four gems (Aqual, Dinloid, Fuli, Rhyloid) each have their own line, in ladder order;
+  // the hidden one is left out (it is found, not listed)
+  // (lowest grade first within a need: Aqual before Dinloid, Fuli before Rhyloid, canon world/ather.md › THE FOUR GRADES)
+  const ORDER = ['raw', 'water', 'earth', 'violet', 'storm', 'pure', 'ather'] as const
+  const kinds = (CRYSTAL_KINDS.filter(k => k !== 'egg') as Exclude<typeof CRYSTAL_KINDS[number], 'egg'>[])
+    .sort((a, b) => crystalDial(a).need - crystalDial(b).need || ORDER.indexOf(a) - ORDER.indexOf(b))
+  return kinds.map(k => {
+    const tier = TIER[k]
+    return row(CRYSTAL_NAME[k], crystalDial(k), rung, `${nm(BLANKSTONE)} 1-2 · ${nm(CRYSTAL_ITEM[k])} ${k === 'raw' ? '1-3' : '1'} · ${nm(DEWL)} ${DEWLS_BY_TIER[tier]}`)
+  })
 }
 
 export function toolPanel(tools: EquippedTools, family: string): ToolPanel {

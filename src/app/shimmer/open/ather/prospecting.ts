@@ -23,7 +23,7 @@
 //
 // ★ PURE but for the guarded localStorage load/save and a tiny subscribe store (as forestry.ts).
 
-import { CRYSTAL_DIAL } from './gather-dials'
+import { CRYSTAL_DIAL, HIGH_GEM_DIAL, type GatherDial } from './gather-dials'
 import { addOpenXp, type Zone } from './forestry'
 import { perkFires, activeCompanion, perkLabel, GEM_DROP_CHANCE, GEM_ITEM } from '../shared/companion'
 import { gardenKey } from '@/lib/keeper-local'
@@ -37,11 +37,24 @@ export type CrystalKind = 'raw' | 'violet' | 'storm' | 'earth' | 'water' | 'egg'
 export const CRYSTAL_KINDS: CrystalKind[] = ['raw', 'violet', 'storm', 'earth', 'water', 'egg', 'pure', 'ather']
 export type Element = 'violet' | 'storm' | 'earth' | 'water'
 export const ELEMENTS: Element[] = ['violet', 'storm', 'earth', 'water']
+// ★ M185 s1 (RULED athernyx c73ab4e, Magii + Alex 11-26): THE FOUR GEMS ARE THE ELEMENT CRYSTALS. Each grade IS an element's
+// crystal: Aqual = water, Dinloid = earth, Fuli = mana, Rhyloid = storm. The old names (Violet / Storm / Earth / Water Crystal)
+// retire. The KIND ids and the bag ids (violet_crystal, ...) stay as they were ON PURPOSE: they are storage keys (bags, banks,
+// room stores, ground loot, placed scenery `crystal:violet`, letters' ink), so an old keeper's crystals ARE the gems by
+// construction and every recipe that asked for one takes the matching gem. Only what a player reads changed.
+// Fuli + Rhyloid never sift from rubble (canon: Stonery sifting = the low two only); nothing sifts in the Wilds today.
+export const GEM = { water: 'Aqual', earth: 'Dinloid', violet: 'Fuli', storm: 'Rhyloid' } as const
 export const CRYSTAL_NAME: Record<CrystalKind, string> = {
-  raw: 'Raw Mana', violet: 'Violet Crystal', storm: 'Storm Crystal', earth: 'Earth Crystal', water: 'Water Crystal',
+  raw: 'Raw Mana', violet: GEM.violet, storm: GEM.storm, earth: GEM.earth, water: GEM.water,
   egg: 'Hidden Crystal', pure: 'Pure Mana Core', ather: 'Ather Crystal',
 }
+/** canon's grade (XP, reset, dewls): the four gems share one (game/shimmer-skilling.md's element row) */
 export const TIER: Record<CrystalKind, 1 | 2 | 3 | 4> = { raw: 1, violet: 2, storm: 2, earth: 2, water: 2, egg: 2, pure: 3, ather: 4 }
+/** M185 s1: low gems first (Alex's pick, 11-26): Aqual + Dinloid take the Goldwood spike, Fuli + Rhyloid the Shimmeroak. The
+ *  hidden one may be any of the four, so it asks the higher one (never a Goldwood back door to Fuli). */
+export const HIGH_GEMS: readonly CrystalKind[] = ['violet', 'storm', 'egg']
+/** the gather dial a node is worked by (the page, the tool panel) */
+export const crystalDial = (kind: CrystalKind): GatherDial => (HIGH_GEMS.includes(kind) ? HIGH_GEM_DIAL : CRYSTAL_DIAL[TIER[kind]])
 /** canon's ladder: XP, respawn (game/shimmer-skilling.md › Prospecting) */
 export const XP = [0, 20, 60, 150, 400] as const
 export const RESPAWN_MS = CRYSTAL_DIAL.map(d => d.respawnMs)

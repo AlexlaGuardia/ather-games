@@ -51,21 +51,23 @@ export const TOOL_DEFS: Record<string, ToolDef> = {
     recipe: [{ itemId: 'starwillow_branch', count: 10 }, { itemId: 'starwillow_sap', count: 5 }],
   },
 
-  // Prospecting — Spikes
-  mana_spike: {
-    id: 'mana_spike', name: 'Mana Spike', skillId: 'prospecting', tier: 1,
+  // Prospecting — Spikes. ★ M185 s1 (RULED athernyx c73ab4e, Magii + Alex 11-26): the spike ladder IS the pruner's: a shaft
+  // in Goldwood > Shimmeroak > Starwillow with raw mana shards, at the CARPENTER (the metal tip, M134, comes on top at the
+  // smith). They replace the Mana / Crystal / Pure Spike; an old save's spike maps to the same tier (LEGACY_TOOL_ID).
+  goldwood_spike: {
+    id: 'goldwood_spike', name: 'Goldwood Spike', skillId: 'prospecting', tier: 1,
     durability: 50, xpBonus: 1.1, speedBonus: 0.9,
-    recipe: [{ itemId: 'raw_mana_shard', count: 8 }],
+    recipe: [{ itemId: 'goldwood_plank', count: 4 }, { itemId: 'raw_mana_shard', count: 6 }],
   },
-  crystal_spike: {
-    id: 'crystal_spike', name: 'Crystal Spike', skillId: 'prospecting', tier: 2,
+  shimmeroak_spike: {
+    id: 'shimmeroak_spike', name: 'Shimmeroak Spike', skillId: 'prospecting', tier: 2,
     durability: 100, xpBonus: 1.2, speedBonus: 0.85,
-    recipe: [{ itemId: 'violet_crystal', count: 3 }, { itemId: 'storm_crystal', count: 3 }, { itemId: 'raw_mana_shard', count: 5 }],
+    recipe: [{ itemId: 'shimmeroak_plank', count: 6 }, { itemId: 'raw_mana_shard', count: 10 }],
   },
-  pure_spike: {
-    id: 'pure_spike', name: 'Pure Spike', skillId: 'prospecting', tier: 3,
+  starwillow_spike: {
+    id: 'starwillow_spike', name: 'Starwillow Spike', skillId: 'prospecting', tier: 3,
     durability: 200, xpBonus: 1.35, speedBonus: 0.8,
-    recipe: [{ itemId: 'pure_mana_core', count: 5 }, { itemId: 'earth_crystal', count: 4 }, { itemId: 'water_crystal', count: 4 }],
+    recipe: [{ itemId: 'starwillow_branch', count: 8 }, { itemId: 'raw_mana_shard', count: 15 }],
   },
 
   // Rinning — Rinsticks
@@ -115,6 +117,13 @@ export const TOOL_DEFS: Record<string, ToolDef> = {
     recipe: [{ itemId: 'starwillow_branch', count: 8 }, { itemId: 'starwillow_sap', count: 4 }],
   },
 }
+
+/** M185 s1: retired tool ids -> the tool that took their tier. A save holding one loads as its heir (nothing lost). */
+export const LEGACY_TOOL_ID: Readonly<Record<string, string>> = {
+  mana_spike: 'goldwood_spike', crystal_spike: 'shimmeroak_spike', pure_spike: 'starwillow_spike',
+}
+/** the live id for a (possibly retired) tool id */
+export const currentToolId = (id: string): string => LEGACY_TOOL_ID[id] ?? id
 
 // ============================================
 // Equipment state
@@ -245,10 +254,10 @@ export function toolsFromSave(saved: ToolsSave | undefined): EquippedTools {
   if (!saved?.equipped) return {}
   const out: EquippedTools = {}
   for (const [skillId, data] of Object.entries(saved.equipped)) {
-    const def = TOOL_DEFS[data.toolId]
+    const toolId = currentToolId(data.toolId), def = TOOL_DEFS[toolId]
     if (def) {
       out[skillId as SkillId] = {
-        toolId: data.toolId,
+        toolId,
         usesRemaining: data.usesRemaining,
         speedBonus: data.speedBonus ?? def.speedBonus,
         xpBonus: data.xpBonus ?? def.xpBonus,

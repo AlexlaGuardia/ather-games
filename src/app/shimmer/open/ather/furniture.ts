@@ -216,10 +216,10 @@ export interface KeepstoneDef { name: string; blurb: string; crystal: string }
 const found = (crystal: string, name: string, what: string): KeepstoneDef => ({ name, crystal, blurb: `Dug out of the rock with ${what} still set inside. Its light is its own. The bank is the same.` })
 export const KEEPSTONES: Readonly<Record<string, KeepstoneDef>> = {
   keepstone: { name: 'Keepstone', crystal: 'raw_mana_shard', blurb: 'A Blankstone pedestal with a mana shard inside. Lift the top and the garden bank is there.' },
-  keepstone_violet: found('violet_crystal', 'Violet Keepstone', 'a violet crystal'),
-  keepstone_storm: found('storm_crystal', 'Storm Keepstone', 'a storm crystal'),
-  keepstone_earth: found('earth_crystal', 'Earth Keepstone', 'an earth crystal'),
-  keepstone_water: found('water_crystal', 'Water Keepstone', 'a water crystal'),
+  keepstone_violet: found('violet_crystal', 'Fuli Keepstone', 'a Fuli'),
+  keepstone_storm: found('storm_crystal', 'Rhyloid Keepstone', 'a Rhyloid'),
+  keepstone_earth: found('earth_crystal', 'Dinloid Keepstone', 'a Dinloid'),
+  keepstone_water: found('water_crystal', 'Aqual Keepstone', 'an Aqual'),
   keepstone_pure: found('pure_mana_core', 'Pure Keepstone', 'a pure mana core'),
   keepstone_ather: found('ather_crystal', 'Ather Keepstone', 'an Ather crystal'),
 }

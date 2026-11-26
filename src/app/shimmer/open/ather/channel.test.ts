@@ -26,20 +26,23 @@ async function main() {
   // ── the cost table, both ways (total mana, then seconds = total / the node's drain) ─────────────────────────────────
   const worn = rungOf(undefined), r1 = rungOf(tool('goldwood_blade')), r2 = rungOf(tool('shimmeroak_blade')), r3 = rungOf(tool('starwillow_blade'))
   ok([worn, r1, r2, r3].join() === '1,1,2,3' && rungOf(tool('worn_blade')) === 1 && rungOf(tool('hazels_blade')) === 1, 'rungs: pruners')
-  ok(['worn_spike', 'mana_spike', 'crystal_spike', 'pure_spike'].map(x => rungOf(tool(x))).join() === '1,1,2,3', 'rungs: spikes')
+  // M185 s1 (Alex 11-26): every crafted spike is one rung over the worn one, so the worn spike stays the weakest
+  ok(['worn_spike', 'goldwood_spike', 'shimmeroak_spike', 'starwillow_spike'].map(x => rungOf(tool(x))).join() === '1,2,3,4', 'rungs: spikes')
   const b = D.BETTER, row = (d: import('./gather-dials').GatherDial) => [1, 2, 3].map(r => D.manaNeed(d, r))
   const eq = (a: number[], w: number[], m: string) => ok(a.every((v, i) => near(v, w[i])), `${m}: ${a}`)
   eq(row(T.goldwood), [5, 5 * b, 5 * b * b], 'goldwood'); eq(row(T.shimmeroak), [10, 10 * b, 10 * b * b], 'shimmeroak')
   eq(row(T.starwillow), [300, 20, 20 * b], 'starwillow'); eq(row(T.dawnwood), [900, 300, 30], 'dawnwood')
-  eq(row(X[1]), [7, 7 * b, 7 * b * b], 'raw'); eq(row(X[2]), [12, 12 * b, 12 * b * b], 'element')
-  eq(row(X[3]), [300, 24, 24 * b], 'pure'); eq(row(X[4]), [1400, 300, 36], 'ather')
+  // M185 s1: a node's need = the spike rung that works it: raw 1, Aqual + Dinloid 2, Fuli + Rhyloid (their own dial) + pure 3, ather 4
+  eq(row(X[1]), [7, 7 * b, 7 * b * b], 'raw'); eq(row(X[2]), [90, 12, 12 * b], 'aqual/dinloid')
+  eq(row(X[3]), [900, 300, 24], 'pure'); eq(row(D.HIGH_GEM_DIAL), [900, 300, 18], 'fuli/rhyloid'); eq(row(X[4]), [1400, 1400, 300], 'ather')
   eq([T.goldwood, T.shimmeroak, T.starwillow, T.dawnwood].map(d => d.drain), [2, 3, 8, 10], 'tree drains')
-  const all = [...Object.entries(T), ...['raw', 'element', 'pure', 'ather'].map((n, i) => [n, X[i + 1]] as const)]
+  const all = [...Object.entries(T), ...['raw', 'aqual/dinloid', 'pure', 'ather'].map((n, i) => [n, X[i + 1]] as const), ['fuli/rhyloid', D.HIGH_GEM_DIAL] as const]
   for (const [n, d] of all) {
-    ok([1, 2].every(r => D.manaNeed(d, r + 1) < D.manaNeed(d, r) && D.gatherSecs(d, r + 1) < D.gatherSecs(d, r)), `${n}: a better focus is not quicker, or is dearer`)
+    const rs = [0, 1, 2].map(i => Math.max(1, d.need - 2) + i)   // the three rungs around the need (two low reads the same at rung 1 and below)
+    ok(rs.slice(0, 2).every(r => D.manaNeed(d, r + 1) < D.manaNeed(d, r) && D.gatherSecs(d, r + 1) < D.gatherSecs(d, r)), `${n}: a better focus is not quicker, or is dearer`)
     ok(D.cycleBudget(d) < d.low[1], `${n}: two too low CAN be finished on regen before the reset (${D.cycleBudget(d)} vs ${d.low[1]})`)
     // PLAYED: a whole cycle at 0.1 s steps, resting on regen (no pause at all: kinder than the game), never done
-    if (d.need === 3) {
+    if (d.need >= 3) {
       const w = C.beginWork('tree', 'sim-' + n, () => ({ drops: [] }), d.respawnMs, 0), m = { cur: 100 }; let done = false
       for (let t = 100; t < d.respawnMs; t += 100) { if (C.stepWork(w, d, 1, 0.1, m, t) === 'done') done = true; m.cur = Math.min(100, m.cur + ECON.manaRegen * 0.1) }
       ok(!done && w.p > 0.3, `${n}: two too low played to the reset finished, or got nowhere (p ${w.p})`)

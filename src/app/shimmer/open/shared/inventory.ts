@@ -89,13 +89,15 @@ export const isCatch = (id: string) => ITEM_GROUP[id] === 'rinning' && id !== 'b
 //    lines are canon's Description column) and the base stone a letter is cut from (RULED 11-16: "a specific stone and not
 //    a hard to get one"; its name is Jin's). Grade is worth and look, never power. Icons: tools/art/crystal_icons.py.
 const stone = (name: string, blurb: string): ItemDef => ({ name, blurb, icon: '', stack: 99, kind: 'material' })
+// ★ M185 s1 (RULED athernyx c73ab4e): the four element crystals ARE the gems, Fuli (mana) / Rhyloid (storm) / Dinloid (earth) /
+//    Aqual (water); the ids stay (storage keys, see ather/prospecting.ts › GEM), the old names retire. Blurbs = canon's column.
 const PROSPECTING: Record<string, ItemDef> = {
   blankstone: stone('Blankstone', 'Plain, even-grained stone. Every letter a runesmith cuts begins as one.'),
   raw_mana_shard: stone('Raw Mana Shard', 'Common, unrefined. The foundation of every potion.'),
-  violet_crystal: stone('Violet Crystal', 'Hums at a frequency you feel in your teeth.'),
-  storm_crystal: stone('Storm Crystal', 'Static jumps between your fingers when you hold it.'),
-  earth_crystal: stone('Earth Crystal', 'Feels like it weighs twice what it should. Warm.'),
-  water_crystal: stone('Water Crystal', 'Surface is always slightly damp. Flows like liquid when struck.'),
+  violet_crystal: stone('Fuli', 'Hums at a frequency you feel in your teeth.'),
+  storm_crystal: stone('Rhyloid', 'Static jumps between your fingers when you hold it.'),
+  earth_crystal: stone('Dinloid', 'Feels like it weighs twice what it should. Warm.'),
+  water_crystal: stone('Aqual', 'Surface is always slightly damp. Flows like liquid when struck.'),
   pure_mana_core: stone('Pure Mana Core', 'Refined crystal that rings like a bell when tapped.'),
   ather_crystal: stone('Ather Crystal', 'Pure dream-stuff crystallized. Looking into it feels like looking into distance.'),
 }

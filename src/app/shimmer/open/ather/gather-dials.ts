@@ -8,7 +8,7 @@
 // Crystals mirror the trees; canon's respawns 2 / 10 / 20 / 45 min. Ather's two-low is higher because its cycle is longer.
 import { ECON } from '../shared/vitals-economy'
 
-export interface GatherDial { need: 1 | 2 | 3; drain: number; mana: number; low: readonly [number, number]; respawnMs: number }
+export interface GatherDial { need: 1 | 2 | 3 | 4; drain: number; mana: number; low: readonly [number, number]; respawnMs: number }
 const min = (m: number) => m * 60_000
 export const TREE_DIAL = {
   goldwood:   { need: 1, drain: 2,  mana: 5,  low: [300, 900], respawnMs: min(3) },
@@ -16,14 +16,21 @@ export const TREE_DIAL = {
   starwillow: { need: 2, drain: 8,  mana: 20, low: [300, 900], respawnMs: min(15) },
   dawnwood:   { need: 3, drain: 10, mana: 30, low: [300, 900], respawnMs: min(30) },
 } as const satisfies Record<string, GatherDial>
-/** by crystal tier: [0] unused · raw · the elements (+ the hidden one) · pure · ather */
+/** by crystal tier (prospecting.ts › TIER, canon's grade: XP, reset, dewls): [0] unused · raw · Aqual + Dinloid · pure · ather.
+ *  The two high gems have their own dial (HIGH_GEM_DIAL) at the same grade: prospecting.ts › crystalDial picks.
+ *  ★ M185 s1 (Alex 11-26, RULED c73ab4e): a node's NEED is the spike rung that works it at its own mana, and a spike's rung is
+ *  one over the pruner's (focuses.ts): worn 1 (raw only; Aqual / Dinloid one low = SLOW, so the worn spike stays the weakest),
+ *  Goldwood 2 (Aqual / Dinloid at their own mana; Fuli / Rhyloid one low = SLOW and dear: 300 mana, 60 s), Shimmeroak 3 (all
+ *  four gems + pure), Starwillow 4 (ather). Two rungs low is past one cycle's pool + regen everywhere = TOO WEAK. */
 export const CRYSTAL_DIAL: readonly GatherDial[] = [
   { need: 1, drain: 2,  mana: 7,  low: [300, 900],  respawnMs: 0 },
   { need: 1, drain: 2,  mana: 7,  low: [300, 900],  respawnMs: min(2) },
-  { need: 1, drain: 3,  mana: 12, low: [300, 900],  respawnMs: min(10) },
-  { need: 2, drain: 8,  mana: 24, low: [300, 900],  respawnMs: min(20) },
-  { need: 3, drain: 10, mana: 36, low: [300, 1400], respawnMs: min(45) },
+  { need: 2, drain: 3,  mana: 12, low: [90, 900],   respawnMs: min(10) },
+  { need: 3, drain: 8,  mana: 24, low: [300, 900],  respawnMs: min(20) },
+  { need: 4, drain: 10, mana: 36, low: [300, 1400], respawnMs: min(45) },
 ]
+/** Fuli + Rhyloid (+ the hidden one, which may be either): the same grade as Aqual / Dinloid (canon's XP + reset), the next spike */
+export const HIGH_GEM_DIAL: GatherDial = { need: 3, drain: 5, mana: 18, low: [300, 900], respawnMs: min(10) }
 export const BETTER = 0.85
 /** stay this close (m) to the node or it lets go: a little past the reach that started it */
 export const HOLD_RANGE = 13

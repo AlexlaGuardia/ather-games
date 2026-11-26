@@ -28,15 +28,16 @@ function soft() {
 
 export const CRYSTAL_LOOK: Record<CrystalKind, { color: string; glow: string; k: number; clear?: boolean }> = {
   raw:    { color: '#e8eaf2', glow: '#c8d2ff', k: 0.3 },
-  violet: { color: '#9a5ae0', glow: '#8a3ad0', k: 0.6 },
-  storm:  { color: '#a8daf8', glow: '#6ab8f0', k: 0.55 },
-  earth:  { color: '#c8843a', glow: '#a0601a', k: 0.35 },
-  water:  { color: '#4ad0c0', glow: '#2ab0a8', k: 0.5 },
+  // M185 s1: the four gems' canon looks (world/ather.md › THE FOUR GRADES): Fuli ruby, Rhyloid diamond, Dinloid emerald, Aqual pearl
+  violet: { color: '#c8203c', glow: '#e0304a', k: 0.6 },              // Fuli: ruby, deep red
+  storm:  { color: '#eef6ff', glow: '#bfe4ff', k: 0.75, clear: true }, // Rhyloid: diamond, clear, fire inside
+  earth:  { color: '#1fa860', glow: '#22c070', k: 0.5 },              // Dinloid: emerald, green
+  water:  { color: '#f2ece0', glow: '#fff6ea', k: 0.35 },             // Aqual: pearl, soft white lustre
   egg:    { color: '#ece4f4', glow: '#c8b8e8', k: 0.5 },
   pure:   { color: '#f4f8ff', glow: '#ffffff', k: 0.7, clear: true },
   ather:  { color: '#ffd860', glow: '#ffc030', k: 0.8, clear: true },
 }
-const EGG_HUES = ['#8a3ad0', '#6ab8f0', '#a0601a', '#2ab0a8'].map(c => new THREE.Color(c))
+const EGG_HUES = ['#e0304a', '#bfe4ff', '#22c070', '#fff6ea'].map(c => new THREE.Color(c))
 
 /** a cluster of points: one tall, three leaning out, unit height ~1.2 m before a node's own scale */
 export function clusterGeometry() {

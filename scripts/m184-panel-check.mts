@@ -3,7 +3,7 @@
 // are written out here by hand from those tables, so a drift in either side goes red. Fresh anonymous contexts, seeded saves:
 //   newborn  -> forestry panel says empty (no rows)
 //   gifted   -> Worn Pruner: stage 0, never wears, trees 5 / 10 / 300 / 900 mana, ok ok slow weak;
-//               Worn Spike: crystals 7 / 12 / 300 / 1400, ok ok slow weak
+//               Worn Spike (M185): raw 7 ok, Aqual / Dinloid 90 slow, Fuli / Rhyloid / pure 900 weak, ather 1400 weak
 //   upgraded -> Shimmeroak Pruner: stage 2, 100 / 100, trees 4 / 9 / 20 / 300, ok ok ok slow
 //   npx tsx scripts/m184-panel-check.mts [origin]
 import puppeteer, { type Page } from 'puppeteer-core'
@@ -82,7 +82,9 @@ for (const [vp, w, h] of [['desktop', 1280, 800], ['phone', 390, 844]] as const)
     ok(!(await readPanel(p)), `${vp} ${name}: the same dial again closes the panel`)
     if (name === 'gifted') {
       const s = await openPanel(p, 'prospecting', phone)
-      ok(s?.name === 'Worn Spike' && s.rows.join() === 'Raw Mana:7:ok,Violet / Storm / Earth / Water Crystal:12:ok,Pure Mana Core:300:slow,Ather Crystal:1400:weak', `${vp} gifted: spike rows ${s?.rows.join()}`)
+      // M185 s1 (RULED c73ab4e): the four gems replaced the element crystals, one row each; the worn spike is the weakest
+      // (Aqual / Dinloid slow, Fuli / Rhyloid too weak). This replaced M184 s2's one 'Violet / Storm / Earth / Water Crystal' row.
+      ok(s?.name === 'Worn Spike' && s.rows.join() === 'Raw Mana:7:ok,Aqual:90:slow,Dinloid:90:slow,Fuli:900:weak,Rhyloid:900:weak,Pure Mana Core:900:weak,Ather Crystal:1400:weak', `${vp} gifted: spike rows ${s?.rows.join()}`)
       await p.keyboard.press('Escape'); await sleep(500)
       ok(!(await readPanel(p)), `${vp} gifted: Escape closes it`)
     }

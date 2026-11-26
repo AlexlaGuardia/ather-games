@@ -16,18 +16,24 @@ import { roomStore, type Works, type RoomKind } from './rooms'
 export type FocusSkill = 'forestry' | 'prospecting'
 export const FOCUSES: Record<FocusSkill, readonly string[]> = {
   forestry: ['goldwood_blade', 'shimmeroak_blade', 'starwillow_blade'],
-  prospecting: ['mana_spike', 'crystal_spike', 'pure_spike'],
+  prospecting: ['goldwood_spike', 'shimmeroak_spike', 'starwillow_spike'],
 }
 /** PROPOSAL pending Magii (CANON_GAPS 11-18): which room's bench makes each family */
 // RULED-AFK 11-18 (Magii, athernyx 5626aaf): a focus binds where its material is worked. ⚠ The Stonery is drawn up, not
 // buildable yet (rooms.ts open:false): until it opens, no keeper can make a spike.
-export const BENCH: Record<FocusSkill, RoomKind> = { forestry: 'carpentry', prospecting: 'stonemason' }
+// ★ M185 s1 (RULED athernyx c73ab4e): the spike's SHAFT is wood now (Goldwood / Shimmeroak / Starwillow), so it is made at the
+// CARPENTER beside the pruner; the metal tip (M134) will be the smith's.
+export const BENCH: Record<FocusSkill, RoomKind> = { forestry: 'carpentry', prospecting: 'carpentry' }
 
 const crafted = (t: EquippedTool | undefined) => !!t && !TOOL_DEFS[t.toolId]?.basic
-/** the focus's rung on the gather ladder (gather-dials.ts): 1, 2 or 3 */
-export const rungOf = (t: EquippedTool | undefined) => (crafted(t) ? Math.max(1, TOOL_DEFS[t!.toolId]?.tier ?? 1) : 1)
-/** the highest node tier this focus works at the node's own mana: rung 1 opens tiers 1 and 2, each rung after one more */
-export const reachOf = (t: EquippedTool | undefined) => rungOf(t) + 1
+const isSpike = (t: EquippedTool | undefined) => !!t && TOOL_DEFS[t.toolId]?.skillId === 'prospecting'
+/** the focus's rung on the gather ladder (gather-dials.ts). Pruners: worn 1, then 1 / 2 / 3 (the first crafted tier only pays
+ *  more XP). ★ SPIKES (M185 s1, Alex 11-26): every crafted spike is one rung over the worn one: worn 1, Goldwood 2, Shimmeroak 3,
+ *  Starwillow 4, so the worn spike stays the weakest and the Goldwood spike is the one that opens Aqual + Dinloid. */
+export const rungOf = (t: EquippedTool | undefined) => (crafted(t) ? Math.max(1, TOOL_DEFS[t!.toolId]?.tier ?? 1) + (isSpike(t) ? 1 : 0) : 1)
+/** the highest node tier this focus works at the node's own mana. Trees: rung 1 opens tiers 1 and 2, each rung after one more.
+ *  Crystals (M185): a node's tier IS its need, so a spike reaches its rung. */
+export const reachOf = (t: EquippedTool | undefined) => rungOf(t) + (isSpike(t) ? 0 : 1)
 /** the extra XP the focus's xpBonus adds on top of the node's own (the node's XP lands in pruneCommit / mineCommit) */
 export const bonusXp = (t: EquippedTool | undefined, xp: number) => Math.round(xp * (t?.xpBonus ?? 1)) - xp
 export const focusName = (t: EquippedTool | undefined, skill: FocusSkill) => (t ? TOOL_DEFS[t.toolId]?.name ?? '' : skill === 'forestry' ? 'Worn Pruner' : 'Worn Spike')

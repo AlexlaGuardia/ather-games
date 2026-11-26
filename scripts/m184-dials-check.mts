@@ -3,7 +3,7 @@
 // durability left; full today, M133 tools are permanent). Each case is a fresh browser context with a seeded save:
 //   newborn (tutorial live, no gifts, rinstick quest not started) -> 3 dials, all empty
 //   gifted  (Bonn's pruner + Otto's spike, rinstick earned)      -> 3 dials, all held, stage 0, no ring
-//   upgraded (a Shimmeroak Pruner in the save)                    -> forestry stage 2, ring 1.000
+//   upgraded (a Shimmeroak Pruner in the save)                    -> forestry stage 2, NO ring (M185 s1: tint only, Alex 11-26)
 //   npx tsx scripts/m184-dials-check.mts [origin]
 import puppeteer from 'puppeteer-core'
 const origin = process.argv[2] ?? 'https://ather.games'
@@ -50,9 +50,11 @@ for (const [vp, w, h, sel] of [['desktop', 1280, 800, '[data-socket]'], ['phone'
     if (name === 'upgraded') {
       const f = dials.find(d => d.fam === 'forestry')
       ok(f?.held === '1' && f.stage === '2', `${vp} upgraded: forestry stage 2 (${JSON.stringify(f)})`)
+      // ★ MOVED BY RULING (Alex 11-26, BETA 51fe8cda; M185 s1): steps 1-3 are TINT ONLY, the ring belongs to a fitted metal tip
+      // (M134, not built). This assert said "wears its border ring, full" until then; it now says there is none.
       const arc = await p.evaluate((sel: string) => !!document.querySelector(`${sel.slice(0, -1)}="forestry"] [data-ring-arc]`), sel)
-      ok(arc, `${vp} upgraded: the forestry dial wears its border ring`)
-      if (vp === 'desktop') ok(f?.ring === '1.000', `${vp} upgraded: ring full (${f?.ring}; M133 nothing wears)`)
+      ok(!arc, `${vp} upgraded: no ring on a stage-2 dial (tint only, the ring is the tip's)`)
+      ok(!f?.ring, `${vp} upgraded: no ring value (${f?.ring})`)
     }
     ok(errs.length === 0, `${vp} ${name}: 0 page errors ${errs.slice(0, 2).join(' | ')}`)
     await p.close()

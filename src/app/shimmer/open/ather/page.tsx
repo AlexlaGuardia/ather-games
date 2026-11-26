@@ -211,9 +211,9 @@ import { ForestryFX, type Aim, type ForestryFx } from './forestry-fx'
 import { ProspectingFX, crystalCentre, type CrystalAim, type ProspectFx } from './prospecting-fx'
 import { CompanionFollower } from '../shared/companion-follower'
 import { subscribeCompanion, takeJoined, perkLabel, perkBonus } from '../shared/companion'
-import { minePlan, mineCommit, mineCheck, regrowIn as crystalRegrow, CRYSTAL_NAME, CRYSTAL_ITEM, TIER as CRYSTAL_TIER, type CrystalKind } from './prospecting'
+import { minePlan, mineCommit, mineCheck, regrowIn as crystalRegrow, CRYSTAL_NAME, CRYSTAL_ITEM, TIER as CRYSTAL_TIER, crystalDial as crystalDialOf, type CrystalKind } from './prospecting'
 import { beginWork, stepWork, finishWork, saveWork, workOf, manaLeft, manaShown, type Work } from './channel'
-import { TREE_DIAL, CRYSTAL_DIAL, HOLD_RANGE, PULSE_GAP_MS, manaNeed } from './gather-dials'
+import { TREE_DIAL, HOLD_RANGE, PULSE_GAP_MS, manaNeed } from './gather-dials'
 import { GatherBar, type GatherView } from './gather-bar'
 import { ChannelFocus, focusAt, freshFocus, type FocusState } from './channel-fx'
 import { GatherTether, type TetherApi } from './gather-tether'
@@ -1144,7 +1144,7 @@ function AtherSliceGame() {
     return () => { flush(); window.removeEventListener('pagehide', flush); document.removeEventListener('visibilitychange', flush) }
   }, [])
   const chanName = (ch: Chan) => (ch.node === 'tree' ? TREE_NAME[ch.t.kind] : CRYSTAL_NAME[ch.c.kind])
-  const treeDial = (t: Tree) => TREE_DIAL[t.kind], crystalDial = (c: Crystal) => CRYSTAL_DIAL[CRYSTAL_TIER[c.kind]]
+  const treeDial = (t: Tree) => TREE_DIAL[t.kind], crystalDial = (c: Crystal) => crystalDialOf(c.kind)   // M185 s1: the gem's own dial
   const atNode = (id: string) => (isKeeperNode(id) ? zoneRef0.current === 'glade' : zoneRef0.current === 'wilds')   // M153 s1b: the Glade's own nodes there, the Wilds' there
   const rung = (node: 'tree' | 'crystal') => rungOf(toolsRef.current[node === 'tree' ? 'forestry' : 'prospecting'])
   const nodeTry = (id: string, node: 'tree' | 'crystal', regrowMs: number, need: number) => ({ firstSteps: peekFirstSteps(), tutorial: isKeeperNode(id), tool: !!toolsRef.current[node === 'tree' ? 'forestry' : 'prospecting'], regrowMs, need, rung: rung(node) })   // M155 s2
@@ -1223,7 +1223,7 @@ function AtherSliceGame() {
     x.xp += extraXp
     const ex = ch.w.extra as { found?: string; perk?: string } | string | undefined
     const perk = typeof ex === 'string' ? ex : ex?.perk
-    const egg = ch.node === 'crystal' && ch.c.kind === 'egg' && typeof ex === 'object' && ex?.found ? `It was ${CRYSTAL_NAME[ex.found as keyof typeof CRYSTAL_NAME].toLowerCase().replace(' crystal', '')}! ` : ''
+    const egg = ch.node === 'crystal' && ch.c.kind === 'egg' && typeof ex === 'object' && ex?.found ? `It was ${CRYSTAL_NAME[ex.found as keyof typeof CRYSTAL_NAME]}! ` : ''
     if (ch.node === 'crystal') { const found = (ch.w.extra as { found: Exclude<CrystalKind, 'egg'> }).found; cFxRef.current?.burst(ch.c, { found }) }
     stopChannel(`${egg}${perk ? `${perk}! ` : ''}+${x.xp} ${skill}${x.levelUp ? `. ${skill} ${x.levelUp}!` : ''}`)
   }, [stopChannel, ww, gladeShape])
