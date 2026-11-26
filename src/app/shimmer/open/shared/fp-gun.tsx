@@ -63,6 +63,12 @@ export const GUN_DEFAULTS: Readonly<GunTune> = {
 // ★ PER GUN (Alex 11-19, tuning the Repeater: "do I have to pass you the values for each one"). The tune used to be ONE set for
 //   every gun, so tuning the Repeater moved the Breacher too. Now: GUN_DEFAULTS is the base, GUN_BAKED[id] is a gun's tuned
 //   numbers everyone gets (Alex's pastes land here), and this browser's per-gun slider moves sit on top (GUN_TUNE_KEY, v2 map).
+// M190 (Alex 11-26, the Lance: "floating in front ... the size in the hands"): the Lance was never tuned, so it sat on the 11-18
+//   base (S 0.55, HIP_Z -0.5): half the size of every tuned gun and a hand further out. Its long body's grip / foregrip sit where
+//   the Backbone's do (REACHER grip z 0.12 / fore -0.3 vs the kit's 0.1 / -0.26), so it takes this hold until Alex
+//   tunes it in /shimmer/dev/guns (a paste lands here and replaces this line).
+const BACKBONE_HOLD: Partial<GunTune> = { S: 1.2, HIP_X: 0.145, HIP_Y: -0.175, HIP_Z: -0.355, ADS_DIST: 0.34, ADS_IN: 0.15, ADS_OUT: 0.11, BOB: 0.006, BOB_ADS: 0.12, KICK_Z: 0.162, KICK_PITCH: 0.255, KICK_DECAY: 2,
+    HAND: 0.85, R_DX: 0.002, R_DY: 0.044, R_DZ: 0.08, R_PITCH: -1.12, R_ROLL: 0.8, L_DX: -0.012, L_DY: -0.032, L_DZ: -0.032, L_PITCH: 1.34, L_ROLL: -2.17 }
 export const GUN_BAKED: Readonly<Record<string, Partial<GunTune>>> = {
   // Alex 11-19, the Repeater: bigger in hand, closer and lower, a stronger kick that settles fast, fuller gloves
   repeater: { S: 1.18, HIP_X: 0.07, HIP_Y: -0.125, HIP_Z: -0.365, ADS_DIST: 0.155, ADS_IN: 0.13, ADS_OUT: 0.13, BOB: 0.008, BOB_ADS: 0.19,
@@ -72,8 +78,9 @@ export const GUN_BAKED: Readonly<Record<string, Partial<GunTune>>> = {
   spitter: { S: 1.2, HIP_X: 0.13, HIP_Y: -0.19, HIP_Z: -0.385, ADS_DIST: 0.295, ADS_IN: 0.15, ADS_OUT: 0.11, BOB: 0.012, BOB_ADS: 0.15, KICK_Z: 0.034, KICK_PITCH: 0.01, KICK_DECAY: 40,
     HAND: 0.64, R_DX: -0.004, R_DY: 0.018, R_DZ: 0.034, R_PITCH: -1.07, R_ROLL: -1.23, L_DX: -0.022, L_DY: -0.07, L_DZ: 0.12, L_PITCH: -2.11, L_ROLL: -0.36 },
   // Alex 11-22, the BACKBONE (same file, all 23 keys): a heavy kick that comes home slowly
-  backbone: { S: 1.2, HIP_X: 0.145, HIP_Y: -0.175, HIP_Z: -0.355, ADS_DIST: 0.34, ADS_IN: 0.15, ADS_OUT: 0.11, BOB: 0.006, BOB_ADS: 0.12, KICK_Z: 0.162, KICK_PITCH: 0.255, KICK_DECAY: 2,
-    HAND: 0.85, R_DX: 0.002, R_DY: 0.044, R_DZ: 0.08, R_PITCH: -1.12, R_ROLL: 0.8, L_DX: -0.012, L_DY: -0.032, L_DZ: -0.032, L_PITCH: 1.34, L_ROLL: -2.17 },
+  backbone: BACKBONE_HOLD,
+  // M190: the Lance holds like the Backbone (see BACKBONE_HOLD) until Alex tunes it
+  lance: BACKBONE_HOLD,
 }
 /** LIVE numbers for the gun in hand: defaults, then the gun's baked tune, then this browser's tune for that gun. */
 export const VM: GunTune = { ...GUN_DEFAULTS }
@@ -341,7 +348,7 @@ export const FpGun = forwardRef<FpGunApi>(function FpGun(_, ref) {
   }), [camera, rig, mats])
   useEffect(() => { loadGunTune() }, [])   // this browser's tune from /shimmer/dev/guns
   useEffect(() => {
-    ;(window as unknown as { __fpGun?: unknown }).__fpGun = { ads: () => adsT, optic: () => optic?.id ?? null, shown: () => rig.root.visible, key: () => rig.key, mark: () => (look ? `${look.mark}:${look.tint}` : null), glow: () => glow, kick: () => st.current.punch, lens: () => lensCost.current, ...(process.env.NODE_ENV !== 'production' ? { preview: previewGunModel, info: () => ({ ...gl.info.render }) } : {}), pos: () => rig.held.position.toArray() }
+    ;(window as unknown as { __fpGun?: unknown }).__fpGun = { ads: () => adsT, optic: () => optic?.id ?? null, shown: () => rig.root.visible, key: () => rig.key, mark: () => (look ? `${look.mark}:${look.tint}` : null), glow: () => glow, kick: () => st.current.punch, lens: () => lensCost.current, ...(process.env.NODE_ENV !== 'production' ? { preview: previewGunModel, info: () => ({ ...gl.info.render }) } : {}), pos: () => rig.held.position.toArray(), vm: () => ({ S: VM.S, HAND: VM.HAND, HIP_Z: VM.HIP_Z }) }   // M190: the hold in use (read only)
     return () => {
       adsT = 0; optic = null; publish()
       rig.root.traverse(o => { if (o instanceof THREE.Mesh) o.geometry.dispose() })

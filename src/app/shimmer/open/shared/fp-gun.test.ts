@@ -50,5 +50,10 @@ ok(Object.values(TINTS).every(t => /^#[0-9a-f]{6}$/i.test(t.hex)), 'every tint i
   ok(defaultsFor('backbone').KICK_DECAY !== defaultsFor('spitter').KICK_DECAY && defaultsFor('repeater').S === 1.18, 'each gun keeps its own tune (the Repeater untouched)')
   ok(GUN_TUNE_KEYS.every(k => defaultsFor('breacher')[k] === GUN_DEFAULTS[k]), 'an untuned gun stays on the base') }
 
+// M190 (Alex 11-26: the Lance 'floating in front', wrong size): the Lance holds like the Backbone, not on the 11-18 base
+{ selectGunTune('lance'); const t = JSON.parse(readFileSync(new URL('../../../../../docs/handoff/gun-hands-tune-2026-11-22.json', import.meta.url), 'utf8')).backbone as Record<string, number>
+  ok(GUN_TUNE_KEYS.every(k => VM[k] === t[k]), "lance: in hand, every key is the Backbone's tuned hold")
+  ok(VM.S >= 1.1 && VM.HIP_Z > -0.42, `lance: in-hand size + reach match the tuned family (S ${VM.S}, HIP_Z ${VM.HIP_Z})`) }
+
 console.log(`fp-gun: ${pass} pass, ${fail} fail`)
 if (fail) process.exit(1)
