@@ -12,7 +12,9 @@ import { hudSay } from '../shared/hud-say'
 import { SPECIES_NAMES, type Species } from '../../spirits/spirit'
 import { SEED_NAME, seedIcon, speciesOf, plant, ripen, growth, settlePot, tend, canTend, tendedToday, bloomAt, growDay, gameDay, seedsOnPlot, takeSeed, BLOOM_DAYS, hasten, growingIn, spiritsAt, featuredAt, withFeatured, BED_RECORD_MAX, type SeedId } from './spirit-seeds'
 import { GAME_DAY_MS } from './nodes'
-import { loadBook, saveBook, see, seenCount, freshBook, type Book } from './grimoire-book'
+import { loadBook, saveBook, see, seenCount, formCount, syncForms, freshBook, type Book, type Page } from './grimoire-book'
+import { secondFormName } from '../../spirits/evolution'
+import { ELEMENT_LABEL } from './second-form-view'
 import { GRIMOIRE_SIZE } from './plot'
 import { SpiritRoster } from './spirit-roster'
 import { BED_UI } from './planter-lines'
@@ -22,12 +24,15 @@ let book: Book | null = null
 const subs = new Set<() => void>()
 const bump = () => subs.forEach(f => f())
 function current(): Book {
-  if (!book) book = typeof window === 'undefined' ? freshBook() : loadBook()
+  if (!book) {
+    if (typeof window === 'undefined') book = freshBook()
+    else { const b = loadBook(), s = syncForms(b, Date.now()); book = s; if (s !== b) saveBook(s) }   // M203: forms taken before M203
+  }
   return book
 }
 /** The current book (loaded once). */
 export const getBook = () => current()
-export function setBook(b: Book) { book = b; saveBook(b); bump() }
+export function setBook(b: Book) { book = syncForms(b, Date.now()); saveBook(book); bump() }   // M203: an evolve writes her form page
 /** Bloom every due pot into its page. Returns the species that just bloomed (for a HUD line). */
 export function ripenBook(now = Date.now()): Species[] {
   const b = current(), r = ripen(b.pots, now)
@@ -68,6 +73,9 @@ function useManifest() {
   return m
 }
 const nameOf = (s: Species) => SPECIES_NAMES[s]
+/** M203: a page's name + picture: a form page shows the locked 2D form art (the form MODELS are being redone, owner-only). */
+const pageName = (p: Page) => p.form ? secondFormName(p, p.form) : nameOf(p.species)
+const pageImg = (p: Page, c: Man | null) => p.form ? `/spirits/grimoire/${p.species}-${p.form}.webp` : c?.img ?? null
 const lab: React.CSSProperties = { fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: H.inkSoft }
 
 /** The garden bank's store, handed in by workshop.tsx (it owns it; importing it here would be a cycle). */
@@ -178,19 +186,20 @@ export function PlanterPanel({ pieceId, onClose, footer, bank }: { pieceId: stri
 export function GrimoirePanel({ onClose, footer }: { onClose: () => void; footer: React.ReactNode }) {
   const b = useBook(), m = useManifest()
   useEffect(() => { ripenBook() }, [])
-  const size = GRIMOIRE_SIZE(seenCount(b))
+  // M203: the base capacity (10 / 15 / 25, from base pages only) plus one page per form taken
+  const size = GRIMOIRE_SIZE(seenCount(b)) + formCount(b)
   const [open, setOpen] = useState<number | null>(null)
   const page = open !== null ? b.pages[open] : null, card = page && m ? m[nameOf(page.species)] : null
   return (
     <HearthFrame title="Grimoire" maxWidth={460} onClose={onClose} fixed dataPanel="grimoire">
       <div style={{ padding: '26px 16px 14px', display: 'grid', gap: 12 }}>
-        <div data-grimoire-count={seenCount(b)} style={{ fontSize: 13, color: H.inkSoft, fontVariantNumeric: 'tabular-nums' }}>{seenCount(b)} / {size} pages</div>
+        <div data-grimoire-count={seenCount(b)} data-grimoire-forms={formCount(b)} style={{ fontSize: 13, color: H.inkSoft, fontVariantNumeric: 'tabular-nums' }}>{b.pages.length} / {size} pages</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6 }}>
           {Array.from({ length: size }, (_, i) => {
-            const p = b.pages[i], c = p && m ? m[nameOf(p.species)] : null
-            return <button key={i} data-page={i + 1} data-species={p?.species ?? ''} data-stage={p?.stage ?? 'empty'} disabled={!p} onClick={() => setOpen(i)}
+            const p = b.pages[i], c = p && m ? m[nameOf(p.species)] : null, img = p ? pageImg(p, c) : null
+            return <button key={i} data-page={i + 1} data-species={p?.species ?? ''} data-form={p?.form ?? ''} data-stage={p?.stage ?? 'empty'} disabled={!p} onClick={() => setOpen(i)}
               style={{ background: 'none', border: 0, padding: 0, cursor: p ? 'pointer' : 'default', opacity: p ? 1 : 0.4, position: 'relative' }}>
-              <Well size={56}>{c ? <img src={c.img} alt="" width={44} height={44} style={{ objectFit: 'contain' }} /> : <span style={{ fontSize: 11, color: H.inkSoft }}>{i + 1}</span>}</Well>
+              <Well size={56}>{img ? <img src={img} alt="" width={44} height={44} style={{ objectFit: 'contain' }} /> : <span style={{ fontSize: 11, color: H.inkSoft }}>{i + 1}</span>}</Well>
               {p?.stage === 'bonded' && <span style={{ position: 'absolute', top: 2, right: 4, width: 6, height: 14, background: '#c0392b', borderRadius: 1 }} />}
             </button>
           })}
@@ -198,11 +207,12 @@ export function GrimoirePanel({ onClose, footer }: { onClose: () => void; footer
         {page && (
           <div data-page-open={open! + 1} style={{ display: 'grid', gap: 6, borderTop: `1px solid ${H.inkSoft}33`, paddingTop: 10 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-              <span style={{ fontWeight: 700 }}>{open! + 1}. {nameOf(page.species)}{page.stage === 'bonded' ? ' 🎗' : ''}</span>
+              <span style={{ fontWeight: 700 }}>{open! + 1}. {pageName(page)}{page.stage === 'bonded' ? ' 🎗' : ''}</span>
               <span style={lab}>{page.stage === 'bonded' ? 'Bonded' : 'Seen'}</span>
             </div>
-            {card && <div style={{ fontSize: 12.5, color: H.inkSoft }}>Like {/^[aeiou]/i.test(card.analog) ? 'an' : 'a'} {card.analog}. {card.quirk.charAt(0).toUpperCase() + card.quirk.slice(1)}.</div>}
-            {card && page.stage === 'bonded' && card.entry && <div style={{ fontSize: 13 }}>{card.entry}</div>}
+            {page.form && <div data-form-of={page.species} style={{ fontSize: 12.5, color: H.inkSoft }}>{ELEMENT_LABEL[page.form]} form of the {nameOf(page.species)}.</div>}{/* M203: neutral, UNSIGNED (@lark) */}
+            {card && !page.form && <div style={{ fontSize: 12.5, color: H.inkSoft }}>Like {/^[aeiou]/i.test(card.analog) ? 'an' : 'a'} {card.analog}. {card.quirk.charAt(0).toUpperCase() + card.quirk.slice(1)}.</div>}
+            {card && !page.form && page.stage === 'bonded' && card.entry && <div style={{ fontSize: 13 }}>{card.entry}</div>}
           </div>
         )}
         <SpiritRoster onClose={onClose} />{/* M109 s3: the roster face (every keeper since M123 s2) */}
