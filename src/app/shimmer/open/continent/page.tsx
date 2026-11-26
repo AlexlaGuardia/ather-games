@@ -103,7 +103,7 @@ import type { Zone } from '../../world/builder-zones'
 import type { Box } from '../terrain-world'
 import { TUNNEL_H, TUNNEL_WALK, boreAt, tunnelWall, bridgeRail, drivable, ferryLanding, guardrails, loadRegion, roadRail, nearPad, nearestRoad, roadside, routeBetween, type Region, type RegionJunction, type RegionRoad } from '../region'
 import { touch, TOUCH_LOOK_SENS, isTouchOnly } from '../shared/touch'
-import { PadBridge } from '../shared/pad-bridge'   // BETA M186: the controller
+import { PadBridge, usePadGlyph, padPrompt } from '../shared/pad-bridge'   // BETA M186: the controller (s2: prompts name its button)
 import { TouchControls, PHONE_ROW_TOP, SKIN_HOLDS, type TouchAction } from '../shared/touch-controls'
 import { useMorelHints } from '../shared/morel-hints'   // BETA M33 S2: Morel's stuck hints on the errand
 import { groundMat, groundOrder, type GroundLayer } from '../shared/ground-layers'
@@ -1549,6 +1549,7 @@ function ContinentRideGame() {
   const [vesselShop, setVesselShop] = useState(false)   // the Passage's vessel counter (vessel-shop.tsx)
   useEffect(() => { const k = (e: KeyboardEvent) => { if (e.code === 'Escape') setVesselShop(false) }; window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k) }, [])
   const optionsOpen = useOptionsOpen()   // Options (options.tsx): O, Esc once the mouse is free, the pack's gear
+  const padGlyph = usePadGlyph()   // M186 s2: with a pad in hand the prompts name its button, not 'E'
   // M80: hold F (phone: SHIELD) charges the keeper's own Mana Skin, on foot and out of every menu
   const skinOk = useRef(false); skinOk.current = !!hud.foot && !bagOpen && !vesselShop && !deed && !optionsOpen && !showMap && !garage && !ferrying
   useSkinCharge({ mana: manaRef, skin: skinRef, active: () => skinOk.current, vitals: vitalsRef })
@@ -1713,12 +1714,12 @@ function ContinentRideGame() {
           stacked just above the F prompt so both read when the keeper stands by a car in a bay */}
       {!isTouch && hud.foot && yardState.action && !deed && !showMap && !garage && !bagOpen && !vesselShop && !optionsOpen && (
         <div data-yard-prompt={yardState.action} style={{ position: 'absolute', left: '50%', top: hud.prompt ? 'calc(62% - 34px)' : '62%', transform: 'translateX(-50%)', padding: '6px 14px', borderRadius: 8, background: 'rgba(10,12,18,0.7)', color: '#f4efe2', font: '600 12px var(--font-game), system-ui', letterSpacing: '0.18em', textTransform: 'uppercase', pointerEvents: 'none' }}>
-          {yardState.action === 'board' && shipAct === 'fit' ? REPAIR_LABEL.fitPrompt : yardState.action === 'board' && shipAct === 'charge' ? REPAIR_LABEL.chargePrompt : YARD_PROMPT[yardState.action]}
+          {padPrompt(yardState.action === 'board' && shipAct === 'fit' ? REPAIR_LABEL.fitPrompt : yardState.action === 'board' && shipAct === 'charge' ? REPAIR_LABEL.chargePrompt : YARD_PROMPT[yardState.action], padGlyph)}
         </div>
       )}
       {hud.prompt && !bagOpen && !vesselShop && !deed && !optionsOpen && (   // world prompts stay out from over a menu
         <div style={{ position: 'absolute', left: '50%', top: '62%', transform: 'translateX(-50%)', padding: '6px 14px', borderRadius: 8, background: 'rgba(10,12,18,0.7)', color: '#f4efe2', font: '600 12px var(--font-game), system-ui', letterSpacing: '0.18em', textTransform: 'uppercase', pointerEvents: 'none' }}>
-          {hud.prompt}
+          {padPrompt(hud.prompt, padGlyph)}
         </div>
       )}
       <div hidden={!!hud.foot} style={{ position: 'absolute', ...(isTouch ? { left: 14, top: 64, textAlign: 'left' as const } : { left: '50%', transform: 'translateX(-50%)', bottom: 16, /* bottom-centre is free in the template */ textAlign: 'center' as const }), color: '#f4efe2', pointerEvents: 'none', textShadow: '0 2px 8px rgba(0,0,0,0.55)' }}>

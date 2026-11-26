@@ -4,7 +4,8 @@ import { readFileSync } from 'node:fs'
 import type { PadButton } from '@/lib/input/actions'
 import { merge } from '@/lib/input/bindings'
 import type { PadSample } from '@/lib/input/gamepad'
-import { newPadState, padStep, releaseAll, OPEN_CODE, PAD_LOOK_RAD_S, type PadEffect } from './pad'
+import { newPadState, padStep, releaseAll, padActed, padPrompt, OPEN_CODE, PAD_LOOK_RAD_S, type PadEffect } from './pad'
+import { hintFor } from '@/lib/input/hints'
 
 let pass = 0; const fails: string[] = []
 const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
@@ -112,6 +113,31 @@ const has = (fx: PadEffect[], e: PadEffect) => fx.some(f => JSON.stringify(f) ==
   ok(/<PadBridge menuOpen=/.test(ather) && /<PadBridge menuOpen=/.test(cont), 'both pages mount <PadBridge>')
   ok(/from '@\/lib\/input\/gamepad'/.test(bridge) && /poll\(\)/.test(bridge), 'bridge polls src/lib/input/gamepad.ts')
   ok(/addEventListener\('pad:hotbar'/.test(hud), 'GameHud hears the d-pad hotbar step')
+}
+
+// M186 s2: the pad takes the game on a press or a pushed stick, not on a held button or a resting drift
+{
+  const p = pad()
+  ok(padActed(p(['X'])), 'a press takes the game')
+  ok(!padActed(p(['X'])), 'a button merely held does not re-take it (the mouse can win while it rests)')
+  ok(!padActed(p([], { lx: 0.3 })), 'a stick drift under half does not take the game')
+  ok(padActed(p([], { ry: -0.8 })), 'a stick pushed past half takes the game')
+  ok(!padActed(null), 'no pad never takes it')
+}
+// M186 s2: prompts name the pad's button for 'use' (DualSense: □, Xbox: X), only the key letter changes
+{
+  const ps = hintFor(map, 'world.interact', 'pad', 'playstation'), xb = hintFor(map, 'world.interact', 'pad', 'xbox')
+  ok(ps === '□' && xb === 'X', `world.interact on a pad = □ / X (${ps} / ${xb})`)
+  ok(padPrompt('E · Gregory (buy ground)', ps) === '□ · Gregory (buy ground)', 'E · Gregory -> □ · Gregory')
+  ok(padPrompt('E · Place · hold E to turn', xb) === 'X · Place · hold X to turn', 'hold E -> hold X')
+  ok(padPrompt('E · Gregory (buy ground)', null) === 'E · Gregory (buy ground)', 'no pad: the text as it is')
+  ok(padPrompt('Elder · Eve', ps) === 'Elder · Eve', 'a word starting with E is not a key')
+  ok(padPrompt('THE · way', ps) === 'THE · way', 'a word ending in E is not a key')
+  const bridge = readFileSync('src/app/shimmer/open/shared/pad-bridge.tsx', 'utf8')
+  const ather = readFileSync('src/app/shimmer/open/ather/page.tsx', 'utf8'), cont = readFileSync('src/app/shimmer/open/continent/page.tsx', 'utf8')
+  ok(/padPrompt\(!isTouch && stance\.kind === 'weapon'/.test(ather) && /padPrompt\(hud\.prompt, padGlyph\)/.test(cont), 'both pages pass their world prompt through padPrompt')
+  ok(/addEventListener\('mousemove'/.test(bridge) && /cursor:none !important/.test(bridge), 'the mouse moving hands the game back; the pad hides the cursor')
+  ok(/data-audio-locked/.test(bridge) && /isTrusted\) return[\s\S]{0,200}audio\(\)/.test(bridge), 'a real gesture resumes the audio; a locked note shows with a pad')
 }
 
 console.log(`pad: ${pass} ok, ${fails.length} fail`)

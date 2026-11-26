@@ -53,6 +53,8 @@ export function audio(): AudioContext | null {
     return ctx
   } catch { return null }
 }
+/** The context's state without making one (M186 s2: the pad bridge says when sound is still locked). null = none yet. */
+export const audioState = (): AudioContextState | null => ctx?.state ?? null
 export function noise(c: AudioContext): AudioBuffer {
   if (noiseBuf) return noiseBuf
   const n = Math.floor(c.sampleRate * 1.5); noiseBuf = c.createBuffer(1, n, c.sampleRate)

@@ -132,3 +132,19 @@ export const PAD_HINTS: { b: PadButton; label: string }[] = [
   { b: 'LT', label: 'aim' }, { b: 'DUP', label: 'bag' }, { b: 'SELECT', label: 'map' }, { b: 'START', label: 'options' },
 ]
 export const PAD_MENU_HINTS: { b: PadButton; label: string }[] = [{ b: 'A', label: 'pick' }, { b: 'B', label: 'close' }]
+
+// ── M186 s2: who holds the game, the pad or the mouse / keys (Alex 11-26: 'when the mouse takes over i need a cursor') ──
+/** The pad TAKES the game on a button press or a stick pushed past half (not a resting drift inside the deadzone's edge). */
+export const PAD_TAKE_STICK = 0.5
+export function padActed(p: PadSample | null): boolean {
+  if (!p) return false
+  return p.pressed.size > 0 || Math.max(Math.abs(p.lx), Math.abs(p.ly), Math.abs(p.rx), Math.abs(p.ry)) > PAD_TAKE_STICK
+}
+/** A world prompt says the key ('E · Gregory'). With a pad in hand it says the pad's button for the same action instead
+ *  ('□ · Gregory'): the leading 'E · ' and any 'hold E'. `glyph` null = no pad: the text as it is. */
+export function padPrompt(text: string, glyph: string | null): string {
+  if (!glyph) return text
+  return text.replace(/^E · /, `${glyph} · `).replace(/\bhold E\b/g, `hold ${glyph}`)
+}
+/** Chrome runs audio only after a real click / key / tap; a pad press is not one. Placeholder words (for @lark). */
+export const SOUND_OFF_NOTE = { click: 'Sound is off · click or press a key once to turn it on', tap: 'Sound is off · tap the screen once to turn it on' }

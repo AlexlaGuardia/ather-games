@@ -7,17 +7,42 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react'
 import { poll, resetEdges, type PadKind } from '@/lib/input/gamepad'
 import { load as loadBindings } from '@/lib/input/bindings'
-import { padName } from '@/lib/input/hints'
+import { padName, hintFor } from '@/lib/input/hints'
 import { touch, TOUCH_LOOK_SENS } from './touch'
-import { newPadState, padStep, releaseAll, PAD_HINTS, PAD_MENU_HINTS, type PadEffect, type PadState } from './pad'
+import { newPadState, padStep, releaseAll, padActed, padPrompt, PAD_HINTS, PAD_MENU_HINTS, SOUND_OFF_NOTE, type PadEffect, type PadState } from './pad'
+import { audio, audioState } from './gun-sound'
 
 // ── "a pad is in use" (for the hint and the click-to-play card) ───────────────────────────────────────────────────
 let activeKind: PadKind | null = null
 const subs = new Set<() => void>()
 const setActive = (k: PadKind | null) => { if (k === activeKind) return; activeKind = k; subs.forEach(f => f()) }
 const subscribe = (f: () => void) => { subs.add(f); return () => { subs.delete(f) } }
-/** The kind of the pad in use, or null when none has spoken. */
+/** The kind of the pad in use, or null when none has spoken (or the mouse / keys took the game back: M186 s2). */
 export const usePadKind = () => useSyncExternalStore(subscribe, () => activeKind, () => null)
+/** M186 s2: the pad's button for 'use' (world.interact, X / □ by default) while a pad holds the game, else null. */
+export function usePadGlyph(): string | null {
+  const k = usePadKind()
+  return k ? hintFor(loadBindings(), 'world.interact', 'pad', k) : null
+}
+/** A world prompt as the player's device names it ('E · Gregory' / '□ · Gregory'). */
+export { padPrompt }
+
+// ── M186 s2: sound for a pad player ───────────────────────────────────────────────────────────────────────────────
+// Chrome lets an AudioContext run only after a real click / key / tap on the page; a gamepad press is NOT a user gesture.
+// So a player who starts on the pad (the pad hides Click-to-play) heard nothing, ever: the one context stayed suspended.
+// Every real gesture resumes it inside the gesture (audio() resumes a suspended context), and while it is still locked
+// with a pad in hand a note says to click / tap once.
+let soundLocked = false
+const lockSubs = new Set<() => void>()
+const setLocked = (v: boolean) => { if (v === soundLocked) return; soundLocked = v; lockSubs.forEach(f => f()) }
+const useSoundLocked = () => useSyncExternalStore(f => { lockSubs.add(f); return () => { lockSubs.delete(f) } }, () => soundLocked, () => false)
+function readLocked(): boolean {
+  const st = audioState()
+  if (st === 'running' || st === 'closed') return false
+  if (st === 'suspended') return true
+  const ua = (navigator as unknown as { userActivation?: { hasBeenActive: boolean } }).userActivation
+  return ua ? !ua.hasBeenActive : false
+}
 
 function key(type: 'keydown' | 'keyup', code: string): boolean {
   const k = code.startsWith('Key') ? code.slice(3).toLowerCase() : code === 'Space' ? ' ' : code
@@ -107,27 +132,54 @@ export function PadBridge({ menuOpen }: { menuOpen: boolean }) {
     // HOLD that stows: stance HOLD_MS is 350 ms). 16 ms sampling catches a real tap at any frame rate; the stick's
     // move / look are rates (look is scaled by real dt), so they do not care which clock drives them. Same reason the
     // phone's fire button is polled on a timer (ather/page.tsx).
+    // M186 s2: the pad HOLDS the game from a press / a pushed stick until the mouse moves or a real key / click / tap
+    // comes; then the cursor shows, Click-to-play is back and prompts say 'E'. The next pad press takes it again.
+    let padOwns = false, n = 0
     const tick = () => {
       const now = performance.now(), dt = Math.min(0.05, Math.max(0, (now - last) / 1000)); last = now
       const pad = poll()
-      setActive(pad ? pad.kind : null)
+      if (!pad) padOwns = false
+      else if (padActed(pad)) padOwns = true
+      setActive(pad && padOwns ? pad.kind : null)
+      if (++n % 8 === 0) setLocked(readLocked())
       for (const e of padStep(s, pad, map, menu.current, dt)) apply(e)
     }
     const id = setInterval(tick, 16)
+    const handBack = () => { padOwns = false; setActive(null) }
+    const gesture = (e: Event) => {
+      if (!e.isTrusted) return     // the bridge's own synthetic keys are not a player's hand
+      audio()                      // inside a real gesture: make / resume the one context (Chrome's rule)
+      setLocked(readLocked())
+      handBack()
+    }
+    const moved = (e: MouseEvent) => { if (e.isTrusted && Math.abs(e.movementX) + Math.abs(e.movementY) > 0) handBack() }
+    const GESTURES = ['pointerdown', 'keydown', 'touchend', 'wheel'] as const
+    for (const g of GESTURES) window.addEventListener(g, gesture, { capture: true, passive: true })
+    window.addEventListener('mousemove', moved, { capture: true, passive: true })
     const blur = () => { for (const e of releaseAll(s)) apply(e); resetEdges() }
     const wake = () => { map = loadBindings() }     // a pad plugged in (or rebinds saved in voxel3d's panel): re-read the map
     window.addEventListener('blur', blur); window.addEventListener('gamepadconnected', wake)
     ;(window as unknown as { __pad?: unknown }).__pad = { kind: () => activeKind, held: () => [...s.down.values()], menu: () => menu.current }   // read-only probe (m186-pad-check)
     return () => {
       clearInterval(id); blur(); setActive(null); ring(null)
+      for (const g of GESTURES) window.removeEventListener(g, gesture, { capture: true })
+      window.removeEventListener('mousemove', moved, { capture: true })
       window.removeEventListener('blur', blur); window.removeEventListener('gamepadconnected', wake)
     }
   }, [])
+  const locked = useSoundLocked()
   if (!kind) return null
   const hints = menuOpen ? PAD_MENU_HINTS : PAD_HINTS
+  const touchy = typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0)
   return (
     <>
-      <style>{`[${RING}]{outline:2px solid #d4a843 !important;outline-offset:2px}`}</style>
+      {/* the pad holds the game: no cursor (the mouse moving hands it back, and the cursor with it) */}
+      <style>{`[${RING}]{outline:2px solid #d4a843 !important;outline-offset:2px} html, html *{cursor:none !important}`}</style>
+      {locked && (
+        <div data-audio-locked style={{ position: 'fixed', left: '50%', top: 40, transform: 'translateX(-50%)', zIndex: 40, padding: '5px 12px', borderRadius: 8, background: 'rgba(12,16,20,0.72)', color: '#f4efe2', font: '600 11px system-ui, sans-serif', letterSpacing: '0.04em', pointerEvents: 'none', whiteSpace: 'nowrap', maxWidth: 'calc(100vw - 32px)', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {touchy ? SOUND_OFF_NOTE.tap : SOUND_OFF_NOTE.click}
+        </div>
+      )}
       <div data-pad-hint style={{ position: 'fixed', left: 8, top: 8, zIndex: 40, display: 'flex', gap: 10, padding: '3px 10px', borderRadius: 999, background: 'rgba(12,16,20,0.55)', color: '#eef3f6', font: '600 10px system-ui, sans-serif', letterSpacing: '0.06em', pointerEvents: 'none', whiteSpace: 'nowrap' }}>
         {hints.map(h => <span key={h.b}><span style={{ color: '#d4a843' }}>{padName(h.b, kind)}</span> {h.label}</span>)}
       </div>

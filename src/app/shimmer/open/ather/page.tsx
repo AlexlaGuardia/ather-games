@@ -163,7 +163,7 @@ import { clearAt, hasSpread, loadSpread, saveSpread, loadSkew, saveSkew, type Sp
 import { loadMap, saveMap, freshMap, startRule, rollSections, areaState, uncover, tend, firstLook, changes, growLine, clearLine, firstLine, type SpreadMap, type AreaState } from './spread-map'   // M70 s2
 import { TouchControls, type TouchAction } from '../shared/touch-controls'
 import { isTouchOnly, pressKey, touch } from '../shared/touch'
-import { PadBridge, usePadKind } from '../shared/pad-bridge'
+import { PadBridge, usePadKind, usePadGlyph, padPrompt } from '../shared/pad-bridge'
 import { useMenuLock } from '../shared/menu-lock'
 import { BirthGate, useBirthGateUp, BORN_EVENT } from '../birth-gate'
 import { MorelBubble } from '../shared/morel-bubble'   // BETA M33: the glove's gem speaks (ammo)
@@ -281,6 +281,7 @@ function AtherSliceGame() {
   const [played, setPlayed] = useState(false)   // locked once: after that an unlocked screen says 'click to resume', not the whole intro
   useEffect(() => setIsTouch(isTouchOnly()), [])
   const padKind = usePadKind()   // M186: a controller in use hides the click-to-play card (a pad never takes pointer lock)
+  const padGlyph = usePadGlyph()   // M186 s2: with a pad in hand the prompts name its button, not 'E'
   const [zone, setZone] = useState<Zone>({ kind: 'plot' })
   const [spawn, setSpawn] = useState<Spawn>(THRESHOLD)
   const [epoch, setEpoch] = useState(0)
@@ -1918,7 +1919,7 @@ function AtherSliceGame() {
         )
       })()}
       {prompt && !panel && !building && (
-        <div style={{ position: 'absolute', left: '50%', top: '58%', transform: 'translateX(-50%)', padding: '6px 12px', borderRadius: 6, background: 'rgba(12,16,20,0.65)', color: '#f4efe2', font: '13px system-ui', pointerEvents: 'none' }}>{!isTouch && stance.kind === 'weapon' && chud?.reloadable ? 'E · reload' : prompt}</div>
+        <div style={{ position: 'absolute', left: '50%', top: '58%', transform: 'translateX(-50%)', padding: '6px 12px', borderRadius: 6, background: 'rgba(12,16,20,0.65)', color: '#f4efe2', font: '13px system-ui', pointerEvents: 'none' }}>{padPrompt(!isTouch && stance.kind === 'weapon' && chud?.reloadable ? 'E · reload' : prompt, padGlyph)}</div>
       )}
       {wmWhy && !panel && !fade && (
         <div data-waymark-why style={{ position: 'absolute', left: '50%', top: '64%', transform: 'translateX(-50%)', maxWidth: 'min(86vw, 420px)', textAlign: 'center', padding: '6px 12px', borderRadius: 6, background: 'rgba(12,16,20,0.65)', color: '#ffb4a8', font: '13px system-ui', pointerEvents: 'none' }}>{wmWhy}</div>
