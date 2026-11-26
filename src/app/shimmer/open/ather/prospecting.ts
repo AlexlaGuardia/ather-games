@@ -38,7 +38,7 @@ export const CRYSTAL_KINDS: CrystalKind[] = ['raw', 'violet', 'storm', 'earth', 
 // ★ M185 s2 (RULED athernyx c73ab4e, CANON_GAPS 'The four gems as the Wilds' mining nodes'): MANA SEEPS. Mana seeps out of a gap
 // in the ground, pools in one spot and crystallises into raw mana shards; small / medium / large by the leak, the bigger the
 // more shards and the rarer. On screen it is a 'mana seep', NEVER a spring or a well (mana-well = the Anemonyx fountain), and
-// it is drawn flat on the ground (crystal-nodes.tsx › Seeps), never a fountain. In the Wilds a seep takes the slot a raw node
+// it is drawn as a low crystal tent over a crack (crystal-nodes.tsx › Seeps, look B), never a fountain. In the Wilds a seep takes the slot a raw node
 // had (crystalFor), so no node id moved; the 'raw' kind stays for old placed scenery and the glade's keeper nodes.
 // Worked with the spike like any node (Prospecting), its own dial (gather-dials.ts › SEEP_DIAL), canon's lowest grade.
 export type SeepKind = 'seep_s' | 'seep_m' | 'seep_l'

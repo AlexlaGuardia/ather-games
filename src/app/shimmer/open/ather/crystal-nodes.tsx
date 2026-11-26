@@ -36,7 +36,7 @@ export const CRYSTAL_LOOK: Record<CrystalKind, { color: string; glow: string; k:
   egg:    { color: '#ece4f4', glow: '#c8b8e8', k: 0.5 },
   pure:   { color: '#f4f8ff', glow: '#ffffff', k: 0.7, clear: true },
   ather:  { color: '#ffd860', glow: '#ffc030', k: 0.8, clear: true },
-  // M185 s2: a mana seep's colour is its SHARDS' (raw mana, as the raw node's: ground loot reads it), the glow the pooled mana's
+  // M185 s2: a mana seep's colour is its SHARDS' (raw mana, as the raw node's: ground loot + the burst read it); the tent = SEEP_LOOK
   seep_s: { color: '#e8eaf2', glow: '#a8b8ff', k: 0.45 },
   seep_m: { color: '#e8eaf2', glow: '#a8b8ff', k: 0.5 },
   seep_l: { color: '#e8eaf2', glow: '#a8b8ff', k: 0.55 },
@@ -116,85 +116,109 @@ function KindMesh({ nodes, kind, cluster, chips }: { nodes: Crystal[]; kind: Cry
   )
 }
 
-// ── M185 s2: MANA SEEPS, drawn. Mana seeps out of a gap in the ground, pools in one spot and crystallises (RULED c73ab4e).
-// So: a FLAT, low, ragged pool lying on the ground (never a basin, a column or a fountain: the Anemonyx mana-well must never be
-// mistaken for one), a dark crack under it, and raw mana shards crusted round its rim, more and bigger with the leak.
-// A worked seep keeps a dull, dried pool and no shards until it seeps again. Code-drawn placeholder: Alex judges the look.
-/** pool radius (m, before the node's own scale) and how many shards crust the rim */
-export const SEEP_SIZE: Record<SeepKind, { r: number; shards: number }> = { seep_s: { r: 0.55, shards: 3 }, seep_m: { r: 0.9, shards: 5 }, seep_l: { r: 1.35, shards: 8 } }
-/** a ragged unit disc, a hair thick, lying flat */
-function poolGeometry() {
-  const g = new THREE.CylinderGeometry(1, 1, 0.04, 12, 1)
-  const p = g.attributes.position
-  for (let i = 0; i < p.count; i++) {
-    const x = p.getX(i), z = p.getZ(i), a = Math.atan2(z, x), d = Math.hypot(x, z)
-    const w = 1 + 0.16 * Math.sin(a * 3 + 0.7) + 0.09 * Math.sin(a * 5 + 2.1)
-    p.setX(i, x * (d > 0 ? w : 1)); p.setZ(i, z * (d > 0 ? w : 1))
-  }
-  g.translate(0, 0.03, 0); g.computeVertexNormals()
-  return g
+// ── M185 s2b: MANA SEEPS, drawn. Mana seeps out of a gap in the ground and crystallises (RULED c73ab4e). The look Alex LOCKED
+// 11-26 (look B, 'crystal tent', Magii #17937): white crystal ribs arch up over a dark crack and meet at a crown, and each rib's
+// leg runs on out over the ground and forks, like a web. Small / Medium / Large grow in rib count and spread. Never a puddle,
+// never rising spray, never fountain-like (the Anemonyx mana-well must never be mistaken for one): the only wet thing is a
+// thin line of light in the crack. Worked: the ribs go dull grey and the crack goes dark until it seeps again.
+// Code-drawn: ONE merged geometry per size (ribs + links + crown), so a seep is 1 draw call (+ its crack + its glow).
+/** the tent at node scale 1 (m): ribs, crown height, where a rib meets the ground, how far its leg runs on. A keeper stands
+ *  ~1.75 m, so a small seep is ankle-to-knee high, a medium near hip high, a large about chest high (x the node's 0.8-1.3 scale). */
+export const SEEP_SIZE: Record<SeepKind, { ribs: number; crown: number; foot: number; leg: number }> = {
+  seep_s: { ribs: 6, crown: 0.45, foot: 0.5, leg: 0.85 },
+  seep_m: { ribs: 9, crown: 0.8, foot: 0.95, leg: 1.6 },
+  seep_l: { ribs: 13, crown: 1.2, foot: 1.55, leg: 2.6 },
 }
-/** the shards round one size of seep's rim, at their real size */
-export function seepShardsGeometry(kind: SeepKind) {
-  const { r, shards } = SEEP_SIZE[kind], parts: THREE.BufferGeometry[] = []
-  for (let k = 0; k < shards; k++) {
-    const a = (k / shards) * Math.PI * 2 + 0.4 * Math.sin(k * 2.3), d = r * (0.78 + 0.18 * Math.sin(k * 1.7))
-    const h = 0.18 + 0.1 * r + 0.08 * Math.sin(k * 3.1), g = new THREE.ConeGeometry(0.05 + 0.03 * r, h, 5)
-    g.translate(0, h / 2, 0); g.rotateX(0.35 * Math.sin(k * 1.3)); g.rotateZ(0.4 * Math.cos(k * 1.9)); g.translate(Math.cos(a) * d, 0.02, Math.sin(a) * d)
-    parts.push(g.toNonIndexed())
+/** the colours: white crystal lit faintly from within; the leak's own light (a pale mana blue) only in the crack */
+export const SEEP_LOOK = { rib: '#f2f6ff', ribGlow: '#b8ccff', worked: '#8c8e96', leak: '#9fd8ff', dark: '#1c1a22' }
+/** one size of seep's tent, merged: the ribs (crown -> arch -> foot -> leg -> fork), a link between each pair of ribs, the crown */
+export function seepTentGeometry(kind: SeepKind) {
+  const { ribs, crown: H, foot: F, leg: G } = SEEP_SIZE[kind], parts: THREE.BufferGeometry[] = []
+  const rad = 0.022 + 0.014 * H, V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z)
+  const ribAt: THREE.CatmullRomCurve3[] = []
+  for (let k = 0; k < ribs; k++) {
+    const a = (k / ribs) * Math.PI * 2 + 0.25 * Math.sin(k * 2.3), c = Math.cos(a), s = Math.sin(a)
+    const f = F * (0.88 + 0.16 * Math.sin(k * 1.7)), g = G * (0.85 + 0.2 * Math.sin(k * 2.9)), bend = 0.18 * Math.sin(k * 3.7)
+    const at = (r: number, y: number, side = 0) => V(c * r - s * side, y, s * r + c * side)
+    const curve = new THREE.CatmullRomCurve3([at(0.05 * H, H), at(0.45 * f, 0.92 * H), at(0.85 * f, 0.55 * H), at(f, 0.06), at((f + g) / 2, 0.03, bend * (g - f)), at(g, 0.02, bend * 1.6 * (g - f))])
+    ribAt.push(curve)
+    parts.push(new THREE.TubeGeometry(curve, 16, rad, 4, false).toNonIndexed())
+    // the fork at the leg's end: two short twigs
+    const end = curve.getPoint(1), dir = end.clone().sub(curve.getPoint(0.94)).setY(0).normalize()
+    for (const t of [-0.6, 0.55]) {
+      const d2 = dir.clone().applyAxisAngle(V(0, 1, 0), t), tw = new THREE.CatmullRomCurve3([end, end.clone().addScaledVector(d2, 0.14 + 0.08 * H).setY(0.015)])
+      parts.push(new THREE.TubeGeometry(tw, 2, rad * 0.7, 3, false).toNonIndexed())
+    }
   }
-  const m = mergeGeometries(parts)!
+  // the web: a thin link from each rib to the next, part way down the arch
+  for (let k = 0; k < ribs; k++) {
+    const A = ribAt[k].getPoint(0.28 + 0.06 * Math.sin(k)), B = ribAt[(k + 1) % ribs].getPoint(0.33 + 0.05 * Math.cos(k))
+    parts.push(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([A, B]), 2, rad * 0.6, 3, false).toNonIndexed())
+  }
+  // the crown: a crusted knot where the ribs meet
+  const knot = new THREE.IcosahedronGeometry(0.09 + 0.08 * H, 0); knot.scale(1.3, 0.7, 1.3); knot.translate(0, H, 0); parts.push(knot)
+  const m = mergeGeometries(parts.map(g => { g.deleteAttribute('uv'); g.deleteAttribute('normal'); return g }))!
   m.computeVertexNormals()
+  for (const g of parts) g.dispose()
   return m
 }
-function SeepMesh({ nodes, kind, pool }: { nodes: Crystal[]; kind: SeepKind; pool: THREE.BufferGeometry }) {
-  const live = useRef<THREE.InstancedMesh>(null), dry = useRef<THREE.InstancedMesh>(null), shards = useRef<THREE.InstancedMesh>(null)
-  const glow = useRef<THREE.PointsMaterial>(null), poolMat = useRef<THREE.MeshLambertMaterial>(null), next = useRef(0), night = useRef(0)
+/** the crack under the tent: a long thin sliver lying flat (unit; each seep scales it to its foot) */
+function crackGeometry() {
+  const g = new THREE.OctahedronGeometry(1, 0); g.scale(0.75, 0.012, 0.07); g.translate(0, 0.02, 0)
+  return g
+}
+function SeepMesh({ nodes, kind, crack }: { nodes: Crystal[]; kind: SeepKind; crack: THREE.BufferGeometry }) {
+  const live = useRef<THREE.InstancedMesh>(null), dry = useRef<THREE.InstancedMesh>(null), cracks = useRef<THREE.InstancedMesh>(null)
+  const glow = useRef<THREE.PointsMaterial>(null), ribMat = useRef<THREE.MeshLambertMaterial>(null), next = useRef(0), night = useRef(0)
   const rev = useSyncExternalStore(subscribeProspecting, prospectingRev, () => 0)
-  const shardGeo = useMemo(() => seepShardsGeometry(kind), [kind])
-  useEffect(() => () => shardGeo.dispose(), [shardGeo])
-  const L = CRYSTAL_LOOK[kind], R = SEEP_SIZE[kind].r
+  const tent = useMemo(() => seepTentGeometry(kind), [kind])
+  useEffect(() => () => tent.dispose(), [tent])
+  const Z = SEEP_SIZE[kind]
   useEffect(() => {
-    if (!live.current || !dry.current || !shards.current) return
+    if (!live.current || !dry.current || !cracks.current) return
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), hide = new THREE.Matrix4().makeScale(0, 0, 0), now = Date.now()
+    const lit = new THREE.Color(SEEP_LOOK.leak), dark = new THREE.Color(SEEP_LOOK.dark)
     nodes.forEach((c, k) => {
-      const gone = isMined(c.id, now), p = new THREE.Vector3(c.x, c.y - 0.02, c.z)
+      const gone = isMined(c.id, now), p = new THREE.Vector3(c.x, c.y - 0.03, c.z)
       q.setFromEuler(e.set(0, c.rot, 0))
-      const poolM = m.clone().compose(p, q, new THREE.Vector3(R * c.s, 1, R * c.s))
-      live.current!.setMatrixAt(k, gone ? hide : poolM)
-      dry.current!.setMatrixAt(k, gone ? poolM : hide)
-      shards.current!.setMatrixAt(k, gone ? hide : m.clone().compose(p, q, new THREE.Vector3(c.s, c.s, c.s)))
+      const tentM = m.clone().compose(p, q, new THREE.Vector3(c.s, c.s, c.s))
+      live.current!.setMatrixAt(k, gone ? hide : tentM)
+      dry.current!.setMatrixAt(k, gone ? tentM : hide)
+      cracks.current!.setMatrixAt(k, m.clone().compose(p, q, new THREE.Vector3(Z.foot * c.s, 1, Z.foot * c.s)))
+      cracks.current!.setColorAt(k, gone ? dark : lit)
     })
-    for (const r of [live, dry, shards]) r.current!.instanceMatrix.needsUpdate = true
-  }, [nodes, rev, R])
+    for (const r of [live, dry, cracks]) r.current!.instanceMatrix.needsUpdate = true
+    if (cracks.current.instanceColor) cracks.current.instanceColor.needsUpdate = true
+  }, [nodes, rev, Z])
+  // the leak's light low in the crack, for live seeps only
   const glowGeo = useMemo(() => {
     const now = Date.now(), pts = nodes.filter(c => !isMined(c.id, now))
     const g = new THREE.BufferGeometry()
-    g.setAttribute('position', new THREE.Float32BufferAttribute(pts.flatMap(c => [c.x, c.y + 0.25, c.z]), 3))
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pts.flatMap(c => [c.x, c.y + 0.12, c.z]), 3))
     return g
   }, [nodes, rev])
   useEffect(() => () => glowGeo.dispose(), [glowGeo])
-  // the pool breathes a little, slow (no jet, no spray: it seeps)
+  // the crystal breathes a little, slow (nothing rises, nothing sprays: it seeps)
   useFrame(({ clock }) => {
     const t = clock.elapsedTime
     if (t > next.current) { next.current = t + 1; night.current = 1 - daylight(dayProgress()) }
-    if (poolMat.current) poolMat.current.emissiveIntensity = 0.5 + 0.15 * Math.sin(t * 0.9)
-    if (glow.current) glow.current.opacity = 0.15 + 0.5 * night.current
+    if (ribMat.current) ribMat.current.emissiveIntensity = 0.28 + 0.08 * Math.sin(t * 0.9) + 0.2 * night.current
+    if (glow.current) glow.current.opacity = 0.2 + 0.45 * night.current
   })
   if (!nodes.length) return null
   return (
     <>
-      <instancedMesh frustumCulled={false} ref={live} args={[pool, undefined, nodes.length]}>
-        <meshLambertMaterial ref={poolMat} color="#4a4f9a" emissive={L.glow} emissiveIntensity={0.5} transparent opacity={0.92} />
+      <instancedMesh frustumCulled={false} ref={live} args={[tent, undefined, nodes.length]}>
+        <meshLambertMaterial ref={ribMat} color={SEEP_LOOK.rib} emissive={SEEP_LOOK.ribGlow} emissiveIntensity={0.3} flatShading />
       </instancedMesh>
-      <instancedMesh frustumCulled={false} ref={dry} args={[pool, undefined, nodes.length]}>
-        <meshLambertMaterial color="#5e5a66" />
+      <instancedMesh frustumCulled={false} ref={dry} args={[tent, undefined, nodes.length]}>
+        <meshLambertMaterial color={SEEP_LOOK.worked} flatShading />
       </instancedMesh>
-      <instancedMesh frustumCulled={false} ref={shards} args={[shardGeo, undefined, nodes.length]}>
-        <meshLambertMaterial color={L.color} emissive={L.glow} emissiveIntensity={L.k} flatShading />
+      <instancedMesh frustumCulled={false} ref={cracks} args={[crack, undefined, nodes.length]}>
+        <meshBasicMaterial color="#ffffff" toneMapped={false} />
       </instancedMesh>
       <points geometry={glowGeo} frustumCulled={false}>
-        <pointsMaterial ref={glow} map={soft()} color={L.glow} size={1.4 + 1.6 * R} sizeAttenuation transparent opacity={0.3} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} />
+        <pointsMaterial ref={glow} map={soft()} color={SEEP_LOOK.leak} size={0.8 + 1.2 * Z.foot} sizeAttenuation transparent opacity={0.3} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} />
       </points>
     </>
   )
@@ -220,8 +244,8 @@ function Feet({ nodes }: { nodes: Crystal[] }) {
 export function Crystals({ W }: { W: Pick<Wilds, 'crystals'> }) {
   const cluster = useMemo(clusterGeometry, []), chips = useMemo(chipsGeometry, [])
   useEffect(() => () => { cluster.dispose(); chips.dispose() }, [cluster, chips])
-  const pool = useMemo(poolGeometry, [])
-  useEffect(() => () => pool.dispose(), [pool])
+  const crack = useMemo(crackGeometry, [])
+  useEffect(() => () => crack.dispose(), [crack])
   const byKind = useMemo(() => CRYSTAL_KINDS.filter(k => !isSeep(k)).map(k => [k, W.crystals.filter(c => c.kind === k)] as const), [W])
   const seeps = useMemo(() => SEEPS.map(k => [k, W.crystals.filter(c => c.kind === k)] as const), [W])
   const rocks = useMemo(() => W.crystals.filter(c => !isSeep(c.kind)), [W])
@@ -229,7 +253,7 @@ export function Crystals({ W }: { W: Pick<Wilds, 'crystals'> }) {
     <>
       <Feet nodes={rocks} />
       {byKind.map(([k, ns]) => <KindMesh key={k} kind={k} nodes={ns} cluster={cluster} chips={chips} />)}
-      {seeps.map(([k, ns]) => <SeepMesh key={k} kind={k} nodes={ns} pool={pool} />)}
+      {seeps.map(([k, ns]) => <SeepMesh key={k} kind={k} nodes={ns} crack={crack} />)}
     </>
   )
 }
