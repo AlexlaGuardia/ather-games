@@ -20,6 +20,8 @@ import { loadAssign, mayUse, setAssign, subscribeAssign } from './train-assign' 
 import { loadWorks } from './rooms'
 import { FURNITURE } from './furniture'
 import { SHEET_LABEL } from './spirit-sheet'
+import { secondFormView, SECOND_FORM_UI, ELEMENT_LABEL } from './second-form-view'   // M201: the second-form stat bar
+import { ELEMENT_COLORS } from '../../spirits/spirit'
 import { isFollowing, setFollowing, spiritHeld, spiritLive, subscribeFollow } from './spirit-follow'
 import { SPECIES_NAMES } from '../../spirits/spirit'
 import { hudSay } from '../shared/hud-say'
@@ -87,6 +89,8 @@ export function SpiritPanel({ sp, id, phone, onClose }: { sp: Parameters<typeof 
     const pieces = loadWorks().pieces.flatMap(pc => { const f = FURNITURE[pc.item]; return f?.train ? [{ id: pc.id, name: f.name, on: mayUse(asg, pc.id, id), pv: previewPlay(rec, sp, f.train) }] : [] })
     return { left: poolLeft(rec), pieces }
   }, [sp, id, statsV, asgV])
+  // M201: her second form: the bar each element's form asks of her stat (live record), and why she is not evolving
+  const form = useMemo(() => secondFormView(sp, id ? loadStats()[id] : undefined), [sp, id, statsV])
   const ink = { label: H.inkSoft, ring: 'rgba(58,39,22,.2)', spoke: 'rgba(58,39,22,.16)' }
   return (
     <HearthFrame title={sheet.name} maxWidth={420} onClose={onClose} fixed dataPanel="spirit">
@@ -126,6 +130,25 @@ export function SpiritPanel({ sp, id, phone, onClose }: { sp: Parameters<typeof 
             ) : <div data-spirit-training-empty className="text-[13px] italic" style={{ color: H.inkFaint }}>{TRAIN_UI.none}</div>}
           </div>
         )}
+        {/* M201: the second-form bars (canon b0f1d0d: the dominant infusion sets the form, a stat bar on that element gates it) */}
+        <div data-second-form data-form-blocker={form.blocker ?? 'ready'} data-form-lean={form.lean ?? ''} className="mt-3">
+          <div className="mb-1.5 text-[13px] font-bold" style={{ color: H.inkSoft }}>{SECOND_FORM_UI.header}</div>
+          <div style={{ display: 'grid', gap: 3 }}>
+            {form.bars.map(b => (
+              <div key={b.element} data-form-bar={b.element} data-form-stat={b.stat} data-form-have={Math.round(b.have)} data-form-need={b.need} data-form-met={b.met ? '1' : '0'}
+                className="flex items-center gap-2 text-[12px]" style={{ opacity: form.lean && form.lean !== b.element ? 0.55 : 1 }}>
+                <span style={{ width: 8, height: 8, borderRadius: 4, background: ELEMENT_COLORS[b.element], flex: 'none' }} />
+                <span style={{ width: 44, fontWeight: 700, color: H.ink }}>{ELEMENT_LABEL[b.element]}</span>
+                <span style={{ width: 30, color: H.inkFaint }}>{SHEET_LABEL[b.stat]}</span>
+                <div style={{ flex: 1, height: 6, borderRadius: 3, background: 'rgba(58,39,22,.12)', overflow: 'hidden' }}>
+                  <div style={{ width: `${Math.round(b.fill * 100)}%`, height: '100%', background: ELEMENT_COLORS[b.element] }} />
+                </div>
+                <span className="tabular-nums" style={{ width: 52, textAlign: 'right', color: H.inkFaint }}>{Math.round(b.have)} / {b.need}</span>
+              </div>
+            ))}
+          </div>
+          <div data-form-reason className="mt-1 text-[12px] italic" style={{ color: H.inkFaint }}>{SECOND_FORM_UI.reason(form, k => SHEET_LABEL[k])}</div>
+        </div>
         <div className="mt-3 mb-1.5 text-[13px] font-bold" style={{ color: H.inkSoft }}>Moves</div>
         {sheet.moves.length ? (
           <div data-spirit-moves style={{ display: 'grid', gap: 4 }}>

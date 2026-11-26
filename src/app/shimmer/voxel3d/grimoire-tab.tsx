@@ -65,7 +65,7 @@ import { ALL_SPECIES, type SpiritIndex } from '../engine/spirit-index'
 import { Portrait, Cube } from './spirit-portrait'
 import { AWAKENED_FORM_NAMES, INFUSION_CAPS } from '../spirits/evolution-config'
 import { infusionTotal, dominantInfusion } from '../spirits/spirit'
-import { evolveSpirit, evolutionBlocker } from '../spirits/evolution'
+import { evolveSpirit, evolutionBlocker, leaningBar } from '../spirits/evolution'
 import { INFUSION_BREWS, POTENT_INFUSION_BREWS, POTENT_POINTS, applyInfusion } from '../engine/alchemy'
 import { countItem } from '../engine/inventory'
 import type { Inventory } from '../engine/inventory'
@@ -231,7 +231,7 @@ function YoursFace({ party, inv, onChange }: {
               if (b === 'settled') return `${s.element} form`
               if (b === 'tied') return 'pulled two ways — no form'
               if (b === 'no-infusions') return 'unset'
-              if (b === 'too-young') return dom ? `leaning ${dom} · form at 34` : 'unset'
+              if (b === 'below-bar') { const bar = leaningBar(s); return bar ? `leaning ${dom} · ${bar.stat} ${Math.round(bar.have)}/${bar.need}` : `leaning ${dom}` }   // M201: a stat bar, not level 34
               return dom ? `leaning ${dom}` : 'unset'
             })()}
           </span>
