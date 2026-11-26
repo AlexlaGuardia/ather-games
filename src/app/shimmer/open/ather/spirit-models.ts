@@ -263,7 +263,9 @@ export const FORM_GROW = 1.2
 // PER FORM, x her base's grown height; a form not listed draws FORM_GROW. Vulnore (v2, her own body: carapace, pillar legs,
 // docs/looks/m202-vulnore-v2-2026-11-26) 1.4: Vulnyx 0.70 -> ~0.99 m standing (a keeper is ~1.75 m). Her glb keeps the
 // Vulnyx's nose-to-tail and standing height in glb units, so the Vulnyx rig numbers (glbLen, clip speeds) still fit her.
-export const FORM_GROW_BY: Readonly<Record<string, number>> = { vulnore: 1.4 }
+// Vulnara (v2, her own body: lean and leggy, tall tufted ears, a raised brow crystal, raised rune rings, a big brush with
+// amethyst shards; docs/looks/m202-vulnara-v2-2026-11-26) 1.4 too: her head and body sit at the Vulnyx's glb scale.
+export const FORM_GROW_BY: Readonly<Record<string, number>> = { vulnore: 1.4, vulnara: 1.4 }
 export const formGrow = (name: string): number => FORM_GROW_BY[name] ?? FORM_GROW
 const secondForm = (sp: Species, form: SpiritElement, name: string, emissive: string, hull: string): SpiritLook => {
   const b = SPIRIT_RIGS[sp]!, g = formGrow(name)

@@ -2,7 +2,7 @@
 // (never the keeper's own save). One bloomed Vulnyx on one planter.
 //  OWNER  1 `?form=mana|storm|earth|water`: she draws as Vulnara / Vulnarc / Vulnore / Vulnix (that glb asked for and mounted, the base
 //         one not), rigged (one skeleton, idle clip on), grown past her base (0.70 m) by her own size dial (formGrow:
-//         ~0.84 m at 1.2; M202 v2 Vulnore ~0.98 m at 1.4); a still of each. --forms earth,mana = only those.
+//         ~0.84 m at 1.2; M202 v2 Vulnore + Vulnara ~0.98 m at 1.4); a still of each. --forms earth,mana = only those.
 //  PLAYER 2 `?form=storm` without the owner cookie: her base Vulnyx, no form glb asked for (the preview is owner-only).   3 0 page errors.
 //   OWNER_KEY=... npx tsx scripts/m202-forms-check.mts [--shots dir] [--url https://ather.games]
 import puppeteer, { type Page } from 'puppeteer-core'
