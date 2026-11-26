@@ -11,7 +11,7 @@ import { readFileSync, existsSync } from 'fs'
 import { parseWilds, BIOME, type WildsMeta } from '../src/app/shimmer/open/ather/wilds'
 import type { Zone } from '../src/app/shimmer/open/ather/forestry'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
-const origin = flag('--url', 'https://ather.games'), noWilds = process.argv.includes('--no-wilds'), phoneOnly = process.argv.includes('--phone-only')
+const origin = flag('--url', 'https://ather.games'), noWilds = process.argv.includes('--no-wilds'), phoneOnly = process.argv.includes('--phone-only'), deskOnly = process.argv.includes('--desk-only')
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 let fails = 0
 const ok = (c: boolean, m: string) => { console.log(`${c ? '✓' : '✗'} ${m}`); if (!c) fails++ }
@@ -24,7 +24,9 @@ const TOOLS = { prospecting: { toolId: 'mana_spike', usesRemaining: 7, speedBonu
 
 // two gem nodes with clear ground 5 m off (the page's own parser + the zone layer, as prospect-check)
 type Pick = { tile: string; tx: number; ty: number; cx: number; cz: number; cy: number; s: number; sx: number; sz: number; sy: number; id: string }
-function pickNode(kind: string): Pick | null {
+// outcrop nodes (':o') first: a grid node (':c') can sit in a cloud void the page drops (M41), which the bare parser here keeps
+function pickNode(kind: string): Pick | null { return pickNodeOf(kind, true) ?? pickNodeOf(kind, false) }
+function pickNodeOf(kind: string, outcrop: boolean): Pick | null {
   const D = 'public/open/wilds/'
   const index = JSON.parse(readFileSync(D + 'tiles.json', 'utf8')) as { tiles: { name: string; tx: number; ty: number; nodes: { i: number; j: number; zone?: Zone }[] }[] }
   for (const t of index.tiles) {
@@ -34,7 +36,7 @@ function pickNode(kind: string): Pick | null {
     const zm = new Map(t.nodes.map(n => [`${n.i},${n.j}`, n.zone ?? 'meadows']))
     const W = parseWilds(meta, new Int16Array(b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength)), new Uint8Array(bio), (i, j) => (zm.get(`${i},${j}`) ?? 'meadows') as Zone)
     for (const c of W.crystals) {
-      if (c.kind !== kind) continue
+      if (c.kind !== kind || c.id.includes(':o') !== outcrop) continue
       for (let a = 0; a < 8; a++) {
         const sx = c.x + Math.cos(a * Math.PI / 4) * 5, sz = c.z + Math.sin(a * Math.PI / 4) * 5, sy = W.heightAt(sx, sz)
         if (W.biomeAt(sx, sz) === BIOME.water || sy < meta.waterY + 0.6 || Math.abs(sy - c.y) > 1.2) continue
@@ -52,7 +54,7 @@ const readPanel = (p: Page) => p.evaluate(() => {
   return { name: e.querySelector('[data-panel-name]')?.textContent ?? '', rows: [...e.querySelectorAll('[data-node-row]')].map(r => { const x = (r as HTMLElement).dataset; return `${x.nodeRow}:${x.mana}:${x.verdict}` }) }
 })
 
-for (const [vp, w, h] of (phoneOnly ? [['phone', 390, 844]] : [['phone', 390, 844], ['desktop', 1280, 800]]) as [string, number, number][]) {
+for (const [vp, w, h] of (phoneOnly ? [['phone', 390, 844]] : deskOnly ? [['desktop', 1280, 800]] : [['phone', 390, 844], ['desktop', 1280, 800]]) as [string, number, number][]) {
   const phone = vp === 'phone'
   const br = await puppeteer.launch({ protocolTimeout: 300000, executablePath: '/usr/bin/chromium-browser', args: ARGS })
   const p = await (await br.createBrowserContext()).newPage()
@@ -106,7 +108,7 @@ for (const [vp, w, h] of (phoneOnly ? [['phone', 390, 844]] : [['phone', 390, 84
     await p.waitForFunction(() => !!(window as any).__ather?.mine, { timeout: 120000 })
     await p.evaluate(() => { const hits = [...document.querySelectorAll('div')].filter(d => d.textContent?.includes('Click to play')); for (const d of hits.filter(d => !hits.some(o => o !== d && d.contains(o)))) (d as HTMLElement).style.visibility = 'hidden' })
     const frame = async () => { try { await p.screenshot() } catch { /* slow */ } }
-    for (const [kind, name, mana] of [['violet', 'Fuli', 300], ['water', 'Aqual', 12]] as const) {
+    for (const [kind, name, mana] of [['water', 'Aqual', 12], ['violet', 'Fuli', 300]] as const) {
       const P = nodes[kind]; if (!P) continue
       for (let i = 0; i < 40 && ((await p.evaluate(() => (window as any).__ather.zone())) !== 'wilds' || i === 0); i++) {
         await p.evaluate((P) => (window as any).__ather.travel({ kind: 'waymark', w: { id: 'check', tile: P.tile, x: P.sx, y: P.sy, z: P.sz, biome: 4, made: 0 } }), P)
@@ -116,7 +118,7 @@ for (const [vp, w, h] of (phoneOnly ? [['phone', 390, 844]] : [['phone', 390, 84
       const TM = 1000, wx = P.sx + P.tx * TM, wz = P.sz + P.ty * TM, dx = P.cx + P.tx * TM - wx, dz = P.cz + P.ty * TM - wz
       const yaw = Math.atan2(-dx, -dz), pitch = -Math.atan2(P.sy + 1.6 - (P.cy + 0.55 * P.s), Math.hypot(dx, dz))
       let aimed: { id: string; kind: string } | null = null
-      for (let i = 0; i < 6 && aimed?.id !== P.id; i++) {
+      for (let i = 0; i < 12 && aimed?.id !== P.id; i++) {
         await p.evaluate((a) => { const A = (window as any).__ather; A.tp(a.wx, a.wz, a.yaw); A.look(a.yaw, a.pitch) }, { wx, wz, yaw, pitch }); await sleep(2500)
         await p.evaluate((a) => (window as any).__ather.look(a.yaw, a.pitch), { yaw, pitch }); for (let j = 0; j < 3; j++) await frame()
         aimed = await p.evaluate(() => (window as any).__ather.crystal())
