@@ -2,8 +2,11 @@
 // (append-only, never resets, locks at 10) and the form gate (3 meals of one element + M201's stat bar).
 // Run: npx tsx src/app/shimmer/open/ather/infusions.test.ts
 import { readFileSync } from 'node:fs'
-import { HERB_OF, TREE_HERB, CRYSTAL_HERB, HERB_FIND_CHANCE, rollHerb, feedMeal, settleForm, mealsOf, mealCounts, mealLean, spiceId, mealId,
-  elementOfMeal, BAR_SLOTS, MEALS_FOR_FORM, ELEMENTS } from './infusions'
+import { HERB_OF, TREE_HERB, CRYSTAL_HERB, HERB_FIND_CHANCE, rollHerb, feedMeal, settleForm, mealsOf, mealCounts, mealLean, mealId,
+  elementOfMeal, BAR_SLOTS, MEALS_FOR_FORM, ELEMENTS, INFUSION, infusionId, infusionsAt, infusionTake, elementOfInfusion, LEGACY_SPICE } from './infusions'
+import { itemDef as def2, renameSpices, newInv, give } from '../shared/inventory'
+import { ALC_STATIONS } from './alchemy-set'
+import { GEM, CRYSTAL_ITEM } from './prospecting'
 import { prunePlan } from './forestry'
 import { minePlan } from './prospecting'
 import { parseBook } from './grimoire-book'
@@ -21,37 +24,82 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
 
 // ── 1. canon: the four herbs, by element (CANON/game/alchemy.md 07-30), read from the canon file ──────────────────
 const canon = readFileSync('/root/athernyx/CANON/game/alchemy.md', 'utf8')
-for (const [el, herb] of [['mana', 'Violetbloom'], ['storm', 'Stormgrass'], ['earth', 'Rootvine'], ['water', 'Tidepetal']] as const) {
+for (const [el, herb] of [['mana', 'Violetbloom'], ['storm', 'Stormgrass'], ['water', 'Tidepetal']] as const) {
   ok(canon.includes(`**${herb}** (${el[0].toUpperCase()}${el.slice(1)})`), `canon names ${herb} for ${el}`)
-  ok(HERB_OF[el] === herb.toLowerCase(), `${el} infusion is fed by ${herb}`)
+  ok(HERB_OF[el] === herb.toLowerCase(), `${el}'s herb is ${herb}`)
 }
+// M207: ROOTVINE RETIRED (Alex 11-26, "too close to rootbulb"): no herb for earth, no tree or crystal turns it up
+ok(HERB_OF.earth === undefined, 'earth has no herb any more (Rootvine retired)')
+ok(!Object.values(TREE_HERB).includes('earth') && !Object.values(CRYSTAL_HERB).includes('earth'), 'no node finds an earth herb')
 
 // ── 2. every herb is FOUND somewhere the keeper already works ──────────────────────────────────────────────────────
 const found = new Set([...Object.values(TREE_HERB), ...Object.values(CRYSTAL_HERB)])
-ok(found.size === 4, 'all four herbs have a find (3 trees + the Fuli crystal)')
+ok(found.size === 3, 'three herbs have a find (2 trees + the Fuli crystal); Rootvine none')
 ok(!('goldwood' in TREE_HERB), 'goldwood (the meadows) carries no herb: canon meadow grows common crops')
-ok(rollHerb('earth', () => HERB_FIND_CHANCE - 0.001).map(d => d.id).join() === 'crop:rootvine:D,seed:rootvine:D', 'a find = the herb + its seed, grade D')
+ok(rollHerb('storm', () => HERB_FIND_CHANCE - 0.001).map(d => d.id).join() === 'crop:stormgrass:D,seed:stormgrass:D', 'a find = the herb + its seed, grade D')
+ok(rollHerb('earth', () => 0).length === 0, 'an earth roll finds nothing (Rootvine retired)')
 ok(rollHerb('earth', () => HERB_FIND_CHANCE).length === 0 && rollHerb(undefined, () => 0).length === 0, 'above the odds, or a node with no herb: nothing')
 const lo = () => 0.0001   // every roll passes
-ok(prunePlan('shimmeroak', lo).some(d => d.id === 'crop:rootvine:D'), 'a pruned shimmeroak can give Rootvine')
+ok(!prunePlan('shimmeroak', lo).some(d => d.id.includes('rootvine')), 'a pruned shimmeroak never gives Rootvine (retired)')
+for (const k of ['goldwood', 'shimmeroak', 'starwillow', 'dawnwood'] as const) ok(!prunePlan(k, lo).some(d => d.id.includes('rootvine')), `${k}: no Rootvine`)
+ok(!minePlan('earth', lo).drops.some(d => d.id.includes('rootvine')), 'a Dinloid gives no Rootvine')
 ok(prunePlan('starwillow', lo).some(d => d.id === 'seed:tidepetal:D'), 'a pruned starwillow can give Tidepetal')
 ok(prunePlan('dawnwood', lo).some(d => d.id === 'crop:stormgrass:D'), 'a pruned dawnwood can give Stormgrass')
 ok(!prunePlan('goldwood', lo).some(d => d.id.startsWith('crop:')), 'a goldwood never gives a herb')
 ok(minePlan('violet', lo).drops.some(d => d.id === 'crop:violetbloom:D'), 'a broken Fuli can give Violetbloom')
 ok(!minePlan('storm', lo).drops.some(d => d.id.startsWith('crop:')), 'other crystals give no herb')
-ok(prunePlan('shimmeroak', () => 0.99).every(d => !d.id.startsWith('seed:')), 'a high roll: no herb (the odds are real)')
+ok(prunePlan('dawnwood', () => 0.99).every(d => !d.id.startsWith('seed:')), 'a high roll: no herb (the odds are real)')
 
-// ── 3. the spice + the meal are real bag items; the hearth cooks every meal; a meal is not the keeper's dish ──────
+// ── 3. M207: the four INFUSIONS, each at its station from its gem (Alex 11-26) ───────────────────────────────────────
+const want = { water: ['aqual_sauce', 'Aqual Sauce', 'crusher', ['shimmerscale', 'water_crystal']], earth: ['golden_tonic', 'Golden Tonic', 'still', ['crop:goldleaf', 'earth_crystal']],
+  storm: ['storm_broth', 'Storm Broth', 'nook', ['crop:stormgrass', 'storm_crystal']], mana: ['fuli_powder', 'Fuli Powder', 'crusher', ['violet_crystal']] } as const
 for (const el of ELEMENTS) {
-  ok(!itemDef(spiceId(el)).name.startsWith('Unknown') && itemDef(spiceId(el)).name.includes('Spice'), `${el}: the spice is a bag item`)
+  const [id, name, at, ins] = want[el], r = INFUSION[el]
+  ok(r.id === id && r.name === name && r.at === at, `${el}: ${name} at the ${at}`)
+  ok(r.in.map(s => s.id).join() === ins.join() && r.in.every(s => s.n === 1), `${el}: ${name} takes ${ins.join(' + ')}`)
+  ok(def2(id).name === name, `${el}: ${name} is a bag item`)
+  ok(def2(id).blurb.includes(ALC_STATIONS[at].name), `${el}: the blurb names its station (${ALC_STATIONS[at].name})`)
+  ok(elementOfInfusion(id) === el && infusionId(el) === id, `${el}: the infusion knows its element`)
+  ok(infusionsAt(at).includes(el), `${el}: listed at the ${at}`)
+}
+ok(infusionsAt('desk').length === 0 && infusionsAt('crusher').join() === 'mana,water', 'the Crusher makes Fuli Powder + Aqual Sauce; the Desk none')
+ok(infusionsAt('still').join() === 'earth' && infusionsAt('nook').join() === 'storm', 'the Still makes Golden Tonic, the Cauldron Nook Storm Broth')
+// the gem each one takes is the element's gem (prospecting.ts GEM: Aqual water, Dinloid earth, Fuli mana, Rhyloid storm)
+for (const [el, kind] of [['water', 'water'], ['earth', 'earth'], ['storm', 'storm'], ['mana', 'violet']] as const) {
+  ok(INFUSION[el].in.some(s => s.id === CRYSTAL_ITEM[kind]), `${el}: takes ${GEM[kind]}`)
+  ok(INFUSION[el].name.includes(GEM[kind]) || el === 'earth' || el === 'storm', `${el}: named after ${GEM[kind]} where Alex did`)
+}
+// what a make spends: exact ids, crops worst grade first, nothing when short
+ok(infusionTake('mana', { violet_crystal: 2 })?.map(s => `${s.id}x${s.n}`).join() === 'violet_crystalx1', 'Fuli Powder spends one Fuli')
+ok(infusionTake('mana', {}) === null, 'no Fuli: no powder')
+ok(infusionTake('water', { shimmerscale: 1 }) === null && infusionTake('water', { water_crystal: 1 }) === null, 'Aqual Sauce needs both the scale and the Aqual')
+ok(infusionTake('earth', { 'crop:goldleaf:B': 1, 'crop:goldleaf:D': 1, earth_crystal: 1 })?.map(s => s.id).join() === 'crop:goldleaf:D,earth_crystal', 'Golden Tonic: the worst Goldleaf goes first')
+ok(infusionTake('storm', { 'crop:stormgrass:A': 1, storm_crystal: 1 })?.map(s => s.id).join() === 'crop:stormgrass:A,storm_crystal', 'Storm Broth: any grade of Stormgrass')
+ok(infusionTake('storm', { 'crop:stormgrass:A': 1 }) === null, 'Storm Broth with no Rhyloid: nothing')
+
+// ── 3b. the hearth cooks infusion + Shimmerscale -> that element's meal; a meal is not the keeper's dish ─────────────
+for (const el of ELEMENTS) {
   ok(itemDef(mealId(el)).name.includes('Meal'), `${el}: the meal is a bag item`)
   const j = SPICED.find(x => x.out.id === mealId(el))
-  ok(!!j && j.in.some(c => c.id === spiceId(el)) && j.in.some(c => c.id === 'shimmerscale'), `${el}: the hearth cooks spice + Shimmerscale -> meal`)
+  ok(!!j && j.in.some(c => c.id === INFUSION[el].id) && j.in.some(c => c.id === 'shimmerscale') && j.in.length === 2, `${el}: the hearth cooks ${INFUSION[el].name} + Shimmerscale -> meal`)
   ok(HEARTH_JOBS.includes(j!) && ALL_JOBS.some(x => x.id === j!.id), `${el}: the meal job is on the hearth and in the station queue`)
   ok(!isDish(mealId(el)), `${el}: a meal is fed, never eaten by the keeper`)
   ok(elementOfMeal(mealId(el)) === el, `${el}: a meal knows its element`)
 }
+ok(!SPICED.some(j => j.in.some(c => c.id.endsWith('_spice'))), 'no hearth job asks for a retired spice')
 ok(ROAST.every(j => !SPICED.includes(j)), 'the roasts are untouched')
+
+// ── 3c. old saves: an M204 spice in a bag becomes its infusion, count kept; nothing else moves ───────────────────────
+let oldBag = newInv(0)
+oldBag = give(oldBag, 'earth_spice', 2).inv; oldBag = give(oldBag, 'water_spice', 1).inv; oldBag = give(oldBag, 'crop:rootvine:D', 3).inv
+const conv = renameSpices(oldBag)
+const cnt = (i: typeof conv, id: string) => i.slots.reduce((a, x) => a + (x?.id === id ? x.n : 0), 0)
+ok(cnt(conv, 'golden_tonic') === 2 && cnt(conv, 'aqual_sauce') === 1, 'old spices load as Golden Tonic x2 + Aqual Sauce x1')
+ok(!conv.slots.some(x => x?.id.endsWith('_spice')), 'no spice left in the bag')
+ok(cnt(conv, 'crop:rootvine:D') === 3, 'a held Rootvine stays (an inert crop)')
+ok(conv.slots.length === oldBag.slots.length && conv.slots.every((x, k) => !x === !oldBag.slots[k]), 'the slots stay where they were')
+ok(renameSpices(newInv(0)) === newInv(0) || renameSpices(conv) === conv, 'a bag with no spice is returned as is')
+ok(Object.keys(LEGACY_SPICE).length === 4 && ELEMENTS.every(el => LEGACY_SPICE[`${el}_spice`] === INFUSION[el].id), 'every old spice maps to its element\'s infusion')
 
 // ── 4. her bar: append-only, never resets, never changes, locks at 10 ─────────────────────────────────────────────
 const sp: Species = 'axolotl'

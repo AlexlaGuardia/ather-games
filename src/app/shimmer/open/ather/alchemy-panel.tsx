@@ -11,8 +11,7 @@ import { hudSay } from '../shared/hud-say'
 import { ALC_STATIONS, ALC_POTIONS, ALC_POTION_ORDER, INTERMEDIATES, stepsAt, chainOf, pickFor, gradeFrom, gradeOrNull, fills, type AlcStation, type Have } from './alchemy-set'
 import { loadRuns, saveRuns, startRun, collectRun, runFrac, runLeft, type Runs } from './alchemy-runs'
 import { extraBottles } from './alchemist-boon'
-import { ELEMENTS, HERB_OF, SPICE_HERBS, MEAL_UI, spiceId } from './infusions'   // M204: the Crusher grinds herbs into spices
-import { GRADES } from './farming'
+import { INFUSION, MEAL_UI, infusionsAt, infusionTake, slotHave } from './infusions'   // M207: the stations make the four infusions
 
 export const haveOf = (inv: Inv): Have => {
   const h: Record<string, number> = {}
@@ -118,7 +117,7 @@ export function AlchemyPanel({ pid, station, onClose, footer, boon }: { pid: str
             )
           })}
         </div>
-        {station === 'crusher' && <SpiceList have={have} />}
+        {infusionsAt(station).length > 0 && <InfusionList station={station} have={have} />}
         <div style={{ fontSize: 11.5, color: H.inkSoft }}>Higher-grade crops make a stronger potion. The best you carry goes in first.</div>
         {footer}
       </div>
@@ -126,33 +125,33 @@ export function AlchemyPanel({ pid, station, onClose, footer, boon }: { pid: str
   )
 }
 
-/** M204: the Crusher Table grinds an element herb into its spice (infusions.ts), at once; the worst grade goes first (a spice
- *  carries no grade). The spice cooks into a meal at the hearth. */
-function SpiceList({ have }: { have: Have }) {
-  const herbIds = (el: (typeof ELEMENTS)[number]) => GRADES.map(g => `crop:${HERB_OF[el]}:${g}`).filter(id => (have[id] ?? 0) > 0)
-  const grind = (el: (typeof ELEMENTS)[number]) => {
-    let bag: Inv | null = getInv(), need = SPICE_HERBS
-    for (const id of GRADES.map(g => `crop:${HERB_OF[el]}:${g}`)) {
-      if (!need || !bag) break
-      const n = Math.min(need, haveOf(bag)[id] ?? 0)
-      if (n) { bag = take(bag, id, n); need -= n }
-    }
-    if (!bag || need) return
-    const g = give(bag, spiceId(el), 1)
+/** M207 (Alex 11-26): the four INFUSIONS, meal ingredients made at once at their station (infusions.ts INFUSION): Aqual Sauce +
+ *  Fuli Powder at the Crusher Table, Golden Tonic at the Still, Storm Broth at the Cauldron Nook. A crop goes in worst grade
+ *  first (an infusion carries no grade). The infusion cooks into its element's meal at the hearth. */
+function InfusionList({ station, have }: { station: AlcStation; have: Have }) {
+  const make = (el: ReturnType<typeof infusionsAt>[number]) => {
+    let bag: Inv | null = getInv()
+    const spend = bag && infusionTake(el, haveOf(bag))
+    if (!bag || !spend) return
+    for (const s of spend) { bag = take(bag, s.id, s.n); if (!bag) return }
+    const g = give(bag, INFUSION[el].id, 1)
     if (g.left) { hudSay('Your bag is full. Make room and come back for it.', 'info', 4); return }
-    setInv(g.inv); hudSay(`${itemDef(spiceId(el)).name}. Next: the hearth.`, 'item', 4)
+    setInv(g.inv); hudSay(`${itemDef(INFUSION[el].id).name}. Next: the hearth.`, 'item', 4)
   }
+  const slotLabel = (id: string) => (id.startsWith('crop:') ? itemDef(`${id}:D`).name.replace(/ · D$/, '') : itemDef(id).name)
   return (
-    <div data-spices style={{ display: 'grid', gap: 6, padding: '8px 10px', borderRadius: 12, background: 'rgba(58,39,22,.06)' }}>
-      <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase', color: H.inkSoft }}>{MEAL_UI.spices}</div>
-      {ELEMENTS.map(el => {
-        const n = herbIds(el).reduce((a, id) => a + have[id], 0), can = n >= SPICE_HERBS
+    <div data-infusions style={{ display: 'grid', gap: 6, padding: '8px 10px', borderRadius: 12, background: 'rgba(58,39,22,.06)' }}>
+      <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase', color: H.inkSoft }}>{MEAL_UI.infusions}</div>
+      {infusionsAt(station).map(el => {
+        const can = !!infusionTake(el, have)
         return (
-          <div key={el} data-spice={el} data-can={can ? 1 : 0} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ fontSize: 13.5, fontWeight: 700, color: H.ink }}>{itemDef(spiceId(el)).name}</div>
-            <div style={{ fontSize: 12, color: H.inkSoft }}>{SPICE_HERBS} {itemDef(`crop:${HERB_OF[el]}:D`).name.replace(/ · D$/, '')} ({n})</div>
-            <span data-act="spice-grind" style={{ marginLeft: 'auto' }}>
-              <HearthButton small primary disabled={!can} onClick={() => grind(el)}>{MEAL_UI.grind}</HearthButton>
+          <div key={el} data-infusion={el} data-can={can ? 1 : 0} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ display: 'grid', gap: 1 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 700, color: H.ink }}>{itemDef(INFUSION[el].id).name}</div>
+              <div style={{ fontSize: 12, color: H.inkSoft }}>{INFUSION[el].in.map(s => `${s.n} ${slotLabel(s.id)} (${slotHave(s.id, have)})`).join(' + ')}</div>
+            </div>
+            <span data-act="infusion-make" style={{ marginLeft: 'auto' }}>
+              <HearthButton small primary disabled={!can} onClick={() => make(el)}>{MEAL_UI.make}</HearthButton>
             </span>
           </div>
         )

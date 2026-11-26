@@ -41,10 +41,12 @@ export const ROAST: readonly Job[] = [
   roast('roast_tuskroot', 'tuskroot_cut'),
 ]
 
-/** M204 (Alex 11-26): THE SPICED MEALS. A spice ground at the Crusher Table (infusions.ts) + one Shimmerscale cooks into a
- *  meal a garden spirit is FED (her panel): it adds the spice's element to her bar for good. Not eaten by the keeper (not a
- *  DISH). Ids spelled out here so this data file stays import-free (infusions.ts spiceId / mealId make the same strings). */
-const spiced = (el: string): Job => ({ id: `cook-${el}_meal`, label: 'Cook', in: [{ id: `${el}_spice`, n: 1 }, { id: 'shimmerscale', n: 1 }], out: { id: `${el}_meal`, n: 1 } })
+/** M204 (Alex 11-26): THE ELEMENT MEALS. M207: an INFUSION (infusions.ts INFUSION: Aqual Sauce, Golden Tonic, Storm Broth,
+ *  Fuli Powder, made at the alchemy set) + one Shimmerscale cooks into a meal a garden spirit is FED (her panel): it adds the
+ *  infusion's element to her bar for good. Not eaten by the keeper (not a DISH). Ids spelled out here so this data file stays
+ *  import-free (infusions.ts INFUSION / mealId make the same strings; infusions.test checks they agree). */
+const INFUSED: Readonly<Record<string, string>> = { mana: 'fuli_powder', storm: 'storm_broth', earth: 'golden_tonic', water: 'aqual_sauce' }
+const spiced = (el: string): Job => ({ id: `cook-${el}_meal`, label: 'Cook', in: [{ id: INFUSED[el], n: 1 }, { id: 'shimmerscale', n: 1 }], out: { id: `${el}_meal`, n: 1 } })
 export const SPICED: readonly Job[] = ['mana', 'storm', 'earth', 'water'].map(spiced)
 /** everything the hearth does */
 export const HEARTH_JOBS: readonly Job[] = [...ROAST, ...SPICED]

@@ -15,11 +15,11 @@ import { keeperKey } from '@/lib/keeper-local'
 import { FURNITURE, KEEPSTONES } from '../ather/furniture'
 import { SEED_IDS, SEED_NAME, SEED_BLURB, seedIcon } from '../ather/seed-items'
 import { MEATS, DISHES } from '../ather/cooking'
-import { ELEMENTS, HERB_OF, spiceId, mealId, MEAL_UI } from '../ather/infusions'   // M204
+import { ELEMENTS, INFUSION, LEGACY_SPICE, mealId, MEAL_UI } from '../ather/infusions'   // M204 + M207
 import { POTIONS } from '../ather/alchemy'
 import { DEWL, DEWL_FIRST } from '../ather/dewl'
 import { CROPS, GRADES, seedId, cropId, parseGraded } from '../ather/farming'
-import { alcName, isAlcPotion, effectOf, INTERMEDIATES, ALC_POTIONS, alcId, potionId } from '../ather/alchemy-set'
+import { alcName, isAlcPotion, effectOf, INTERMEDIATES, ALC_POTIONS, ALC_STATIONS, alcId, potionId } from '../ather/alchemy-set'
 
 export interface ItemDef {
   name: string
@@ -147,11 +147,13 @@ for (const id of SEED_IDS) { OPEN_ITEMS[id] = { name: SEED_NAME, blurb: SEED_BLU
 //    material; a dish is held and clicked to eat (ather/page.tsx). Icons: tools/art/food_icons.py.
 for (const [id, f] of Object.entries(MEATS)) { OPEN_ITEMS[id] = { name: f.name, blurb: f.blurb, icon: `/open/icons/${id.replace(/_/g, '-')}.svg`, stack: 99, kind: 'material' }; ITEM_GROUP[id] = 'cooking' }
 for (const [id, f] of Object.entries(DISHES)) { OPEN_ITEMS[id] = { name: f.name, blurb: f.blurb, icon: `/open/icons/${id.replace(/_/g, '-')}.svg`, stack: 20, kind: 'material' }; ITEM_GROUP[id] = 'cooking' }
-// M204 SPICES + SPICED MEALS (ather/infusions.ts): a spice is ground at the Crusher Table, a meal cooked at the hearth and fed
-//    to a garden spirit. Spice icons borrow the herb's; meal icons = code-drawn mochi PLACEHOLDERS (Alex 11-26: wagashi look).
+// M204 + M207 INFUSIONS + ELEMENT MEALS (ather/infusions.ts): an infusion is made at an alchemy station, a meal cooked at the
+//    hearth and fed to a garden spirit. Infusion icons borrow the gem's; meal icons = code-drawn mochi PLACEHOLDERS (Alex 11-26: wagashi look).
 const EL_WORD = { mana: 'Mana', storm: 'Storm', earth: 'Earth', water: 'Water' } as const
 for (const el of ELEMENTS) {
-  OPEN_ITEMS[spiceId(el)] = { name: MEAL_UI.spiceName(EL_WORD[el]), blurb: MEAL_UI.spiceBlurb(EL_WORD[el]), icon: `/open/icons/crop-${HERB_OF[el]}.svg`, stack: 99, kind: 'material' }; ITEM_GROUP[spiceId(el)] = 'cooking'
+  // M207: the infusion (a meal ingredient made at an alchemy station); its icon borrows its gem's until its own is drawn
+  const inf = INFUSION[el], gem = inf.in[inf.in.length - 1].id, at = ALC_STATIONS[inf.at].name
+  OPEN_ITEMS[inf.id] = { name: inf.name, blurb: MEAL_UI.infusionBlurb(EL_WORD[el], at), icon: `/open/icons/${gem.replace(/_/g, '-')}.svg`, stack: 99, kind: 'material' }; ITEM_GROUP[inf.id] = 'cooking'
   OPEN_ITEMS[mealId(el)] = { name: MEAL_UI.mealName(EL_WORD[el]), blurb: MEAL_UI.mealBlurb(EL_WORD[el]), icon: `/open/icons/meal-${el}.svg`, stack: 20, kind: 'material' }; ITEM_GROUP[mealId(el)] = 'cooking'
 }
 // POTIONS (2026-11-17, ather/alchemy.ts): canon's brews the open world can reach, boiled in the alchemy room's cauldron; held and
@@ -320,6 +322,9 @@ export const INV_KEY = 'open.inv.v1'
 /** Guns left the bag (11-18): an older bag's gun stacks are taken out (weapons are equipment, loadout.ts). Pure. */
 export const dropGuns = (i: Inv): Inv => (i.slots.some(x => x && OPEN_ITEMS[x.id]?.kind === 'gun') ? { ...i, slots: i.slots.map(x => (x && OPEN_ITEMS[x.id]?.kind === 'gun' ? null : x)) } : i)
 
+/** M207: an M204 spice (`<el>_spice`) in an older bag becomes its element's infusion, in place, count kept. Pure. */
+export const renameSpices = (i: Inv): Inv => (i.slots.some(x => x && x.id in LEGACY_SPICE) ? { ...i, slots: i.slots.map(x => (x && x.id in LEGACY_SPICE ? { ...x, id: LEGACY_SPICE[x.id] } : x)) } : i)
+
 export function loadInv(waymarksLeft = FREE_WAYMARKS): Inv {
   try {
     const v = JSON.parse(localStorage.getItem(keeperKey(INV_KEY)) ?? 'null')
@@ -333,6 +338,7 @@ export function loadInv(waymarksLeft = FREE_WAYMARKS): Inv {
       out = dropGuns(out)
       // the bait floor shipped an hour as 'forage' before canon named it MAST (11-17): rename it in place
       if (out.slots.some((x: Stack | null) => x?.id === 'forage')) out = { ...out, slots: out.slots.map((x: Stack | null) => (x?.id === 'forage' ? { ...x, id: 'mast' } : x)) }
+      out = renameSpices(out)   // M207: M204's spices are now the infusions
       // rinning arrived (11-15): an older bag is handed the starting bait once
       if (!(out.gifts ?? []).includes('bait1')) out = { ...give(out, 'bait', STARTING_BAIT).inv, gifts: [...(out.gifts ?? []), 'bait1'] }
       return out

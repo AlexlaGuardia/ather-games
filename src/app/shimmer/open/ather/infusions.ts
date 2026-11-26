@@ -4,11 +4,21 @@
 // NEVER resets or changes. 3-4 meals of one element + M201's stat bar = she takes that element's second form. At 10 the
 // bar is full and locked. ⚖ canon amend [OPEN] (athernyx CANON_GAPS, alchemy.md): every word here is a neutral UI label.
 //
-// Canon herbs (alchemy.md, RULED 07-30): Violetbloom (Mana), Stormgrass (Storm), Rootvine (Earth), Tidepetal (Water).
-// ⚖ JIN'S APPLICATION (for Magii, CANON_GAPS 08-18 herb grounds): canon puts each herb on a GROUND (Violetbloom basin,
-//   Stormgrass highland, Rootvine woodland, Tidepetal shore). The open world's Wilds have no such ground layer yet, so a herb
-//   is FOUND where its ground's character already stands, at a node the keeper already works:
-//     Rootvine   <- pruning a SHIMMEROAK (the thicket's closed canopy: old forest floor)
+// ★ BETA M207 (world, Alex 11-26, reworks the spice step above): THE FOUR INFUSIONS ARE DISH INGREDIENTS made at the alchemy
+// set's stations, each from its element's gem (prospecting.ts GEM, RULED c73ab4e: Aqual water, Dinloid earth, Fuli mana,
+// Rhyloid storm; their bag ids are the old `<kind>_crystal` keys):
+//   Water = Shimmerscale ground to powder at the CRUSHER + Aqual           -> Aqual Sauce
+//   Earth = Goldleaf + Dinloid at the STILL                                -> Golden Tonic
+//   Storm = Stormgrass + Rhyloid boiled at the CAULDRON (the Cauldron Nook) -> Storm Broth
+//   Mana  = Fuli ground at the CRUSHER                                     -> Fuli Powder
+// "these would all just be part of recipes to add the element to the dish": a dish cooked with one is that element's meal
+// (the bar, MEALS_FOR_FORM and the form gate below are unchanged). Names = Alex's working words, canon [OPEN] (athernyx
+// CANON_GAPS 'Cooking, part 2'), for @lark. ROOTVINE IS RETIRED (Alex: "too close to rootbulb"): no tree turns it up any more.
+// Old saves: a `<el>_spice` in a bag is RENAMED in place to its element's infusion when the bag loads (inventory.ts loadInv,
+// LEGACY_SPICE), so a keeper loses nothing; a crop:rootvine already held stays an inert crop.
+//
+// Herb finds (M204, Jin's application of canon's herb grounds, alchemy.md 07-30): a herb is FOUND at a node the keeper
+// already works. Stormgrass feeds the Storm Broth; Tidepetal + Violetbloom stay finds (canon herbs, growable crops).
 //     Tidepetal  <- pruning a STARWILLOW (the willows line the water: the shore)
 //     Stormgrass <- pruning a DAWNWOOD (the Spine's foothills: unbroken sky)
 //     Violetbloom <- breaking a FULI (violet) crystal (where the mana pools deepest)
@@ -17,38 +27,69 @@
 import { dominantInfusion, type Infusions, type Species } from '../../spirits/spirit'
 import { pendingEvolution } from '../../spirits/evolution'
 import type { FormElement, StatOf } from '../../spirits/second-form-gate'
-import { cropId, seedId, type CropId } from './farming'
+import { cropId, seedId, GRADES, type CropId } from './farming'
 import type { Pot } from './spirit-seeds'
 
 export const ELEMENTS: readonly FormElement[] = ['mana', 'storm', 'earth', 'water']
 export const isElement = (v: unknown): v is FormElement => typeof v === 'string' && (ELEMENTS as readonly string[]).includes(v)
 
-/** canon: each element's herb */
-export const HERB_OF: Readonly<Record<FormElement, CropId>> = { mana: 'violetbloom', storm: 'stormgrass', earth: 'rootvine', water: 'tidepetal' }
-/** which tree's pruning turns up which herb (Jin's application, above); goldwood none */
-export const TREE_HERB: Readonly<Record<string, FormElement>> = { shimmeroak: 'earth', starwillow: 'water', dawnwood: 'storm' }
+/** canon's herb per element (alchemy.md); only the finds below are dropped. Earth's (Rootvine) is retired from play (M207). */
+export const HERB_OF: Readonly<Partial<Record<FormElement, CropId>>> = { mana: 'violetbloom', storm: 'stormgrass', water: 'tidepetal' }
+/** which tree's pruning turns up which herb (Jin's application, above); goldwood + shimmeroak none (M207: Rootvine retired) */
+export const TREE_HERB: Readonly<Record<string, FormElement>> = { starwillow: 'water', dawnwood: 'storm' }
 /** which crystal's breaking turns up which herb */
 export const CRYSTAL_HERB: Readonly<Record<string, FormElement>> = { violet: 'mana' }
 /** odds per worked node (build dial): ~1 in 8 prunes of the right tree */
 export const HERB_FIND_CHANCE = 0.12
 /** what a find puts in the bag: one herb and its seed, grade D */
-export const herbFind = (el: FormElement): { id: string; n: number }[] => [{ id: cropId(HERB_OF[el]), n: 1 }, { id: seedId(HERB_OF[el]), n: 1 }]
+export const herbFind = (el: FormElement): { id: string; n: number }[] => { const h = HERB_OF[el]; return h ? [{ id: cropId(h), n: 1 }, { id: seedId(h), n: 1 }] : [] }
 /** roll a find for a node of this kind (one rand() call, always made, so the roll count never depends on the kind) */
 export function rollHerb(el: FormElement | undefined, rand: () => number): { id: string; n: number }[] {
   const r = rand()
   return el && r < HERB_FIND_CHANCE ? herbFind(el) : []
 }
 
-// ── the spice (Crusher Table) and the meal (the hearth) ─────────────────────────────────────────────────────────────
-/** bag ids: `<el>_spice` ground from the herb, `<el>_meal` cooked from a spice + a Shimmerscale (the hearth's tier-1 rinn) */
-export const spiceId = (el: FormElement) => `${el}_spice`
+// ── the infusion (an alchemy station) and the meal (the hearth) ─────────────────────────────────────────────────────
+/** the alchemy-set station that makes it (alchemy-set.ts AlcStation; 'nook' = the Cauldron Nook, the set's cauldron) */
+export type InfusionStation = 'crusher' | 'still' | 'nook'
+/** one infusion: its bag id, name, station and what it takes (`crop:<crop>` = that crop at any grade, worst first) */
+export interface InfusionRecipe { id: string; name: string; at: InfusionStation; in: readonly { id: string; n: number }[] }
+export const INFUSION: Readonly<Record<FormElement, InfusionRecipe>> = {
+  water: { id: 'aqual_sauce', name: 'Aqual Sauce', at: 'crusher', in: [{ id: 'shimmerscale', n: 1 }, { id: 'water_crystal', n: 1 }] },
+  earth: { id: 'golden_tonic', name: 'Golden Tonic', at: 'still', in: [{ id: 'crop:goldleaf', n: 1 }, { id: 'earth_crystal', n: 1 }] },
+  storm: { id: 'storm_broth', name: 'Storm Broth', at: 'nook', in: [{ id: 'crop:stormgrass', n: 1 }, { id: 'storm_crystal', n: 1 }] },
+  mana: { id: 'fuli_powder', name: 'Fuli Powder', at: 'crusher', in: [{ id: 'violet_crystal', n: 1 }] },
+}
+export const infusionId = (el: FormElement) => INFUSION[el].id
+export const elementOfInfusion = (id: string): FormElement | null => ELEMENTS.find(el => INFUSION[el].id === id) ?? null
+/** the infusions a station makes, in ELEMENTS order */
+export const infusionsAt = (at: string): FormElement[] => ELEMENTS.filter(el => INFUSION[el].at === at)
+/** The exact bag ids an infusion would spend from `have` (crops worst grade first), or null if something is short. */
+export function infusionTake(el: FormElement, have: Readonly<Record<string, number>>): { id: string; n: number }[] | null {
+  const out: { id: string; n: number }[] = []
+  for (const slot of INFUSION[el].in) {
+    let need = slot.n
+    const ids = slot.id.startsWith('crop:') ? GRADES.map(g => `${slot.id}:${g}`) : [slot.id]
+    for (const id of ids) {
+      if (!need) break
+      const n = Math.min(need, have[id] ?? 0)
+      if (n > 0) { out.push({ id, n }); need -= n }
+    }
+    if (need) return null
+  }
+  return out
+}
+/** how many of a slot `have` holds (a crop slot counts every grade) */
+export const slotHave = (slotId: string, have: Readonly<Record<string, number>>) =>
+  slotId.startsWith('crop:') ? GRADES.reduce((a, g) => a + (have[`${slotId}:${g}`] ?? 0), 0) : (have[slotId] ?? 0)
+
+/** bag ids: `<el>_meal` cooked from an infusion + a Shimmerscale (the hearth's tier-1 rinn) */
 export const mealId = (el: FormElement) => `${el}_meal`
-/** grinding: SPICE_HERBS herbs of ANY grade (`crop:<herb>:<g>`), worst grade first -> one spice, at once (build dial) */
-export const SPICE_HERBS = 1
 /** the meal's base: one Shimmerscale (cooking.ts: the hearth's first food) */
 export const MEAL_BASE = 'shimmerscale'
 export const elementOfMeal = (id: string): FormElement | null => { const m = /^(mana|storm|earth|water)_meal$/.exec(id); return m ? m[1] as FormElement : null }
-export const elementOfSpice = (id: string): FormElement | null => { const m = /^(mana|storm|earth|water)_spice$/.exec(id); return m ? m[1] as FormElement : null }
+/** M204's retired spices (`<el>_spice`): an old bag's spice becomes its element's infusion on load (inventory.ts loadInv) */
+export const LEGACY_SPICE: Readonly<Record<string, string>> = Object.fromEntries(ELEMENTS.map(el => [`${el}_spice`, INFUSION[el].id]))
 
 // ── her bar ─────────────────────────────────────────────────────────────────────────────────────────────────────────
 /** the bar's length: full = locked (Alex: "feed the spirit 10 meals to lock in its element") */
@@ -103,12 +144,11 @@ export function settleForm(pot: Pot, sp: Species, statOf: StatOf): { pot: Pot; e
 
 /** player-facing words: plain functional UI labels, UNSIGNED (for @lark; canon amend [OPEN]) */
 export const MEAL_UI = {
-  spiceName: (el: string) => `${el} Spice`,
-  spiceBlurb: (el: string) => `Ground from its herb at the Crusher Table. Cook it into a ${el} Meal at the hearth.`,
+  infusionBlurb: (el: string, station: string) => `Made at the ${station}. Cook it into a ${el} Meal at the hearth.`,
   mealName: (el: string) => `${el} Meal`,
-  mealBlurb: (el: string) => `A spiced meal. Open a garden spirit's panel and feed it to her: it adds ${el} to her bar, for good.`,
-  grind: 'Grind',
-  spices: 'Spices',
+  mealBlurb: (el: string) => `A ${el} meal. Open a garden spirit's panel and feed it to her: it adds ${el} to her bar, for good.`,
+  make: 'Make',
+  infusions: 'Meal ingredients',
   bar: 'Element',
   feed: (meal: string) => `Feed ${meal}`,
   fed: (el: string, n: number) => `${el} · ${n} / ${BAR_SLOTS}`,
