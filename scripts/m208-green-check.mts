@@ -67,7 +67,7 @@ try {
   await load(A, '&waymark=greg')
   ok(await poll(async () => (await zone(A)) === 'wilds', 240000), '3. A is out in the Wilds')
   ok(await poll(() => A.evaluate(() => typeof (window as any).__ather?.fall === 'function'), 60000), '3. the fight is up (__ather.fall)')
-  await sleep(2000)
+  await sleep(3000); await A.mouse.click(PHONE ? 195 : 640, PHONE ? 420 : 400); await sleep(800)   // the sim runs once play is clicked (as death-check)
   await A.evaluate(() => (window as any).__ather.fall())
   ok(await landed(A, 30000), `3. after the death the fold sets A down at the gate on the Green (${await zone(A)}, ${(await offLanding(A)).toFixed(2)} m)`)
   await sleep(2000); await shot(A, 'c-respawn')
