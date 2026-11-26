@@ -14,7 +14,7 @@ import { NYX_RINN } from '../continent/rinning-nyx'
 import { keeperKey } from '@/lib/keeper-local'
 import { FURNITURE, KEEPSTONES } from '../ather/furniture'
 import { SEED_IDS, SEED_NAME, SEED_BLURB, seedIcon } from '../ather/seed-items'
-import { MEATS, DISHES } from '../ather/cooking'
+import { MEATS, DISHES, FILLETS, SCALES, SCALES_DEF } from '../ather/cooking'
 import { ELEMENTS, INFUSION, LEGACY_SPICE, mealId, MEAL_UI } from '../ather/infusions'   // M204 + M207
 import { POTIONS } from '../ather/alchemy'
 import { DEWL, DEWL_FIRST } from '../ather/dewl'
@@ -147,6 +147,11 @@ for (const id of SEED_IDS) { OPEN_ITEMS[id] = { name: SEED_NAME, blurb: SEED_BLU
 //    material; a dish is held and clicked to eat (ather/page.tsx). Icons: tools/art/food_icons.py.
 for (const [id, f] of Object.entries(MEATS)) { OPEN_ITEMS[id] = { name: f.name, blurb: f.blurb, icon: `/open/icons/${id.replace(/_/g, '-')}.svg`, stack: 99, kind: 'material' }; ITEM_GROUP[id] = 'cooking' }
 for (const [id, f] of Object.entries(DISHES)) { OPEN_ITEMS[id] = { name: f.name, blurb: f.blurb, icon: `/open/icons/${id.replace(/_/g, '-')}.svg`, stack: 20, kind: 'material' }; ITEM_GROUP[id] = 'cooking' }
+// M206 THE FILET TAB (ather/cooking.ts FILET): fillets + Shimmerscale scales, made at the Rinnshop. Kept by the cooking room
+//    (never 'rinning': a fillet is not a catch). Icons borrow the rinn's; their roasts borrow Roast Rinn's, until drawn.
+for (const [id, f] of Object.entries(FILLETS)) { OPEN_ITEMS[id] = { name: f.name, blurb: f.blurb, icon: `/open/icons/${id.replace(/_(fillet|meat)$/, '')}.svg`, stack: 99, kind: 'material' }; ITEM_GROUP[id] = 'cooking' }
+OPEN_ITEMS[SCALES] = { name: SCALES_DEF.name, blurb: SCALES_DEF.blurb, icon: '/open/icons/shimmerscale.svg', stack: 99, kind: 'material' }; ITEM_GROUP[SCALES] = 'cooking'
+for (const id of ['roast_shimmerscale_fillet', 'roast_ribboneel_fillet', 'roast_clickclaw_meat']) OPEN_ITEMS[id].icon = '/open/icons/roast-rinn.svg'
 // M204 + M207 INFUSIONS + ELEMENT MEALS (ather/infusions.ts): an infusion is made at an alchemy station, a meal cooked at the
 //    hearth and fed to a garden spirit. Infusion icons borrow the gem's; meal icons = code-drawn mochi PLACEHOLDERS (Alex 11-26: wagashi look).
 const EL_WORD = { mana: 'Mana', storm: 'Storm', earth: 'Earth', water: 'Water' } as const

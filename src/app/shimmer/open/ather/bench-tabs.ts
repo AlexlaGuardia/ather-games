@@ -5,11 +5,11 @@
 import type { RoomKind } from './rooms'
 import { BENCH, type FocusSkill } from './focuses'
 
-export type BenchTab = 'refine' | 'furniture' | 'blades' | 'spikes' | 'hearth' | 'cauldron' | 'bait' | 'rinsticks' | 'keeper'
+export type BenchTab = 'refine' | 'furniture' | 'blades' | 'spikes' | 'hearth' | 'cauldron' | 'bait' | 'filet' | 'rinsticks' | 'keeper'
 
 export const TAB_LABEL: Record<BenchTab, string> = {
   refine: 'Refine', furniture: 'Furniture', blades: 'Pruners', spikes: 'Spikes', hearth: 'Hearth', cauldron: 'Cauldron',
-  bait: 'Bait', rinsticks: 'Rinsticks', keeper: 'Moglin',   // the keeper is the PLAYER; this tab is the room's Moglin (Alex 11-22)
+  bait: 'Bait', filet: 'Filet', rinsticks: 'Rinsticks', keeper: 'Moglin',   // the keeper is the PLAYER; this tab is the room's Moglin (Alex 11-22)
 }
 
 const FOCUS_TAB: Record<FocusSkill, BenchTab> = { forestry: 'blades', prospecting: 'spikes' }
@@ -18,7 +18,7 @@ const CRAFT_TABS: Partial<Record<RoomKind, BenchTab[]>> = {
   stonemason: ['refine'],
   cooking: ['hearth'],
   alchemy: ['cauldron'],
-  rinnshop: ['bait', 'rinsticks'],
+  rinnshop: ['bait', 'filet', 'rinsticks'],   // M206: Filet prepares a catch
 }
 
 /** The tabs a room's bench shows: its crafts, then any tool focus made there (focuses.ts BENCH), then the keeper. */

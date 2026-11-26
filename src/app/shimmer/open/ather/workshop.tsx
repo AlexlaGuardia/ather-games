@@ -27,7 +27,7 @@ import {
   ROOMS, ROOM_ORDER, TABLE, canPlace, place, raised, progress, wallsOf, benchOf, footprint, loadWorks, saveWorks,
   WALL_H, benchBox, keepClear, tableAt, TABLE_ITEM, type Works, type Room, type RoomKind, type WorkNear,
   stationOf, setStation, stockItemFromBag, stockItemFromBank, craftAt, jobRuns, toWorld, pieceRect, pieceBoxes, pieceFloor, canPlacePiece, placePiece, planPiece, plannedAt, unplan, withPlanned, turnPiece, retireRooms, toggleOpen, type Piece,
-  ROOM_STORE_SLOTS, ROOM_KEEPS, roomAccepts, roomStore, stockRoom, stockRoomFromBag, takeFromRoom, makeBaitAt, benchCount, type StoreMove,
+  ROOM_STORE_SLOTS, ROOM_KEEPS, roomAccepts, roomStore, stockRoom, stockRoomFromBag, takeFromRoom, makeBaitAt, filetAt, benchCount, type StoreMove,
   CHEST_W, CHEST_D, CHEST_H, KEEPSTONE, KEEPSTONE_RECIPE, makeKeepstone, makeKeepstoneFrom, shortOf, haveFor, payCost, pickUpChest, allChests, chestBox, chestsStanding, canPlaceChest, placeChest, type Chest,
 } from './rooms'
 import {
@@ -68,7 +68,7 @@ import { ALC_POTIONS as BREW_POTIONS, ALC_POTION_ORDER as BREW_ORDER } from './a
 import { openNet } from '../shared/open-mp'
 import { boonAt, assignSet, standAt, setRoom, boonLine } from './alchemist-boon'
 import { loadRuns, saveRuns, returnRun } from './alchemy-runs'
-import { HEARTH_JOBS } from './cooking'   // M204: + the spiced meals
+import { HEARTH_JOBS, FILET } from './cooking'   // M204: + the spiced meals; M206: the Filet tab
 import { FarmPanel, FarmInterior, FarmCrate, currentFarm, setFarm, currentWater, settleWater, farmNow } from './farm-room'
 import { plumbingOf, spillIfRemoved } from './water'
 import { grantStarter } from './farmroom'
@@ -1844,6 +1844,26 @@ function BenchPanel({ room, onClose }: { room: Room; onClose: () => void }) {
       case 'blades': case 'spikes': return focusSkill ? <FocusList r={r} inv={inv} skill={focusSkill} /> : null
       case 'rinsticks': return <RinstickList r={r} inv={inv} />
       case 'keeper': return <MoglinDuty r={r} />
+      case 'filet': {   // M206: prepare a caught rinn (cooking.ts FILET); instant, like bait
+        const fish = Object.keys(FILET).filter(id => benchCount(r, inv, id) > 0)
+        return (
+          <div>
+            <div style={lab}>Filet</div>
+            <div style={{ fontSize: 12.5, color: H.inkSoft, margin: '4px 0 8px' }}>Prepare a catch for the hearth. Shimmerscale gives its scales too, for the Crusher. From the room's store first, then your bag.</div>
+            {fish.length ? (
+              <div style={{ display: 'grid', gap: 6 }}>
+                {fish.map(id => (
+                  <div key={id} data-filet-from={id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ flex: 1, fontSize: 13.5, color: H.ink }}>{itemDef(id).name} <span style={{ color: H.inkSoft }}>× {benchCount(r, inv, id)}</span>
+                      <span style={{ display: 'block', fontSize: 12, color: H.inkSoft }}>{FILET[id].map(o => itemDef(o.id).name).join(' + ')}</span></span>
+                    <HearthButton small onClick={() => { const m = filetAt(getW(), r.id, getInv(), id); if (m) { setWorks(m.works); setInv(m.inv); hudSay(m.made.map(o => itemDef(o.id).name).join(' + '), 'item', 3) } else hudSay('No room in your bag. Clear a slot.', 'info') }}>Filet</HearthButton>
+                  </div>
+                ))}
+              </div>
+            ) : <div style={{ fontSize: 13, color: H.inkSoft }}>Nothing to filet. Shimmerscale, Ribboneel and Clickclaw can be prepared here.</div>}
+          </div>
+        )
+      }
       case 'bait': return (
         <div>
           <div style={lab}>Bait · {countOf(inv, 'bait')} in the bag</div>

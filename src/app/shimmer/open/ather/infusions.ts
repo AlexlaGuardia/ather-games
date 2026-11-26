@@ -55,7 +55,7 @@ export type InfusionStation = 'crusher' | 'still' | 'nook'
 /** one infusion: its bag id, name, station and what it takes (`crop:<crop>` = that crop at any grade, worst first) */
 export interface InfusionRecipe { id: string; name: string; at: InfusionStation; in: readonly { id: string; n: number }[] }
 export const INFUSION: Readonly<Record<FormElement, InfusionRecipe>> = {
-  water: { id: 'aqual_sauce', name: 'Aqual Sauce', at: 'crusher', in: [{ id: 'shimmerscale', n: 1 }, { id: 'water_crystal', n: 1 }] },
+  water: { id: 'aqual_sauce', name: 'Aqual Sauce', at: 'crusher', in: [{ id: 'shimmerscale_scales', n: 1 }, { id: 'water_crystal', n: 1 }] },   // M206: the scales off the Filet tab (cooking.ts SCALES)
   earth: { id: 'golden_tonic', name: 'Golden Tonic', at: 'still', in: [{ id: 'crop:goldleaf', n: 1 }, { id: 'earth_crystal', n: 1 }] },
   storm: { id: 'storm_broth', name: 'Storm Broth', at: 'nook', in: [{ id: 'crop:stormgrass', n: 1 }, { id: 'storm_crystal', n: 1 }] },
   mana: { id: 'fuli_powder', name: 'Fuli Powder', at: 'crusher', in: [{ id: 'violet_crystal', n: 1 }] },

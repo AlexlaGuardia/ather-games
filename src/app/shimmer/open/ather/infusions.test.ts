@@ -51,7 +51,7 @@ ok(!minePlan('storm', lo).drops.some(d => d.id.startsWith('crop:')), 'other crys
 ok(prunePlan('dawnwood', () => 0.99).every(d => !d.id.startsWith('seed:')), 'a high roll: no herb (the odds are real)')
 
 // ── 3. M207: the four INFUSIONS, each at its station from its gem (Alex 11-26) ───────────────────────────────────────
-const want = { water: ['aqual_sauce', 'Aqual Sauce', 'crusher', ['shimmerscale', 'water_crystal']], earth: ['golden_tonic', 'Golden Tonic', 'still', ['crop:goldleaf', 'earth_crystal']],
+const want = { water: ['aqual_sauce', 'Aqual Sauce', 'crusher', ['shimmerscale_scales', 'water_crystal']]   /* M206: the Filet tab's scales */, earth: ['golden_tonic', 'Golden Tonic', 'still', ['crop:goldleaf', 'earth_crystal']],
   storm: ['storm_broth', 'Storm Broth', 'nook', ['crop:stormgrass', 'storm_crystal']], mana: ['fuli_powder', 'Fuli Powder', 'crusher', ['violet_crystal']] } as const
 for (const el of ELEMENTS) {
   const [id, name, at, ins] = want[el], r = INFUSION[el]
@@ -72,7 +72,7 @@ for (const [el, kind] of [['water', 'water'], ['earth', 'earth'], ['storm', 'sto
 // what a make spends: exact ids, crops worst grade first, nothing when short
 ok(infusionTake('mana', { violet_crystal: 2 })?.map(s => `${s.id}x${s.n}`).join() === 'violet_crystalx1', 'Fuli Powder spends one Fuli')
 ok(infusionTake('mana', {}) === null, 'no Fuli: no powder')
-ok(infusionTake('water', { shimmerscale: 1 }) === null && infusionTake('water', { water_crystal: 1 }) === null, 'Aqual Sauce needs both the scale and the Aqual')
+ok(infusionTake('water', { shimmerscale_scales: 1 }) === null && infusionTake('water', { water_crystal: 1 }) === null, 'Aqual Sauce needs both the scales and the Aqual')
 ok(infusionTake('earth', { 'crop:goldleaf:B': 1, 'crop:goldleaf:D': 1, earth_crystal: 1 })?.map(s => s.id).join() === 'crop:goldleaf:D,earth_crystal', 'Golden Tonic: the worst Goldleaf goes first')
 ok(infusionTake('storm', { 'crop:stormgrass:A': 1, storm_crystal: 1 })?.map(s => s.id).join() === 'crop:stormgrass:A,storm_crystal', 'Storm Broth: any grade of Stormgrass')
 ok(infusionTake('storm', { 'crop:stormgrass:A': 1 }) === null, 'Storm Broth with no Rhyloid: nothing')

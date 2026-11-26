@@ -18,6 +18,8 @@ const P: Record<BenchTab, React.ReactNode> = {
   cauldron: <><path d="M4 10h16M5 10c0 6 3 9 7 9s7-3 7-9" /><path d="M7 21l1-2M17 21l-1-2" /><circle cx="10" cy="6" r="1.5" /><circle cx="14" cy="4" r="1" /></>,
   // a hook
   bait: <><path d="M12 3v11a4 4 0 0 1-8 0v-2" /><path d="M4 12l2 2" /><circle cx="12" cy="3" r="1" /></>,
+  // M206: a knife over a fish-shaped fillet
+  filet: <><path d="M3 15c3-4 8-5 13-3l4-2v6l-4-2c-5 2-10 1-13-3" /><path d="M5 7l9-3 2 2-9 3z" /></>,
   // a rod with its line
   rinsticks: <><path d="M4 20L19 4" /><path d="M19 4c1 6 0 10-2 14" /><circle cx="17" cy="19" r="1.3" /></>,
   // a round Moglin head with ears

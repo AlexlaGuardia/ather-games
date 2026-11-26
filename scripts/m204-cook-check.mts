@@ -5,7 +5,7 @@
 // one slot of a 10-slot bar by her name in the element's colour; it never resets or changes; 3 meals of one element + M201's
 // stat bar = she evolves; 10 = the bar is full and locked. ASSERTS MOVED (M207): phase A was "grind Rootvine -> Earth Spice";
 // it is now the four infusions at three stations + an OLD SAVE's Earth Spice loading as a Golden Tonic.
-// SETUP (stated): bag = 6 Shimmerscale, 1 each Aqual / Fuli / Dinloid / Rhyloid, 1 Goldleaf (B), 1 Stormgrass (C), 1 OLD
+// SETUP (stated): bag = 5 Shimmerscale + 1 Shimmerscale Scales (M206: the sauce grinds the scales), 1 each Aqual / Fuli / Dinloid / Rhyloid, 1 Goldleaf (B), 1 Stormgrass (C), 1 OLD
 // Earth Spice (M204 save), 2 Earth Meals + 4 Water Meals; Crusher Table, Still, Cauldron Nook 4 m apart from (-130, 102.5)
 // (phase A), a cooking room at (-100, 100) (phase B), then a bloomed fox planter at (-130, 102.5) in the party (phase C). Her
 // stat record: 30 growths + 5 GRD played, so the Earth form's GRD bar is met (asserted in the panel first).
@@ -50,7 +50,7 @@ try {
     if (sessionStorage.getItem('m204')) return; sessionStorage.setItem('m204', '1')
     localStorage.setItem('ather:shimmer:birthRune', 'star')
     const slots: unknown[] = Array(32).fill(null)
-    const put: [string, number][] = [['waymark', 12], ['shimmerscale', 6], ['water_crystal', 1], ['violet_crystal', 1], ['earth_crystal', 1], ['storm_crystal', 1],
+    const put: [string, number][] = [['waymark', 12], ['shimmerscale', 5], ['shimmerscale_scales', 1], ['water_crystal', 1], ['violet_crystal', 1], ['earth_crystal', 1], ['storm_crystal', 1],
       ['crop:goldleaf:B', 1], ['crop:stormgrass:C', 1], ['earth_spice', 1], ['earth_meal', 2], ['water_meal', 4]]
     put.forEach(([id, n], k) => { slots[k] = { id, n } })
     localStorage.setItem('open.inv.v1', JSON.stringify({ v: 1, slots, gifts: ['bait1'] }))
@@ -87,8 +87,8 @@ try {
   }
   const a = await bag()
   ok(a.fuli_powder === 1 && a.aqual_sauce === 1 && a.storm_broth === 1 && a.golden_tonic === 2, `A bag: 1 Fuli Powder, 1 Aqual Sauce, 1 Storm Broth, 2 Golden Tonic (the old Earth Spice converted) ${JSON.stringify({ f: a.fuli_powder, aq: a.aqual_sauce, s: a.storm_broth, g: a.golden_tonic })}`)
-  ok(!a.earth_spice && !a.water_crystal && !a.violet_crystal && !a.earth_crystal && !a.storm_crystal && !a['crop:goldleaf:B'] && !a['crop:stormgrass:C'] && a.shimmerscale === 5,
-    `A the inputs spent (gems, Goldleaf, Stormgrass, 1 scale; 5 scales left: ${a.shimmerscale}); no spice left`)
+  ok(!a.earth_spice && !a.water_crystal && !a.violet_crystal && !a.earth_crystal && !a.storm_crystal && !a['crop:goldleaf:B'] && !a['crop:stormgrass:C'] && !a.shimmerscale_scales && a.shimmerscale === 5,
+    `A the inputs spent (gems, Goldleaf, Stormgrass, the Shimmerscale scales (M206); 5 Shimmerscale left: ${a.shimmerscale}); no spice left`)
   ok(!Object.keys(a).some(k => k.includes('rootvine')), 'A no Rootvine anywhere in the bag')
 
   // ── B. the hearth cooks the spice + a Shimmerscale into an Earth Meal

@@ -8,7 +8,7 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
 ok(benchTabs('carpentry').join() === 'refine,furniture,blades,spikes,keeper', 'carpentry: refine, furniture, blades, spikes, keeper (M185: spikes at the carpenter)')
 ok(benchTabs('stonemason').join() === 'refine,keeper', 'stonemason: refine, keeper (M185: the spike moved to the carpenter)')
 ok(benchTabs('cooking').join() === 'hearth,keeper' && benchTabs('alchemy').join() === 'cauldron,keeper', 'cooking + alchemy')
-ok(benchTabs('rinnshop').join() === 'bait,rinsticks,keeper', 'rinnshop')
+ok(benchTabs('rinnshop').join() === 'bait,filet,rinsticks,keeper', 'rinnshop')
 ok(benchTabs('smith').join() === 'keeper', 'a room with no crafts yet still has its keeper')
 for (const k of ['carpentry', 'stonemason', 'cooking', 'alchemy', 'rinnshop', 'smith', 'farm'] as const) {
   const t = benchTabs(k)

@@ -18,6 +18,7 @@ import { gardenKey } from '@/lib/keeper-local'
 import { countOf, take, give, ITEM_GROUP, HOTBAR, SLOTS, baitYield, type Inv, type Stack } from '../shared/inventory'
 import { MAX_CHESTS, putIn, withdraw, adoptBank, bankCount, bankTake, type Bank } from './garden-bank'
 import { BED_UI } from './planter-lines'
+import { FILET } from './cooking'   // M206: the Rinnshop's Filet tab
 import { FURNITURE, isPlanned, BEDS_MAX, PIECE_JOBS, MAX_PIECES, KEEPSTONES, keepstoneFor, ALC_LIVE, type Job } from './furniture'
 import { adoptWork, adoptOut, stockJobs, type Work, type Station } from './station-queue'
 import { adoptUpper, levelBase, type Level } from './plot-floors'
@@ -425,6 +426,20 @@ export function makeBaitAt(w: Works, roomId: string, inv: Inv, id: string): { wo
   let left = g.left
   if (left > 0) { const p = putIn(store, ROOM_STORE_SLOTS, 'bait', left); store = p.bank; left = p.left }
   return left > 0 ? null : { works: setStore(w, roomId, store), inv: g.inv, made }
+}
+
+/** M206 THE FILET TAB: prepare ONE caught rinn at the Rinnshop bench (cooking.ts FILET), from the room's store first, else the
+ *  bag. Everything it makes goes to the bag (a fillet is carried to the hearth, the scales to the Crusher): no room in the bag
+ *  = null and nothing is spent. Null too when the rinn has no Filet row or none is in reach. */
+export function filetAt(w: Works, roomId: string, inv: Inv, id: string): { works: Works; inv: Inv; made: readonly { id: string; n: number }[] } | null {
+  const r = w.rooms.find(x => x.id === roomId), made = FILET[id]
+  if (!r || r.kind !== 'rinnshop' || !made) return null
+  let store = roomStore(r), bag: Inv | null = inv
+  const k = store.stacks.findIndex(s => s.id === id)
+  if (k >= 0) store = { v: 1, stacks: store.stacks.flatMap((s, i) => (i !== k ? [s] : s.n > 1 ? [{ ...s, n: s.n - 1 }] : [])) }
+  else { bag = take(inv, id, 1); if (!bag) return null }
+  for (const o of made) { const g = give(bag, o.id, o.n); if (g.left > 0) return null; bag = g.inv }
+  return { works: setStore(w, roomId, store), inv: bag, made }
 }
 
 /** Work a carpentry job (or any bench job): the inputs come from the room's store first, then the bag; what is made goes
