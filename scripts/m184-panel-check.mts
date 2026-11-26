@@ -1,5 +1,5 @@
 // M184 s2: THE TOOL PANEL. Hover a dial (desktop) and it reacts (grows); click (desktop) / tap (phone 390) opens the tool
-// panel with the numbers the game gathers by (open/ather/tool-panel.ts over gather-dials.ts + TOOL_DEFS). Expected numbers
+// panel with the numbers (hover = Tailwind 4's `scale` + `filter`, not `transform`) the game gathers by (open/ather/tool-panel.ts over gather-dials.ts + TOOL_DEFS). Expected numbers
 // are written out here by hand from those tables, so a drift in either side goes red. Fresh anonymous contexts, seeded saves:
 //   newborn  -> forestry panel says empty (no rows)
 //   gifted   -> Worn Pruner: stage 0, never wears, trees 5 / 10 / 300 / 900 mana, ok ok slow weak;
@@ -9,7 +9,11 @@
 import puppeteer, { type Page } from 'puppeteer-core'
 const origin = process.argv[2] ?? 'https://ather.games'
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
-const br = await puppeteer.launch({ protocolTimeout: 240000, executablePath: '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
+const ARGS = ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader']
+// a desktop has a mouse: headless reports (hover: none) and Tailwind 4 gates every hover: on (hover: hover), so the desktop
+// browser is told it has one (Blink: hover = 2, fine pointer = 4); the phone keeps the default (no hover, tap)
+const MOUSE = '--blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4'
+const launch = (mouse: boolean) => puppeteer.launch({ protocolTimeout: 240000, executablePath: '/usr/bin/chromium-browser', args: mouse ? [...ARGS, MOUSE] : ARGS })
 let fails = 0
 const ok = (c: boolean, m: string) => { console.log(`${c ? '✓' : '✗'} ${m}`); if (!c) fails++ }
 const TUT = (gifts: string[]) => ({ v: 1, live: true, greg: { welcome: true, moglins: true, spirits: true, wilds: true }, heard: [], gifts, b2: 'none', baitDay: null, m70: 'none', m70node: null, m70side: 'none', folded: true })
@@ -35,6 +39,7 @@ async function openPanel(p: Page, fam: string, phone: boolean): Promise<Panel> {
 }
 for (const [vp, w, h] of [['desktop', 1280, 800], ['phone', 390, 844]] as const) {
   const phone = vp === 'phone'
+  const br = await launch(!phone)
   for (const [name, c] of Object.entries(CASES)) {
     const p = await (await br.createBrowserContext()).newPage()
     await p.setViewport({ width: w, height: h, ...(phone ? { isMobile: true, hasTouch: true, deviceScaleFactor: 2 } : {}) })
@@ -50,12 +55,14 @@ for (const [vp, w, h] of [['desktop', 1280, 800], ['phone', 390, 844]] as const)
     const n = await p.$$eval('[data-dial-btn]', es => es.map(e => (e as HTMLElement).dataset.dialBtn).join(','))
     ok(n === 'forestry,prospecting,rinning', `${vp} ${name}: three dial buttons (${n || 'none'})`)
     if (!phone && n) {
-      const before = await p.$eval(btn('forestry'), e => getComputedStyle(e).transform)
+      const before = await p.$eval(btn('forestry'), e => { const c = getComputedStyle(e); return `${c.scale}|${c.filter}` })
       const hit = await p.$eval(btn('forestry'), e => { const r = e.getBoundingClientRect(); const t = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2); return !!t && e.contains(t) })
       ok(hit, `${vp} ${name}: the dial is on top at its centre (not covered)`)
-      await p.hover(btn('forestry')); await sleep(500)
-      const after = await p.$eval(btn('forestry'), e => getComputedStyle(e).transform)
-      ok(before !== after && /matrix\(1\.1/.test(after), `${vp} ${name}: hover reacts (${before} -> ${after})`)
+      await p.hover(btn('forestry'))
+      // the grow is a 150 ms transition; on a 2 fps swiftshader page it can take a few frames to land
+      let after = ''
+      for (let i = 0; i < 20; i++) { await sleep(200); after = await p.$eval(btn('forestry'), e => { const c = getComputedStyle(e); return `${c.scale}|${c.filter}|${e.getAnimations().length}` }); if (/^1\.1/.test(after)) break }
+      ok(before !== after && /^1\.1/.test(after) && /brightness/.test(after), `${vp} ${name}: hover reacts (${before} -> ${after})`)
     }
     const f = await openPanel(p, 'forestry', phone)
     ok(!!f && f.fam === 'forestry', `${vp} ${name}: ${phone ? 'tap' : 'click'} opens the forestry panel (${JSON.stringify(f)})`)
@@ -68,6 +75,7 @@ for (const [vp, w, h] of [['desktop', 1280, 800], ['phone', 390, 844]] as const)
       ok(f?.held === '1' && f.stage === '2' && f.name === 'Shimmeroak Pruner' && f.uses === '100' && f.dur === '100', `${vp} upgraded: Shimmeroak Pruner stage 2, 100/100`)
       ok(f?.rows.join() === 'Goldwood:4:ok,Shimmeroak:9:ok,Starwillow:20:ok,Dawnwood:300:slow', `${vp} upgraded: tree rows ${f?.rows.join()}`)
     }
+    if (process.env.SHOT_DIR && name === 'upgraded') await p.screenshot({ path: `${process.env.SHOT_DIR}/m184-panel-${vp}.png` }).catch(() => {})   // the panel open
     // the same dial again closes it; then the spike's panel
     const el = await p.$(btn('forestry')); if (el) { if (phone) await el.tap(); else await el.click() }
     await sleep(600)
@@ -78,10 +86,9 @@ for (const [vp, w, h] of [['desktop', 1280, 800], ['phone', 390, 844]] as const)
       await p.keyboard.press('Escape'); await sleep(500)
       ok(!(await readPanel(p)), `${vp} gifted: Escape closes it`)
     }
-    if (process.env.SHOT_DIR && name === 'upgraded') await p.screenshot({ path: `${process.env.SHOT_DIR}/m184-panel-${vp}.png` }).catch(() => {})
     ok(errs.length === 0, `${vp} ${name}: 0 page errors ${errs.slice(0, 2).join(' | ')}`)
     await p.close()
   }
+  await br.close()
 }
-await br.close()
 console.log(fails ? `FAIL ${fails}` : 'PASS'); process.exit(fails ? 1 : 0)
