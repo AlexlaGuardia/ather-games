@@ -103,6 +103,9 @@ try {
   ok(title.includes(name) && title.includes('Seen'), `C page 3 opens: ${name}, Seen (${title.slice(0, 80)})`)
   const fit = await p.evaluate(() => { const e = document.querySelector('[data-panel="grimoire"]'); if (!e) return null; const r = e.getBoundingClientRect(); return r.left >= -0.5 && r.right <= innerWidth + 0.5 })
   ok(fit === true, 'C the grimoire fits 390 wide')
+  // M200 (play-M200, the M203 find): the grimoire's Party roster names her by her FORM now, not her base name
+  const rosterName = await p.evaluate(() => document.querySelector('[data-roster-spirit="vx-check"]')?.getAttribute('data-roster-name') ?? document.querySelector('[data-roster-spirit="vx-check"]')?.textContent ?? null)
+  ok(rosterName === name, `C the Party roster names her ${name}, not her base name (${rosterName})`)
   await shot('c-form-page'); await p.keyboard.press('Escape'); await sleep(500)
 
   // ── D. reload: it stays

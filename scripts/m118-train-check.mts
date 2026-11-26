@@ -8,6 +8,8 @@
 //     +1, the pool one smaller). The Manalotl (never assigned) does not play it and has no record.
 //  3. Her panel again: the radar's AGI = the preview's 'to' (+ any later plays), the pool = the record's.
 //  4. 0 page errors.
+// M200 (play-M200, 2026-11-26): a training point = 1% of her grown stat (spirit-stats.ts). The asserts' MEANING moved with the
+// feature: the preview reads base x (1 + g%) to one decimal (old: base + g, whole), the radar round(base x (1 + g%)).
 //   npx tsx scripts/m118-train-check.mts [--url http://localhost:3202]      (OWNER_KEY from env or .env; run on the box)
 import puppeteer from 'puppeteer-core'
 import { existsSync, readFileSync } from 'fs'
@@ -89,11 +91,12 @@ try {
   const p1 = await panel('fox', async () => { allowedAfter = await p.evaluate(() => { const b = document.querySelector<HTMLButtonElement>('[data-train-toggle="hd-check"]'); b?.click(); return null })
     await sleep(500); allowedAfter = await p.evaluate(() => document.querySelector('[data-train-piece="hd-check"]')?.getAttribute('data-train-on') ?? null) })
   const pv = p1?.row ?? null
-  const from = SPECIES_BASE.fox.agi + 3
+  const pct = (g: number) => SPECIES_BASE.fox.agi * (1 + g / 100), tenth = (v: number) => Math.round(v * 10) / 10
+  const from = tenth(pct(3)), to = tenth(pct(4))
   ok(p1?.pool === TRAIN.pool - 3, `1 the old save loads: training points ${p1?.pool} of ${TRAIN.pool} (3 spent), no NaN: ${JSON.stringify(p1?.axes)}`)
-  ok(!!pv && pv['data-train-on'] === '0' && pv['data-preview-stat'] === 'agi' && pv['data-preview-spend'] === '1' && Number(pv['data-preview-from']) === from && Number(pv['data-preview-to']) === from + 1 && Number(pv['data-preview-left']) === TRAIN.pool - 4,
+  ok(!!pv && pv['data-train-on'] === '0' && pv['data-preview-stat'] === 'agi' && pv['data-preview-spend'] === '1' && Number(pv['data-preview-from']) === from && Number(pv['data-preview-to']) === to && to > from && Number(pv['data-preview-left']) === TRAIN.pool - 4,
     `1 the hurdle row: not allowed, previews one play ${JSON.stringify(pv)}`)
-  ok(!!p1 && [TRAIN_UI.header, TRAIN_UI.play(1, 'AGI', from, from + 1), TRAIN_UI.allow, TRAIN_UI.footer].every(w => p1.text.toLowerCase().includes(w.toLowerCase())), `1 the panel says the signed words: '${TRAIN_UI.header}', '${TRAIN_UI.play(1, 'AGI', from, from + 1)}', '${TRAIN_UI.allow}', '${TRAIN_UI.footer}'`)
+  ok(!!p1 && [TRAIN_UI.header, TRAIN_UI.play(1, 'AGI', from, to), TRAIN_UI.allow, TRAIN_UI.footer].every(w => p1.text.toLowerCase().includes(w.toLowerCase())), `1 the panel says the signed words: '${TRAIN_UI.header}', '${TRAIN_UI.play(1, 'AGI', from, to)}', '${TRAIN_UI.allow}', '${TRAIN_UI.footer}'`)
   ok(allowedAfter === '1', `1 Allow tapped: the row reads allowed (${allowedAfter})`)
   ok(JSON.stringify(await p.evaluate(() => JSON.parse(localStorage.getItem('ather.trainAssign.v1') ?? '{}'))) === '{"hd-check":["vx-check"]}', '1 the assignment is saved (the Vulnyx only)')
   ok(!!p1 && !p1.overflow && p1.w <= 390, `1 the panel fits 390 wide (${p1?.w.toFixed(0)} px)`)
@@ -112,12 +115,12 @@ try {
   }
   const f = seen.fox.first
   ok(seen.fox.at > 3 && !!f, `2 the Vulnyx plays the hurdle on her own (${seen.fox.at} samples, first play in ${((Date.now() - t0) / 1000).toFixed(0)} s window)`)
-  ok(!!f && f.g.agi === 4 && TRAIN.pool - (f.g.agi ?? 0) === Number(pv?.['data-preview-left']) && SPECIES_BASE.fox.agi + f.g.agi === Number(pv?.['data-preview-to']), `2 the spend = the preview exactly: ${JSON.stringify(f)}`)
+  ok(!!f && f.g.agi === 4 && TRAIN.pool - (f.g.agi ?? 0) === Number(pv?.['data-preview-left']) && tenth(pct(f.g.agi)) === Number(pv?.['data-preview-to']), `2 the spend = the preview exactly: ${JSON.stringify(f)}`)
   const bk = await book()
   ok(seen.axolotl.at === 0 && !bk['mx-check'], `2 the Manalotl (not assigned) never plays it, no record (${seen.axolotl.at} samples, ${JSON.stringify(bk['mx-check'] ?? null)})`)
   // 3. the panel again
   const p3 = await panel('fox'), r3 = (await book())['vx-check']
-  ok(!!p3 && !!r3 && p3.axes.agi === SPECIES_BASE.fox.agi + r3.g.agi && p3.axes.agi >= from + 1 && p3.pool === TRAIN.pool - Object.values(r3.g).reduce((a, b) => a + b, 0),
+  ok(!!p3 && !!r3 && p3.axes.agi === Math.round(pct(r3.g.agi ?? 0)) && p3.axes.agi >= Math.round(to) && p3.pool === TRAIN.pool - Object.values(r3.g).reduce((a, b) => a + b, 0),
     `3 the panel: AGI ${p3?.axes.agi}, points left ${p3?.pool} (record ${JSON.stringify(r3?.g)})`)
   ok(errs.length === 0, `4 0 page errors ${errs.join(' | ')}`)
 } finally { await br.close() }
