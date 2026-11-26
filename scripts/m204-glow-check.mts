@@ -64,7 +64,7 @@ async function frame(p: Page, name: string) {
   const m = await p.evaluate(() => { const r = [...(window as any).__spiritModel.rigs.values()][0], b = r.body, ps = b.meshes.body.geometry.getAttribute('position'), V = b.bones[0].position.clone(); let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9
     for (let i = 0; i < ps.count; i += 3) { b.at('body', i, V); x0 = Math.min(x0, V.x); x1 = Math.max(x1, V.x); z0 = Math.min(z0, V.z); z1 = Math.max(z1, V.z) }
     return { x: (x0 + x1) / 2, z: (z0 + z1) / 2 } })
-  await aimAt(p, m.x, m.z, 0.3); await hideCard(p); await sleep(600); await aimAt(p, m.x, m.z, 0.3); await sleep(300)
+  await aimAt(p, m.x, m.z, 0.3); await hideCard(p); await sleep(300)
   await p.screenshot({ path: `${shots}/${name}.png` })
 }
 const frameMs = (p: Page) => p.evaluate(async () => { const t0 = performance.now(); let n = 0; while (performance.now() - t0 < 6000) { await new Promise(r => requestAnimationFrame(r)); n++ } return (performance.now() - t0) / Math.max(1, n) }) as Promise<number>
