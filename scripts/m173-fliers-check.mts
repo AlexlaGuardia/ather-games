@@ -62,7 +62,7 @@ try {
     await br.close(); process.exit(0)
   }
   if (S2) {
-    const { p, got } = await open(6, []); await p.evaluate(() => (window as any).__ather.tp(-130, 108, 0))
+    if (!process.argv.includes('--from3')) { const { p, got } = await open(6, []); await p.evaluate(() => (window as any).__ather.tp(-130, 108, 0))
     ok(await gl(p, 6), '1. six rigged bodies, the Dewbear and the Hovari among them, no orb'); await sleep(4000)
     const s = await p.evaluate(() => { const M = (window as any).__spiritModel; return { sp: M.species, h: Object.fromEntries([...M.rigs.values()].map((r: any) => [r.sp, r.h])), sk: [...M.rigs.values()].map((r: any) => new Set(Object.values(r.body.meshes).map((x: any) => x.skeleton.uuid)).size), mounted: M.mounted } })
     ok(s.mounted === 6 && s.sk.every((x: number) => x === 1) && KIND.every(k => s.sp[k] === 1), `1. one of each, one skeleton each ${JSON.stringify(s.sp)}`)
@@ -78,20 +78,21 @@ try {
     { const b = R.p5; ok(moves(b) && b.every(r => r.off > 0.7), `2. the Hovari hovers: lowest ${Math.min(...b.map(r => r.off)).toFixed(3)} .. ${Math.max(...b.map(r => r.off)).toFixed(3)} m over the ground, ${b.filter(r => r.v > 0.3).length} moving frames, clips ${[...new Set(b.map(r => r.clip))]}`) }
     for (const id of ['p2', 'p3']) ok(R[id].every(r => r.alt === 0), `2. ${R[id][0].sp} never off the ground`)
     const low = Object.values(R).flat().reduce((a, r) => (r.off < a.off ? r : a)); ok(low.off > -0.03, `2. nothing under the ground: ${low.sp} ${low.clip} ${(low.off * 1000).toFixed(0)} mm`)
-    await p.close()
+    await p.close() }
     { const { p } = await open(6, ['p4', 'p5', 'p2']); await p.evaluate(() => (window as any).__ather.tp(-131, 112, 0)); ok(await gl(p, 6), '3. six drawn, three follow'); await sleep(6000); await sampler(p)
       await p.evaluate(`new Promise(res => { let t0 = performance.now(), last = t0, s = 0; const A = window.__ather, L = 24; (function f() { const n = performance.now(), dt = Math.min(0.2, (n - last) / 1000); last = n; s += 4.2 * dt; const k = s % (2 * L), out = k < L, y = out ? -Math.PI / 2 : Math.PI / 2; A.tp(-144 + (out ? k : 2 * L - k), 113, y); A.look(y, 0.2); if (n - t0 < 40000) requestAnimationFrame(f); else res(0) })() })`)
       await shot(p, 's2-follow'); const R1 = await rows(p)
       { const m = R1.p4.filter(r => r.mode === 'follow' && r.v > 0.3); ok(m.length > 10 && m.every(r => r.alt === 0 && r.off > -0.04), `3. the Dewbear follows on her feet (${m.length} moving frames, up to ${Math.max(...m.map(r => r.v)).toFixed(1)} m/s, ${m.filter(r => r.capped).length} capped = slide, off ${Math.min(...m.map(r => r.off)).toFixed(3)} m)`) }
       { const m = R1.p5.filter(r => r.mode === 'follow' && r.v > 0.3); ok(m.length > 10 && R1.p5.every(r => r.off > 0.7), `3. the Hovari follows hovering (${m.length} moving frames, up to ${Math.max(...m.map(r => r.v)).toFixed(1)} m/s, ${Math.min(...R1.p5.map(r => r.off)).toFixed(3)} .. ${Math.max(...R1.p5.map(r => r.off)).toFixed(3)} m up)`) }
       await sleep(8000)
-      for (const sp of ['water-bear', 'hummingbird']) { let up = false
+      for (const sp of ['water-bear', 'hummingbird']) { let up = false, why: any = null
         for (let k = 0; k < 8 && !up; k++) { const m = await p.evaluate((q: string) => { const t = (window as any).__spiritModel.trots[q], s = (window as any).__ather.state(); return { x: t.x, y: t.y, z: t.z, kx: s.px ?? s.x, kz: s.pz ?? s.z } }, sp)
           const d = Math.hypot(m.x - m.kx, m.z - m.kz); if (d > 2.4) { await p.evaluate((x: number, z: number) => (window as any).__ather.tp(x, z, 0), m.x + (m.kx - m.x) / d * 1.5, m.z + (m.kz - m.z) / d * 1.5); await sleep(1500) }
           const m2 = await p.evaluate((q: string) => { const t = (window as any).__spiritModel.trots[q]; return { x: t.x, z: t.z } }, sp); await aimAt(p, m2.x, m2.z, sp === 'hummingbird' ? 1.0 : 0.28); await p.keyboard.press('e'); await sleep(1500)
+          why = await p.evaluate(() => ({ opts: [...document.querySelectorAll('[data-talk-option]')].map(e => e.textContent), prompt: [...document.querySelectorAll('div')].map(d => d.textContent ?? '').find(t => /^E · /.test(t)) ?? null }))
           const talk = await p.evaluate(() => { const b = [...document.querySelectorAll<HTMLButtonElement>('[data-talk-option]')].find(e => /Open/.test(e.textContent ?? '')); b?.click(); return !!b }); await sleep(2500)
-          up = talk && await p.evaluate((q: string) => !!document.querySelector(`[data-spirit-avatar="${q}"] canvas`), sp); if (!up) { await p.keyboard.press('Escape'); await sleep(800) } }
-        ok(up, `4. E on the ${sp}: the panel's live avatar is her`); await sleep(3000); await shot(p, `s2-panel-${sp}`)
+          up = talk && await p.evaluate((q: string) => !!document.querySelector(`[data-spirit-avatar="${q}"] canvas`), sp); if (!up) { why.avatars = await p.evaluate(() => [...document.querySelectorAll('[data-spirit-avatar]')].map(e => e.getAttribute('data-spirit-avatar'))); await p.keyboard.press('Escape'); await sleep(800) } }
+        ok(up, `4. E on the ${sp}: the panel's live avatar is her${up ? '' : ` (last try: ${JSON.stringify(why)})`}`); await sleep(3000); await shot(p, `s2-panel-${sp}`)
         if (up && shots) await (await p.$(`[data-spirit-avatar="${sp}"]`))?.screenshot({ path: `${shots}/${tag}-s2-avatar-${sp}.png` }).catch(() => {})
         await p.keyboard.press('Escape'); await sleep(1200) }
       await p.evaluate(() => (window as any).__ather.travel({ kind: 'waymark', w: { id: 'greg', tile: 'first-wilds', x: -300, y: 0, z: 300, biome: 2, made: 0 } }))
@@ -107,7 +108,8 @@ try {
       const t1 = Date.now(); let f: any = {}; const by = new Set<string>()
       while (Date.now() - t1 < 300000 && !(by.has('p4') && by.has('p5'))) {
         for (let k = 0; k < 10; k++) { await sleep(2500); f = await p.evaluate(() => { const S = (window as any).__spiritFight(); return { on: (window as any).__f.on, fights: S.seen.fights, hit: S.seen.hit, by: [...new Set(S.log.filter((e: any) => e.kind === 'hit').map((e: any) => e.id))], hovY: S.spirits.find((x: any) => x.id === 'p5')?.y } }); for (const x of f.by) by.add(x) }
-        await p.evaluate(() => { (window as any).__f.fight = false }); await sleep(8000); await p.evaluate(() => { (window as any).__f.fight = true }) }
+        // a slow frame steps the fight by a capped dt, so 8 s of wall clock may not end it: wait until it IS over (then the next one rolls who joins again)
+        await p.evaluate(() => { (window as any).__f.fight = false }); await sleep(8000); await p.waitForFunction(() => !(window as any).__spiritFight().on, { timeout: 90000 }).catch(() => {}); await p.evaluate(() => { (window as any).__f.fight = true }) }
       await shot(p, 's2-fight'); const R3 = await rows(p)
       ok(f.on > 10 && by.has('p4') && by.has('p5'), `5. fights, the Dewbear and the Hovari each landed a HIT (${[...by]}): ${JSON.stringify(f)}`)
       ok(!!R3.p5?.length && R3.p5.every(r => r.off > 0.6), `5. the Hovari hovers in it (${R3.p5?.length} frames, ${Math.min(...(R3.p5 ?? []).map(r => r.off)).toFixed(2)} m lowest)`)
