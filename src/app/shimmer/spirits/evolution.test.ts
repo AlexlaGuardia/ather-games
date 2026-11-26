@@ -10,7 +10,7 @@ import { pendingEvolution, evolveSpirit, evolutionBlocker, secondFormName, leani
 import { EVOLUTION_THRESHOLDS } from './evolution-config'
 import { SECOND_FORM_BAR, GATE_STAT, FORM_ELEMENTS, formBars, type StatOf } from './second-form-gate'
 import { SPECIES_BASE } from '../open/ather/spirit-growth'
-import { TRAIN, type StatRec } from '../open/ather/spirit-stats'
+import { TRAIN, statValue, type StatRec } from '../open/ather/spirit-stats'
 import { secondFormView, SECOND_FORM_UI } from '../open/ather/second-form-view'
 
 let pass = 0, fail = 0
@@ -132,8 +132,14 @@ console.log('\n★ M201: the stat bar (canon b0f1d0d: infusion + a stat gate on 
   check('the table has every species x element', sps.every(sp => FORM_ELEMENTS.every(el => Number.isFinite(SECOND_FORM_BAR[sp]?.[el]))))
   check('the four elements read four DIFFERENT trainable stats', new Set(Object.values(GATE_STAT)).size === 4 && Object.values(GATE_STAT).every(k => (['pwr','grd','agi','vig'] as string[]).includes(k)))
   check('no spirit meets any bar at bloom', sps.every(sp => FORM_ELEMENTS.every(el => SPECIES_BASE[sp][GATE_STAT[el]] < SECOND_FORM_BAR[sp][el])))
-  check('★ full training alone (TRAIN.cap) never reaches a bar: growth is needed too',
-    sps.every(sp => FORM_ELEMENTS.every(el => SPECIES_BASE[sp][GATE_STAT[el]] + TRAIN.cap < SECOND_FORM_BAR[sp][el])))
+  // M200: training is now +1% a point of her grown stat, so full training (TRAIN.cap = +20%) at bloom is base x1.2: read
+  // through the REAL statValue, every bar round(2 x base + 10) still sits above it, and growth is still needed to close it
+  check('★ full training alone (TRAIN.cap, M200 +20%) never reaches a bar: growth is needed too',
+    sps.every(sp => FORM_ELEMENTS.every(el => { const k = GATE_STAT[el]
+      return statValue(sp, { form: 'base', g: { [k]: TRAIN.cap }, plays: TRAIN.cap }, k) < SECOND_FORM_BAR[sp][el] })))
+  check('M200: and some growth WITH full training does reach every bar (the gate is reachable)',
+    sps.every(sp => FORM_ELEMENTS.every(el => { const k = GATE_STAT[el]
+      return statValue(sp, { form: 'base', g: { [k]: TRAIN.cap }, plays: TRAIN.cap, grown: 200 }, k) >= SECOND_FORM_BAR[sp][el] })))
   check('a stronger base stat asks a higher bar', SECOND_FORM_BAR['water-bear'].earth > SECOND_FORM_BAR.hummingbird.earth)
   check('SECOND (legacy) clears every bar, so the infusion asserts above read the infusion rule alone',
     sps.every(sp => FORM_ELEMENTS.every(el => legacyStatOf({ species: sp, element: 'base', infusions: { mana: 0, storm: 0, earth: 0, water: 0 }, level: SECOND })(GATE_STAT[el]) >= SECOND_FORM_BAR[sp][el])))
@@ -144,7 +150,7 @@ console.log('\n★ M201: the stat bar (canon b0f1d0d: infusion + a stat gate on 
   const grown: StatRec = { form: 'base', g: { pwr: 20 }, plays: 20, xp: 0, grown: 200 }
   const v = secondFormView('fox', grown, 'base', { mana: 0, storm: 2, earth: 0, water: 0 })
   check('open world, grown + trained + leaning storm: ready, lean storm', v.blocker === null && v.lean === 'storm', JSON.stringify(v.bars[1]))
-  check('open world, training shows in the bar', secondFormView('fox', { form: 'base', g: { pwr: 7 }, plays: 7 }).bars[1].have === SPECIES_BASE.fox.pwr + 7)
+  check('open world, training shows in the bar', Math.abs(secondFormView('fox', { form: 'base', g: { pwr: 7 }, plays: 7 }).bars[1].have - SPECIES_BASE.fox.pwr * 1.07) < 1e-9)
   check('open world, settled reads settled', secondFormView('fox', grown, 'earth').blocker === 'settled')
 }
 

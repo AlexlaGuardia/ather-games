@@ -5,7 +5,7 @@
 // a spirit anywhere. Words on this face are functional UI labels, SIGNED in lark batch 11-23b §A (athernyx 2ac7da7).
 import { useSyncExternalStore } from 'react'
 import { HearthButton, H } from '../../ui/hearth'
-import { SPECIES_NAMES } from '../../spirits/spirit'
+import { spiritFormName } from '../../spirits/spirit'   // M200: an evolved spirit goes by her form name
 import { hudSay } from '../shared/hud-say'
 import { speciesOf, homeOf, featuredAt } from './spirit-seeds'
 import { useBook } from './spirit-panels'
@@ -44,9 +44,9 @@ export function SpiritRoster({ onClose }: { onClose: () => void }) {
           if (typeof r === 'string') { const n = beds.indexOf(r) + 1
             return <div key={`bed:${r}`} data-roster-bed={r} style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: H.inkSoft, marginTop: n > 1 ? 4 : 0 }}>{BED_UI.group(n)}</div> }
           const [id, pot] = r, featured = featuredAt(book.pots, book.featured, homeOf(id)) === id
-          const sp = speciesOf(pot.seed), name = sp ? SPECIES_NAMES[sp] : '?', inP = party.includes(id), withYou = follow.includes(id)
+          const sp = speciesOf(pot.seed), name = sp ? spiritFormName(sp, pot.element) : '?', inP = party.includes(id), withYou = follow.includes(id)
           return (
-            <div key={id} data-roster-spirit={id} data-species={sp ?? ''} data-in-party={inP ? '1' : '0'} data-bed={homeOf(id)} data-featured={featured ? '1' : '0'}
+            <div key={id} data-roster-spirit={id} data-species={sp ?? ''} data-roster-name={name} data-in-party={inP ? '1' : '0'} data-bed={homeOf(id)} data-featured={featured ? '1' : '0'}
               style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px', borderRadius: 8, background: 'rgba(255,250,240,.6)', boxShadow: 'inset 0 0 0 1px rgba(58,39,22,.14)', fontSize: 13 }}>
               <span style={{ fontWeight: 700, color: H.ink }}>{name}</span>
               <span style={{ fontSize: 11, color: H.inkFaint }}>{withYou ? L.withYou : inP ? L.inParty : L.roaming}</span>

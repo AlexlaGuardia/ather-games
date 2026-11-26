@@ -1,7 +1,11 @@
 // M110 s1 the per-spirit stat record (spirit-stats.ts): the cap and gain math. Run: npx tsx src/app/shimmer/open/ather/spirit-stats.test.ts
 import { TRAIN, TRAIN_STATS, gainFor, isTrainStat, parseRec, statValue, withFight, withPlay, previewPlay, poolLeft, poolSpent, type StatBook, type StatRec } from './spirit-stats'
 import { mayUse, withAssign, parseAssign } from './train-assign'
-import { SPECIES_BASE, expNeed } from './spirit-growth'
+import { SPECIES_BASE, expNeed, grownStat } from './spirit-growth'
+import { spiritFormName } from '../../spirits/spirit'
+import { readFileSync } from 'node:fs'
+const near = (x: number, y: number) => Math.abs(x - y) < 1e-9
+const tenth = (v: number) => Math.round(v * 10) / 10
 import { FURNITURE, PIECE_JOBS, REFINE, STONE_REFINE } from './furniture'
 import { spiritSheet, SHEET_STATS } from './spirit-sheet'
 import { GARDEN_KEY_SPECS } from '@/lib/keeper-key-specs'
@@ -23,7 +27,7 @@ const b0: StatBook = {}
 const a = withPlay(b0, 'mx', 'axolotl', 'agi')
 ok(a.rose === 1 && a.book.mx.g.agi === 1 && a.book.mx.plays === 1, 'first play: +1 AGI, one play')
 ok(Object.keys(b0).length === 0, 'the input book is not mutated')
-ok(statValue('axolotl', a.book.mx, 'agi') === SPECIES_BASE.axolotl.agi + 1, 'value = rebased species base + gains')
+ok(near(statValue('axolotl', a.book.mx, 'agi'), SPECIES_BASE.axolotl.agi * 1.01), 'value = rebased species base x (1 + 1%) (M200: a point = 1% of her stat)')
 ok(statValue('axolotl', a.book.mx, 'pwr') === SPECIES_BASE.axolotl.pwr && statValue('axolotl', a.book.mx, 'foc') === SPECIES_BASE.axolotl.foc, 'other stats untouched (FOC/RES never train)')
 // play to the play cap: lands exactly on it, then stops
 let b: StatBook = {}, n = 0
@@ -35,8 +39,8 @@ ok(atCap.rose === 0 && atCap.book.mx.g.agi === TRAIN.cap && atCap.book.mx.plays 
 ok(withPlay({}, 'vx', 'fox', 'agi').rose === 1, 'no form cap: the Vulnyx AGI trains')
 ok(withPlay({ vx: { form: 'base', g: {}, plays: 0, grown: 500 } }, 'vx', 'fox', 'pwr').rose === 1, 'no form cap: a grown spirit still trains')
 // the sheet reads the record
-const sh = spiritSheet('axolotl', a.book.mx), agi = sh.axes.find(x => x.stat === 'agi')!
-ok(agi.value === SPECIES_BASE.axolotl.agi + 1, 'the panel radar reads the record (AGI +1)')
+const sh = spiritSheet('axolotl', { form: 'base', g: { agi: 20 }, plays: 20 }), agi = sh.axes.find(x => x.stat === 'agi')!
+ok(agi.value === Math.round(SPECIES_BASE.axolotl.agi * 1.2), `the panel radar reads the record (AGI +20 = x1.2: ${agi.value})`)
 ok(spiritSheet('axolotl').axes.every(x => x.value === SPECIES_BASE.axolotl[x.stat]), 'no record = the rebased species base')
 ok(sh.axes.every(x => x.reach > 0 && x.reach <= 1), 'radar reach stays within 0..1')
 ok(GARDEN_KEY_SPECS.some(k => k.base === 'ather.spiritStats.v1'), 'the stat record is a registered garden key (cloud save carries it)')
@@ -92,7 +96,7 @@ ok(GARDEN_KEY_SPECS.some(k => k.base === 'ather.spiritStats.v1'), 'the stat reco
   let b: StatBook = {}, spentAll = 0, previewsMatch = true, monotone = true, prevLeft = TRAIN.pool
   for (const stat of ['agi', 'pwr', 'grd'] as const) for (let i = 0; i < TRAIN.cap + 5; i++) {
     const before = b.s, pv = previewPlay(before, 'fox', stat), r = withPlay(b, 's', 'fox', stat), after = r.book.s
-    if (r.rose !== pv.spend || poolLeft(after) !== pv.left || Math.round(statValue('fox', after, stat)) !== pv.to || Math.round(statValue('fox', before, stat)) !== pv.from) previewsMatch = false
+    if (r.rose !== pv.spend || poolLeft(after) !== pv.left || tenth(statValue('fox', after, stat)) !== pv.to || tenth(statValue('fox', before, stat)) !== pv.from) previewsMatch = false
     if (poolLeft(after) > prevLeft || TRAIN_STATS.some(k => (after.g[k] ?? 0) < (before?.g[k] ?? 0))) monotone = false
     prevLeft = poolLeft(after); spentAll += r.rose; b = r.book
   }
@@ -102,7 +106,7 @@ ok(GARDEN_KEY_SPECS.some(k => k.base === 'ather.spiritStats.v1'), 'the stat reco
   ok(b.s.g.agi === TRAIN.cap && b.s.g.pwr === TRAIN.pool - TRAIN.cap && !b.s.g.grd, `per-stat cap then the pool: ${JSON.stringify(b.s.g)}`)
   ok(previewPlay(b.s, 'fox', 'agi').why === 'cap' && previewPlay(b.s, 'fox', 'grd').why === 'pool' && previewPlay(b.s, 'fox', 'vig').spend === 0, 'the preview says why nothing will spend (cap / pool)')
   const fresh = previewPlay(undefined, 'axolotl', 'vig')
-  ok(fresh.spend === 1 && fresh.left === TRAIN.pool - 1 && fresh.to === fresh.from + 1 && fresh.why === 'ok', `a fresh spirit: one play = 1 point, +1 (${JSON.stringify(fresh)})`)
+  ok(fresh.spend === 1 && fresh.left === TRAIN.pool - 1 && fresh.from === SPECIES_BASE.axolotl.vig && fresh.to === tenth(SPECIES_BASE.axolotl.vig * 1.01) && fresh.to > fresh.from && fresh.why === 'ok', `a fresh spirit: one play = 1 point = +1% (${JSON.stringify(fresh)})`)
   // the gate
   let a = withAssign({}, 'hd', 'vx', true)
   ok(mayUse(a, 'hd', 'vx') && !mayUse(a, 'hd', 'mx') && !mayUse(a, 'ps', 'vx') && !mayUse({}, 'hd', 'vx'), 'only an assigned spirit may use a piece (default: none)')
@@ -116,6 +120,38 @@ ok(GARDEN_KEY_SPECS.some(k => k.base === 'ather.spiritStats.v1'), 'the stat reco
   // old saves: an M110 record whose g is past the pool (e.g. 20+20+5) loads, nothing lowered, nothing left, no NaN
   const big = parseRec({ form: 'base', g: { agi: 20, pwr: 20, grd: 5 }, plays: 50 }) as StatRec
   ok(big.g.agi === 20 && big.g.grd === 5 && poolLeft(big) === 0 && previewPlay(big, 'fox', 'vig').spend === 0 && Number.isFinite(previewPlay(big, 'fox', 'vig').from), 'an over-pool old save: kept as is, 0 left, no NaN')
+}
+
+// ── M200: A TRAINING POINT = 1% OF HER GROWN STAT (Alex 11-26). pool 40 = up to +40% spread, cap 20 = +20% in one stat.
+{
+  const base = SPECIES_BASE.fox.pwr, bloom20: StatRec = { form: 'base', g: { pwr: 20 }, plays: 20 }
+  ok(near(statValue('fox', bloom20, 'pwr'), base * 1.2), `★ a bloom spirit +20 in PWR = base x1.2 (${statValue('fox', bloom20, 'pwr')} vs ${base * 1.2})`)
+  ok(statValue('fox', bloom20, 'pwr') < base + TRAIN.cap, 'and far less than the old flat +20 (training no longer dwarfs growth on day one)')
+  // a grown spirit: the same 20 points are worth 20% of HER stat, so they rise with her
+  const g0: StatRec = { form: 'base', g: {}, plays: 0, grown: 500 }, g20: StatRec = { ...g0, g: { pwr: 20 } }
+  const grownPwr = grownStat('fox', 'pwr', 500)
+  ok(near(statValue('fox', g20, 'pwr'), grownPwr * 1.2), `★ a grown spirit's training scales with her: +20 = her grown ${grownPwr.toFixed(1)} x1.2`)
+  const gainBloom = statValue('fox', bloom20, 'pwr') - base, gainGrown = statValue('fox', g20, 'pwr') - statValue('fox', g0, 'pwr')
+  ok(gainGrown > gainBloom * 2 && near(gainGrown / gainBloom, grownPwr / base), `the same 20 points add more to a grown spirit (${gainBloom.toFixed(1)} -> ${gainGrown.toFixed(1)}), in step with her growth`)
+  // the whole pool: +40% spread, never more than +20% in one stat
+  let b: StatBook = {}
+  for (const st of TRAIN_STATS) for (let i = 0; i < 30; i++) b = withPlay(b, 'f', 'fox', st).book
+  const pct = TRAIN_STATS.map(k => statValue('fox', b.f, k) / SPECIES_BASE.fox[k] - 1)
+  ok(near(pct.reduce((x, y) => x + y, 0), TRAIN.pool / 100) && pct.every(x => x <= TRAIN.cap / 100 + 1e-9), `the pool = +40% spread, at most +20% a stat (${pct.map(x => (x * 100).toFixed(0)).join('/')})`)
+  // old saves: spent points carry over as % (the record keeps every point, no refund, nothing in it lowers)
+  const old = parseRec({ form: 'base', g: { agi: 12, pwr: 3 }, plays: 15, grown: 4 }) as StatRec
+  ok(old.g.agi === 12 && old.g.pwr === 3 && poolLeft(old) === TRAIN.pool - 15 && near(statValue('fox', old, 'agi'), grownStat('fox', 'agi', 4) * 1.12), 'an old save: its 12 spent AGI points now read as +12%, its pool is unchanged')
+  // the preview shows the new numbers (one decimal, so a 1% play on a low stat still shows its rise)
+  const pv = previewPlay(g20, 'fox', 'agi')
+  ok(pv.from === tenth(grownStat('fox', 'agi', 500)) && pv.to === tenth(grownStat('fox', 'agi', 500) * 1.01) && pv.to > pv.from, `the preview on a grown spirit: ${pv.from} -> ${pv.to}`)
+}
+
+// ── M200 (play-M203 find): the grimoire roster names an evolved spirit by her FORM name, not her base name
+{
+  ok(spiritFormName('fox', 'earth') === 'Vulnore' && spiritFormName('fox', 'mana') === 'Vulnara', 'an evolved Vulnyx goes by her form (Vulnore / Vulnara)')
+  ok(spiritFormName('fox') === 'Vulnyx' && spiritFormName('fox', 'base') === 'Vulnyx' && spiritFormName('fox', null) === 'Vulnyx', 'no element / base = her base name')
+  const roster = readFileSync(new URL('./spirit-roster.tsx', import.meta.url), 'utf8')
+  ok(/spiritFormName\(sp, pot\.element\)/.test(roster) && !/SPECIES_NAMES\[sp\]/.test(roster), 'the roster names each spirit through spiritFormName(sp, pot.element)')
 }
 
 if (fails.length) { console.error(`spirit-stats: ${pass} pass, ${fails.length} FAIL`); for (const f of fails) console.error('  ✗ ' + f); process.exit(1) }

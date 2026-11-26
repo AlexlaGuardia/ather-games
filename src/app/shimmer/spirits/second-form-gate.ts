@@ -6,8 +6,8 @@
 //    Read off ELEMENT_STAT_MODS (evolution-config.ts), each element's own lead, made one-to-one over the four training
 //    stats: mana -> VIG, storm -> PWR, earth -> GRD, water -> AGI.
 //  - SECOND_FORM_BAR[species][element]: derived from the species' FIXED base (open/ather/spirit-growth.ts SPECIES_BASE) as
-//    round(BAR.MULT x base + BAR.ADD). With BAR {2, 10}, a stat at base 20 needs 50: full training (+20, TRAIN.cap) still
-//    asks ~5 growths; no training asks ~26 growths. Every species needs real growth or training, never neither.
+//    round(BAR.MULT x base + BAR.ADD). With BAR {2, 10}, a stat at base 20 needs 50: full training (TRAIN.cap = +20%
+//    since M200, so 24) still asks real growth; no training asks ~26 growths. Every species needs real growth or training, never neither.
 //  - BAR_TUNED: per-species x per-element overrides. Empty on purpose: each base spirit's numbers are tuned in its own M202
 //    slice (one spirit at a time); an override beats the derived number and nothing else changes.
 // ⚠ NOT in evolution-config.ts: the dev Evolution editor (save-map route) REGENERATES that file whole, and would drop this.

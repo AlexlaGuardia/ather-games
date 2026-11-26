@@ -135,6 +135,11 @@ export function getSecondFormName(species: Species, element: Element): string | 
   if (element === 'base') return null
   return SECOND_FORM_NAMES[species]?.[element] ?? null
 }
+/** M200 (play-M203 find): a spirit's NAME as the keeper sees it: her second-form name once her element is set, else her
+ *  species name (Vulnyx -> Vulnore after she evolves by earth). An unset / 'base' / unknown element = the base name. */
+export function spiritFormName(species: Species, element?: Element | null): string {
+  return (element && element !== 'base' ? SECOND_FORM_NAMES[species]?.[element] : undefined) ?? SPECIES_NAMES[species]
+}
 
 // Generate random seed values (IVs equivalent, 0-31 per stat)
 function randomSeeds(): number[] {
