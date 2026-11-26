@@ -132,7 +132,10 @@ try {
     let t = await k.tut()
     for (let n = 0; n < 6 && !t.greg.wilds; n++) { await k.greg([L('greg.b1.choice.c'), L('greg.b1.choice.a'), L('greg.b1.choice.b')]); t = await k.tut() }
     ok(t.greg.wilds && t.gifts.includes('grimoire'), `${T}: Greg's Beat 1 heard, the grimoire handed`)
-    ok(await poll(async () => (await arrow(k)).a?.shown === true, 10000), `${T}: the arrow is up after the talk box closes`)
+    // the talk helper ends on an Escape; a talk that had already closed itself turns that Escape into the Options menu (which, rightly, hides the arrow too)
+    const optsUp = await p.evaluate(() => !!document.querySelector('[data-panel="options"]'))
+    if (optsUp) { await p.keyboard.press('Escape'); await sleep(800) }
+    ok(await poll(async () => (await arrow(k)).a?.shown === true, 10000), `${T}: the arrow is up after the talk box closes${optsUp ? ' (the Options menu had it hidden: closed first)' : ''} ${JSON.stringify((await arrow(k)).a)}`)
     const ar = await arrow(k), slot = ar.a?.slot as number
     const inv = (JSON.parse(await k.store('open.inv.v1') ?? 'null')?.slots ?? []) as any[]
     ok(ar.a?.id === 'grimoire' && inv[slot]?.id === 'grimoire_pedestal', `${T}: it points at the slot the grimoire landed in (slot ${slot + 1}: ${inv[slot]?.id})`)
