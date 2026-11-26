@@ -77,11 +77,15 @@ cmd_memgate() {
   while :; do
     have=$(mem_avail_mb)
     if [ "$have" -ge "$need" ]; then
-      [ "$said" = 1 ] && echo ">> memgate: ${have} MB available, starting '$what' after ${waited}s" >&2
+      if [ "$said" = 1 ]; then
+        echo ">> memgate: ${have} MB available, starting '$what' after ${waited}s" >&2
+        printf '%s\twait\t%s\t%ss\tok\t%s\n' "$(now_iso)" "$WIN" "$waited" "$what" >> "$COORD_DIR/waits.log"
+      fi
       return 0
     fi
     if [ "$waited" -ge "$maxw" ]; then
       echo "memgate: gave up on '$what' after ${waited}s: ${have} MB available, needs ${need} MB." >&2
+      printf '%s\twait\t%s\t%ss\tGAVE-UP\t%s\n' "$(now_iso)" "$WIN" "$waited" "$what" >> "$COORD_DIR/waits.log"
       echo "  biggest: $(ps -eo rss,args --sort=-rss | awk 'NR>1&&NR<=4{printf "%dMB %s; ", $1/1024, substr($2,1,40)}')" >&2
       return 1
     fi
@@ -370,7 +374,9 @@ cmd_tsc() {
   (
     if ! flock -n 8; then
       echo ">> coord tsc: another lane's typecheck is running; queued behind it (one at a time, ~2 GB each)" >&2
-      flock -w 1200 8 || { echo "coord tsc: waited 20 min for the typecheck lock; giving up" >&2; exit 1; }
+      t0=$(now_epoch)
+      flock -w 1200 8 || { echo "coord tsc: waited 20 min for the typecheck lock; giving up" >&2; printf '%s\ttsc-queue\t%s\t1200s\tGAVE-UP\t-\n' "$(now_iso)" "$WIN" >> "$COORD_DIR/waits.log"; exit 1; }
+      printf '%s\ttsc-queue\t%s\t%ss\tok\t-\n' "$(now_iso)" "$WIN" "$(( $(now_epoch) - t0 ))" >> "$COORD_DIR/waits.log"
     fi
     cmd_memgate 2200 900 "typecheck" || exit 1
     cd "$REPO"
@@ -772,6 +778,9 @@ case "${1:-status}" in
   reap)    cmd_reap ;;
   memgate) shift; cmd_memgate "$@" ;;
   tsc)     shift; cmd_tsc "$@" ;;
+  shared-stats)    # one TSV line for the 5-min sampler: ts, MemAvailable MB, shared alive, shared MB, lanes forwarding, own servers
+    own=$( { grep -l '^own=1' "$DEVWINS_DIR"/* 2>/dev/null || true; } | wc -l)
+    printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$(now_iso)" "$(mem_avail_mb)" "$(shared_alive && echo 1 || echo 0)" "$(shared_alive && shared_tree_rss_mb || echo 0)" "$(shared_users)" "$own" ;;
   shared-recycle)  # [--if-bloated <mb> <idle_s>]: restart the shared dev server now, or only when bloated + idle
     shift
     if [ "${1:-}" = "--if-bloated" ]; then shared_recycle_if_bloated "${2:-3000}" "${3:-300}"; else shared_recycle; fi ;;
