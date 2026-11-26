@@ -39,3 +39,8 @@ uv run --no-project --with numpy,scipy,trimesh,fast_simplification python tools/
 /opt/blender/blender -b -P tools/rig_vulnore.py -- vulnore.glb vulnore-rigged.glb vulnore-metrics.json
 npx tsx tools/three-check.mts vulnore-rigged.glb 1.4
 ```
+
+## Shots
+`side-by-side.jpg`: the locked art | prod 390x844 owner preview (`?form=earth`) | base Vulnyx (left of each pair, drawn at 1/1.4 so the
+two are at true relative size) beside the new Vulnore: side, three-quarter, front. `vulnara/vulnarc/vulnix-390.png` = the untouched s1 forms.
+Prod check (scripts/m202-forms-check.mts, owner, this box): ALL PASS; Vulnore measured 0.926 m standing (look h 0.977 m).
