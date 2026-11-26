@@ -54,6 +54,7 @@ const measure = (p: Page) => p.evaluate(async () => {
 const hideCard = (p: Page) => p.evaluate(() => { const h = [...document.querySelectorAll('div')].filter(d => d.textContent?.includes('Click to play')); for (const d of h.filter(d => !h.some(o => o !== d && d.contains(o)))) (d as HTMLElement).style.visibility = 'hidden' }).catch(() => {})
 
 const base = SPIRIT_RIGS.fox!
+const MID_AIM = new Set(['vulnix'])
 const only = flag('--forms', '').split(',').filter(Boolean)
 for (const el of SPIRIT_ELEMENTS.filter(e => !only.length || only.includes(e))) {
   const L = SECOND_FORMS.fox![el], file = L.url.split('/').pop()!
@@ -73,7 +74,13 @@ for (const el of SPIRIT_ELEMENTS.filter(e => !only.length || only.includes(e))) 
       if (Math.hypot(q.x - last.x, q.z - last.z) < 0.02) break; last = q }
     // settled beside the keeper she is too close to frame: step back 3 m from where she now stands and shoot at once
     await p.evaluate(() => { const W = window as any, r = [...W.__spiritModel.rigs.values()][0]; W.__ather.tp(r.x + 2.4, r.z + 1.8, 0) }); await sleep(150)
-    const m2 = await p.evaluate(() => { const r = [...(window as any).__spiritModel.rigs.values()][0]; return { x: r.x, z: r.z } }); await aimAt(p, m2.x, m2.z, 0.35); await hideCard(p)
+    // M202 v3: Vulnix is the longest of the line, so her root sits well off her middle and the still cut her head: for her the aim is
+    // the middle of her drawn body (world bbox of her skinned verts); the other forms keep the root aim their stills were judged on
+    const mid = MID_AIM.has(L.name)
+    const m2 = await p.evaluate((mid: boolean) => { const r = [...(window as any).__spiritModel.rigs.values()][0]; if (!mid) return { x: r.x, z: r.z }
+      const b = r.body, ps = b.meshes.body.geometry.getAttribute('position'), V = b.bones[0].position.clone(); let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9
+      for (let i = 0; i < ps.count; i += 3) { b.at('body', i, V); x0 = Math.min(x0, V.x); x1 = Math.max(x1, V.x); z0 = Math.min(z0, V.z); z1 = Math.max(z1, V.z) }
+      return { x: (x0 + x1) / 2, z: (z0 + z1) / 2 } }, mid); await aimAt(p, m2.x, m2.z, 0.35); await hideCard(p)
     await p.screenshot({ path: `${shots}/${L.name}-390.png` }) }
   await p.browserContext().close()
 }
