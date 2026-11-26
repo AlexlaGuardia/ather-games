@@ -29,6 +29,13 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
   m.end('a'); const before = m.percent(); m.release('g')
   ok(before === 10 && m.percent() === 100, `release jumps forward (${before} -> ${m.percent()})`)
 }
+// 2b. budgetTo trims a reservation mid-load without starting a new one
+{ const m = new LoadMeter()
+  m.reserve('g', 1000); m.begin('a', 200, 'g'); m.add('a', 200); m.end('a')
+  m.budgetTo('g', 200)
+  ok(m.percent() === 50, `200 of 200 + 200 left = 50 (${m.percent()})`)
+  m.budgetTo('g', 0); ok(m.percent() === 100, 'nothing left: 100')
+}
 // 3. never back: a job that grows on its headers (hint -> Content-Length) does not move the Dewbear back
 { const m = new LoadMeter()
   m.begin('a', 100); m.add('a', 50)

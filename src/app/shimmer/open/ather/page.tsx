@@ -121,7 +121,7 @@ import { useLoadout } from '../shared/loadout'
 import { pitstopsUnlocked, type PlaceLike, type Pitstop } from '../continent/pitstops'
 import { mapDoors, runeHoldOpen } from './map-doors'   // M181: Rune Hold's door waits for its unlock
 import { tileCentreWorld, BIOME, BIOME_NAME, type Wilds, type Tree, type Crystal } from './wilds'
-import { loadIndex, makeWorld, stream, releaseTo, tileOf, zonesOf, TILE_M, WILDS_RELEASE_MS, type WildsWorld } from './wilds-world'
+import { loadIndex, makeWorld, stream, releaseTo, tileOf, zonesOf, wanted, TILE_M, WILDS_RELEASE_MS, type WildsWorld } from './wilds-world'
 import { makeVoids, FALL_LIP, type VoidField } from './wilds-voids'
 import { ensureEdits, voidEditsLive, zonesJsonLive } from './wilds-edits'   // M104: the void brush layer
 import { startFall, stepFall, type FallState } from './void-fall'
@@ -779,6 +779,8 @@ function AtherSliceGame() {
     const sp = resumeFrom(window.location.search, loadSpot(), n => !!ww.byName.get(n))
     if (!sp || sp.tile === GLADE_TILE) { loadMeter.release('wilds'); setResuming(false); return }
     landed.current = true
+    // M187: Greg's ring is in; what is left is exactly the spot's tiles not loaded yet, so the budget becomes that
+    loadMeter.budgetTo('wilds', wanted(ww, sp.x, sp.z).filter(n => !ww.loaded.has(n)).length * TILE_BYTES)
     stream(ww, sp.x, sp.z).then(() => { loadMeter.release('wilds'); setWrev(ww.rev); setHereTile(sp.tile); arrive({ kind: 'wilds', tile: sp.tile }, { x: sp.x, z: sp.z, yaw: sp.yaw }); setResuming(false) })
   }, [ww, arrive])
   const hereTileRef = useRef(hereTile); hereTileRef.current = hereTile

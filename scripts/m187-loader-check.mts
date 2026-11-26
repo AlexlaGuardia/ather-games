@@ -14,8 +14,9 @@ let fails = 0
 const ok = (c: unknown, m: string) => { console.log(`${c ? '✓' : '✗'} ${m}`); if (!c) fails++ }
 const br = await puppeteer.launch({ protocolTimeout: 300000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--mute-audio'] })
 const REGION = { '/open/continent.json': 692973, '/open/continent.bin.gz': 2577643 } as Record<string, number>
-interface Sample { t: number; pct: number; bytes: number; dew: { l: number; r: number } | null; fruit: { l: number } | null; tip: { t: number; b: number; fs: number } | null; runTop: number; fruitId: string | null; canvas: boolean }
+interface Sample { t: number; pct: number; bytes: number; dew: { l: number; r: number } | null; fruit: { l: number } | null; tip: { t: number; b: number; fs: number } | null; runTop: number; track: number; fruitId: string | null; canvas: boolean }
 async function watch(p: Page, region: boolean, until: number) {
+  await p.evaluate('window.__name = (f) => f')   // tsx wraps named arrows in __name(); the page has none
   const cdp = await p.createCDPSession()
   await cdp.send('Network.enable'); await cdp.send('Network.setCacheDisabled', { cacheDisabled: true })
   await cdp.send('Network.emulateNetworkConditions', { offline: false, latency: 120, downloadThroughput: 2_000_000 / 8, uploadThroughput: 500_000 / 8 })
@@ -30,7 +31,7 @@ async function watch(p: Page, region: boolean, until: number) {
       const rect = (q: string) => { const e = document.querySelector(q); if (!e) return null; const b = e.getBoundingClientRect(); return { l: b.left, r: b.right, t: b.top, b: b.bottom } }
       const tip = document.querySelector('[data-load-tip]') as HTMLElement | null
       const tipText = tip?.children[1] as HTMLElement | undefined
-      return { pct: r ? Number(r.dataset.loadRunner) : -1, dew: rect('[data-load-dewbear]'), fruit: rect('[data-load-fruit-img]'), runTop: rect('[data-load-runner]')?.t ?? -1,
+      return { pct: r ? Number(r.dataset.loadRunner) : -1, dew: rect('[data-load-dewbear]'), fruit: rect('[data-load-fruit-img]'), runTop: rect('[data-load-runner]')?.t ?? -1, track: rect('[data-load-runner]')?.l ?? 0,
         tip: tip ? { t: tip.getBoundingClientRect().top, b: tip.getBoundingClientRect().bottom, fs: tipText ? parseFloat(getComputedStyle(tipText).fontSize) : 0 } : null,
         fruitId: r?.dataset.loadFruit ?? null, canvas: !!document.querySelector('canvas'), screen: !!document.querySelector('[data-load-screen]') }
     }).catch(() => null)
@@ -53,8 +54,8 @@ function judge(tag: string, ss: Sample[], total: number | null, vw: number) {
     ok(errs.length > 0 && Math.max(...errs) <= 15, `${tag}: % tracks the bytes on the wire (max gap ${errs.length ? Math.max(...errs).toFixed(1) : '-'} pts)`)
   }
   const d = on.filter(s => s.dew)
-  const lefts = d.map(s => s.dew!.l)
-  ok(lefts[0] <= 16 + 24 && lefts[lefts.length - 1] > lefts[0] + vw * 0.35, `${tag}: the Dewbear runs left to right (${lefts[0].toFixed(0)} -> ${lefts[lefts.length - 1].toFixed(0)} px)`)
+  const lefts = d.map(s => s.dew!.l - s.track)   // from the track's left edge (the track is 560 px max, centred on desktop)
+  ok(lefts[0] <= 24 && lefts[lefts.length - 1] > lefts[0] + Math.min(vw - 32, 560) * 0.35, `${tag}: the Dewbear runs left to right (${lefts[0].toFixed(0)} -> ${lefts[lefts.length - 1].toFixed(0)} px)`)
   const at100 = d.filter(s => s.pct === 100 && s.fruit).slice(-1)[0]
   ok(at100 && Math.abs(at100.dew!.r - at100.fruit!.l) <= 6, `${tag}: at 100 it is at the fruit (gap ${at100 ? (at100.fruit!.l - at100.dew!.r).toFixed(1) : '-'} px)`)
   const tips = on.filter(s => s.tip).map(s => s.tip!)
@@ -66,7 +67,7 @@ function judge(tag: string, ss: Sample[], total: number | null, vw: number) {
 const phone = { width: 390, height: 844, isMobile: true, hasTouch: true, deviceScaleFactor: 2 }, desk = { width: 1280, height: 800, deviceScaleFactor: 1 }
 const fruits: string[] = []
 for (const [vtag, vp] of [['390', phone], ['desktop', desk]] as const) {
-  const p = await (await br.createBrowserContext()).newPage(); await p.setViewport(vp)
+  const p = await (await br.createBrowserContext()).newPage(); await p.setViewport(vp); await p.evaluateOnNewDocument('window.__name = (f) => f')
   await p.evaluateOnNewDocument(() => { try { localStorage.setItem('ather:shimmer:birthRune', 'star') } catch { /* */ } })
   const errs: string[] = []; p.on('pageerror', e => errs.push(String(e).slice(0, 160)))
   p.on('console', m => { if (m.type() === 'error') errs.push('console: ' + m.text().slice(0, 160)) })
@@ -87,7 +88,7 @@ for (const [vtag, vp] of [['390', phone], ['desktop', desk]] as const) {
 }
 // the Ather resume veil, phone: a saved Wilds spot far from Greg's ring
 {
-  const p = await (await br.createBrowserContext()).newPage(); await p.setViewport(phone)
+  const p = await (await br.createBrowserContext()).newPage(); await p.setViewport(phone); await p.evaluateOnNewDocument('window.__name = (f) => f')
   await p.evaluateOnNewDocument((s: string) => { try { if (sessionStorage.getItem('m187')) return; sessionStorage.setItem('m187', '1'); localStorage.setItem('ather:shimmer:birthRune', 'star'); localStorage.setItem('open.lastspot.v1', s) } catch { /* */ } }, JSON.stringify(makeSpot('w-3_-3', -3000, -3000, 0)))
   await p.goto(`${origin}/shimmer/open/ather?hour=14`, { waitUntil: 'domcontentloaded', timeout: 240000 })
   p.waitForFunction(() => Number((document.querySelector('[data-load-runner]') as HTMLElement | null)?.dataset.loadRunner) >= 30, { timeout: 120000, polling: 100 })
@@ -96,7 +97,7 @@ for (const [vtag, vp] of [['390', phone], ['desktop', desk]] as const) {
   const on = ss.filter(s => s.pct >= 0)
   ok(on.length >= 3, `ather resume: the loader was up (${on.length} samples, fruit ${on[0]?.fruitId})`)
   ok(on.map(s => s.pct).every((v, i, a) => i === 0 || v >= a[i - 1]) && new Set(on.map(s => s.pct).filter(v => v > 0 && v < 100)).size >= 3, `ather resume: % climbs with the tiles (${[...new Set(on.map(s => s.pct))].join(' ')})`)
-  ok(on.some(s => s.pct === 100) || (await p.evaluate(() => (window as any).__loadMeter?.percent())) === 100, 'ather resume: reaches 100')
+  ok(on.some(s => s.pct === 100), 'ather resume: reaches 100 while the veil is up')
   await p.close()
 }
 console.log(`fruits seen on the first loads: ${fruits.join(', ')}`)

@@ -36,6 +36,8 @@ export class LoadMeter {
   private fresh() { if (this.idle()) { this.jobs.clear(); this.budget.clear(); this.shown = 0 } }
   reserve(group: string, bytes: number) { this.fresh(); this.budget.set(group, (this.budget.get(group) ?? 0) + Math.max(0, bytes)); this.emit() }
   release(group: string) { if (this.budget.delete(group)) this.emit() }
+  /** set a group's budget to what is now known to be left (never starts a new load, unlike reserve) */
+  budgetTo(group: string, bytes: number) { this.budget.set(group, Math.max(0, bytes)); this.emit() }
   begin(key: string, want: number, group?: string) {
     this.fresh()
     this.jobs.set(key, { want: Math.max(1, want), got: 0, done: false }); this.draw(group, want); this.emit()
