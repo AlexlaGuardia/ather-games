@@ -6,7 +6,8 @@
 //   LEFT   (data-card="cluster")  the garden cluster card (M188 s3): make a cluster WITH a friend (free, four seats), its
 //                                 name (any member names it: canon guard 3, no title), who is in, ask a friend into an open
 //                                 seat, invite a member into your chord from their row. The record is /api/cluster's.
-//   RIGHT  (data-card="brewings") the brewings posted to the stone (Host / Find): drawn as its layout, 'coming' until s4.
+//   RIGHT  (data-card="brewings") the brewings posted to the stone (Host / Find): Host / Find + the RSVP
+//                                 (M188 s4, brewing-card.tsx; the record is /api/brewing's).
 // Desktop: the three side by side, the centre raised and wider. Phone (< 720 px): a three-tab rail, the centre card first.
 // ⚠ Card words are neutral placeholders for @lark (canon: the word is 'a brewing'; never 'podium' / 'potion party' / 'swaray').
 // Guard (canon): a brewing gives MORE, never ONLY; nothing sits behind friends online.
@@ -17,6 +18,7 @@ import { useChordBox } from '../shared/chord'
 import { chordLights, clusterSeats } from './chordstone'
 import type { useCluster } from './cluster-panel'
 import { CLUSTER_NAME_MAX } from '@/lib/accounts/cluster-name'
+import { BrewingsCard } from './brewing-card'
 
 type CardId = 'cluster' | 'friends' | 'brewings'
 const CARDS: { id: CardId; label: string }[] = [
@@ -30,7 +32,6 @@ const cardBox = (front: boolean): React.CSSProperties => ({
   boxShadow: front ? '0 10px 22px rgba(58,39,22,.28), 0 1px 2px rgba(58,39,22,.25)' : '0 4px 10px rgba(58,39,22,.18)',
   borderRadius: 12, padding: '12px 12px 14px', color: H.ink,
 })
-const Coming = () => <span data-coming className="ml-2 align-middle text-[10.5px] font-extrabold uppercase tracking-[.12em] px-1.5 py-[2px] rounded-full" style={{ background: 'rgba(95,125,69,.16)', color: H.moss }}>coming</span>
 const cardTitle = 'hk-title text-[16px] hk-ember'
 const line = 'text-[12px] leading-snug hk-soft mt-1.5'
 
@@ -134,28 +135,6 @@ function ClusterCard({ c }: { c: Cl }) {
   )
 }
 
-function BrewingsCard() {
-  const [tab, setTab] = useState<'find' | 'host'>('find')
-  return (
-    <div data-card="brewings">
-      <div className={cardTitle}>Brewings<Coming /></div>
-      <div className="flex gap-1.5 mt-2">
-        {(['find', 'host'] as const).map(t => (
-          <button key={t} onClick={() => setTab(t)} data-brew-tab={t} className={`hk-btn px-3 py-1 text-[12px] ${tab === t ? 'hk-fill-moss' : ''}`}>{t === 'find' ? 'Find' : 'Host'}</button>
-        ))}
-      </div>
-      {tab === 'find' ? (
-        <>
-          <div className="mt-3 text-[12px] hk-faint italic font-semibold" data-brew-list>No brewings posted yet.</div>
-          <div className={line}>Brewings posted to the Chordstone will show here: the time, the host, the potion and the open seats.</div>
-        </>
-      ) : (
-        <div className={line}>Hosting a brewing (a time, public or private, the potion, which steps are open) is not open yet.</div>
-      )}
-    </div>
-  )
-}
-
 /** The Chordstone's panel. `phone` = the narrow layout (a tab rail, one card at a time). */
 export function ChordstonePanel({ onClose, cluster }: { onClose: () => void; cluster: Cl }) {
   const [narrow, setNarrow] = useState(true)
@@ -168,7 +147,7 @@ export function ChordstonePanel({ onClose, cluster }: { onClose: () => void; clu
   const [pick, setPick] = useState<CardId>('friends')
   const { members, me, code } = useChordBox()
   const lights = chordLights(members, me, !!code)
-  const body = (id: CardId) => id === 'friends' ? <div data-card="friends"><ChordTab stone /></div> : id === 'cluster' ? <ClusterCard c={cluster} /> : <BrewingsCard />
+  const body = (id: CardId) => id === 'friends' ? <div data-card="friends"><ChordTab stone /></div> : id === 'cluster' ? <ClusterCard c={cluster} /> : <BrewingsCard signedIn={cluster.signedIn} />
   const lightsRow = (
     <div className="flex items-center gap-2 flex-wrap text-[12px] font-bold" data-stone-lights={lights.length}>
       {lights.length ? lights.map(l => (

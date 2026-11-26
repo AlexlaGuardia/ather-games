@@ -22,6 +22,7 @@ import { setPartyOrder } from './party-host'
 import { usePartyLobby, type LobbyMember } from '@/lib/party-lobby'
 import { selfPlayerId, storedName } from '../../play3d/multiplayer'
 import { hostOfZone, plotZone, GLADE_LOBBY } from '../ather/plot-visit'
+import { useBrewingDoor } from './brewing-net'
 
 // ── BETA M61 PLOT VISITS: the party lobby (lib/party-lobby, a roster that holds across zones) says where each mate is; a mate
 // on a plot can be visited. The page says which zone this keeper is in (setLobbyZone); the Ather page registers how a visit
@@ -36,7 +37,7 @@ export function hostHome(host: string): boolean | null {
   return m ? m.zone === plotZone(host) : null
 }
 export function setVisitHandler(f: typeof visitHandler) { visitHandler = f }
-function requestVisit(host: string, name: string) {
+export function requestVisit(host: string, name: string) {
   if (visitHandler) { visitHandler(host, name); return }
   window.location.href = `/shimmer/open/ather?visit=${encodeURIComponent(host)}&vn=${encodeURIComponent(name)}`
 }
@@ -148,6 +149,12 @@ function PartyTab({ party, start, join, leave, mates }: { party: string | null; 
 
 const Swatch = ({ c }: { c: string }) => <span aria-hidden className="inline-block w-[9px] h-[9px] rounded-full shrink-0" style={{ background: c, boxShadow: `0 0 4px ${c}` }} />
 
+/** BETA M188 s4: is this keeper signed in with a name (friends + brewings need it). Reads the page's <OpenSocial/>. */
+export function useSocialSignedIn(): boolean {
+  useSocialGen()
+  return !!socialBox.account?.session?.username
+}
+
 /** BETA M188 s3: invite one keeper (by account id) into MY chord, starting one if I am in none: the Chordstone's
  *  cluster card uses it from a member's row. Same socket and answers as the Friends list's Invite. null = no socket here. */
 export function useChordInvite(): ((user_id: string) => Promise<string>) | null {
@@ -221,7 +228,7 @@ export function OpenSocial() {
   const account = useAccount()
   const userId = account.session?.username ? account.session.user_id : null
   const presence = usePresence(userId, account.session?.username ?? '')
-  const { party, join } = useParty()
+  const { party, join, start } = useParty()
   // M61: the party's cross-zone roster (only while in a party; `look` carries the socket id the plot zones are named by)
   const zoneNow = useLobbyZone()
   const [me, setMe] = useState<string | null>(null)
@@ -232,6 +239,7 @@ export function OpenSocial() {
   setPartyOrder(mates.map(m => m.look).filter(Boolean))   // M156 s2: who hosts the party's Wilds
   useEffect(() => { setChordBox(mates, me ?? '', party) })   // M188: the Chord tab + the chordmates' bars read this
   useEffect(() => { socialBox = { presence, account }; socialGen++; ssubs.forEach(f => f()) })
+  useBrewingDoor(!!userId, party, start, me)   // M188 s4: a brewing this keeper hosts opens its door 20 min before
   if (typeof window !== 'undefined') (window as unknown as { __lobby?: unknown }).__lobby = { members: () => lobbyBox.members, zone: () => lobbyZone }
   return (
     <>

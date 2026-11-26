@@ -162,6 +162,29 @@ const SCHEMA = `
       data       TEXT NOT NULL,
       updated_at INTEGER NOT NULL
     );
+    -- BETA M188 s4: brewings posted to the Chordstone (brewings.ts). A host schedules one (a time, public or private,
+    -- the potion, which of its steps keepers may sign up for); a seat is one keeper on one open step = their RSVP, live
+    -- until \`at\`. door_* = what the host's own client posts in the last minutes (its chord code + plot id) so an RSVP
+    -- holder's map door can take them to the host's garden. Read only by the brewing's seat holders.
+    CREATE TABLE IF NOT EXISTS brewings (
+      brewing_id TEXT PRIMARY KEY,
+      host_id    TEXT NOT NULL,
+      potion     TEXT NOT NULL,
+      at         INTEGER NOT NULL,
+      public     INTEGER NOT NULL DEFAULT 1,
+      seats      TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      door_code  TEXT,
+      door_look  TEXT
+    );
+    CREATE TABLE IF NOT EXISTS brewing_seats (
+      brewing_id TEXT NOT NULL,
+      step       INTEGER NOT NULL,
+      user_id    TEXT NOT NULL,
+      taken_at   INTEGER NOT NULL,
+      PRIMARY KEY (brewing_id, step),
+      UNIQUE (brewing_id, user_id)
+    );
 `
 
 /** Our own stable id — deliberately NOT the google sub, so a provider can change later. */
@@ -404,6 +427,8 @@ export function deleteAccount(user_id: string): boolean {
   d.prepare('DELETE FROM cluster_plots WHERE user_id = ?').run(user_id)
   d.prepare('DELETE FROM cluster_gardens WHERE user_id = ?').run(user_id)
   d.prepare('DELETE FROM cluster_seen WHERE user_id = ?').run(user_id)
+  d.prepare('DELETE FROM brewing_seats WHERE user_id = ? OR brewing_id IN (SELECT brewing_id FROM brewings WHERE host_id = ?)').run(user_id, user_id)
+  d.prepare('DELETE FROM brewings WHERE host_id = ?').run(user_id)
   d.prepare('DELETE FROM saves WHERE user_id = ?').run(user_id)
   const res = d.prepare('DELETE FROM accounts WHERE user_id = ?').run(user_id)
   return Number(res.changes) > 0

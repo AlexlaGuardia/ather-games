@@ -18,6 +18,7 @@ import type { Pitstop } from '../continent/pitstops'
 import { HearthFrame, HearthButton, H } from '../../ui/hearth'
 import { PanZoomBox, PIN_KEEP } from '../../ui/pan-zoom-view'
 import { GRID, sqId, ringOf, canBuy, RING_PAGES, GRIMOIRE_SIZE, type Garden } from './plot'
+import { FriendDoor } from './brewing-card'   // M188 s4
 
 export type Dest =
   | { kind: 'home' }
@@ -179,6 +180,7 @@ export function FoldMap({ view, travel, W, fog, waymarks, infected, here, inWild
               {quest?.some(q => q.zone === 'glade')
                 ? <div data-quest-stop style={{ borderRadius: 6, boxShadow: '0 0 0 2px #ff9a4a' }}>{stop('Moonwell Glade', "Gregory's garden", { kind: 'glade' }, '#ff9a4a')}</div>
                 : stop('Moonwell Glade', "Gregory's garden", { kind: 'glade' }, '#9fd27a')}
+              <FriendDoor onGo={onClose} />   {/* M188 s4: the door under the Glade: friends online to visit, a brewing host's garden */}
               {stop("Gregory's waymark", 'the Wilds · meadow', { kind: 'waymark', w: GREG_WAYMARK }, '#e7c766')}
               {regions.length > 1 && (
                 <div data-spread-legend style={{ display: 'flex', flexWrap: 'wrap', gap: 4, fontSize: 11, margin: '2px 0 4px' }}>
