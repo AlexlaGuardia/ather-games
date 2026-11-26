@@ -35,6 +35,6 @@ export function flyStep(s: FlyState, f: FlyLook, up: boolean, near: number, dt: 
 /** the clip a flier plays: still up = still flying, whatever the trot has gone on to */
 export const flyClip = (want: RigClip, alt: number): RigClip => (alt > DOWN ? 'run' : want)
 /** wing-beat cycles for this frame, by time, paced a little by her speed (never by the ground she covers: nothing is planted) */
-export function flapCycles(f: FlyLook, v: number, clipV: number, dur: number, dt: number): number {
+export function flapCycles(f: Pick<FlyLook, 'flap'>, v: number, clipV: number, dur: number, dt: number): number {
   return dt / dur * Math.min(f.flap[1], Math.max(f.flap[0], v / Math.max(clipV, 1e-6)))
 }

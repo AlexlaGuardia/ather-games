@@ -100,6 +100,30 @@ const NOCTYX_TROT: Partial<TrotDials> = {
   happyHops: 5, happyHop: 0.26, happyH: 0.1, happyWig: 0.16,
 }
 
+// ── M173 s2 (Alex 11-24 approved both v2 looks): DEWBEAR + HOVARI. Manner = the temperament column of world/spirits-species.md.
+//  · Dewbear "Round, squishy, nearly indestructible ... Zero personal space: will waddle right up to you and stay": a slow,
+//    sturdy waddle, short legs out, long sits and looks, sniffs about; she rarely darts and never hurries off far.
+//  · Hovari "Fast, jewel-toned, hovering ... Precise, controlled movements. Delicate but fierce. Default pose: hovering": quick
+//    darts that stop dead, snap glances, short holds, few rests; she settles IN THE AIR (her sit / sleep clips never land).
+const DEWBEAR_TROT: Partial<TrotDials> = {
+  speed: 0.7, dash: 1.1, turnK: 4, hopH: 0, stretch: 0, squash: 0, lean: 0, planted: 1,
+  chain: 0.95, checkS: [1.2, 2.4], legMax: 2.2,
+  beat: { look: 0.35, sniff: 0.3, sit: 0.35, tilt: 0 },
+  lookS: [3.0, 5.0], sniffS: [2.0, 3.4], sitS: [6.0, 10.0],
+  glance: 0.45, glanceHold: [1.0, 1.8], glanceMax: 0.5,
+  happyHops: 2, happyHop: 0.55, happyH: 0.03, happyWig: 0.12,
+}
+const HOVARI_TROT: Partial<TrotDials> = {
+  speed: 1.4, dash: 2.6, turnK: 16, hopH: 0, stretch: 0, squash: 0, lean: 0, planted: 1,
+  chain: 0.8, checkS: [0.3, 0.7], legMax: 3.5,
+  beat: { look: 0.6, sniff: 0.05, sit: 0.2, tilt: 0.15 },
+  lookS: [1.2, 2.4], sitS: [2.5, 4.0], tiltS: [0.8, 1.4],
+  glance: 0.08, glanceHold: [0.3, 0.7], glanceMax: 0.85,
+  happyHops: 4, happyHop: 0.22, happyH: 0.06, happyWig: 0.1,
+}
+/** the Hovari glb: one unit = 0.219 m (docs/looks/hovari-2026-11-24 v2: beak tip to tail tip 0.300 m = canon's ~0.30 long) */
+export const HOVARI_UNIT = 0.219
+
 export const SPIRIT_MODELS: Partial<Record<Species, SpiritLook>> = {
   // Vulnyx: grown 0.70 m (shipped M102/M107 at 0.55), gold; tail out along +x, swings in z; ear flick; trot = TROT's
   // defaults, grown (grownTrot).
@@ -138,6 +162,20 @@ export const SPIRIT_MODELS: Partial<Record<Species, SpiritLook>> = {
     sway: { along: 'z', sign: -1, from: 2, to: 3, dir: 'x', amp: 0, ampRun: 0, hz: 1, hzRun: 1, lag: 0 },
     trot: NOCTYX_TROT,
   },
+  // Dewbear: 0.50 m (GROWN), the approved v2's own tints (the look proof): dew-blue floor, pale-blue hull. Tail too small to sway.
+  'water-bear': {
+    name: 'dewbear', url: '/open/spirits/dewbear.glb', h: GROWN['water-bear'].height,
+    skin: { emissive: '#cdf3ff', emissiveI: 0.10 }, hull: { color: '#d8f4ff', opacity: 0.38 },
+    sway: { along: 'z', sign: -1, from: 2, to: 3, dir: 'x', amp: 0, ampRun: 0, hz: 1, hzRun: 1, lag: 0 },
+    trot: DEWBEAR_TROT,
+  },
+  // Hovari: 0.30 m beak to tail (GROWN length); the v2 proof's tints (emissive 0.14, hull 0.50); the wing blur `shimmer` glows.
+  hummingbird: {
+    name: 'hovari', url: '/open/spirits/hovari.glb', h: HOVARI_UNIT,
+    skin: { emissive: '#6bf2db', emissiveI: 0.14 }, hull: { color: '#adfff0', opacity: 0.50 },
+    sway: { along: 'z', sign: -1, from: 2, to: 3, dir: 'x', amp: 0, ampRun: 0, hz: 1, hzRun: 1, lag: 0 },
+    trot: HOVARI_TROT,
+  },
 }
 
 // ── M132 s2 THE RIGGED MANALOTL (every keeper's since 11-24, spirit-model.tsx useSpiritRig; Alex 11-24 OK'd the v2 look and the size: 0.90 m
@@ -174,6 +212,20 @@ export const NOCTYX_RIG: RigLook = {
 }
 /** their glbs' heights standing (the idle clips' means), glb units */
 export const ATHOWL_GLB_TALL = 1.005, NOCTYX_GLB_TALL = 0.999
+// ── M173 s2: the Dewbear walks (the README's wiring numbers); her stubby legs go as fast as she ever does behind a sprinting keeper (FOLLOW.vMax 9 m/s = 14.6 strides/s: a
+// scuttle), so the cadence cap is hers. The Hovari HOVERS (hover: every clip hangs ~0.9 m up, Alex 11-24 "near eye level").
+export const DEWBEAR_RIG: RigLook = {
+  glbLen: 1.58, pivot: { x: 0, z: 0 }, clipV: { walk: 1.0 / 0.5, run: 2.8 / 0.5 }, runAt: [1.0, 0.85], hull: 0.024,
+  neck: 'b_neck', head: 'b_head', lie: true, cadence: 15, avatar: { z: 0, far: 1.3 },
+}
+export const HOVARI_RIG: RigLook = {
+  glbLen: 1.09, pivot: { x: 0, z: 0 }, clipV: { walk: 0.8 / HOVARI_UNIT, run: 4.0 / HOVARI_UNIT }, runAt: [1.4, 1.1], hull: 0.030,
+  neck: 'b_neck', head: 'b_head', lie: true,
+  hover: { flap: [1.0, 1.25], low: 0.874 / HOVARI_UNIT, top: 1.16 / HOVARI_UNIT },
+  cull: { c: [0, 4.4, 0.07], r: 1.3, min: [-0.95, 3.4, -0.9], max: [0.95, 5.4, 1.05] },
+  avatar: { z: 0.07, far: 1.6, y: 4.0 },
+}
+export const DEWBEAR_GLB_TALL = 1.0
 export const SPIRIT_RIGS: Partial<Record<Species, SpiritLook>> = {
   axolotl: {
     ...SPIRIT_MODELS.axolotl!, url: '/open/spirits/manalotl-rigged.glb', h: RIG_H, rig: MANALOTL_RIG, tilt: undefined,
@@ -187,6 +239,10 @@ export const SPIRIT_RIGS: Partial<Record<Species, SpiritLook>> = {
   },
   owl: { ...SPIRIT_MODELS.owl!, url: '/open/spirits/athowl-rigged.glb', h: GROWN.owl.height / ATHOWL_GLB_TALL, rig: ATHOWL_RIG },
   bat: { ...SPIRIT_MODELS.bat!, url: '/open/spirits/noctyx-rigged.glb', h: GROWN.bat.height / NOCTYX_GLB_TALL, rig: NOCTYX_RIG },
+  // the very glb Blue wears at Greg's bench (he re-tones his own copy, glade-blue.tsx); every other Dewbear keeps its colours
+  'water-bear': { ...SPIRIT_MODELS['water-bear']!, url: '/open/spirits/dewbear-rigged.glb', h: GROWN['water-bear'].height / DEWBEAR_GLB_TALL, rig: DEWBEAR_RIG },
+  hummingbird: { ...SPIRIT_MODELS.hummingbird!, url: '/open/spirits/hovari-rigged.glb', rig: HOVARI_RIG,
+    glow: { part: 'shimmer', emissive: '#b8fff0', lo: 0.35, hi: 0.6, hz: 0.5 } },
 }
 /** the look to draw: the rigged one where there is one and `on` */
 export const rigLook = (sp: Species, look: SpiritLook, on: boolean): SpiritLook => (on ? SPIRIT_RIGS[sp] ?? look : look)

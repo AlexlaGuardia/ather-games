@@ -30,8 +30,16 @@ export type RigLook = {
   fly?: FlyLook
   /** the glb has its own lie clip */
   lie?: boolean
-  /** the panel's turntable: the z she turns round (her middle, tail and all, glb units) and how far the camera stands back */
-  avatar: { z: number; far: number }
+  /** M173 s2: a HOVERER (the Hovari): every clip, the bind pose too, hangs in the air (her own height, drawn in the glb), so
+   *  nothing is added and nothing lands. Her drift / dart wings beat by TIME (never by ground: a slow drift or a stop would
+   *  freeze them), at the clip's own pace x her speed over its speed, held inside `flap`. `low` / `top` = her lowest and highest
+   *  point hovering (glb units): the E pick, the fight's shot and the panel copy read her there, not at her feet. */
+  hover?: { flap: [number, number]; low: number; top: number }
+  /** M173 s2: her own culling sphere + box (glb units) where the shared one would miss her (a hoverer sits 3.4 to 5.4 up) */
+  cull?: { c: [number, number, number]; r: number; min: [number, number, number]; max: [number, number, number] }
+  /** the panel's turntable: the z she turns round (her middle, tail and all, glb units) and how far the camera stands back;
+   *  `y` (a hoverer): the panel copy is set down by this much, so she turns in frame */
+  avatar: { z: number; far: number; y?: number }
 }
 /** strides a second the legs never pass */
 export const CADENCE_MAX = 5.5

@@ -64,11 +64,11 @@ export function makeRigBody(gltf: RigGltf, rig: RigLook, mats: RigMats, glowPart
   const bones = b0.skeleton.bones, skeleton = new THREE.Skeleton(bones, b0.skeleton.boneInverses.map(m => m.clone()))
   const root = new THREE.Group(), boneRoot = bones.find(b => !bones.includes(b.parent as THREE.Bone))!
   root.add(boneRoot)
-  const id = new THREE.Matrix4(), ball = new THREE.Sphere(new THREE.Vector3(0, 0.45, -0.4), 1.5), meshes: Record<string, THREE.SkinnedMesh> = {}
+  const C = rig.cull, id = new THREE.Matrix4(), ball = C ? new THREE.Sphere(new THREE.Vector3(...C.c), C.r) : new THREE.Sphere(new THREE.Vector3(0, 0.45, -0.4), 1.5), meshes: Record<string, THREE.SkinnedMesh> = {}
   const add = (name: string, part: string, mat: THREE.Material | null) => {
     if (!geos[part] || !mat) return
     const m = new THREE.SkinnedMesh(geos[part], mat); m.name = name; m.bind(skeleton, id)
-    m.boundingSphere = ball; m.boundingBox = new THREE.Box3(new THREE.Vector3(-1, -0.05, -1.6), new THREE.Vector3(1, 1.15, 0.8))   // any clip's reach: never culled by the rest pose
+    m.boundingSphere = ball; m.boundingBox = C ? new THREE.Box3(new THREE.Vector3(...C.min), new THREE.Vector3(...C.max)) : new THREE.Box3(new THREE.Vector3(-1, -0.05, -1.6), new THREE.Vector3(1, 1.15, 0.8))   // any clip's reach: never culled by the rest pose
     root.add(m); meshes[name] = m
   }
   add('body', 'body', mats.skin); add('bodyHull', 'body', mats.halo)
@@ -90,7 +90,9 @@ export function makeRigBody(gltf: RigGltf, rig: RigLook, mats: RigMats, glowPart
       want = clip; w = fadeWeights(w, clip, dt)
       const gait = clip === 'run' || clip === 'walk' ? clip : w.run > w.walk ? 'run' : 'walk'
       const air = clip === 'run' && Math.abs(moved) < 1e-6 ? dt / act.run.getClip().duration : null
-      const g = rig.fly && gait === 'run' ? { cycles: flapCycles(rig.fly, Math.abs(moved) / Math.max(dt, 1e-3), rig.clipV.run * h, act.run.getClip().duration, dt), capped: false }   // M173: wings, not feet
+      const hov = rig.hover && (clip === 'walk' || clip === 'run' || w.walk + w.run > 0) ? rig.hover : null   // M173 s2: a hoverer's wings, by time
+      const g = hov ? { cycles: flapCycles(hov, Math.abs(moved) / Math.max(dt, 1e-3), rig.clipV[gait] * h, act[gait].getClip().duration, dt), capped: false }
+        : rig.fly && gait === 'run' ? { cycles: flapCycles(rig.fly, Math.abs(moved) / Math.max(dt, 1e-3), rig.clipV.run * h, act.run.getClip().duration, dt), capped: false }   // M173: wings, not feet
         : air !== null ? { cycles: air, capped: false } : gaitCycles(moved, dt, strideLen(rig.clipV[gait], act[gait].getClip().duration, h), rig.cadence)
       phase = ((phase + g.cycles) % 1 + 1) % 1; capped = g.capped; rate = dt > 0 ? g.cycles * act[gait].getClip().duration / dt : 0
       for (const c of has) { const on = w[c] > 0; act[c].enabled = on; act[c].setEffectiveWeight(w[c]) }

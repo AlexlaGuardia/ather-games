@@ -230,7 +230,9 @@ function SpiritModel({ sp, look, nav, id, avatar, dev }: { sp: Species; look: Sp
         braceMax: Math.max(pr.trots[sp]?.braceMax ?? 0, trot.braced()),   // M110 s2: the shove's lean / the guard's crouch, at its deepest
         yMax: ps.mode === 'happy' ? Math.max(pr.trots[sp]?.mode === 'happy' ? pr.trots[sp].yMax : 0, ps.y) : (pr.trots[sp]?.yMax ?? 0) }   // M109 s2: the happy beat's peak hop
       pr.trots[sp] = tp; if (sp === 'fox') pr.trot = tp
-      if (dev && id) spiritLive.set(id, { id, sp, x: ps.x, y: baseY + floor + ps.y + alt, z: ps.z, h: look.h, at: Date.now() })   // M109: the E pick reads it
+      // M109: the E pick reads it. M173 s2: a hoverer is picked (and shoots) where she hangs, not at her feet
+      const hov = rig?.hover
+      if (dev && id) spiritLive.set(id, { id, sp, x: ps.x, y: baseY + floor + ps.y + alt + (hov ? hov.low * look.h : 0), z: ps.z, h: hov ? (hov.top - hov.low) * look.h : look.h, at: Date.now() })
       if (id && inFormation(id)) reportFormationPos(id, ps.x, ps.z)   // M126 s1: the probe's real spacing
       return
     }
@@ -243,7 +245,7 @@ function SpiritModel({ sp, look, nav, id, avatar, dev }: { sp: Species; look: Sp
     // the panel's copy turns round her middle (the tail is half of her), the garden's round her feet
     const pz = avatar ? rig.avatar.z : rig.pivot.z
     return <group ref={g} name={`spirit-model-${look.name}`} userData={{ spiritModel: look.name, rigged: true }}>
-      {body && <group scale={H} position={[-rig.pivot.x * H, 0, -pz * H]}><primitive object={body.root} /></group>}
+      {body && <group scale={H} position={[-rig.pivot.x * H, avatar ? -(rig.avatar.y ?? 0) * H : 0, -pz * H]}><primitive object={body.root} /></group>}
     </group>
   }
   if (!parts) return null
