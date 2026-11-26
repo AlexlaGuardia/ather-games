@@ -42,3 +42,8 @@ cd tools; uv run --no-project --with numpy,scipy,trimesh,fast_simplification,net
 blender -b -P ../../vulnyx-2026-11-24/tools/look.py -- <unrigged glb> <prefix> 420      (look.py on a RIGGED glb draws it broken: use pose.py)
 blender -b -P pose.py -- <rigged glb> <prefix> <clip> <t>
 ```
+
+## Prod proof (build 8e1b9f80, carries d37cc6c2)
+`scripts/m202-forms-check.mts --species axolotl` (owner, this box, 390x844): ALL PASS. aurlotl 0.663 m standing (want 0.67),
+arclotl 0.582 (0.59), craglotl 0.396 (0.42), marlotl 0.467 (0.48), each mounted not the base; player `?form=water` sees the base
+Manalotl, no form glb asked for; 0 page errors. Stills: `prod/<form>-390.png`.
