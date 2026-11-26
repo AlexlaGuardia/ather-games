@@ -1,19 +1,21 @@
 'use client'
-// ── PLAY TOGETHER IN THE OPEN WORLD, slice 2: THE PARTY (BETA M27, Alex 11-18) ──────────────────────────────────────────
-// Options › Game › "Play together" opens this panel: PARTY (start one, join by code, copy the invite link, leave, who is in
-// your world) and FRIENDS (play3d's FriendsTab: your list, online first, add by name, Invite). An invite from a friend pops
-// over the world wherever you stand (InvitePrompt), because presence is held by <OpenSocial/>, which both open-world
-// pages mount once. A party code is lib/party's (every game reads it), so joining one here reconnects the open-world
-// socket (shared/open-mp.tsx) into the party's own instance, which strangers never join.
+// ── PLAY TOGETHER IN THE OPEN WORLD: THE CHORD (BETA M27 the party, Alex 11-18 -> BETA M188 s1 the CHORD, RULED 62a71de) ──
+// Options › CHORD (ChordTab, rendered by open/options.tsx) is the open world's group screen: the chord (start one, join by
+// code, copy the invite link, leave, who is in it, each in their colour), a chord invite waiting on you, who is in your world,
+// and FRIENDS (play3d's FriendsTab: your list, online first, add by name, Invite). An invite from a friend also pops over the
+// world wherever you stand (InvitePrompt), because presence is held by <OpenSocial/>, which both open-world pages mount once.
+// Under the word 'chord' is lib/party's code (every game reads it), so joining one reconnects the open-world socket
+// (shared/open-mp.tsx) into the chord's own instance, which strangers never join. Never 'party' on screen (canon: a chord).
 // The pieces are play3d's (play3d/play-together.tsx, lib/presence, lib/party); this file is the open world's frame.
 import { useEffect, useState, useSyncExternalStore } from 'react'
-import { HearthFrame, HearthTabs, H, hearthBody } from '../../ui/hearth'
+import { H, hearthBody } from '../../ui/hearth'
 import { FriendsTab, InvitePrompt, useFriends } from '../../play3d/play-together'
 import { useRoster } from '../../play3d/RemotePlayers'
 import { useParty, newPartyCode, sanitizePartyCode, inviteUrl } from '@/lib/party'
 import { usePresence, type UsePresence } from '@/lib/presence'
 import { useAccount, type UseAccount } from '@/lib/accounts/use-account'
-import { useMenuLock } from './menu-lock'
+import { setOptionsOpen } from '../options'
+import { setChordBox, useChordBox, chordColour } from './chord'
 import { hudSay } from './hud-say'
 import { openPeers } from './open-mp'
 import { setPartyOrder } from './party-host'
@@ -50,11 +52,12 @@ export function whereOf(m: LobbyMember, all: LobbyMember[]): { text: string; plo
 }
 let lobbyBox: { members: LobbyMember[]; me: string } = { members: [], me: '' }
 
-// ── open / closed: one store, so Options (another file) can open it ──────────────────────────────────────────────────
-let open = false
-const subs = new Set<() => void>()
-export function setPlayTogether(v: boolean) { open = v; subs.forEach(f => f()) }
-export const usePlayTogetherOpen = () => useSyncExternalStore(f => { subs.add(f); return () => { subs.delete(f) } }, () => open, () => false)
+// ── BETA M188 s1: the 'Play together' panel is gone; its contents live in Options › CHORD (ChordTab below). OpenSocial holds
+// the presence socket, so the tab reads it from this box (one socket per page, the tab only renders). ─────────────────────
+let socialBox: { presence: UsePresence | null; account: UseAccount | null } = { presence: null, account: null }
+let socialGen = 0
+const ssubs = new Set<() => void>()
+const useSocialGen = () => useSyncExternalStore(f => { ssubs.add(f); return () => { ssubs.delete(f) } }, () => socialGen, () => 0)
 
 const label = 'hk-label text-[13px] hk-soft'
 const hint = 'text-[11px] leading-snug hk-faint mt-1.5'
@@ -69,7 +72,7 @@ function Account({ account }: { account: UseAccount }) {
   if (!session) return (
     <>
       <button onClick={signIn} className="hk-btn w-full py-1.5 text-[12px]" data-act="sign-in">◆ Sign in with Google</button>
-      <div className={hint}>Sign in to add friends and send invites. A party code works without it.</div>
+      <div className={hint}>Sign in to add friends and send chord invites. A chord code works without it.</div>
     </>
   )
   return <div className="hk-title text-[15px] hk-ember">◆ {session.username ?? 'no name yet (claim one in The Room)'}</div>
@@ -77,7 +80,7 @@ function Account({ account }: { account: UseAccount }) {
 
 function PartyTab({ party, start, join, leave, mates }: { party: string | null; start: () => void; join: (c: string) => boolean; leave: () => void; mates: LobbyMember[] }) {
   const roster = useRoster(openPeers())
-  const me = selfPlayerId(), others = mates.filter(m => m.look !== me)
+  const me = selfPlayerId(), others = mates.filter(m => m.look !== me), meRow = mates.find(m => m.look === me)
   const [draft, setDraft] = useState('')
   const [copied, setCopied] = useState(false)
   const [bad, setBad] = useState(false)
@@ -89,46 +92,49 @@ function PartyTab({ party, start, join, leave, mates }: { party: string | null; 
   const doJoin = () => { const ok = !!sanitizePartyCode(draft) && join(draft); setBad(!ok); if (ok) setDraft('') }
   return (
     <>
-      <div className={label} style={{ margin: '12px 0 4px' }}>Party</div>
+      <div className={label} style={{ margin: '12px 0 4px' }}>Your chord</div>
       {party ? (
         <>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
             <span className="hk-ember tabular-nums font-extrabold text-[19px] tracking-[.18em]" data-party-code>{party}</span>
-            <button onClick={leave} className="hk-btn px-3 py-1 text-[12px]" data-act="leave-party">Leave</button>
+            <button onClick={leave} className="hk-btn px-3 py-1 text-[12px]" data-act="leave-party">Leave the chord</button>
           </div>
           <button onClick={copy} className={`hk-btn w-full py-1.5 text-[12px] ${copied ? 'hk-fill-moss' : ''}`}>{copied ? '✓ Link copied' : '⧉ Copy invite link'}</button>
-          <div className={hint}>Friends who open the link, or enter the code, play in your world: the Wilds and the continent.</div>
+          <div className={hint}>Keepers who open the link, or enter the code, ring into your chord and play in your world: the Wilds and the continent.</div>
         </>
       ) : (
         <>
-          <button onClick={start} className="hk-btn w-full py-1.5 text-[12px]" data-act="start-party">⚑ Start a party</button>
+          <button onClick={start} className="hk-btn w-full py-1.5 text-[12px]" data-act="start-party">⚑ Start a chord</button>
           <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
             <input value={draft} placeholder="CODE" maxLength={12} style={{ ...input, letterSpacing: '0.14em' }} data-party-input
               onChange={e => { setDraft(e.target.value.toUpperCase()); setBad(false) }}
               onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') doJoin() }} />
             <button onClick={doJoin} className="hk-btn px-3.5 py-1 text-[12px]" data-act="join-party">Join</button>
           </div>
-          {bad && <div className={`${hint} hk-rust`}>That is not a party code.</div>}
+          {bad && <div className={`${hint} hk-rust`}>That is not a chord code.</div>}
         </>
       )}
       {party && (
         <>
-          <div className={label} style={{ margin: '12px 0 4px' }}>Your party</div>
-          <div className="text-[12px] leading-[1.7] font-bold hk-ink" data-party-mates>
+          <div className={label} style={{ margin: '12px 0 4px' }}>In the chord</div>
+          <div className="text-[12px] leading-[1.7] font-bold hk-ink" data-party-mates data-chord-members>
+            {meRow && <div style={{ display: 'flex', alignItems: 'center', gap: 6 }} data-chord-member={me} data-chord-colour={chordColour(me)}>
+              <Swatch c={chordColour(me)} /><span>{meRow.name} <span className="hk-faint font-semibold">· you</span></span>
+            </div>}
             {others.map(m => {
               const w = whereOf(m, mates)
               return (
-                <div key={m.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }} data-mate={m.look}>
-                  <span>{m.name} <span className="hk-faint font-semibold">· {w.text}</span></span>
+                <div key={m.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }} data-mate={m.look} data-chord-member={m.look} data-chord-colour={chordColour(m.look)}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Swatch c={chordColour(m.look)} /><span>{m.name} <span className="hk-faint font-semibold">· {w.text}</span></span></span>
                   {w.plotHost && w.plotHost !== me && (
-                    <button onClick={() => { setPlayTogether(false); requestVisit(w.plotHost!, w.plotName ?? m.name) }} className="hk-btn px-2 py-0.5 text-[11px]" data-act="visit-plot">Visit</button>
+                    <button onClick={() => { setOptionsOpen(false); requestVisit(w.plotHost!, w.plotName ?? m.name) }} className="hk-btn px-2 py-0.5 text-[11px]" data-act="visit-plot">Visit</button>
                   )}
                 </div>
               )
             })}
-            {others.length === 0 && <div className="hk-faint font-semibold italic">no one else in the party yet</div>}
+            {others.length === 0 && <div className="hk-faint font-semibold italic">no one else in the chord yet</div>}
           </div>
-          <div className={hint}>A mate on their plot can be visited: walk round their house, look, but only they can change it.</div>
+          <div className={hint}>A chordmate on their plot can be visited: walk round their house, look, but only they can change it.</div>
         </>
       )}
       <div className={label} style={{ margin: '12px 0 4px' }}>In your world</div>
@@ -140,31 +146,49 @@ function PartyTab({ party, start, join, leave, mates }: { party: string | null; 
   )
 }
 
-function Panel({ presence, account, onClose, mates }: { presence: UsePresence; account: UseAccount; onClose: () => void; mates: LobbyMember[] }) {
+const Swatch = ({ c }: { c: string }) => <span aria-hidden className="inline-block w-[9px] h-[9px] rounded-full shrink-0" style={{ background: c, boxShadow: `0 0 4px ${c}` }} />
+
+/** ★ BETA M188 s1: Options › CHORD. Who is in your chord (name + their colour), a chord invite waiting on you (Join / Not now),
+ *  start / join by code / copy the link / leave, who is in your world, and your friends (invite one into the chord). Light on
+ *  purpose: the Chordstone at the Green's gate (s2) will do the heavy lifting. Reads the page's <OpenSocial/> (one socket). */
+export function ChordTab() {
+  useSocialGen()
+  const { presence, account } = socialBox
   const { party, start, join, leave } = useParty()
-  const [tab, setTab] = useState<'party' | 'friends'>('party')
-  const signedIn = !!account.session?.username
-  const fr = useFriends(tab === 'friends', signedIn)
-  const onlineFriends = fr.friends.filter(f => f.status === 'accepted' && f.online).length
+  const { members: mates } = useChordBox()
+  const signedIn = !!account?.session?.username
+  const fr = useFriends(true, signedIn)
+  if (!presence || !account) return <div className="text-[12px] hk-faint italic" data-panel="chord">The chord is not reachable here.</div>
   const invite = async (f: { user_id: string; username: string }): Promise<string> => {
     const code = party ?? start()
     const r = await presence.invite(f.user_id, code)
     return r.ok ? 'invited' : r.reason === 'offline' ? 'offline' : r.reason === 'unverified' ? 'sign in again' : 'not connected'
   }
+  const inc = presence.incoming
   return (
-    <div className="absolute top-5 right-5 z-[41] pointer-events-auto" data-panel="play-together">
-      <HearthFrame title="Play together" maxWidth={320} backdrop={false} onClose={onClose}>
-        <div className="px-3.5 pt-5 pb-3.5 hk-ink" style={{ ...hearthBody }}>
-          <HearthTabs tabs={[{ id: 'party', label: 'Party' }, { id: 'friends', label: 'Friends', count: signedIn ? onlineFriends : undefined }]}
-                      active={tab} onPick={id => setTab(id as 'party' | 'friends')} />
-          <div style={{ marginTop: 10 }}><Account account={account} /></div>
-          {tab === 'friends'
-            ? <FriendsTab signedIn={signedIn} friends={fr.friends} loaded={fr.loaded} act={fr.act} onInvite={invite} inParty={!!party} />
-            : <PartyTab party={party} start={() => { start() }} join={join} leave={leave} mates={mates} />}
+    <div className="hk-ink" style={{ ...hearthBody }} data-panel="chord">
+      {inc && (
+        <div data-chord-invite className="rounded-[10px] px-2.5 py-2 mb-2" style={{ background: 'rgba(200,100,42,.12)', boxShadow: 'inset 0 0 0 1.5px #c8642a' }}>
+          <div className="text-[13px] font-extrabold">{inc.from_name} asks you into their chord</div>
+          {!!party && party !== inc.party && <div className="text-[11px] hk-faint">You will leave the chord you are in.</div>}
+          <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+            <button className="hk-btn px-3 py-1 text-[12px] hk-fill-moss" data-act="chord-accept" onClick={() => acceptInvite(join, presence)}>Join</button>
+            <button className="hk-btn px-3 py-1 text-[12px]" data-act="chord-decline" onClick={presence.dismiss}>Not now</button>
+          </div>
         </div>
-      </HearthFrame>
+      )}
+      <Account account={account} />
+      <PartyTab party={party} start={() => { start() }} join={join} leave={leave} mates={mates} />
+      <div className={label} style={{ margin: '14px 0 0' }}>Friends</div>
+      <FriendsTab signedIn={signedIn} friends={fr.friends} loaded={fr.loaded} act={fr.act} onInvite={invite} inParty={!!party} noun="chord" />
     </div>
   )
+}
+
+function acceptInvite(join: (c: string) => boolean, presence: UsePresence) {
+  const inv = presence.incoming
+  if (!inv) return
+  join(inv.party); presence.dismiss(); hudSay(`Joined ${inv.from_name}'s chord`, 'info', 4)
 }
 
 /** Mount ONCE per open-world page (outside the Canvas): presence (so an invite finds you anywhere), the invite prompt,
@@ -173,27 +197,25 @@ export function OpenSocial() {
   const account = useAccount()
   const userId = account.session?.username ? account.session.user_id : null
   const presence = usePresence(userId, account.session?.username ?? '')
-  const isOpen = usePlayTogetherOpen()
   const { party, join } = useParty()
-  useMenuLock(isOpen, () => document.querySelector('canvas'))
   // M61: the party's cross-zone roster (only while in a party; `look` carries the socket id the plot zones are named by)
   const zoneNow = useLobbyZone()
   const [me, setMe] = useState<string | null>(null)
   useEffect(() => { setMe(selfPlayerId()) }, [])
   const lobby = usePartyLobby({ code: party, userId: account.session?.user_id ?? me, name: account.session?.username ?? (me ? storedName() : ''), zone: zoneNow, look: me ?? '' })
-  const mates = lobby.state?.members ?? []
+  const mates = party ? lobby.state?.members ?? [] : []
   lobbyBox = { members: mates, me: me ?? '' }
   setPartyOrder(mates.map(m => m.look).filter(Boolean))   // M156 s2: who hosts the party's Wilds
+  useEffect(() => { setChordBox(mates, me ?? '', party) })   // M188: the Chord tab + the chordmates' bars read this
+  useEffect(() => { socialBox = { presence, account }; socialGen++; ssubs.forEach(f => f()) })
   if (typeof window !== 'undefined') (window as unknown as { __lobby?: unknown }).__lobby = { members: () => lobbyBox.members, zone: () => lobbyZone }
-  useEffect(() => { const k = (e: KeyboardEvent) => { if (e.code === 'Escape' && open) setPlayTogether(false) }; window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k) }, [])
   return (
     <>
       {presence.incoming && (
-        <InvitePrompt invite={presence.incoming} inParty={!!party && party !== presence.incoming.party}
-          onJoin={() => { const inv = presence.incoming!; join(inv.party); presence.dismiss(); hudSay(`Joined ${inv.from_name}'s party`, 'info', 4) }}
+        <InvitePrompt invite={presence.incoming} inParty={!!party && party !== presence.incoming.party} noun="chord"
+          onJoin={() => acceptInvite(join, presence)}
           onDismiss={presence.dismiss} />
       )}
-      {isOpen && <Panel presence={presence} account={account} mates={mates} onClose={() => setPlayTogether(false)} />}
     </>
   )
 }

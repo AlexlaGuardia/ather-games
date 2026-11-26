@@ -80,10 +80,10 @@ const clickSel = async (p: Page, sel: string) => { const b = await p.evaluate((s
 const clickText = (p: Page, sel: string, text: string) => p.evaluate((s: string, t: string) => { const e = [...document.querySelectorAll<HTMLElement>(s)].find(x => x.textContent?.includes(t)); e?.click(); return !!e }, sel, text)
 async function panel(p: Page) {
   for (let i = 0; i < 4; i++) {
-    if (await p.$('[data-panel="play-together"]')) return true
+    if (await p.$('[data-panel="chord"]')) return true   // M188 s1: the panel is Options › Chord now ('Play together' is gone)
     if (!(await p.$('[data-panel="options"]'))) { await p.keyboard.press('KeyO'); await poll(async () => !!(await p.$('[data-panel="options"]')), 8000) }
-    await clickText(p, '[data-panel="options"] button', 'Play together')
-    if (await poll(async () => !!(await p.$('[data-panel="play-together"]')), 6000)) return true
+    await clickText(p, '[data-panel="options"] button', 'Chord')
+    if (await poll(async () => !!(await p.$('[data-panel="chord"]')), 6000)) return true
   }
   return false
 }

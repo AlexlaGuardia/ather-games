@@ -68,7 +68,7 @@ export function openPartyBrew(potion: string): boolean {
   const cur = loadHost()
   if (cur && !cur.poured) { hudSay('A brewing is already going on your plot.', 'info', 4); return false }
   const b = openBrewing(selfPlayerId(), potion); if (!b) return false
-  setHost(b); hudSay(`A brewing of ${ALC_POTIONS[potion].name} is open. Your party can take the steps at the stations.`, 'info', 5); return true
+  setHost(b); hudSay(`A brewing of ${ALC_POTIONS[potion].name} is open. Your chord can take the steps at the stations.`, 'info', 5); return true
 }
 /** HOST: close a brewing nobody has started a step on (nothing to give back) */
 export function closePartyBrew(): boolean {

@@ -44,6 +44,7 @@ import { OPEN_TOOL_FAMILIES } from '../../ui/tool-stage'
 import { loadTools, TOOLS_EVENT } from '../ather/rinsticks'
 import { toolPanel } from '../ather/tool-panel'
 import { ToolPanelView } from './tool-panel-view'
+import { ChordBars } from './chord-bars'   // BETA M188 s1: chordmates' health over your own
 import { createSkillSet, type SkillSet } from '../../engine/skills'
 import type { Vitals } from '../../engine/vitals'
 import { hudSay, linesAt, subscribe, type Line } from './hud-say'
@@ -278,6 +279,7 @@ export function GameHud({ size, pose, marks, vitals, mana, tools, skills, entrie
         <HearthCompass face={FACE} pose={pose} marks={marks} size="phone" centerX={phoneCompassX} />
         <XpBar face={FACE} size="phone" centerX={phoneCompassX} top={8 + XP_BELOW_COMPASS} />
         {minimap}
+        <ChordBars vitals={vitals} phone />
         {/* a phone's right edge belongs to the thumbs below the map: the chips join into one line */}
         <StatusChips items={status.length ? [{ label: status.map(x => x.value !== undefined ? `${x.label} ${x.value}` : x.label).join(' · ') }] : []} top={statusTop} right={box.right} maxW={vw - box.right - 16 - 12} />
         {/* ★ THE LINE CLEARS THE THUMBS (Alex 11-22 playtest): at bottom:118 it grew UP into SLIDE / JUMP / FIRE / the DRAW pill
@@ -304,7 +306,8 @@ export function GameHud({ size, pose, marks, vitals, mana, tools, skills, entrie
       {minimap}
       <HearthClock face={FACE} box={box} />
       <StatusChips items={status} top={statusTop} right={box.right} />
-      <div className="fixed bottom-4 left-4 pointer-events-none" style={{ zIndex: 32 }}><HearthVitals face={FACE} vitals={vitals} /></div>
+      <div className="fixed bottom-4 left-4 pointer-events-none" style={{ zIndex: 32 }} data-hud="vitals"><HearthVitals face={FACE} vitals={vitals} /></div>
+      <ChordBars vitals={vitals} phone={false} />
       <div className="contents" style={{ zIndex: 32 }}><CornerFixed size={size} mana={mana} readouts={readouts} onPick={pick} picked={picked} /></div>
       {picked && T.current && <ToolPanelView panel={toolPanel(T.current, picked)} phone={false} onClose={closePanel} />}
       {casts && <CastPlates casts={casts} />}

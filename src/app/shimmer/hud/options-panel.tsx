@@ -15,7 +15,7 @@
 import React, { useState } from 'react'
 import { HearthFrame, HearthTabs, hearthDisplay } from '../ui/hearth'
 
-export type OptionsTab = 'game' | 'video' | 'sound' | 'controls' | 'dev'
+export type OptionsTab = 'game' | 'chord' | 'video' | 'sound' | 'controls' | 'dev'
 
 /** A full-width row: label left, dim tail right. `href` navigates, `onClick` acts. */
 export function OptionRow({ href, onClick, label, tail }: { href?: string; onClick?: () => void; label: string; tail: string }) {
@@ -46,7 +46,7 @@ export function OptionSlider({ label, value, min = 0, max = 1, step = 0.05, onCh
 export const OptionHead = ({ children, tone = 'hk-soft' }: { children: React.ReactNode; tone?: string }) =>
   <div className={`hk-label pt-2 text-[14px] ${tone}`}>{children}</div>
 
-export function OptionsPanel({ onClose, isOwner, game, video, sound, controls, dev, initial = 'game', leave }: {
+export function OptionsPanel({ onClose, isOwner, game, chord, video, sound, controls, dev, initial = 'game', leave }: {
   onClose: () => void
   /**
    * The keeper of the realm (`/api/owner`). Gates the Dev TAB. ⚠ This flag hides the DOOR; the dev
@@ -57,6 +57,8 @@ export function OptionsPanel({ onClose, isOwner, game, video, sound, controls, d
   isOwner: boolean
   /** Extra Game rows, rendered under Resume and above the exits (New Game, Play together, …). */
   game?: React.ReactNode
+  /** the open world's CHORD tab (BETA M188: who is in your chord, invites, leave); omitted = no tab */
+  chord?: React.ReactNode
   video?: React.ReactNode
   sound?: React.ReactNode
   controls?: React.ReactNode
@@ -67,6 +69,7 @@ export function OptionsPanel({ onClose, isOwner, game, video, sound, controls, d
 }) {
   const [tab, setTab] = useState<OptionsTab>(initial)
   const tabs: [OptionsTab, string][] = [['game', 'Game'], ['video', 'Video'], ['sound', 'Sound'], ['controls', 'Controls']]
+  if (chord) tabs.splice(1, 0, ['chord', 'Chord'])
   if (isOwner) tabs.push(['dev', 'Dev'])
   return (
     // ★ Carved Hearth (Phase 7): a side SHEET, not a modal — it hangs in the corner over the world
@@ -89,6 +92,7 @@ export function OptionsPanel({ onClose, isOwner, game, video, sound, controls, d
           Your world saves itself as you play. Leaving is never a loss.
         </p>
       </>)}
+      {chord && tab === 'chord' && chord}
       {tab === 'video' && video}
       {tab === 'sound' && sound}
       {tab === 'controls' && controls}

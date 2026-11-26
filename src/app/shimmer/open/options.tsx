@@ -20,7 +20,7 @@ import { refreshBirth } from './birth-gate'
 import { getInv, setInv } from './shared/bag'
 import { oneOfEachSeed, lendAllGuns, takeBackGuns } from './shared/owner-grants'
 import { getLoadout, setLoadout, useLoadout } from './shared/loadout'
-import { setPlayTogether } from './shared/play-together'
+import { ChordTab } from './shared/play-together'
 import { ACTIONS, RESERVED, useKeymap, keyFor, keyName, setBinding, resetKeymap, setCapturing, installKeymap } from './shared/keymap'
 import { PAD_ROW_IDS, PAD_FIXED, OPEN_CODE, padBind, padReset } from './shared/pad'
 import { padCapture, savePadMap, usePadSeenKind } from './shared/pad-bridge'
@@ -200,9 +200,8 @@ export function OpenOptions({ onClose, keys = WALK_KEYS, extraGame, inGarden = f
         game={<>
           <Toggle id="tooltips" label="Tooltips" sub="explanations on hover, and a warning before a buy that is not written for you" on={s.tooltips} onFlip={() => setSettings({ tooltips: !s.tooltips })} />
           {extraGame}
-          {/* M27: the party + friends (shared/play-together.tsx, mounted by the page's <OpenSocial/>) */}
-          <OptionRow onClick={() => { onClose(); setPlayTogether(true) }} label="⚑ Play together" tail="party · friends" />
         </>}
+        chord={<ChordTab />}   /* BETA M188 s1: the chord + friends (shared/play-together.tsx; the page's <OpenSocial/> holds the socket). Replaced the 'Play together' row */
         video={<>
           <OptionHead>View</OptionHead>
           <OptionSlider label="field of view" min={FOV_RANGE[0]} max={FOV_RANGE[1]} step={1} value={s.fov} onChange={v => setSettings({ fov: v })} format={v => `${Math.round(v)}°`} />

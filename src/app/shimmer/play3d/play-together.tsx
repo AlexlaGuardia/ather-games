@@ -64,7 +64,7 @@ function Dot({ on }: { on: boolean }) {
                style={{ background: on ? H.moss : 'rgba(58,39,22,.25)', boxShadow: on ? `0 0 4px ${H.moss}` : 'none' }} />
 }
 
-export function FriendsTab({ signedIn, friends, loaded, act, onInvite, inParty }: {
+export function FriendsTab({ signedIn, friends, loaded, act, onInvite, inParty, noun = 'party' }: {
   signedIn: boolean
   friends: FriendRow[]
   loaded: boolean
@@ -72,12 +72,14 @@ export function FriendsTab({ signedIn, friends, loaded, act, onInvite, inParty }
   /** invite this friend to your party (starting one if you have none); resolves to a short row note */
   onInvite: (f: FriendRow) => Promise<string>
   inParty: boolean
+  /** the group's word on screen: play3d says 'party', the open world says 'chord' (BETA M188, canon: a company of keepers) */
+  noun?: string
 }) {
   const [draft, setDraft] = useState('')
   const [note, setNote] = useState<string | null>(null)
   const [rowNote, setRowNote] = useState<Record<string, string>>({})
   if (!signedIn) {
-    return <div className="text-[12px] leading-snug hk-faint pt-3">Sign in on the Party tab to keep a friends list. A party link still works without one.</div>
+    return <div className="text-[12px] leading-snug hk-faint pt-3">Sign in on the {noun === 'party' ? 'Party' : 'Chord'} tab to keep a friends list. A {noun} link still works without one.</div>
   }
   const accepted = friends.filter(f => f.status === 'accepted').sort((a, b) => Number(!!b.online) - Number(!!a.online) || a.username.localeCompare(b.username))
   const incoming = friends.filter(f => f.status === 'pending' && f.incoming)
@@ -118,7 +120,7 @@ export function FriendsTab({ signedIn, friends, loaded, act, onInvite, inParty }
           <span className={`flex-1 truncate ${f.online ? '' : 'hk-soft'}`}>{f.username}</span>
           {rowNote[f.user_id] && <span className="text-[10px] hk-faint">{rowNote[f.user_id]}</span>}
           {f.online && (
-            <button className="hk-btn px-2.5 py-0.5 text-[12px]" title={inParty ? 'Invite to your party' : 'Start a party and invite them'}
+            <button className="hk-btn px-2.5 py-0.5 text-[12px]" title={inParty ? `Invite to your ${noun}` : `Start a ${noun} and invite them`}
                     onClick={() => void invite(f)}>Invite</button>
           )}
           <button className="hk-btn px-1.5 py-0.5 text-[11px]" title="Remove friend" aria-label={`Remove ${f.username}`}
@@ -143,11 +145,12 @@ export function FriendsTab({ signedIn, friends, loaded, act, onInvite, inParty }
 }
 
 /** "X invites you to their party" — over the world, wherever you are standing. */
-export function InvitePrompt({ invite, inParty, onJoin, onDismiss }: {
+export function InvitePrompt({ invite, inParty, onJoin, onDismiss, noun = 'party' }: {
   invite: PartyInvite
   inParty: boolean
   onJoin: () => void
   onDismiss: () => void
+  noun?: string
 }) {
   return (
     <div className="fixed left-1/2 -translate-x-1/2 top-16 z-[60] pointer-events-auto" data-panel="party-invite">
@@ -155,8 +158,8 @@ export function InvitePrompt({ invite, inParty, onJoin, onDismiss }: {
            style={{ ...hearthBody, background: 'linear-gradient(180deg, #fffaf0, #f6ead2)', boxShadow: '0 8px 20px rgba(58,39,22,.35), 0 1px 2px rgba(58,39,22,.3)' }}>
         <span className="text-[18px]" aria-hidden>👥</span>
         <div className="text-[13px] leading-snug">
-          <div className="font-extrabold">{invite.from_name} invites you to their party</div>
-          {inParty && <div className="text-[11px] hk-faint">You will leave the party you are in.</div>}
+          <div className="font-extrabold">{invite.from_name} invites you to their {noun}</div>
+          {inParty && <div className="text-[11px] hk-faint">You will leave the {noun} you are in.</div>}
         </div>
         <button className="hk-btn px-3 py-1 text-[12px] hk-fill-moss" onClick={onJoin}>Join</button>
         <button className="hk-btn px-3 py-1 text-[12px]" onClick={onDismiss}>Not now</button>
