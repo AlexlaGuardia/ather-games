@@ -15,11 +15,11 @@ const ok = (c: unknown, m: string) => { console.log(`${c ? '✓' : '✗'} ${m}`)
 const br = await puppeteer.launch({ protocolTimeout: 300000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--mute-audio'] })
 const REGION = { '/open/continent.json': 692973, '/open/continent.bin.gz': 2577643 } as Record<string, number>
 interface Sample { t: number; pct: number; bytes: number; dew: { l: number; r: number } | null; fruit: { l: number } | null; tip: { t: number; b: number; fs: number } | null; runTop: number; track: number; fruitId: string | null; canvas: boolean }
-async function watch(p: Page, region: boolean, until: number) {
+async function watch(p: Page, region: boolean, until: number, bps = 2_000_000) {
   await p.evaluate('window.__name = (f) => f')   // tsx wraps named arrows in __name(); the page has none
   const cdp = await p.createCDPSession()
   await cdp.send('Network.enable'); await cdp.send('Network.setCacheDisabled', { cacheDisabled: true })
-  await cdp.send('Network.emulateNetworkConditions', { offline: false, latency: 120, downloadThroughput: 2_000_000 / 8, uploadThroughput: 500_000 / 8 })
+  await cdp.send('Network.emulateNetworkConditions', { offline: false, latency: 120, downloadThroughput: bps / 8, uploadThroughput: 500_000 / 8 })
   const ids = new Map<string, string>(); let bytes = 0
   cdp.on('Network.requestWillBeSent', (e: any) => { const path = new URL(e.request.url).pathname; if (region ? REGION[path] : /\/open\/wilds\//.test(path)) ids.set(e.requestId, path) })
   cdp.on('Network.dataReceived', (e: any) => { if (ids.has(e.requestId)) bytes += e.dataLength })
@@ -93,7 +93,8 @@ for (const [vtag, vp] of [['390', phone], ['desktop', desk]] as const) {
   await p.goto(`${origin}/shimmer/open/ather?hour=14`, { waitUntil: 'domcontentloaded', timeout: 240000 })
   p.waitForFunction(() => Number((document.querySelector('[data-load-runner]') as HTMLElement | null)?.dataset.loadRunner) >= 30, { timeout: 120000, polling: 100 })
     .then(() => p.screenshot({ path: `${shots}/ather-resume-390-mid.png` })).catch(() => {})
-  const ss = await watch(p, false, 150000)
+  // 8 Mbps here: the resume veil has a 20 s cap (ather/page.tsx) that lifts it unfinished on a slower line (seen at 2 Mbps: 86%)
+  const ss = await watch(p, false, 150000, 8_000_000)
   const on = ss.filter(s => s.pct >= 0)
   ok(on.length >= 3, `ather resume: the loader was up (${on.length} samples, fruit ${on[0]?.fruitId})`)
   ok(on.map(s => s.pct).every((v, i, a) => i === 0 || v >= a[i - 1]) && new Set(on.map(s => s.pct).filter(v => v > 0 && v < 100)).size >= 3, `ather resume: % climbs with the tiles (${[...new Set(on.map(s => s.pct))].join(' ')})`)
