@@ -259,10 +259,16 @@ export const rigLook = (sp: Species, look: SpiritLook, on: boolean): SpiritLook 
 export type SpiritElement = 'mana' | 'storm' | 'earth' | 'water'
 export const SPIRIT_ELEMENTS: readonly SpiritElement[] = ['mana', 'storm', 'earth', 'water']
 export const FORM_GROW = 1.2
+// M202 v2 (Alex 11-26: "a little size increase as well since the awakened forms can get bigger than the player"): ONE SIZE DIAL
+// PER FORM, x her base's grown height; a form not listed draws FORM_GROW. Vulnore (v2, her own body: carapace, pillar legs,
+// docs/looks/m202-vulnore-v2-2026-11-26) 1.4: Vulnyx 0.70 -> ~0.99 m standing (a keeper is ~1.75 m). Her glb keeps the
+// Vulnyx's nose-to-tail and standing height in glb units, so the Vulnyx rig numbers (glbLen, clip speeds) still fit her.
+export const FORM_GROW_BY: Readonly<Record<string, number>> = { vulnore: 1.4 }
+export const formGrow = (name: string): number => FORM_GROW_BY[name] ?? FORM_GROW
 const secondForm = (sp: Species, form: SpiritElement, name: string, emissive: string, hull: string): SpiritLook => {
-  const b = SPIRIT_RIGS[sp]!
-  return { ...b, name, form, url: `/open/spirits/${name}-rigged.glb`, h: b.h * FORM_GROW, skin: { emissive, emissiveI: 0.14 }, hull: { color: hull, opacity: 0.38 },
-    trot: grownTrot(b.trot, b.h, b.h * FORM_GROW) }
+  const b = SPIRIT_RIGS[sp]!, g = formGrow(name)
+  return { ...b, name, form, url: `/open/spirits/${name}-rigged.glb`, h: b.h * g, skin: { emissive, emissiveI: 0.14 }, hull: { color: hull, opacity: 0.38 },
+    trot: grownTrot(b.trot, b.h, b.h * g) }
 }
 export const SECOND_FORMS: Partial<Record<Species, Record<SpiritElement, SpiritLook>>> = {
   fox: {
