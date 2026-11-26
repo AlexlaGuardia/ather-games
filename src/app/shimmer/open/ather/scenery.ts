@@ -29,7 +29,7 @@ export interface SceneryKind {
   k: string; group: SceneryGroup; label: string; sub?: BuildSub
   w: number; d: number; h: number; solid: boolean; floats?: true
   box?: { w: number; d: number; h: number }; panel?: boolean
-  arms?: readonly { x: number; z: number; w: number; d: number; h: number }[]; ends?: readonly (readonly [number, number])[]
+  arms?: readonly { x: number; z: number; w: number; d: number; h: number; ladder?: true }[]; ends?: readonly (readonly [number, number])[]
   model: { glb: string; fit: number; look?: string; yaw?: number; glow?: number } | { crystal: string } | { piece: string } | { filler: string } | { node: string } | { room: GladeRoom }
 }
 const words = (id: string) => { const s = id.replace(/[_-]+/g, ' '); return s[0].toUpperCase() + s.slice(1) }
@@ -175,7 +175,7 @@ export function sceneryBoxes(items: readonly PlacedProp[]): Box[] {
           return { x0: r.x0, x1: r.x1, z0: r.z0, z1: r.z1, y0: mid - e - 0.5, y1: mid + e + a.h * p.s } })
       }
       const rs = isWholeQ(p.q) ? [quadBounds(x, z, w, d, p.q)] : w >= d ? panelChain(x, z, w, d, p.q) : panelChain(x, z, d, w, p.q + 1)
-      return rs.map(r => ({ x0: r.x0, x1: r.x1, z0: r.z0, z1: r.z1, y0: p.y - 0.5, y1: p.y + a.h * p.s }))
+      return rs.map(r => ({ x0: r.x0, x1: r.x1, z0: r.z0, z1: r.z1, y0: p.y - 0.5, y1: p.y + a.h * p.s, ...(a.ladder ? { ladder: true as const } : {}) }))   // M169 s3b: Creative's ladder climbs too
     }))
     const b = K.box ?? K, w = b.w * p.s, d = b.d * p.s
     const ks = K.box ? [quadBounds(p.x, p.z, w, d, 0)] : K.panel && !isWholeQ(p.q) ? panelChain(p.x, p.z, w, d, p.q) : [quadBounds(p.x, p.z, w, d, p.q)]

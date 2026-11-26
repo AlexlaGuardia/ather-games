@@ -28,6 +28,8 @@ export const opens = (f: PieceDef | undefined) => f?.shape === 'door' || f?.shap
  *  RAMP_RISE), and the ONE rail style the stair's sides, the railing, the fence and the gate share (post, handrail, height) */
 export const STAIR = { steps: 12, rise: 0.4, tread: 0.5 } as const
 export const RAMP = { strips: 12, rise: 0.1 } as const
+/** M169 s3b: a ladder's two stiles and its rungs (a rung every `rung` m from the first one up) */
+export const LADDER = { stile: 0.07, rung: 0.3, rungT: 0.04 } as const
 export const RAIL = { h: 1.0, post: 0.1, hand: 0.1, handT: 0.06, bal: 0.04, low: 0.15, lowT: 0.05, mid: 0.55 } as const
 /** a stair step's local box: n = 1..steps from the bottom (+z end), climbing toward -z */
 export const stepZ = (f: Pick<PieceDef, 'd'>, n: number, tread: number) => f.d / 2 - (n - 0.5) * tread
@@ -105,6 +107,10 @@ function cutBoxes(f: PieceDef, open: boolean): PieceBox[] {
       const { strips, rise } = RAMP, run = d / strips
       for (let n = 1; n <= strips; n++) { const z = stepZ(f, n, run), top = n * rise; out.push(bx(0, top / 2, z, w - 0.12, top, run, c)); [-1, 1].forEach(k => out.push(bx(k * (w / 2 - 0.03), top / 2 + 0.02, z, 0.06, top + 0.04, run, tr))) }
       return out }
+    case 'ladder': {   // M169 s3b: two stiles the full height, a rung every LADDER.rung m between them
+      ;[-1, 1].forEach(k => out.push(bx(k * (w / 2 - LADDER.stile / 2), h / 2, 0, LADDER.stile, h, d, c)))
+      for (let y = LADDER.rung; y < h - 0.05; y += LADDER.rung) out.push(bx(0, y, 0, w - 2 * LADDER.stile, LADDER.rungT, LADDER.rungT, tr))
+      return out }
     case 'corner': {   // an L in a 1 x 1 m square: one arm along its back (local -z), one down its left (local -x), meeting in the corner
       const t = 0.3, H = h
       for (const [x, z, aw, ad] of [[0, -w / 2 + t / 2, w, t], [-w / 2 + t / 2, t / 2, t, d - t]] as const)
@@ -114,7 +120,8 @@ function cutBoxes(f: PieceDef, open: boolean): PieceBox[] {
   return out
 }
 /** a part of a piece that BLOCKS the walker: local middle (x, z), size w x d, h tall from the floor */
-export interface SolidPart { x: number; z: number; w: number; d: number; h: number }
+/** `ladder`: M169 s3b: the walker climbs this box (terrain-world ladderAt; it still blocks like any part) */
+export interface SolidPart { x: number; z: number; w: number; d: number; h: number; ladder?: true }
 /** M169 s2: what of a cut piece blocks (null = not a cut piece: its whole footprint, the old rule). A shut door's leaves block the
  *  whole doorway; an open door, a doorway or an arch blocks nothing (the lintel is over a keeper's head). A window is a wall. */
 export function buildSolids(f: PieceDef, open = false): SolidPart[] | null {
@@ -126,6 +133,7 @@ export function buildSolids(f: PieceDef, open = false): SolidPart[] | null {
       for (let n = 1; n <= STAIR.steps; n++) { const z = stepZ(f, n, STAIR.tread), top = n * STAIR.rise
         out.push({ x: 0, z, w: f.w, d: STAIR.tread, h: top }); for (const k of railSides(f)) out.push({ x: railX(f, k), z, w: RAIL.post, d: STAIR.tread, h: top + RAIL.h }) }
       return out }
+    case 'ladder': return [{ x: 0, z: 0, w: f.w, d: f.d, h: f.h, ladder: true }]   // M169 s3b: one thin box, climbed from either face
     case 'ramp': return Array.from({ length: RAMP.strips }, (_, i) => ({ x: 0, z: stepZ(f, i + 1, f.d / RAMP.strips), w: f.w, d: f.d / RAMP.strips, h: (i + 1) * RAMP.rise }))
     case 'gate': return open ? [-1, 1].map(k => ({ x: k * (f.w / 2 - RAIL.post / 2), z: 0, w: RAIL.post, d: f.d, h: f.h })) : [{ x: 0, z: 0, w: f.w, d: f.d, h: f.h }]
     case 'corner': return [{ x: 0, z: -f.w / 2 + 0.15, w: f.w, d: 0.3, h: f.h }, { x: -f.w / 2 + 0.15, z: 0.15, w: 0.3, d: f.d - 0.3, h: f.h }]

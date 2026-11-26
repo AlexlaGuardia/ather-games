@@ -13,12 +13,13 @@
 // world without cells, never a new number.
 
 import {
-  BODY_R, BODY_H, VAULT_REACH, MANTLE_REACH,
+  BODY_R, BODY_H, VAULT_REACH, MANTLE_REACH, LADDER_REACH,
   type LocoWorld, type CellProbe, CELL_SOLID, CELL_WATER, CELL_HALF,
 } from './shared/locomotion'
 
 /** Half-open in every axis: a point is inside when x0 <= x < x1 (the voxel cell's own rule). */
-export interface Box { x0: number; y0: number; z0: number; x1: number; y1: number; z1: number }
+/** `ladder`: M169 s3b: a box the walker climbs (it still blocks like any box): `ladderAt` below. */
+export interface Box { x0: number; y0: number; z0: number; x1: number; y1: number; z1: number; ladder?: true }
 
 export interface Shape {
   /** Height of the land at (x, z); -Infinity where there is none. */
@@ -143,6 +144,23 @@ export function terrainWorld(shape: Shape): LocoWorld {
         return { x: x + dx * 0.25, y: top, z: z + dz * 0.25 }
       }
       return null
+    },
+
+    // M169 s3b: the nearest `ladder` box the body touches (within LADDER_REACH of its side), its feet between its foot and its top.
+    // A ladder is climbed across its THIN side, from either face; (nx, nz) points from the body at it.
+    ladderAt(px, pz, feetY) {
+      const reach = BODY_R + LADDER_REACH
+      let best: { top: number; nx: number; nz: number; over: number } | null = null, bd = Infinity
+      for (const b of shape.solids(px - reach, feetY - 0.2, pz - reach, px + reach, feetY + 0.2, pz + reach)) {
+        if (!b.ladder || feetY < b.y0 - 0.1 || feetY > b.y1 + 0.05) continue
+        const d = Math.hypot(px - Math.min(b.x1, Math.max(b.x0, px)), pz - Math.min(b.z1, Math.max(b.z0, pz)))
+        if (d > reach || d >= bd) continue
+        const thinX = b.x1 - b.x0 <= b.z1 - b.z0
+        const nx = thinX ? ((b.x0 + b.x1) / 2 >= px ? 1 : -1) : 0, nz = thinX ? 0 : ((b.z0 + b.z1) / 2 >= pz ? 1 : -1)
+        const over = thinX ? (nx > 0 ? b.x1 - px : px - b.x0) : (nz > 0 ? b.z1 - pz : pz - b.z0)
+        best = { top: b.y1, nx, nz, over }; bd = d
+      }
+      return best
     },
   }
 }

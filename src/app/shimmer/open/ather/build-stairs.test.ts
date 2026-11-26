@@ -20,7 +20,7 @@ const STAIRS = ['stair', 'stair_rail_left', 'stair_rail_right', 'stair_railed'],
 const cat = Object.fromEntries(buildCatalog().map(g => [g.sub, g.ids]))
 ok(J(cat.Stairs) === J(STAIRS), `Stairs (${cat.Stairs})`)
 ok(J(cat['Railings + fences']) === J(RAILS), `Railings + fences (${cat['Railings + fences']})`)
-ok(J(cat['Ramps + ladders']) === J(['ramp']), `Ramps + ladders (${cat['Ramps + ladders']})`)
+ok(J(cat['Ramps + ladders']) === J(['ramp', 'ladder']), `Ramps + ladders (${cat['Ramps + ladders']})`)   // s3b: + the ladder (build-ladder.test)
 for (const id of NEW) ok(SCENERY_BY.get(`piece:${id}`)?.group === 'Build' && SCENERY_BY.get(`piece:${id}`)?.sub === FURNITURE[id].build, `${id}: in Creative's Build, same sub-category`)
 
 // ── sizes: the stair climbs the 4.8 m wall top in steps the walker takes (rise <= 0.5); NOTES: 0.5 m deep, 2 m wide, 6 m long ──

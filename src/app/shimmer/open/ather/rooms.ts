@@ -487,7 +487,7 @@ export function partBoxes(parts: readonly SolidPart[], x: number, z: number, q: 
   const a = (q * Math.PI) / 2, c = Math.cos(a), s = Math.sin(a)
   return parts.flatMap(t => { const px = x + t.x * c - t.z * s, pz = z + t.x * s + t.z * c
     const rs = isWholeQ(q) ? [quadBounds(px, pz, t.w, t.d, q)] : t.w >= t.d ? panelChain(px, pz, t.w, t.d, q) : panelChain(px, pz, t.d, t.w, q + 1)
-    return rs.map(k => ({ x0: k.x0, x1: k.x1, z0: k.z0, z1: k.z1, y0: base - 0.5, y1: base + t.h })) })
+    return rs.map(k => ({ x0: k.x0, x1: k.x1, z0: k.z0, z1: k.z1, y0: base - 0.5, y1: base + t.h, ...(t.ladder ? { ladder: true as const } : {}) })) })   // M169 s3b: a ladder stays a ladder to the walker
 }
 /** one placed piece's walker boxes on a floor at `base` (rooms + Creative zones share it: zone-parts.ts) */
 export function onePieceBoxes(p: Pick<Piece, 'item' | 'x' | 'z' | 'q' | 'open'>, base: number): Box[] {

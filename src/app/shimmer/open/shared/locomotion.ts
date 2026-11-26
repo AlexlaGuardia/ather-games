@@ -131,6 +131,15 @@ export const FALL_OFF = 0.55
 export const CLIMB_SPEED = 2.5
 export const CLIMB_STRAFE = 1.6
 export const CLIMB_MAX_RISE = 2.5
+// ── ★ LADDERS (BETA M169 s3b, Alex 11-25 'yes': "walk into a ladder and climb it to any height, on and off at the top and the bottom,
+// phone too") ── A ladder is NOT the grip climb above: no Space, no CLIMB_MAX_RISE budget, no wall-catch. Walking INTO it (the
+// joystick or W, nothing else) takes hold and climbs; walking away climbs down; at the bottom that walks off; at the top, walking on
+// steps over it onto what it leans on, and walking toward it from up there swings onto it. Space lets go (a small kick back off it).
+// Only a world that answers `ladderAt` has ladders, so every other world (the voxel oracle, the server) ticks byte-for-byte as before.
+export const LADDER_SPEED = CLIMB_SPEED   // 4.8 m in ~2 s
+export const LADDER_PUSH = 0.3            // how much of the wish must point at / away from the ladder to climb (a sideways walk passes by)
+export const LADDER_REACH = 0.15          // past the body's radius, how near the ladder counts as touching it
+export const LADDER_LOCK = 0.35           // after letting go, the same ladder does not take hold again at once
 export const MANTLE_REACH = 1.4
 export const WALLJUMP_UP = 7.0
 /** FLOOR on the kick's speed, not the kick's speed. See `kickOffWall`. */
@@ -365,6 +374,8 @@ export interface LocoState {
   /** Seconds of Hollow-drain left on the keeper. While positive her run is capped to
    *  `DRAINED_SPEED`. The host sets it on contact; locomotion only spends it. */
   drainT: number
+  /** M169 s3b: on a ladder (the ladder rule owns the tick); `ladderLock` = seconds before a ladder takes hold again after a let-go */
+  onLadder?: boolean; ladderLock?: number
 }
 
 /** Where the camera goes. The one place the step-smoothing offset is applied, so a new call site
@@ -517,6 +528,10 @@ export interface LocoWorld {
   vaultTarget(px: number, pz: number, feetY: number, dx: number, dz: number): { x: number; y: number; z: number } | null
   /** A standable lip within grab reach on the wall along (dx, dz): where the hands go, or null. */
   lipAt(px: number, pz: number, feetY: number, dx: number, dz: number): { x: number; y: number; z: number } | null
+  /** M169 s3b (optional: a world without it has no ladders): the ladder the body at these feet touches, or null. (nx, nz) = the
+   *  cardinal direction from the body to it; `top` = its top (the feet's highest rung); `over` = how far from the body's centre its
+   *  far face is along (nx, nz). */
+  ladderAt?(px: number, pz: number, feetY: number): { top: number; nx: number; nz: number; over: number } | null
 }
 
 /** The voxel grid as a LocoWorld — the walker's original queries, unchanged. */
@@ -694,6 +709,51 @@ export function tickLocomotion(s: LocoState, input: LocoInput, world: CellProbe 
     if (s.kickArmed && jumpKey) { s.jumpHeld = false; s.coyoteT = COYOTE_TIME }
   }
   s.kickArmed = false
+
+  // ── ★ LADDERS (M169 s3b; the rule is written at LADDER_SPEED above) ───────────────────────────
+  if (s.ladderLock) s.ladderLock = Math.max(0, s.ladderLock - dt)
+  const lad = w.ladderAt && !s.ladderLock ? w.ladderAt(s.px, s.pz, s.py) : null
+  if (!lad) s.onLadder = false
+  else {
+    const push = mvX * lad.nx + mvZ * lad.nz
+    const off = (feet: number) => {   // let go, standing
+      s.onLadder = false; s.climbing = false; s.airborne = false; s.py = feet; s.vy = 0; s.hvx = 0; s.hvz = 0
+      s.coyoteT = COYOTE_TIME; s.airJumps = 0; s.jumpHeld = jumpKey; s.eye += (EYE_STAND - s.eye) * 0.25
+    }
+    if (!s.onLadder && push > LADDER_PUSH) {
+      if (s.py >= lad.top - 0.1) {   // on what it leans on, at the top, walking toward it: swing over onto it, just under the top rung
+        const tx = s.px + lad.nx * (lad.over + BODY_R + 0.05), tz = s.pz + lad.nz * (lad.over + BODY_R + 0.05)
+        if (!s.airborne && w.bodyFree(tx, tz, lad.top - 0.05)) { s.px = tx; s.pz = tz; s.py = lad.top - 0.05; s.onLadder = true }
+      } else s.onLadder = true       // walked (or fell) into it below the top: take hold
+    }
+    if (s.onLadder) {
+      s.sliding = false; s.slideT = 0; s.crouching = false; s.skidding = false; s.onWall = false; s.wallStick = 0; s.wallCatchT = 0
+      s.hanging = false; s.mantleT = 0; s.vaulting = false; s.sprintT = 0; s.airSpeed = 0
+      if (jumpKey && !s.jumpHeld) {   // Space: let go with a small kick back off it
+        s.onLadder = false; s.climbing = false; s.ladderLock = LADDER_LOCK; s.airborne = true
+        s.hvx = -lad.nx * WALK_SPEED * 0.5; s.hvz = -lad.nz * WALK_SPEED * 0.5; s.vy = JUMP_V0 * 0.5; s.airSpeed = WALK_SPEED * 0.5
+        s.jumpHeld = true; return
+      }
+      s.jumpHeld = jumpKey; s.climbing = true; s.airborne = false; s.vy = 0; s.hvx = 0; s.hvz = 0; s.coyoteT = 0
+      s.eye += (EYE_STAND - s.eye) * 0.25
+      const v = push > LADDER_PUSH ? LADDER_SPEED : push < -LADDER_PUSH ? -LADDER_SPEED : 0
+      let ny = Math.min(lad.top, s.py + v * dt)
+      if (v > 0 && ny >= lad.top) {   // the top: walking on steps over it onto what it leans on (nothing there: she waits on the top rung)
+        for (const extra of [0.05, 0.3, 0.6]) {
+          const tx = s.px + lad.nx * (lad.over + BODY_R + extra), tz = s.pz + lad.nz * (lad.over + BODY_R + extra)
+          const f = w.floorAt(tx, tz, lad.top + 0.05, 0.3)
+          if (f !== null && f >= lad.top - 0.3 && w.bodyFree(tx, tz, f)) { s.px = tx; s.pz = tz; off(f); return }
+        }
+      }
+      if (v < 0) {   // the bottom: the floor under her takes her feet and she walks off
+        const f = w.floorAt(s.px, s.pz, s.py, 0.05)
+        if (f !== null && ny <= f + 0.02) { off(f); return }
+      }
+      if (v > 0 && !w.bodyFree(s.px, s.pz, ny)) ny = s.py   // a roof over the ladder
+      s.py = ny
+      return
+    }
+  }
 
   // ── crouch / slide ──────────────────────────────────────────────────────────────────────────
   const curSpeed = Math.hypot(s.hvx, s.hvz)

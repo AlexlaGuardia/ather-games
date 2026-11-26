@@ -76,7 +76,7 @@ export interface PieceDef {
    *  blocks). 'door' and 'shutters' OPEN and SHUT on E on a plot (rooms.ts toggleOpen; Piece.open). Sizes: athernyx concept-1672
    *  building + textures NOTES (Magii 246c2cc / 9c9e688): doorway 2 x 2.2 m, leaves 0.94 x 2.14, window band 1.0 to 2.2 m, round
    *  pane 0.9 m at 1.6 m, shutter leaves 0.5 x 1.2 m, half wall = the railing's 1.0 m. Each stands on the 4.8 m wall panel grid. */
-  shape?: 'door' | 'window' | 'round' | 'shutters' | 'arch' | 'doorway' | 'half' | 'end' | 'corner' | 'stair' | 'railing' | 'fence' | 'gate' | 'ramp'
+  shape?: 'door' | 'window' | 'round' | 'shutters' | 'arch' | 'doorway' | 'half' | 'end' | 'corner' | 'stair' | 'railing' | 'fence' | 'gate' | 'ramp' | 'ladder'
   /** BETA M169 s3: a stair's railings: on its left ('l'), its right ('r') or both ('lr'), as seen climbing it. Absent = none. */
   rails?: 'l' | 'r' | 'lr'
   /** M110 s1: a TRAINING piece: party spirits may play at it as they please (spirit-trot.ts PLAY), each play nudging this ONE
@@ -159,6 +159,9 @@ export const FURNITURE: Readonly<Record<string, PieceDef>> = {
   fence: { name: 'Fence', blurb: 'Two metres of goldwood fence, posts and rails.', recipe: [{ id: 'goldwood_plank', n: 2 }], w: 2, d: 0.12, h: 1.04, solid: true, wood: 'goldwood', shape: 'fence', build: 'Railings + fences' },
   fence_gate: { name: 'Fence gate', blurb: 'A goldwood gate between two fence posts. It opens and shuts.', recipe: [{ id: 'goldwood_plank', n: 2 }], w: 1, d: 0.12, h: 1.04, solid: true, wood: 'goldwood', shape: 'gate', build: 'Railings + fences' },
   ramp: { name: 'Ramp', blurb: 'A goldwood slope, two metres wide, up to a deck or a doorstep.', recipe: [{ id: 'goldwood_plank', n: 10 }], w: 2, d: 4, h: 1.2, solid: true, wood: 'goldwood', shape: 'ramp', build: 'Ramps + ladders' },
+  // BETA M169 s3b (Alex 11-25 'yes'): a ladder up to the 4.8 m wall top; walk into it and you climb it (shared/locomotion.ts ladder
+  //    rule), on and off at the top and the bottom. Cost (Jin's): 4 planks (two stiles, sixteen rungs; a stair's 12 is a staircase).
+  ladder: { name: 'Ladder', blurb: 'A goldwood ladder up to the top of a wall.', recipe: [{ id: 'goldwood_plank', n: 4 }], w: 0.6, d: 0.1, h: 4.8, solid: true, wood: 'goldwood', shape: 'ladder', build: 'Ramps + ladders' },
   lift: { name: 'Lift', blurb: 'A goldwood car on cords, a stone weight hung beside it. Pull the cord for a floor and up or down you go.', recipe: [{ id: 'goldwood_plank', n: 8 }, { id: 'stone_brick', n: 4 }], w: 1.0, d: 1.0, h: 2.0, solid: false, wood: 'goldwood', shaft: true },
   // ── UNIQUE pieces, Nyx-side (Alex 11-17: "unique pieces are SOLD FOR MARKS by the carpenter + other Nyx-side shops";
   //    Magii c52ba1c: which shops stock decor is ours, no new names). Made of the continent's canon goods (game/economy.md:
