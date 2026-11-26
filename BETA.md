@@ -260,6 +260,7 @@ Steps (one worker each, in order; each keeps `beta-m7-saves` green):
 - **Rules:** only rows on this list. No new systems, no lore, nothing public. Canon gate + tests before every build.
 
 ## Inbox (Alex's brain dump: hub writes here at once, dated, his words; triaged into rows / queue / CANON_GAPS / killed)
+- 11-26 12:4x Alex: 'the backbone is good.. we will have to do it all over once we get the guns remodeled.. actually i think we should remodel them as we do the testing like the back bone and the spitter im doing now and im ready to tweak their placements here in the gun tuner but the aim toggle isnt showing for the new backbone' (Roar/Charred hold follow-up DROPPED: guns get remodelled as tested)
 - 11-26 12:0x Alex: 'the sound in the game is missing.. and i dont think its me but im not sure' -> M186 s2 (likely: a pad press is not a browser user gesture, and M186 hides the Click-to-play card, so audio never unlocks)
 - 11-26 11:5x Alex: 'im not a fan of the mana seeps.. im not sure how to explain the spiderweby crystal structure im picturing but the puddle aint it lol' -> M185 s2 look REJECTED; concept options via Magii
 - 11-26 11:3x Alex: 'when the mouse takes over i need a courser to move around with the mouse as well' -> M186 s2
