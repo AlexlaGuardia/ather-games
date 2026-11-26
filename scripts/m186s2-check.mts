@@ -47,28 +47,36 @@ async function open(vp: string, w: number, h: number, pad: boolean) {
     }
     W.__raf = 0; const loop = () => { W.__raf++; requestAnimationFrame(loop) }; requestAnimationFrame(loop)
   }, { TUT, pad } as any)
-  return { br, p, errs, phone }
+  // ⚠ puppeteer's page.evaluate runs WITH a user gesture (Runtime.callFunctionOn userGesture: true), which itself unlocks
+  // audio and would fake a pad-only start. Every read and every fake-pad write goes through Runtime.evaluate WITHOUT one.
+  const cdp = await p.createCDPSession()
+  const ev = async (fn: any, ...args: any[]): Promise<any> => {
+    const r: any = await cdp.send('Runtime.evaluate', { expression: `(${fn.toString()})(...${JSON.stringify(args)})`, returnByValue: true, awaitPromise: true, userGesture: false })
+    if (r.exceptionDetails) throw new Error(String(r.exceptionDetails.exception?.description ?? r.exceptionDetails.text).slice(0, 200))
+    return r.result.value
+  }
+  return { br, p, errs, phone, ev }
 }
 
 for (const [vp, w, h] of (phoneOnly ? [['phone', 390, 844]] : deskOnly ? [['desktop', 1100, 700]] : [['phone', 390, 844], ['desktop', 1100, 700]]) as [string, number, number][]) {
-  const { br, p, errs, phone } = await open(vp, w, h, true)
+  const { br, p, errs, phone, ev } = await open(vp, w, h, true)
   try {
     const poll = async (fn: () => Promise<boolean>, ms = 20000) => { const t = Date.now(); while (Date.now() - t < ms) { if (await fn().catch(() => false)) return true; await sleep(200) } return false }
-    const frames = async (n: number) => { const f0 = await p.evaluate(() => (window as any).__raf); await poll(() => p.evaluate((f, n) => (window as any).__raf >= f + n, f0, n), 30000) }
-    const press = async (b: keyof typeof BTN, ms = 120) => { await p.evaluate(i => (window as any).__fake.set(i, true), BTN[b]); await sleep(ms); await p.evaluate(i => (window as any).__fake.set(i, false), BTN[b]); await sleep(150); await frames(2) }
-    const axes = (a: number[]) => p.evaluate(a => (window as any).__fake.axes(a), a)
-    const steps = () => p.evaluate(() => (window as any).__sfx?.asked?.()['step-grass'] ?? 0)
-    const ac = () => p.evaluate(() => { const a = (window as any).__acs as AudioContext[]; return { n: a.length, st: a.map(c => c.state).join(','), t: a[0]?.currentTime ?? 0, act: (navigator as any).userActivation?.hasBeenActive ?? null } })
+    const frames = async (n: number) => { const f0 = await ev(() => (window as any).__raf); await poll(() => ev((f, n) => (window as any).__raf >= f + n, f0, n), 30000) }
+    const press = async (b: keyof typeof BTN, ms = 120) => { await ev(i => (window as any).__fake.set(i, true), BTN[b]); await sleep(ms); await ev(i => (window as any).__fake.set(i, false), BTN[b]); await sleep(150); await frames(2) }
+    const axes = (a: number[]) => ev(a => (window as any).__fake.axes(a), a)
+    const steps = () => ev(() => (window as any).__sfx?.asked?.()['step-grass'] ?? 0)
+    const ac = () => ev(() => { const a = (window as any).__acs as AudioContext[]; return { n: a.length, st: a.map(c => c.state).join(','), t: a[0]?.currentTime ?? 0, act: (navigator as any).userActivation?.hasBeenActive ?? null } })
     const walk = async (ms: number) => { await axes([0, -1, 0, 0]); await sleep(ms); await axes([0, 0, 0, 0]); await frames(3) }
-    const note = () => p.evaluate(() => { const e = document.querySelector('[data-audio-locked]') as HTMLElement | null; return e ? e.innerText : null })
-    const cursor = () => p.evaluate(() => getComputedStyle(document.querySelector('canvas') ?? document.body).cursor)
+    const note = () => ev(() => { const e = document.querySelector('[data-audio-locked]') as HTMLElement | null; return e ? e.innerText : null })
+    const cursor = () => ev(() => getComputedStyle(document.querySelector('canvas') ?? document.body).cursor)
 
     await p.goto(`${url}/shimmer/open/ather?hour=13&waymark=greg`, { waitUntil: 'load', timeout: 240000 })
-    ok(await poll(() => p.evaluate(() => (window as any).__ather?.zone?.() === 'wilds' && !!(window as any).__pad), 240000), `${vp}: in the Wilds, the pad bridge mounted`)
+    ok(await poll(() => ev(() => (window as any).__ather?.zone?.() === 'wilds' && !!(window as any).__pad), 240000), `${vp}: in the Wilds, the pad bridge mounted`)
     await sleep(5000)
     // A: pad only
     await press('R3')
-    ok(await poll(() => p.evaluate(() => (window as any).__pad.kind() === 'playstation')), `${vp}: A. the pad is in use`)
+    ok(await poll(() => ev(() => (window as any).__pad.kind() === 'playstation')), `${vp}: A. the pad is in use`)
     const s0 = await steps(); await walk(2500)
     const a0 = await ac()
     ok(await steps() > s0, `${vp}: A. the pad walks and a footstep is asked for (${s0} -> ${await steps()})`)
@@ -83,31 +91,31 @@ for (const [vp, w, h] of (phoneOnly ? [['phone', 390, 844]] : deskOnly ? [['desk
     await sleep(400)
     ok(await note() === null, `${vp}: A. the note is gone ("${await note()}")`)
     const s1 = await steps(), t1 = (await ac()).t; await walk(2500)
-    const played = await p.evaluate(() => (window as any).__sfx?.played?.()['step-grass'] ?? 0)
+    const played = await ev(() => (window as any).__sfx?.played?.()['step-grass'] ?? 0)
     ok(await steps() > s1 && (await ac()).t > t1 + 0.5 && played > 0, `${vp}: A. a footstep plays on a running clock (asked ${s1} -> ${await steps()}, played ${played}, clock ${t1.toFixed(1)} -> ${(await ac()).t.toFixed(1)})`)
     if (!phone) {
       // B: cursor hand-over
-      if (await p.evaluate(() => !!document.pointerLockElement)) { await p.keyboard.press('Escape'); await sleep(600) }
+      if (await ev(() => !!document.pointerLockElement)) { await p.keyboard.press('Escape'); await sleep(600) }
       await press('R3'); await sleep(300)
-      ok(await cursor() === 'none' && await p.evaluate(() => (window as any).__pad.kind()) === 'playstation', `${vp}: B. with the pad the cursor is hidden (${await cursor()})`)
+      ok(await cursor() === 'none' && await ev(() => (window as any).__pad.kind()) === 'playstation', `${vp}: B. with the pad the cursor is hidden (${await cursor()})`)
       await p.mouse.move(200, 200); await p.mouse.move(260, 240, { steps: 4 }); await sleep(400)
       ok(await cursor() !== 'none', `${vp}: B. the mouse moves -> a cursor (${await cursor()})`)
-      ok(await p.evaluate(() => (window as any).__pad.kind()) === null && !(await p.$('[data-pad-hint]')), `${vp}: B. the mouse took over: no pad chip`)
-      ok(await p.evaluate(() => document.body.innerText.includes('Click to play')), `${vp}: B. Click to play is back`)
+      ok(await ev(() => (window as any).__pad.kind()) === null && !(await ev(() => !!document.querySelector('[data-pad-hint]'))), `${vp}: B. the mouse took over: no pad chip`)
+      ok(await ev(() => document.body.innerText.includes('Click to play')), `${vp}: B. Click to play is back`)
       await press('R3'); await sleep(300)
-      ok(await cursor() === 'none' && await p.evaluate(() => (window as any).__pad.kind()) === 'playstation', `${vp}: B. a pad press -> hidden again (${await cursor()})`)
+      ok(await cursor() === 'none' && await ev(() => (window as any).__pad.kind()) === 'playstation', `${vp}: B. a pad press -> hidden again (${await cursor()})`)
     }
     // C: Greg's prompt names the pad's button
-    await p.evaluate(() => (window as any).__ather.travel({ kind: 'glade' }))
-    ok(await poll(() => p.evaluate(() => (window as any).__ather.zone() === 'glade' && !!(window as any).__greg), 120000), `${vp}: C. in the Glade`); await sleep(4000)
-    const near = () => p.evaluate(() => (window as any).__ather?.near?.()?.kind ?? null)
-    const at = async (x: number, z: number, yaw: number) => { await poll(() => p.evaluate(() => !!(window as any).__ather?.gladeAt), 30000); return p.evaluate((x, z, y) => (window as any).__ather.gladeAt(x, z, y), x, z, yaw) }
-    const greg = await p.evaluate(() => { const g = (window as any).__greg; const v = typeof g === 'function' ? g() : typeof g.at === 'function' ? g.at() : g; return { x: v.x, z: v.z } })
+    await ev(() => (window as any).__ather.travel({ kind: 'glade' }))
+    ok(await poll(() => ev(() => (window as any).__ather.zone() === 'glade' && !!(window as any).__greg), 120000), `${vp}: C. in the Glade`); await sleep(4000)
+    const near = () => ev(() => (window as any).__ather?.near?.()?.kind ?? null)
+    const at = async (x: number, z: number, yaw: number) => { await poll(() => ev(() => !!(window as any).__ather?.gladeAt), 30000); return ev((x, z, y) => (window as any).__ather.gladeAt(x, z, y), x, z, yaw) }
+    const greg = await ev(() => { const g = (window as any).__greg; const v = typeof g === 'function' ? g() : typeof g.at === 'function' ? g.at() : g; return { x: v.x, z: v.z } })
     let faced = false
     for (const d of [2, 1.6, 2.4]) { for (let i = 0; i < 12 && !faced; i++) { const a = i * Math.PI / 6; await at(greg.x + Math.sin(a) * d, greg.z + Math.cos(a) * d, a); faced = await poll(async () => (await near()) === 'greg', 2500) } if (faced) break }
     ok(faced, `${vp}: C. stood before Greg`)
     await press('R3')
-    const promptHas = (s: string) => p.evaluate(s => document.body.innerText.includes(s), s)
+    const promptHas = (s: string) => ev(s => document.body.innerText.includes(s), s)
     ok(await poll(() => promptHas('□ · Gregory'), 15000) && !(await promptHas('E · Gregory')), `${vp}: C. with the pad the prompt says '□ · Gregory'`)
     if (phone) await p.touchscreen.tap(w / 2, 120)
     else { await p.mouse.move(300, 300); await p.mouse.move(340, 320, { steps: 3 }) }
@@ -119,16 +127,16 @@ for (const [vp, w, h] of (phoneOnly ? [['phone', 390, 844]] : deskOnly ? [['desk
 }
 // D: keyboard only
 if (!phoneOnly) {
-  const { br, p, errs } = await open('desktop', 1100, 700, false)
+  const { br, p, errs, ev } = await open('desktop', 1100, 700, false)
   try {
     const poll = async (fn: () => Promise<boolean>, ms = 20000) => { const t = Date.now(); while (Date.now() - t < ms) { if (await fn().catch(() => false)) return true; await sleep(200) } return false }
     await p.goto(`${url}/shimmer/open/ather?hour=13&waymark=greg`, { waitUntil: 'load', timeout: 240000 })
-    ok(await poll(() => p.evaluate(() => (window as any).__ather?.zone?.() === 'wilds'), 240000), `keys: in the Wilds`)
+    ok(await poll(() => ev(() => (window as any).__ather?.zone?.() === 'wilds'), 240000), `keys: in the Wilds`)
     await sleep(5000)
     await p.keyboard.down('KeyW'); await sleep(3000); await p.keyboard.up('KeyW'); await sleep(500)
-    const r = await p.evaluate(() => ({ st: ((window as any).__acs as AudioContext[]).map(c => c.state).join(','), played: (window as any).__sfx?.played?.()['step-grass'] ?? 0 }))
+    const r = await ev(() => ({ st: ((window as any).__acs as AudioContext[]).map(c => c.state).join(','), played: (window as any).__sfx?.played?.()['step-grass'] ?? 0 }))
     ok(r.st.length > 0 && r.st.split(',').every(s => s === 'running') && r.played > 0, `keys: a keyboard-only start has sound (${JSON.stringify(r)})`)
-    ok(!(await p.$('[data-audio-locked]')), `keys: no 'sound is off' note`)
+    ok(!(await ev(() => !!document.querySelector('[data-audio-locked]'))), `keys: no 'sound is off' note`)
     ok(errs.length === 0, `keys: 0 page errors ${errs.slice(0, 2).join(' | ')}`)
   } catch (e) { ok(false, `keys: threw ${String(e).slice(0, 300)}`) }
   await br.close()
