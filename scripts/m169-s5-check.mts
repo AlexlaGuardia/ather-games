@@ -150,7 +150,7 @@ async function run(PHONE: boolean) {
   { const f = one('porch'); await tpTo(f.x, f.z - 3.5); const g0 = (await me()).y; const m = await hold('s', m => m.z > f.z - 0.2, 4000)   // from behind (the deck is in front)
     ok(Math.abs(m.y - g0) < 0.05 && m.z < f.z - 0.9, `4. ${N}: with no step a porch's 0.6 m stops her (feet +${(m.y - g0).toFixed(2)}, z ${(m.z - f.z).toFixed(2)})`) }
   // 5: up the ladder, off onto the balcony, to its far rail; she stands there
-  { const L = one('ladder'), B = one('balcony'); await tpTo(L.x, L.z + 2); const g0 = (await me()).y
+  { const L = one('ladder'), B = one('balcony'); await tpTo(L.x - 0.5, L.z + 1.4); const g0 = (await me()).y
     let m = await hold('w', m => m.lad && m.y - g0 > 4.1, 40000)
     ok(m.lad && m.y - g0 > 4.1, `5. ${N}: she climbs the ladder (feet +${(m.y - g0).toFixed(2)})`)
     m = await hold('w', m => !m.lad && m.z < B.z - 0.2, 6000); await p.keyboard.down('w'); await sleep(2000); await p.keyboard.up('w'); await sleep(600); m = await me()
