@@ -279,6 +279,7 @@ Steps (one worker each, in order; each keeps `beta-m7-saves` green):
 - **Rules:** only rows on this list. No new systems, no lore, nothing public. Canon gate + tests before every build.
 
 ## Inbox (Alex's brain dump: hub writes here at once, dated, his words; triaged into rows / queue / CANON_GAPS / killed)
+- 11-26 14:5x Alex on Vulnarc v2: 'Approved' -> Vulnarc ✅ look (paler than art kept); Vulnix next
 - 11-26 15:0x Alex: 'lets talk about the center green this needs to be an established place.. the Main gate at the center with a chordstone.. here should be where the player respawns and lands on arrival.. and if more keepers join the cluster they use the hosts center green as their own' -> M208
 - 11-26 14:5x Alex: Tidepetal + Violetbloom stay as finds, kept for later recipes (M204 s3 found recipes / third-form dishes)
 - 11-26 14:3x Alex on Vulnara v2: 'Approved on to the next' -> Vulnara ✅ look; Vulnarc next
