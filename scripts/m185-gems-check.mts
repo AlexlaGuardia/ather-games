@@ -101,6 +101,10 @@ for (const [vp, w, h] of (phoneOnly ? [['phone', 390, 844]] : deskOnly ? [['desk
   ok(pn?.rows.filter(r => !/Mana Seep:/.test(r)).join() === 'Raw Mana:6:ok,Aqual:12:ok,Dinloid:12:ok,Fuli:300:slow,Rhyloid:300:slow,Pure Mana Core:300:slow,Ather Crystal:1400:weak', `${vp}: Goldwood rows ${pn?.rows.join()}`)
   if (process.env.SHOT_DIR) await p.screenshot({ path: `${process.env.SHOT_DIR}/m185-panel-${vp}.png` }).catch(() => {})
   await p.keyboard.press('Escape'); await sleep(500)
+  // the Escape that shuts the panel can also open Options (no pointer lock headless), and Options FREEZES the game: a channel
+  // then never drains (the s1/s2 '+0' wall, found 11-26 s2b). Shut it the way a player would, and prove it is shut.
+  for (let i = 0; i < 4 && await p.evaluate(() => /Resume[\s\S]{0,40}Tooltips/.test(document.body.innerText)); i++) { await p.keyboard.press('Escape'); await sleep(600) }
+  ok(!(await p.evaluate(() => /Resume[\s\S]{0,40}Tooltips/.test(document.body.innerText))), `${vp}: Options is shut before the Wilds (an open menu freezes the game)`)
 
   // 4. the Wilds (desktop)
   if (!phone && !noWilds) {
