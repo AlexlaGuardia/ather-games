@@ -51,7 +51,7 @@ export const MAX_PARTS = 200
 export interface SnapMoglin { id: string; profession: string; room?: string }
 /** `farm` / `water` are the host's farm + tank saves, adopted on the guest's side by farmroom.adoptFarm / water.adoptWater
  *  (both already validate), so the beds and tanks on the host's plot show the host's crops, not the guest's. */
-export interface PlotSnap { works: Works; owned: string[]; moglins?: SnapMoglin[]; farm?: unknown; water?: unknown }
+export interface PlotSnap { works: Works; owned: string[]; moglins?: SnapMoglin[]; farm?: unknown; water?: unknown; seat?: unknown }   // M208 s2: seat = the host's cluster seat (green-landing.ts cleanSeat reads it)
 export interface SnapPart { v: number; i: number; n: number; d: string }
 
 // ── the codec ───────────────────────────────────────────────────────────────────────────────────────────────────────────────

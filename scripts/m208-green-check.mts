@@ -5,12 +5,15 @@
 //      is dressed (window.__green: 2 trunks, 4 lamps)
 //   2. A walks off to its start ground and travels home (the fold map's Home): lands at the gate again
 //   3. A dies in the Wilds (__ather.fall = the fight's 'down'): the fold sets it down at the gate on the Green
-//   4. B (A's chordmate) visits A (?visit=<A>): B stands on A's ground at the gate on the Green (the host's Green)
+//   4. B (A's chordmate) visits A (?visit=<A>): B stands on A's ground on the Green (the host's Green). M208 s2 MOVED this
+//      assert: a guest not in the host's cluster lands on a FREE spot between the paths (green-landing.ts freeLanding(B's id)),
+//      not on the host's own spot; m208-four-check covers cluster mates
 //   5. 0 page errors. Shots: <out>/<390|desk>-*.png
 // Hooks: __ather.state / zone / travel / tp / fall, __mp.zone, __green READ; __ather.fall + tp to drive.
 //   npx tsx scripts/m208-green-check.mts [--url https://ather.games] [--phone] [--out dir]
 import puppeteer, { type Page } from 'puppeteer-core'
 import { HOME_LANDING, GATE, GATE_FACE, THRESHOLD } from '../src/app/shimmer/open/ather/plot'
+import { freeLanding } from '../src/app/shimmer/open/ather/green-landing'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), out = flag('--out', '/tmp'), PHONE = process.argv.includes('--phone')
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
@@ -76,7 +79,9 @@ try {
   ok(await poll(async () => (await A.evaluate(() => (window as any).__mp.zone())) === `open:plot:${idA}`, 90000), `4. A hosts its plot (${await A.evaluate(() => (window as any).__mp.zone())})`)
   await load(B, `&visit=${idA}&vn=A`)
   ok(await poll(async () => (await B.evaluate(() => (window as any).__mp.zone())) === `open:plot:${idA}`, 90000), `4. B is on A's ground (${await B.evaluate(() => (window as any).__mp.zone())})`)
-  ok(await landed(B, 30000), `4. B lands at the gate on the HOST's Green (${(await offLanding(B)).toFixed(2)} m)`)
+  const idB = await B.evaluate(() => localStorage.getItem('ather:mp:id')), spotB = freeLanding(idB ?? '')
+  const offB = async () => { const s = await at(B); return Math.hypot(s.x - spotB.x, s.z - spotB.z) }
+  ok(await poll(async () => (await zone(B)) === 'plot' && (await offB()) < 1.2, 30000), `4. B lands on a free spot on the HOST's Green (${(await offB()).toFixed(2)} m off it; ${(await offLanding(B)).toFixed(1)} m from the host's spot)`)
   await sleep(2500); await shot(B, 'd-guest')
 } catch (e) { ok(false, `threw: ${String(e).slice(0, 300)}`) }
 ok(errs.length === 0, `5. 0 page errors (${errs.slice(0, 3).join(' | ')})`)

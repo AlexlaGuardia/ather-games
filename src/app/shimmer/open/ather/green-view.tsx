@@ -10,6 +10,7 @@ import { useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { GATE, GATE_FACE, GROUND_Y, HOME_LANDING, LANDING_OFF, GATE_TRUNKS, GATE_TRUNK_SIDE, GATE_TRUNK_BACK, GREEN_LAMPS, GREEN_LAMP_R } from './plot'
+import { AXIS } from './green-landing'   // M208 s2: the other three quarters' landing spots
 
 const BARK = '#6f4a2c', BARK_HI = '#8a5e37', LEAF = '#4f8a3a', LEAF_HI = '#67a148'
 const STONE = '#cfc3a4', KERB = '#b9ab90', GLOW = '#ffe6a0'
@@ -73,6 +74,8 @@ export function GreenDressing() {
       <mesh ref={turn} geometry={spiral} position={[0, 3.4, 0.04]}><meshBasicMaterial color="#fff3c2" transparent opacity={0.85} /></mesh>
       {/* the threshold stone a keeper lands on */}
       <mesh position={[0, 0.43, LANDING_OFF]}><cylinderGeometry args={[1.9, 2.0, 0.1, 20]} /><meshLambertMaterial color={STONE} flatShading /></mesh>
+      {/* M208 s2: a smaller pale stone where each of the other three quarters' keepers lands (a guest from that side) */}
+      {(['nw', 'sw', 'se'] as const).map(q => <mesh key={q} position={[AXIS[q][0], 0.43, AXIS[q][1]]}><cylinderGeometry args={[1.1, 1.2, 0.1, 16]} /><meshLambertMaterial color={STONE} flatShading /></mesh>)}
       {/* the kerb round the gate's ground, open where the paths come in */}
       {stones.map(({ a, s }, k) => (
         <mesh key={k} position={[Math.cos(a) * KERB_R, 0.45, Math.sin(a) * KERB_R]} rotation-y={a * 3.1} scale={[s, 0.45, s]}>

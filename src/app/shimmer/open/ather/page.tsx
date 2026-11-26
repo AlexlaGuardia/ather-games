@@ -34,6 +34,7 @@ import type { AlcStation } from './alchemy-set'
 import { useParty, storedParty } from '@/lib/party'
 import { selfPlayerId } from '../../play3d/multiplayer'
 import { clusterFrame } from './cluster'
+import { guestLanding, freeLanding, type Seat, type Spot } from './green-landing'   // M208 s2: four landing spots on the Green
 import { setLobbyZone, setVisitHandler, hostHome } from '../shared/play-together'
 import { Canvas } from '@react-three/fiber'
 import { ProgramKeeper } from './program-keeper-view'
@@ -502,10 +503,25 @@ function AtherSliceGame() {
   // M61: going visiting (or coming home) = a walk through the veil to the plot's threshold. Play together's Visit button calls the
   // handler; ?visit=<host>&vn=<name> is how the continent page hands a visit over.
   const visitHost = visitNow?.host ?? null, lastHost = useRef<string | null>(null)
+  // ★ M208 s2 (Alex 11-26, four keepers never land on each other): my cluster seat (sent to guests in the plot snapshot), and a
+  // guest's landing: a free spot first, then, once the host's snapshot names its seat, the side of the gate facing MY plot when
+  // we share a cluster (green-landing.ts). The re-seat is skipped if I already walked off the spot.
+  const mySeat = useMemo<Seat | null>(() => { const m = cl0.view?.members.find(x => x.user_id === cl0.me); return cl0.view && m ? { cluster: cl0.view.cluster_id, quarter: m.quarter as Seat['quarter'] } : null }, [cl0.view, cl0.me])
+  const mySeatRef = useRef(mySeat); mySeatRef.current = mySeat
+  const guestSpot = useRef<{ host: string; at: Spot; seated: boolean } | null>(null)
+  const hostSeat = visitNow?.snap?.seat
+  useEffect(() => {
+    const g = guestSpot.current
+    if (!g || g.seated || !visitNow?.snap || visitNow.host !== g.host || fading.current) return
+    g.seated = true
+    const s = guestLanding(hostSeat, mySeat, selfPlayerId())
+    if (Math.hypot(s.x - g.at.x, s.z - g.at.z) < 0.01 || Math.hypot(pos.current.x - g.at.x, pos.current.z - g.at.z) > 2.5) return
+    g.at = s; setSpawn(s); setEpoch(e => e + 1)
+  }, [visitNow, hostSeat, mySeat, fade, epoch])   // eslint-disable-line react-hooks/exhaustive-deps -- fade/epoch: a snapshot that beat the veil is seated once it lifts
   useEffect(() => {
     if (visitHost === lastHost.current) return
     lastHost.current = visitHost
-    if (visitHost) arrive({ kind: 'plot' }, HOME_LANDING); else goHome()   // M208: a guest lands on the host's Green   // M71 s1: home from a visit = the Glade until the fold
+    if (visitHost) { const s = freeLanding(selfPlayerId()); guestSpot.current = { host: visitHost, at: s, seated: false }; arrive({ kind: 'plot' }, s) } else { guestSpot.current = null; goHome() }   // M208: a guest lands on the host's Green; s2: on a free spot until the host's seat says which side is theirs   // M71 s1: home from a visit = the Glade until the fold
   }, [visitHost, arrive, goHome])
   useEffect(() => {
     // only a party mate visits (the party instance is the only door); a visit link without one says so and goes nowhere
@@ -870,7 +886,7 @@ function AtherSliceGame() {
   const heightRef = useRef(ground); heightRef.current = ground
   const visitRev = useMemo(() => ({ works, owned: garden.owned }), [works, garden.owned])   // stable until the plot changes
   const plotNet = usePlotVisitNet({ relay: mp.relay, onRelay: mp.onRelay, hosting: !!plotMp && !visitNow, visit: visitNow,
-    snapOf: (): PlotSnap => ({ works: currentWorks(), owned: [...garden.owned], moglins: snapMoglins(loadVillage().moglins), farm: currentFarm(), water: currentWater() }),   // leftovers: the host's Moglins, beds + tanks
+    snapOf: (): PlotSnap => ({ works: currentWorks(), owned: [...garden.owned], moglins: snapMoglins(loadVillage().moglins), farm: currentFarm(), water: currentWater(), seat: mySeatRef.current ?? undefined }),   // M208 s2: seat   // leftovers: the host's Moglins, beds + tanks
     live: () => openNet()?.live() ?? [], rev: visitRev,   // M61 s2: a new works / owned = a re-send
     say: m => hudSay(m, 'info', 5) })   // s3: sent home / the host left
   usePartyBrew({ relay: mp.relay, onRelay: mp.onRelay, hosting: !!plotMp && !visitNow, visit: visitNow, guests: plotNet.guests, works: currentWorks })

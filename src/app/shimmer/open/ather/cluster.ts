@@ -63,8 +63,8 @@ function rotFor(where: Quarter): number {
   }
   return 0
 }
-/** Where a server quarter stands in MY view (mine is always ne). */
-const relQuarter = (mine: Quarter, q: Quarter) => ORDER[(ORDER.indexOf(q) - ORDER.indexOf(mine) + 4) % 4]
+/** Where a server quarter stands in MY view (mine is always ne). Exported for green-landing.ts (M208 s2). */
+export const relQuarter = (mine: Quarter, q: Quarter) => ORDER[(ORDER.indexOf(q) - ORDER.indexOf(mine) + 4) % 4]
 
 // ★ BETA M52 (Alex 11-20): the Green is ALWAYS drawn, alone too: `linked` now means "the Green is here" (always true), the
 // quarters nobody holds are OPEN SPOTS, and the one main gate stands in the square's centre (plot.ts GATE). No record yet
