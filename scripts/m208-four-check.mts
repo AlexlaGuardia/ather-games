@@ -85,6 +85,15 @@ const open = async (who: { id: string; name: string } | null, label: string): Pr
 }
 const at = (p: Page) => p.evaluate(() => { const s = (window as any).__ather.state(); return { zone: (window as any).__ather.zone() as string, x: s.px as number, z: s.pz as number, yaw: s.yaw as number } })
 const mpZone = (p: Page) => p.evaluate(() => (window as any).__mp.zone() as string | null)
+// the visit is refused when the lobby roster does not (yet) show the host home (plot-visit visitVerdict): say why, reload once
+const reach = async (P: Page, idA: string, who: string) => {
+  for (let i = 0; i < 2; i++) {
+    if (await poll(async () => (await mpZone(P)) === `open:plot:${idA}`, 60000)) return true
+    console.log(`  (${who} not on ash's ground yet, try ${i + 1}: visit log ${JSON.stringify(await P.evaluate(() => (window as any).__visit?.log?.() ?? null))})`)
+    if (i === 0) await load(P, `&visit=${idA}&vn=ash`)
+  }
+  return false
+}
 const settle = (p: Page, want: { x: number; z: number }, ms = 60000) => poll(async () => { const s = await at(p); return s.zone === 'plot' && dist(s, want) < 1.2 }, ms)
 try {
   // 1 · fir alone, ash in the cluster: both load in at HOME_LANDING
@@ -101,7 +110,7 @@ try {
   // 2 · birch + cedar visit ash
   for (const k of [KB, KC]) {
     const P = await open(k, k.name); await load(P, `&visit=${idA}&vn=ash`)
-    ok(await poll(async () => (await mpZone(P)) === `open:plot:${idA}`, 120000), `2. ${k.name} is on ash's ground (${await mpZone(P)})`)
+    ok(await reach(P, idA, k.name), `2. ${k.name} is on ash's ground (${await mpZone(P)})`)
     const where = relQuarter('sw', SEAT[k.id]), want = quarterLanding(where)
     const got = await settle(P, want, 45000), s = await at(P)
     ok(got, `2. ★ ${k.name} (${SEAT[k.id]}; ${where} in ash's view) lands on its own side: ${dist(s, want).toFixed(2)} m off its spot (${dist(s, HOME_LANDING).toFixed(1)} m from ash's)`)
@@ -112,7 +121,7 @@ try {
   }
   // 3 · the stranger (chord, no cluster)
   const S = await open(null, 'stranger'); await load(S, `&visit=${idA}&vn=ash`)
-  ok(await poll(async () => (await mpZone(S)) === `open:plot:${idA}`, 120000), `3. the stranger is on ash's ground (${await mpZone(S)})`)
+  ok(await reach(S, idA, 'stranger'), `3. the stranger is on ash's ground (${await mpZone(S)})`)
   const idS = await S.evaluate(() => { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i)!; if (k.endsWith('ather:mp:id')) return localStorage.getItem(k) } return null })
   const wantS = freeLanding(idS ?? '')
   ok(await settle(S, wantS, 45000), `3. ★ the stranger (${idS}) lands on a free spot between the paths (${dist(await at(S), wantS).toFixed(2)} m off it)`)
