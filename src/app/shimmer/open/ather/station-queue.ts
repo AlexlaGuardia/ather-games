@@ -11,7 +11,7 @@
 // nothing to do is never banked. ★ PURE: no React, no DOM.
 import { putIn } from './garden-bank'
 import { REFINE, STONE_REFINE, PIECE_JOBS, type Job } from './furniture'
-import { ROAST } from './cooking'
+import { HEARTH_JOBS } from './cooking'
 import { BREW } from './alchemy'
 import type { Stack } from '../shared/inventory'
 import { gradeEquiv, doubles } from './moglin-stats'
@@ -29,7 +29,7 @@ export interface Work { focus?: Focus; run?: { job: string; t: number; f?: boole
 export interface Station { store?: Stack[]; out?: Stack[]; work?: Work }
 export type Status = 'idle' | 'working' | 'focus'
 
-export const ALL_JOBS: readonly Job[] = [...REFINE, ...STONE_REFINE, ...PIECE_JOBS, ...ROAST, ...BREW]
+export const ALL_JOBS: readonly Job[] = [...REFINE, ...STONE_REFINE, ...PIECE_JOBS, ...HEARTH_JOBS, ...BREW]
 export const jobById = (id: string): Job | undefined => ALL_JOBS.find(j => j.id === id)
 
 /** Craft time per OUTPUT ITEM, in ms (Jin's defaults, hub 11-20: plank 4 s, brick 6 s, pane 8 s, furniture 20-60 s). */
@@ -53,7 +53,7 @@ const have = (stacks: readonly Stack[] | undefined, id: string) => (stacks ?? []
 const BIG = 1e9
 /** the jobs a room stockpiles: refining, plus the hearth's roasts and the cauldron's brews (M43 fold; never furniture) */
 export function stockJobs(kind: string): readonly Job[] {
-  return kind === 'carpentry' ? REFINE : kind === 'stonemason' ? STONE_REFINE : kind === 'cooking' ? ROAST : kind === 'alchemy' ? BREW : []
+  return kind === 'carpentry' ? REFINE : kind === 'stonemason' ? STONE_REFINE : kind === 'cooking' ? HEARTH_JOBS : kind === 'alchemy' ? BREW : []
 }
 /** runs a quantity of OUTPUT items takes */
 export const runsFor = (j: Job, qty: number) => Math.ceil(Math.max(0, Math.min(MAX_QTY, qty)) / j.out.n)

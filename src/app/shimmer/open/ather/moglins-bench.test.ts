@@ -3,7 +3,7 @@
 // store only, at the craft grade's pace; a stall banks nothing; the 12 h cap holds; the wrong room does nothing.
 import { tick, assign, freshVillage, dutyLine, PER_HOUR, type MoglinRecord, type Village } from './moglins'
 import { freshWorks, type Works, type Room } from './rooms'
-import { ROAST } from './cooking'
+import { HEARTH_JOBS } from './cooking'   // M204: the hearth = roasts + spiced meals
 
 let pass = 0
 const fails: string[] = []
@@ -22,7 +22,7 @@ const W: Works = { ...freshWorks(), rooms: [room('k', 'cooking', sc(60))] }
 const V: Village = { v: 1, moglins: [mog('heath', 'cook', 1, 'k')], lastTick: T0 }
 const t = tick(V, W, T0 + 2 * H)
 ok(!Object.keys(t.made).length && count(t.works, 'k', 'shimmerscale') === 60, 'village tick still eats a cooking store (double ticker)')
-ok(stockJobs('cooking') === ROAST && stockJobs('alchemy') === BREW, 'cooking / alchemy are not stockpile rooms')
+ok(stockJobs('cooking') === HEARTH_JOBS && stockJobs('alchemy') === BREW, 'cooking / alchemy are not stockpile rooms')
 // the stockpile with a fair cook, 1 h: 60 stocked keeps the 30 reserve; 30 surplus roasts into the OUTPUT at 8 s a roast / speed 1
 const st0 = { store: sc(60), out: undefined as undefined, work: { cur: 0, last: T0 } }
 const a = advance(st0, T0 + H, moglinSpeed(0), stockJobs('cooking'))

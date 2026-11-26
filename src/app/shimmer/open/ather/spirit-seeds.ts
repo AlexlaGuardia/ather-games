@@ -36,7 +36,9 @@ export const LEGACY_BLOOM_MS = GAME_DAY_MS / 4
  *  `v: 2` = planted under the day rule (M106); `tends` = the game days it was tended on. No `v` = an M76 pot (16-min rule). */
 export type Pot = { seed: SeedId; at: number; bloomed?: true; v?: 2; tends?: number[]
   /** M202: the element she evolved by (her second form); unset = her base form. Written by the evolution (M201). */
-  element?: 'mana' | 'storm' | 'earth' | 'water' }
+  element?: 'mana' | 'storm' | 'earth' | 'water'
+  /** M204: her bar: the element of every spiced meal she was fed, in order (infusions.ts feedMeal). Append-only, max 10. */
+  meals?: ('mana' | 'storm' | 'earth' | 'water')[] }
 export type Pots = Readonly<Record<string, Pot>>
 /** The game-day calendar (anemonyx-view.tsx counts the same days). */
 export const gameDay = (t: number) => Math.floor(t / GAME_DAY_MS)

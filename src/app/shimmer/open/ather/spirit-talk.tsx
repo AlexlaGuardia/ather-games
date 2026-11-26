@@ -20,14 +20,18 @@ import { loadAssign, mayUse, setAssign, subscribeAssign } from './train-assign' 
 import { loadWorks } from './rooms'
 import { FURNITURE } from './furniture'
 import { SHEET_LABEL } from './spirit-sheet'
-import { secondFormView, SECOND_FORM_UI, ELEMENT_LABEL } from './second-form-view'   // M201: the second-form stat bar
+import { secondFormView, SECOND_FORM_UI, ELEMENT_LABEL, recStatOf } from './second-form-view'   // M201: the second-form stat bar
+import { feedMeal, settleForm, mealsOf, mealCounts, mealLean, elementOfMeal, mealId, ELEMENTS, BAR_SLOTS, MEALS_FOR_FORM, MEAL_UI } from './infusions'   // M204: spiced meals fill her bar; she evolves
+import { countOf } from '../shared/inventory'
+import { useBook, getPots, setPots } from './spirit-panels'
+import { secondFormName } from '../../spirits/evolution'
 import { ELEMENT_COLORS } from '../../spirits/spirit'
 import { isFollowing, setFollowing, spiritHeld, spiritLive, subscribeFollow } from './spirit-follow'
 import { SPECIES_NAMES } from '../../spirits/spirit'
 import { hudSay } from '../shared/hud-say'
 import { getInv, setInv, useInv } from '../shared/bag'
-import { itemDef } from '../shared/inventory'
-import { feed, foodIn, loadFed, saveFed, spiritCheer } from './spirit-feed'
+import { itemDef, take } from '../shared/inventory'
+import { feed, foodIn, loadFed, saveFed, spiritCheer, withFed } from './spirit-feed'
 import { askAlong, inParty } from './spirit-party'
 import { FEED_NONE, fedLine, followRefuseLine, talkLine } from './party-spirit-lines'   // M109: the SIGNED lines (canon script, word for word)
 import { PARTY_FULL_LINE } from './spirit-roster'
@@ -90,11 +94,44 @@ export function SpiritPanel({ sp, id, phone, onClose }: { sp: Parameters<typeof 
     return { left: poolLeft(rec), pieces }
   }, [sp, id, statsV, asgV])
   // M201: her second form: the bar each element's form asks of her stat (live record), and why she is not evolving
-  const form = useMemo(() => secondFormView(sp, id ? loadStats()[id] : undefined), [sp, id, statsV])
+  // M204: her pot carries her element + her meal bar (infusions.ts); the bar's counts are what the form gate reads
+  const pot = useBook().pots[id ?? ''], inv = useInv(), meals = mealsOf(pot)
+  const form = useMemo(() => secondFormView(sp, id ? loadStats()[id] : undefined, pot?.element ?? 'base', mealCounts(mealsOf(pot))), [sp, id, statsV, pot])
+  // M204: meals already in when her stat reached the bar (training, growth): she takes her form as the panel opens
+  useEffect(() => {
+    if (!id || !pot) return
+    const r = settleForm(pot, sp, recStatOf(sp, loadStats()[id]))
+    if (r) { setPots({ ...getPots(), [id]: r.pot }); hudSay(MEAL_UI.evolved(r.formName), 'item', 5) }
+  }, [id, pot, sp, statsV])
+  // M204: the spiced meals in the bag, one row per element
+  const mealRows = useMemo(() => ELEMENTS.map(el => ({ el, id: mealId(el), n: countOf(inv, mealId(el)) })).filter(r => r.n > 0), [inv])
+  const feedOne = (mid: string) => {
+    const el = elementOfMeal(mid)
+    if (!id || !pot || !el) return
+    const r = feedMeal(pot, sp, el, recStatOf(sp, loadStats()[id]))
+    if (!r.ok) { hudSay(MEAL_UI.locked, 'info', 4); return }
+    const bag = take(getInv(), mid, 1)
+    if (!bag) return
+    setInv(bag); setPots({ ...getPots(), [id]: r.pot }); saveFed(withFed(loadFed(), id, mid, Date.now())); spiritCheer.add(id)
+    hudSay(r.evolved && r.formName ? MEAL_UI.evolved(r.formName) : MEAL_UI.fed(ELEMENT_LABEL[el], r.slot + 1), 'item', 5)
+  }
+  const lean = mealLean(meals)
   const ink = { label: H.inkSoft, ring: 'rgba(58,39,22,.2)', spoke: 'rgba(58,39,22,.16)' }
   return (
     <HearthFrame title={sheet.name} maxWidth={420} onClose={onClose} fixed dataPanel="spirit">
       <div data-spirit-sheet={sp} data-spirit-name={sheet.name} className="px-4 pt-7 pb-4">
+        {/* M204: her bar (Alex 11-26): 10 slots by her name, one per spiced meal she was fed, in its element's colour. Never resets. */}
+        {id && pot && (
+          <div data-meal-bar={meals.join(',')} data-meal-locked={meals.length >= BAR_SLOTS ? '1' : '0'} className="mb-2" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+            <span className="text-[11px] font-bold uppercase" style={{ color: H.inkSoft, letterSpacing: '.1em' }}>{MEAL_UI.bar}</span>
+            <div style={{ display: 'flex', gap: 3 }}>
+              {Array.from({ length: BAR_SLOTS }, (_, k) => (
+                <span key={k} data-meal-slot={k} data-meal-el={meals[k] ?? ''} style={{ width: 14, height: 14, borderRadius: 3,
+                  background: meals[k] ? ELEMENT_COLORS[meals[k]] : 'rgba(58,39,22,.1)', boxShadow: meals[k] ? `0 0 6px ${ELEMENT_COLORS[meals[k]]}` : 'inset 0 1px 2px rgba(58,39,22,.25)' }} />
+              ))}
+            </div>
+          </div>
+        )}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
           {look && <SpiritAvatar sp={sp} look={look} size={phone ? 124 : 132} />}
           <StatRadar phone={phone} attr="spirit" ink={ink}
@@ -148,6 +185,25 @@ export function SpiritPanel({ sp, id, phone, onClose }: { sp: Parameters<typeof 
             ))}
           </div>
           <div data-form-reason className="mt-1 text-[12px] italic" style={{ color: H.inkFaint }}>{SECOND_FORM_UI.reason(form, k => SHEET_LABEL[k])}</div>
+          {/* M204: her second form, named (canon's 40-form grid), once she has it */}
+          {pot?.element && <div data-form-element={pot.element} data-form-name={secondFormName({ species: sp }, pot.element)} className="mt-1 text-[13px] font-bold" style={{ color: ELEMENT_COLORS[pot.element] }}>
+            {secondFormName({ species: sp }, pot.element)}</div>}
+          {/* M204: the meals she leans to, and the feed itself */}
+          {id && pot && (
+            <div data-meal-feed data-meal-lean={lean ? `${lean.el}:${lean.n}` : ''} className="mt-2" style={{ display: 'grid', gap: 4 }}>
+              {!pot.element && lean && <div data-meal-reason className="text-[12px] italic" style={{ color: H.inkFaint }}>
+                {MEAL_UI.meals(ELEMENT_LABEL[lean.el], Math.min(lean.n, MEALS_FOR_FORM))}</div>}
+              {meals.length < BAR_SLOTS && mealRows.map(m => (
+                <button key={m.id} data-feed-meal={m.id} onClick={() => feedOne(m.id)}
+                  className="rounded-[8px] px-2.5 py-1.5 flex items-center gap-2 text-[13px]"
+                  style={{ minHeight: 36, background: 'rgba(255,250,240,.6)', boxShadow: `inset 0 0 0 1px ${ELEMENT_COLORS[m.el]}`, color: H.ink, textAlign: 'left' }}>
+                  <span style={{ width: 8, height: 8, borderRadius: 4, background: ELEMENT_COLORS[m.el], flex: 'none' }} />
+                  <span style={{ fontWeight: 700 }}>{MEAL_UI.feed(itemDef(m.id).name)}</span>
+                  <span className="ml-auto tabular-nums" style={{ color: H.inkFaint }}>x{m.n}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         <div className="mt-3 mb-1.5 text-[13px] font-bold" style={{ color: H.inkSoft }}>Moves</div>
         {sheet.moves.length ? (

@@ -8,7 +8,7 @@
 // ★ PURE but for the guarded localStorage load/save (as plot.ts).
 import { gardenKey } from '@/lib/keeper-local'
 import type { Species } from '../../spirits/spirit'
-import type { Pots } from './spirit-seeds'
+import type { Pot, Pots } from './spirit-seeds'
 import { isSeed } from './seed-items'
 
 export type Stage = 'seen' | 'bonded'
@@ -39,7 +39,12 @@ export function parseBook(v: unknown): Book {
   for (const [id, p] of Object.entries(o.pots ?? {})) if (p && isSeed(p.seed) && typeof p.at === 'number') {
     // M106: v 2 = the day rule, with the game days it was tended on; no v = an M76 pot (keeps its 16-min promise)
     const day = p.v === 2 ? { v: 2 as const, tends: Array.isArray(p.tends) ? p.tends.filter((d: unknown): d is number => typeof d === 'number' && Number.isInteger(d)) : [] } : {}
-    pots[id] = p.bloomed ? { seed: p.seed, at: p.at, ...day, bloomed: true } : { seed: p.seed, at: p.at, ...day }
+    // M204: her second form (element) and her meal bar ride the pot (a bad value is dropped, never guessed; the bar caps at 10)
+    const EL = ['mana', 'storm', 'earth', 'water']
+    const el = p.bloomed && EL.includes(p.element as string) ? { element: p.element } : {}
+    const ml = p.bloomed && Array.isArray(p.meals) ? p.meals.filter((m: unknown): m is NonNullable<Pot['element']> => EL.includes(m as string)).slice(0, 10) : []
+    const meals = ml.length ? { meals: ml } : {}
+    pots[id] = p.bloomed ? { seed: p.seed, at: p.at, ...day, bloomed: true, ...el, ...meals } : { seed: p.seed, at: p.at, ...day }
   }
   const met = Array.isArray(o.met) ? o.met.filter((k): k is number => Number.isInteger(k)) : []
   const since = Number.isInteger(o.since) ? o.since : undefined

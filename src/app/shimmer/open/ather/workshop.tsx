@@ -68,7 +68,7 @@ import { ALC_POTIONS as BREW_POTIONS, ALC_POTION_ORDER as BREW_ORDER } from './a
 import { openNet } from '../shared/open-mp'
 import { boonAt, assignSet, standAt, setRoom, boonLine } from './alchemist-boon'
 import { loadRuns, saveRuns, returnRun } from './alchemy-runs'
-import { ROAST } from './cooking'
+import { HEARTH_JOBS } from './cooking'   // M204: + the spiced meals
 import { FarmPanel, FarmInterior, FarmCrate, currentFarm, setFarm, currentWater, settleWater, farmNow } from './farm-room'
 import { plumbingOf, spillIfRemoved } from './water'
 import { grantStarter } from './farmroom'
@@ -1364,7 +1364,8 @@ function PlanterSpirit({ id }: { id: string }) {
   // M102 Manalotl wire-in: the bloomed pot's OWN species' model (spirit-models.ts), or the gold orb when it has none yet.
   // M107 ship (Alex 11-23): the model + her roam are for every keeper now.
   // M202 s1: an evolved spirit (pot.element) draws her SECOND FORM where her species' forms are modelled; `?form=` = the owner preview
-  const preview = useFormPreview(), sp = p?.bloomed ? speciesOf(p.seed) : null, look = formLook(sp, p?.element ?? preview) ?? spiritModelFor(sp)
+  // M204: the form models are owner-only while they are redone: a player's evolved spirit (element set) keeps her base look
+  const owner = useOwner(), preview = useFormPreview(), sp = p?.bloomed ? speciesOf(p.seed) : null, look = formLook(sp, (owner ? p?.element : undefined) ?? preview) ?? spiritModelFor(sp)
   const nav = useMemo(() => (look && sp ? planterNav(id, dev, spiritBodyR(sp)) : null), [look, id, dev, sp])   // M107: she roams the garden
   useFrame(({ clock }) => { if (orb.current) orb.current.position.y = 1.0 + Math.sin(clock.elapsedTime * 1.6) * 0.06 })
   const orbMesh = <mesh ref={orb} position-y={1.0}><sphereGeometry args={[0.16, 14, 10]} /><meshBasicMaterial color={f.glow} transparent opacity={0.85} /></mesh>
@@ -1838,7 +1839,7 @@ function BenchPanel({ room, onClose }: { room: Room; onClose: () => void }) {
         ? cl(crafts(STONE_REFINE), 'Parts for a house plan, cut from every stone in the store. A Moglin also keeps stacks going by itself.', 'No blankstone or mana shards to cut. Prospect them in the Wilds.')
         : cl(crafts(REFINE), 'Each log works two ways. Focus one: the station works every log in its store, one at a time. A Moglin also keeps stacks going by itself.', 'No logs to work. Prune trees in the Wilds. Better woods come as your Forestry grows.')
       case 'furniture': return cl(BENCH_JOBS.filter(j => spirits3d || !FURNITURE[j.id]?.train), 'Finished pieces wait in the output. Hold one from the hotbar on your plot and E sets it.')
-      case 'hearth': return cl(ROAST, 'Hold a roast in the Wilds and click to eat it mid-fight. Meat comes from the Smokehouse in the continent\'s towns.')
+      case 'hearth': return cl(HEARTH_JOBS, 'Hold a roast in the Wilds and click to eat it mid-fight. Meat comes from the Smokehouse in the continent\'s towns. A spiced meal is fed to a garden spirit, in her panel.')
       case 'cauldron': return cl(BREW, 'Hold a potion and click to drink.')
       case 'blades': case 'spikes': return focusSkill ? <FocusList r={r} inv={inv} skill={focusSkill} /> : null
       case 'rinsticks': return <RinstickList r={r} inv={inv} />

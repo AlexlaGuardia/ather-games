@@ -11,6 +11,8 @@ import { hudSay } from '../shared/hud-say'
 import { ALC_STATIONS, ALC_POTIONS, ALC_POTION_ORDER, INTERMEDIATES, stepsAt, chainOf, pickFor, gradeFrom, gradeOrNull, fills, type AlcStation, type Have } from './alchemy-set'
 import { loadRuns, saveRuns, startRun, collectRun, runFrac, runLeft, type Runs } from './alchemy-runs'
 import { extraBottles } from './alchemist-boon'
+import { ELEMENTS, HERB_OF, SPICE_HERBS, MEAL_UI, spiceId } from './infusions'   // M204: the Crusher grinds herbs into spices
+import { GRADES } from './farming'
 
 export const haveOf = (inv: Inv): Have => {
   const h: Record<string, number> = {}
@@ -116,9 +118,45 @@ export function AlchemyPanel({ pid, station, onClose, footer, boon }: { pid: str
             )
           })}
         </div>
+        {station === 'crusher' && <SpiceList have={have} />}
         <div style={{ fontSize: 11.5, color: H.inkSoft }}>Higher-grade crops make a stronger potion. The best you carry goes in first.</div>
         {footer}
       </div>
     </HearthFrame>
+  )
+}
+
+/** M204: the Crusher Table grinds an element herb into its spice (infusions.ts), at once; the worst grade goes first (a spice
+ *  carries no grade). The spice cooks into a meal at the hearth. */
+function SpiceList({ have }: { have: Have }) {
+  const herbIds = (el: (typeof ELEMENTS)[number]) => GRADES.map(g => `crop:${HERB_OF[el]}:${g}`).filter(id => (have[id] ?? 0) > 0)
+  const grind = (el: (typeof ELEMENTS)[number]) => {
+    let bag: Inv | null = getInv(), need = SPICE_HERBS
+    for (const id of GRADES.map(g => `crop:${HERB_OF[el]}:${g}`)) {
+      if (!need || !bag) break
+      const n = Math.min(need, haveOf(bag)[id] ?? 0)
+      if (n) { bag = take(bag, id, n); need -= n }
+    }
+    if (!bag || need) return
+    const g = give(bag, spiceId(el), 1)
+    if (g.left) { hudSay('Your bag is full. Make room and come back for it.', 'info', 4); return }
+    setInv(g.inv); hudSay(`${itemDef(spiceId(el)).name}. Next: the hearth.`, 'item', 4)
+  }
+  return (
+    <div data-spices style={{ display: 'grid', gap: 6, padding: '8px 10px', borderRadius: 12, background: 'rgba(58,39,22,.06)' }}>
+      <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase', color: H.inkSoft }}>{MEAL_UI.spices}</div>
+      {ELEMENTS.map(el => {
+        const n = herbIds(el).reduce((a, id) => a + have[id], 0), can = n >= SPICE_HERBS
+        return (
+          <div key={el} data-spice={el} data-can={can ? 1 : 0} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ fontSize: 13.5, fontWeight: 700, color: H.ink }}>{itemDef(spiceId(el)).name}</div>
+            <div style={{ fontSize: 12, color: H.inkSoft }}>{SPICE_HERBS} {itemDef(`crop:${HERB_OF[el]}:D`).name.replace(/ · D$/, '')} ({n})</div>
+            <span data-act="spice-grind" style={{ marginLeft: 'auto' }}>
+              <HearthButton small primary disabled={!can} onClick={() => grind(el)}>{MEAL_UI.grind}</HearthButton>
+            </span>
+          </div>
+        )
+      })}
+    </div>
   )
 }

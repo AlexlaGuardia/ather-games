@@ -31,6 +31,7 @@ import { ownerSlot } from '../shared/owner-store'
 import { isKeeperNode, onKeeperNodes, setSpent, spentUntil, waitClock } from './keeper-nodes'   // M153 s1b
 import { withDewls } from './dewl'
 import { KEEPSTONE_FIND, keepstoneFor } from './furniture'
+import { rollHerb, CRYSTAL_HERB } from './infusions'   // M204
 
 /** what stands on the rock. `egg` = a Wooded Trails element node: which element is only known when it shatters. */
 export type CrystalKind = 'raw' | 'violet' | 'storm' | 'earth' | 'water' | 'egg' | 'pure' | 'ather' | SeepKind | 'stone'
@@ -225,6 +226,7 @@ export function minePlan(kind: CrystalKind, rand: () => number = Math.random): {
   }
   // now and then a crystal node gives up an old UNIQUE Keepstone with its crystal still set (canon 5a20b8f; furniture.ts)
   if (rand() < (KEEPSTONE_FIND[CRYSTAL_ITEM[found]] ?? 0)) drops.push({ id: keepstoneFor(CRYSTAL_ITEM[found]), n: 1 })
+  drops.push(...rollHerb(CRYSTAL_HERB[found], rand))   // M204: Violetbloom by a broken Fuli (infusions.ts)
   return { drops: withDewls(drops, tier), found, perk }   // M159: always, beside the usual drop
 }
 /** The node is done: XP lands on Prospecting and it stays spent till `until` (M136: this cycle's reset, counted from the first touch). */
