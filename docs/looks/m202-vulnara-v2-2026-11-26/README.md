@@ -47,3 +47,11 @@ uv run --no-project --with numpy,scipy,trimesh,fast_simplification,networkx pyth
 npx tsx tools/three-check.mts vulnara-rigged.glb 1.4
 ```
 The decimation allows a pinched edge (two crystal faces that kiss, 1 edge in this build); never an open one.
+
+## Shots
+`side-by-side.jpg`: the locked art | prod 390x844 owner preview (`?form=mana`, build 730f9e28) | base Vulnyx, Vulnore, Vulnara
+at true relative size (grow x glb height; idle frame 0): side, three-quarter (top two rows), front (bottom). `vulnara-390.png` =
+the prod still. **The prod still frames her badly** (only her brush at the right edge, in both of two re-takes): after the
+check's teleport she walks to the keeper, so the camera aim lands beside her. The mount, size and player asserts are what prove her
+on prod; a better in-game still is a check fix (aim after she settles), not done here.
+Prod check (scripts/m202-forms-check.mts --forms mana, owner, this box): ALL PASS; Vulnara 0.998 m standing (look h 0.977).
