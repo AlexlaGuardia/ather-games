@@ -1,5 +1,5 @@
 // BETA M97 s1: rooms are SHELLS (Alex 11-23: just the floor and the furniture inside; no walls, roof, door frame). Run: npx tsx src/app/shimmer/open/ather/shell-rooms.test.ts
-import { place, wallsOf, benchOf, doorOf, benchBox, toWorld, canPlacePiece, nearWork, freshWorks, loadWorks, saveWorks, ROOMS, type Works, type Room } from './rooms'
+import { place, useSpotOf, wallsOf, benchOf, doorOf, benchBox, toWorld, canPlacePiece, nearWork, freshWorks, loadWorks, saveWorks, ROOMS, type Works, type Room } from './rooms'
 import { STARTING_SQUARES } from './plot'
 import { newInv, give } from '../shared/inventory'
 let pass = 0; const fails: string[] = []
@@ -32,6 +32,17 @@ ok(!place(w, owned, pl!.inv, 'carpentry', P.x - 7.5, P.z, 0, 2000), 'half a metr
 ok(!place(w, owned, pl!.inv, 'carpentry', P.x - 4, P.z + 3, 0, 2000), 'a real overlap refuses')
 // survives reload
 const store = new Map<string, string>(); (globalThis as unknown as { localStorage: unknown }).localStorage = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => { store.set(k, v) }, removeItem: (k: string) => { store.delete(k) } }
+// M183: a room is a pad. Anything may stand on its floor; only a piece IN the bench or on its use spot crowds it (slabs lie under both)
+for (let q = 0; q < 4; q++) {
+  const rr: Room = { ...r, q }, ww: Works = { ...w, rooms: [rr] }, at = (u: number, v: number) => toWorld(rr, u, v), D = ROOMS.rinnshop.d / 2, u = useSpotOf(rr), b = benchOf(rr)
+  const can = (item: string, x: number, z: number, qq = q) => { const v = canPlacePiece(ww, owned, item, x, z, qq); return { ok: v.ok, why: v.ok ? '' : v.why } }
+  ok(Math.abs(Math.hypot(u.x - b.x, u.z - b.z) - 1.2) < 1e-9, `turn ${q}: the use spot is 1.2 m in front of the bench`)
+  ok(can('goldwood_table', at(-2.5, 0).x, at(-2.5, 0).z).ok && can('goldwood_stool', at(1.6, D - 1.4).x, at(1.6, D - 1.4).z).ok, `turn ${q}: a table mid-floor, a stool beside the bench (both within the old 1.6 m)`)
+  ok(can('stone_slab_wide', b.x, b.z).ok && can('stone_slab_wide', u.x, u.z).ok, `turn ${q}: a floor slab under the bench and on the use spot`)
+  ok(can('goldwood_stool', b.x, b.z).why === 'That crowds the bench.' && can('goldwood_stool', b.x + 1.1 * (q % 2 ? 0 : 1), b.z + 1.1 * (q % 2 ? 1 : 0)).why === 'That crowds the bench.', `turn ${q}: a stool in the bench (middle, end) crowds it`)
+  ok(can('goldwood_stool', u.x, u.z).why === 'That crowds the bench.' && can('goldwood_table', at(0, D - 3.2).x, at(0, D - 3.2).z).why === 'That crowds the bench.', `turn ${q}: a stool on the use spot, a table across it`)
+  ok(can('goldwood_stool', at(0, D - 3.15).x, at(0, D - 3.15).z).ok, `turn ${q}: a stool just clear of the use spot`)
+}
 saveWorks(w); ok(loadWorks().rooms[0]?.shell === true, 'the shell flag survives reload')
 
 console.log(`shell-rooms: ${pass} pass, ${fails.length} fail`); for (const f of fails) console.log('  FAIL', f); if (fails.length) process.exit(1)

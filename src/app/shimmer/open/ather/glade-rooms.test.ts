@@ -1,7 +1,7 @@
 // npx tsx src/app/shimmer/open/ather/glade-rooms.test.ts   (BETA M153 s1c-3)
 import { readFileSync } from 'fs'
 import { join } from 'path'
-import { GLADE_ROOMS, PROPS_MAX, addProp, changeProp, cleanProp, cleanProps, isRoom, isStanding, pieceCount, propsCanon, putPlace, removeProp, roomOf, type Prop } from '../../world/builder-props'
+import { GLADE_ROOMS, PROPS_MAX, SCALE_MAX, addProp, changeProp, cleanProp, cleanProps, isRoom, isStanding, pieceCount, propsCanon, putPlace, removeProp, roomOf, type Prop } from '../../world/builder-props'
 import { EMPTY_LAYER, cleanLayer } from '../../world/builder'
 import { setGladePeople } from './glade-people'
 import { gladePlaces } from './glade-places'
@@ -13,7 +13,8 @@ import { gladeHome } from './glade-home'
 import { setGladeBlueprint, yarrowCrate } from './glade-lots'
 import { parseHouse } from './plot-blueprint'
 import { gladeFrame, gladeLayerGround, parseGladeLayer, type GladeLayer } from './glade-layer'
-import { gladeShapeOf, peopleProblems, placeProblems, walkReach } from './glade-people-check'
+import { FLOOR_UNDER, gladeShapeOf, peopleProblems, placeProblems, walkReach } from './glade-people-check'
+import { FURNITURE } from './furniture'
 import { terrainWorld } from '../terrain-world'
 import { ROOMS, ROOM_ORDER, benchOf, type Room } from './rooms'
 import { SCENERY, SCENERY_BY, isSolid, sceneryBoxes, sceneryPlaced } from './scenery'
@@ -94,6 +95,21 @@ ok(problems([s0, { id: 'pq3', k: 'filler:rock-large', ...at(0, 0.2), q: 0, s: 1 
 ok(problems([s0, { id: 'pq3', k: 'filler:sign', ...at(0, 0.6), q: 0, s: 1 }]).some(q => /Carpentry room has a bench nobody can stand at/.test(q)), 'a sign at the bench')
 { const ring: Prop[] = []; for (let s = -7; s <= 7; s += 2) for (const [x, z, q] of [[s, -7, 0], [s, 7, 0], [-7, s, 1], [7, s, 1]]) ring.push({ id: `pr${ring.length}`, k: 'filler:fence', x: s0.x + x, z: s0.z + z, q, s: 2 })
   ok(problems([s0, ...ring]).some(q => /Carpentry room cannot be reached on foot/.test(q)), 'fenced in') }
+// M183: a room is a pad (Alex 11-25: his Carpentry room floored in wide slabs, walls and tables round it, refused 'stands in a solid piece')
+{ const D = ROOM_SIZE.carpentry.d / 2, spot = at(0, D - BENCH_IN - 1.2), pc = (k: string, p: { x: number; z: number }, i: number, sc = 1): Prop => ({ id: `pm${i}`, k: `piece:${k}`, x: p.x, z: p.z, q: 0, s: sc })
+  const floor: Prop[] = []; for (let u = -3; u <= 3; u += 2) for (let v = -2; v <= 2; v += 2) floor.push(pc('stone_slab_wide', at(u, v), floor.length))
+  ok(floor.length === 12 && problems([s0, ...floor]).length === 0, `slabs over the whole floor, under the bench and the use spot: ${problems([s0, ...floor])}`)
+  ok(problems([s0, pc('stone_slab_wide', bench, 0, SCALE_MAX)]).length === 0, 'the thickest slab the builder can scale lies under the bench')
+  ok(problems([s0, ...floor, pc('goldwood_table', at(-2.5, -1.5), 20), pc('goldwood_table', at(2.5, -1.5), 21)]).length === 0, 'tables on the floor')
+  no([s0, pc('goldwood_table', bench, 20)], /^Carpentry room stands in a solid piece$/, 'a table in the bench')
+  no([s0, ...floor, pc('goldwood_table', bench, 20)], /^Carpentry room stands in a solid piece$/, 'a table in the bench, on the slabs')
+  no([s0, ...floor, pc('goldwood_table', spot, 20)], /^Carpentry room has a bench nobody can stand at$/, 'a table on the use spot, on the slabs')
+  ok(FLOOR_UNDER >= Math.max(...Object.values(FURNITURE).filter(f => f.slab).map(f => f.h)) * SCALE_MAX && FLOOR_UNDER < Math.min(...sceneryBoxes(sceneryPlaced([s0], () => 3)).map(b => b.y1 - b.y0 - 0.5)) / 2, `FLOOR_UNDER ${FLOOR_UNDER}: the thickest floor, well under the bench`)
+  // a room turned off the square (Alex's is at 45 degrees): its bench's boxes are a chain, fatter than the bench; it still publishes
+  for (const q of [0.5, 1.5, 0.25]) { const t = { ...s0, q }, ta = (u: number, v: number) => fromRect(roomPad(t)!, u, v)
+    ok(problems([t]).length === 0, `turned ${q}: publishes (${problems([t])})`)
+    no([t, pc('goldwood_table', ta(0, D - BENCH_IN - 1.4), 20)], /^Carpentry room (has a bench nobody can stand at|stands in a solid piece)$/, `turned ${q}: a table on its use spot`) }
+}
 // a person in its bench is people's own line; on its floor they stand
 { const ps = (x: number, z: number) => [{ who: 'greg', name: 'Gregory', x, z }]; ok(peopleProblems(L([s0]), ps(bench.x, bench.z)).join() === 'Gregory is inside something solid' && peopleProblems(L([s0]), ps(at(2, -1).x, at(2, -1).z)).length === 0, 'a person in the bench; on the floor') }
 // the walker gets on and off it, and is stopped by the bench

@@ -3,13 +3,15 @@
 // void, not in the water as drawn, not inside a solid piece or house, and reachable on foot from the newborn spot by the WALKER's own
 // rules (terrain-world: its body, its half-metre step, its slope; no jump, no climb). Pure; glade-people-check.test.ts (the live layer).
 import { terrainWorld, type Shape } from '../terrain-world'
+import { BODY_R } from '../shared/locomotion'
 import { plotShape, mistWalls } from './plot'
 import { mateWalls } from './cluster'
 import { GLADE_FRAME, GLADE_GATE, GLADE_OWNED } from './glade-cluster'
 import { withPieces } from './dynamic-solids'
 import { withZoneParts, zoneParts, zonePartBoxes } from './zone-parts'
 import { SCENERY_BY, sceneryBoxes, sceneryPlaced } from './scenery'
-import { ROOM_PREFIX, isRoom } from '../../world/builder-props'
+import { ROOM_PREFIX, SCALE_MAX, isRoom } from '../../world/builder-props'
+import { FURNITURE } from './furniture'
 import { gladeLayerGround, gladeWet, type GladeLayer } from './glade-layer'
 import { BENCH_IN, PAD_FALL, fromRect, inRect, padGround, padLevel, rectPoints, rectsOverlap, roomPads, type Ground, type RoomPad } from './glade-pads'
 import { gladePlaces, placeDoor, placeSolids, type GladePlace } from './glade-places'
@@ -98,7 +100,13 @@ function doorway(w: ReturnType<typeof terrainWorld>, d: P, f: number): P[] {
 }
 /** s1c-3: a garden room's furniture, and where a keeper stands at it (0.35 m clear of the deepest bench) */
 const roomSolids = (r: RoomPad, layer: GladeLayer, land: Ground): Box[] => sceneryBoxes(sceneryPlaced((layer.props ?? []).filter(p => p.id === r.id), land).map(p => ({ ...p, low: undefined })))
-const roomSpot = (r: RoomPad): P => fromRect(r, 0, r.d / 2 - BENCH_IN - 1.2)
+/** M183: or a little further out (to 1.6 m, well inside E's reach): a room turned off the square has its bench drawn as a chain of
+ *  axis boxes, fatter than the bench, and at 45 degrees they reached the 1.2 m spot by a centimetre, so a turned room never published */
+const roomSpots = (r: RoomPad): P[] => [1.2, 1.4, 1.6].map(m => fromRect(r, 0, r.d / 2 - BENCH_IN - m))
+/** M183: the thickest floor the catalog lays, at the largest scale: a piece no higher than this over the bench's floor lies UNDER it */
+export const FLOOR_UNDER = Math.max(...Object.values(FURNITURE).filter(f => f.slab).map(f => f.h)) * SCALE_MAX + 0.005
+/** bench box b (sceneryBoxes sinks every box 0.5 m: b.y0 + 0.5 is the floor it stands on) */
+const underBench = (b: Box, q: Box) => q.y1 <= b.y0 + 0.5 + FLOOR_UNDER
 /** s1c-2: may the houses stand there? The same shape of answer as peopleProblems. A house nobody moved is only asked whether its door can
  *  still be reached, and whether a moved one stands in it: the rest is the Glade as built. s1c-3: the garden rooms are asked the same. */
 export function placeProblems(layer: GladeLayer, places: readonly GladePlace[] = gladePlaces(), newborn: P | null = null): string[] {
@@ -120,10 +128,14 @@ export function placeProblems(layer: GladeLayer, places: readonly GladePlace[] =
       if (inRect(p, GLADE_GATE.x, GLADE_GATE.z, GATE_CLEAR)) { no('is in the gate'); continue }
       const other = all.find(o => o !== p && (!room && o.place !== null && (crate || o.place === 'jars') ? solids(o).some(a => own.some(b => hits(a, b))) : rectsOverlap(p, o)))
       if (other) { const pair = [p.id, other.id].sort().join(); if (!said.has(pair)) { said.add(pair); no(`stands in ${other.name}`) } continue }
-      if (own.some(b => pieces.some(q => hits(b, q)))) { no('stands in a solid piece'); continue }
+      // M183: a room is a pad: what stands on its floor is the builder's; only a piece IN its bench refuses (a floor may lie under it)
+      if (own.some(b => pieces.some(q => hits(b, q) && !(room && underBench(b, q))))) { no('stands in a solid piece'); continue }
     }
     if (crate && !p.moved) continue   // beside Yarrow's door, which is asked
-    const d = p.place === null ? roomSpot(p) : placeDoor(p.place), f = Number.isFinite(land(d.x, d.z)) ? w.floorAt(d.x, d.z, stand(d.x, d.z), STEP) : null
+    const at = (q: P) => (Number.isFinite(land(q.x, q.z)) ? w.floorAt(q.x, q.z, stand(q.x, q.z), STEP) : null), free = (q: P) => { const g = at(q); return g !== null && w.bodyFree(q.x, q.z, g) && !wet(q.x, q.z) }
+    // the 1.2 m spot, or (only when the bench's own fat boxes are what stops it) the first free one further out
+    const inBench = (q: P) => { const g = at(q) ?? 0; return own.some(b => b.x0 < q.x + BODY_R && q.x - BODY_R < b.x1 && b.z0 < q.z + BODY_R && q.z - BODY_R < b.z1 && b.y1 > g) }
+    const rs = room ? roomSpots(p) : [], d = room ? (free(rs[0]) || !inBench(rs[0]) ? rs[0] : rs.find(free) ?? rs[0]) : placeDoor(p.place!), f = at(d)
     if (f === null || !w.bodyFree(d.x, d.z, f) || wet(d.x, d.z)) no(room ? 'has a bench nobody can stand at' : crate ? 'has no room in front of it' : 'has a door nobody can stand at')
     else if (reach && newborn && !reach(newborn, doorway(w, d, f))) no(crate || room ? 'cannot be reached on foot from the newborn spot' : 'has a door nobody can reach on foot')
   }

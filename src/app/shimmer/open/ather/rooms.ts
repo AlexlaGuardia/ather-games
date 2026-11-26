@@ -26,7 +26,8 @@ import { adoptStairs, type Stairs } from './plot-stairs'
 import { adoptDecks, type Decks } from './plot-decks'
 import { adoptFound, adoptFoundCells, floorAt } from './plot-found'
 import { cellMid, shaftBlocked, shaftTop } from './lift'
-import { normQ, quad, quadBounds, quadsHit, rectQuad, isWholeQ, type Rect } from './build-prefs'
+import { normQ, quad, quadBounds, quadsHit, rectQuad, isWholeQ, type Rect, type Quad } from './build-prefs'
+import { BODY_R } from '../shared/locomotion'
 import { buildSolids, opens, type SolidPart } from './build-catalog'   // M169 s2: what of a cut piece blocks
 import { adoptWalls, adoptCarry, adoptRoof, adoptFloors, adoptPaid, wallRects, type Walls, type RoofStyle, type Floors } from './plot-walls'
 
@@ -138,6 +139,16 @@ export function toWorld(r: Pick<Room, 'x' | 'z' | 'q'>, lx: number, lz: number) 
 }
 /** Where you stand to work the room: just inside, before the back wall. */
 export const benchOf = (r: Room) => toWorld(r, 0, ROOMS[r.kind].d / 2 - 1.4)
+/** M183: where a keeper stands to work the bench: 1.2 m in front of it (the Glade's roomSpot, glade-people-check). */
+export const useSpotOf = (r: Pick<Room, 'kind' | 'x' | 'z' | 'q'>) => toWorld(r, 0, ROOMS[r.kind].d / 2 - 1.4 - 1.2)
+/** M183 (Alex 11-25: "if the rooms floor could let us place over it the player could design it as they want"): a room is a
+ *  pad. A piece may stand anywhere on its floor; it crowds the bench only when it is IN the bench (a floor slab may lie under
+ *  it) or stands where a keeper's body works it (the use spot, BODY_R round). Touching either is fine (5 mm of float slack). */
+export function crowdsBench(r: Room, item: string, mine: Quad): boolean {
+  if (FURNITURE[item]?.slab) return false
+  const b = benchOf(r), u = useSpotOf(r), spot = { x0: u.x - BODY_R, x1: u.x + BODY_R, z0: u.z - BODY_R, z1: u.z + BODY_R }
+  return quadsHit(mine, rectQuad(quadBounds(b.x, b.z, 2.4, 0.8, r.q)), -0.005) || quadsHit(mine, rectQuad(spot), -0.005)
+}
 /** The door's middle, on the front wall. */
 export const doorOf = (r: Room) => toWorld(r, 0, -ROOMS[r.kind].d / 2)
 
@@ -517,9 +528,9 @@ export function canPlacePiece(works: Works, owned: ReadonlySet<string>, item: st
   const pad = 0.15, mine = pieceQuad(item, x, z, q), hit = (b: { x0: number; x1: number; z0: number; z1: number }) => quadsHit(mine, rectQuad(b), pad)   // M98: the turned footprint, not its axis box
   for (const r of works.rooms) {
     if (wallsOf(r).some(hit)) return { ok: false, why: `In the wall of your ${ROOMS[r.kind].name}.` }
-    const d = doorOf(r), b = benchOf(r)
+    const d = doorOf(r)
     if (!r.shell && Math.hypot(d.x - x, d.z - z) < 1.6) return { ok: false, why: 'That blocks the doorway.' }   // M97: a shell has no door
-    if (Math.hypot(b.x - x, b.z - z) < 1.6) return { ok: false, why: 'That crowds the bench.' }
+    if (crowdsBench(r, item, mine)) return { ok: false, why: 'That crowds the bench.' }   // M183: was any piece within 1.6 m of the bench
   }
   if (!site && allChests(works).some(c => quadsHit(mine, chestQuad(c), pad))) return { ok: false, why: 'Too close to a Keepstone.' }
   // M98 s2: furniture may stand TOUCHING furniture (the anchor lands a row flush: bench to bench, a table pushed to a bench);
