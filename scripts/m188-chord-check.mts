@@ -80,6 +80,8 @@ try {
     const row = await poll(async () => !!(await me.$(`[data-chord-member="${other}"]`)), 30000)
     const r = row ? await me.$eval(`[data-chord-member="${other}"]`, e => ({ text: e.textContent ?? '', colour: e.getAttribute('data-chord-colour') })) : null
     ok(r && r.text.trim().length > 0 && /^#[0-9a-f]{6}$/i.test(r.colour ?? ''), `${tag}'s Chord tab lists the other (${r?.text.trim()}, ${r?.colour})`)
+    const lit = await me.evaluate(() => [...document.querySelectorAll<HTMLElement>('[data-panel="options"] button')].filter(b => (b.style.boxShadow ?? '').includes('inset')).map(b => b.textContent?.trim()))
+    ok(lit.length === 1 && lit[0] === 'Chord', `${tag}: the lit tab is Chord (${lit.join(',')})`)
     const words = (await me.$eval('[data-panel="chord"]', e => e.textContent ?? '')).toLowerCase()
     ok(!/\bpart(y|ies)\b/.test(words) && !words.includes('podium'), `${tag}'s Chord tab never says party / podium`)
     res[`tab${tag}`] = r
