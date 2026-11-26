@@ -508,7 +508,7 @@ function AtherSliceGame() {
     let asking: ReturnType<typeof setInterval> | undefined
     const go = (host: string, name: string) => {
       if (host === selfPlayerId()) return
-      if (!storedParty()) { noteVisit('refused:no-party'); hudSay('Join their party first: only party mates can visit a plot.', 'info', 5); return }
+      if (!storedParty()) { noteVisit('refused:no-party'); hudSay('Join their chord first: only chordmates can visit a plot.', 'info', 5); return }
       // M156: nobody leaves for a plot its keeper is not standing on (no garden folded, in the Glade or the Wilds, offline)
       clearInterval(asking)
       let asks = 0
