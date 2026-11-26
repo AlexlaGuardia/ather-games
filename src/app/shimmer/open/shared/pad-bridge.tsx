@@ -6,7 +6,8 @@
 
 import { useEffect, useRef, useSyncExternalStore } from 'react'
 import { poll, resetEdges, type PadKind } from '@/lib/input/gamepad'
-import { load as loadBindings } from '@/lib/input/bindings'
+import { load as loadBindings, save as saveBindings, type BindingMap } from '@/lib/input/bindings'
+import { PAD, type PadButton } from '@/lib/input/actions'
 import { padName, hintFor } from '@/lib/input/hints'
 import { touch, TOUCH_LOOK_SENS } from './touch'
 import { newPadState, padStep, releaseAll, padActed, padPrompt, PAD_HINTS, PAD_MENU_HINTS, SOUND_OFF_NOTE, type PadEffect, type PadState } from './pad'
@@ -24,6 +25,21 @@ export function usePadGlyph(): string | null {
   const k = usePadKind()
   return k ? hintFor(loadBindings(), 'world.interact', 'pad', k) : null
 }
+// ── M189: the pad family last seen (Options draws its rows in that family's glyphs even after the mouse took over) ──
+let seenKind: PadKind | null = null
+const seenSubs = new Set<() => void>()
+const setSeen = (k: PadKind | null) => { if (!k || k === seenKind) return; seenKind = k; seenSubs.forEach(f => f()) }
+export const usePadSeenKind = () => useSyncExternalStore(f => { seenSubs.add(f); return () => { seenSubs.delete(f) } }, () => seenKind, () => null)
+
+// ── M189: rebinding. Options asks for the NEXT pad press; while it waits the bridge hands that press over and does
+// nothing else with it (no accept, no close). A save bumps mapVer, and the bridge re-reads the map on its next tick.
+let capture: ((b: PadButton) => void) | null = null
+/** Hand the next pad press to `f` (null stops listening). */
+export const padCapture = (f: ((b: PadButton) => void) | null) => { capture = f }
+let mapVer = 0
+/** Save a rebound map (the 08-28 BindingMap, shimmer.voxel.bindings.v1) and make the live bridge use it. */
+export function savePadMap(m: BindingMap) { saveBindings(m); mapVer++; seenSubs.forEach(f => f()) }
+
 /** A world prompt as the player's device names it ('E · Gregory' / '□ · Gregory'). */
 export { padPrompt }
 
@@ -126,7 +142,7 @@ export function PadBridge({ menuOpen }: { menuOpen: boolean }) {
   useEffect(() => {
     const s: PadState = newPadState()
     firing = () => s.fire
-    let last = performance.now(), map = loadBindings()
+    let last = performance.now(), map = loadBindings(), ver = mapVer
     // ⚠ A TIMER, NOT rAF (unlike voxel3d): the open world runs at a few fps on a weak GPU or a swiftshader check, and a
     // button tapped and let go inside one long frame is an edge rAF never sees (and a tap of Y read a frame late is a
     // HOLD that stows: stance HOLD_MS is 350 ms). 16 ms sampling catches a real tap at any frame rate; the stick's
@@ -138,6 +154,14 @@ export function PadBridge({ menuOpen }: { menuOpen: boolean }) {
     const tick = () => {
       const now = performance.now(), dt = Math.min(0.05, Math.max(0, (now - last) / 1000)); last = now
       const pad = poll()
+      if (ver !== mapVer) { ver = mapVer; map = loadBindings() }
+      if (pad) setSeen(pad.kind)
+      if (capture) {
+        for (const e of releaseAll(s)) apply(e)
+        const b = pad && (Object.keys(PAD) as PadButton[]).find(x => pad.pressed.has(x))
+        if (b) { const f = capture; capture = null; f(b) }
+        return
+      }
       if (!pad) padOwns = false
       else if (padActed(pad) && !padOwns) {
         padOwns = true
@@ -163,7 +187,7 @@ export function PadBridge({ menuOpen }: { menuOpen: boolean }) {
     const blur = () => { for (const e of releaseAll(s)) apply(e); resetEdges() }
     const wake = () => { map = loadBindings() }     // a pad plugged in (or rebinds saved in voxel3d's panel): re-read the map
     window.addEventListener('blur', blur); window.addEventListener('gamepadconnected', wake)
-    ;(window as unknown as { __pad?: unknown }).__pad = { kind: () => activeKind, held: () => [...s.down.values()], menu: () => menu.current }   // read-only probe (m186-pad-check)
+    ;(window as unknown as { __pad?: unknown }).__pad = { kind: () => activeKind, held: () => [...s.down.values()], menu: () => menu.current, map: () => map }   // read-only probe (m186-pad-check)
     return () => {
       clearInterval(id); blur(); setActive(null); ring(null)
       for (const g of GESTURES) window.removeEventListener(g, gesture, { capture: true })
@@ -173,7 +197,9 @@ export function PadBridge({ menuOpen }: { menuOpen: boolean }) {
   }, [])
   const locked = useSoundLocked()
   if (!kind) return null
-  const hints = menuOpen ? PAD_MENU_HINTS : PAD_HINTS
+  const binds = loadBindings()
+  const hints = menuOpen ? PAD_MENU_HINTS.map(h => ({ key: h.b, glyph: padName(h.b, kind), label: h.label }))
+    : PAD_HINTS.map(h => ({ key: h.id, glyph: hintFor(binds, h.id, 'pad', kind), label: h.label })).filter(h => h.glyph)
   const touchy = typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0)
   return (
     <>
@@ -185,7 +211,7 @@ export function PadBridge({ menuOpen }: { menuOpen: boolean }) {
         </div>
       )}
       <div data-pad-hint style={{ position: 'fixed', left: 8, top: 8, zIndex: 40, display: 'flex', gap: 10, padding: '3px 10px', borderRadius: 999, background: 'rgba(12,16,20,0.55)', color: '#eef3f6', font: '600 10px system-ui, sans-serif', letterSpacing: '0.06em', pointerEvents: 'none', whiteSpace: 'nowrap' }}>
-        {hints.map(h => <span key={h.b}><span style={{ color: '#d4a843' }}>{padName(h.b, kind)}</span> {h.label}</span>)}
+        {hints.map(h => <span key={h.key}><span style={{ color: '#d4a843' }}>{h.glyph}</span> {h.label}</span>)}
       </div>
     </>
   )

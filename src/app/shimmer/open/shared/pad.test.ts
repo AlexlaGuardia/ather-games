@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 import type { PadButton } from '@/lib/input/actions'
 import { merge } from '@/lib/input/bindings'
 import type { PadSample } from '@/lib/input/gamepad'
-import { newPadState, padStep, releaseAll, padActed, padPrompt, OPEN_CODE, PAD_LOOK_RAD_S, type PadEffect } from './pad'
+import { newPadState, padStep, releaseAll, padActed, padPrompt, padBind, padReset, PAD_ROW_IDS, OPEN_CODE, PAD_LOOK_RAD_S, type PadEffect } from './pad'
 import { hintFor } from '@/lib/input/hints'
 
 let pass = 0; const fails: string[] = []
@@ -139,6 +139,44 @@ const has = (fx: PadEffect[], e: PadEffect) => fx.some(f => JSON.stringify(f) ==
   ok(/exitPointerLock/.test(bridge), 'the pad taking the game lets the mouse go (so the mouse next shows a cursor)')
   ok(/addEventListener\('mousemove'/.test(bridge) && /cursor:none !important/.test(bridge), 'the mouse moving hands the game back; the pad hides the cursor')
   ok(/data-audio-locked/.test(bridge) && /isTrusted\) return[\s\S]{0,200}audio\(\)/.test(bridge), 'a real gesture resumes the audio; a locked note shows with a pad')
+}
+
+// 12. M189 rebinding: jump A -> B swaps Close onto A; the world then jumps on B, not A; a menu still closes on B, picks on A
+{
+  const r = padBind(map, 'move.jump', 'B')!
+  ok(!!r && r.swapped === 'ui.close', 'jump onto B swaps with close')
+  ok(JSON.stringify(r.map['move.jump'].pad) === '["B"]' && JSON.stringify(r.map['ui.close'].pad) === '["A"]', 'jump on B, close on A')
+  ok(JSON.stringify(r.map['move.jump'].keys) === JSON.stringify(map['move.jump'].keys), 'the keyboard keys are untouched')
+  const s = newPadState(), p = pad()
+  let fx = padStep(s, p(['B']), r.map, false, 1 / 60)
+  ok(has(fx, { t: 'keydown', code: 'Space' }) && !fx.some(f => 'code' in f && f.code === 'Escape'), 'world: B jumps, does not close')
+  padStep(s, p([]), r.map, false, 1 / 60)
+  fx = padStep(s, p(['A']), r.map, false, 1 / 60)
+  ok(!has(fx, { t: 'keydown', code: 'Space' }) && has(fx, { t: 'keydown', code: 'Escape' }), 'world: A no longer jumps (it is close now)')
+  const m = newPadState(), q = pad()
+  fx = padStep(m, q(['A']), r.map, true, 1 / 60)
+  ok(has(fx, { t: 'accept' }) && !fx.some(f => f.t === 'tap' && f.code === 'Escape'), 'menu: A still picks (close moved onto A waits)')
+  padStep(m, q([]), r.map, true, 1 / 60)
+  fx = padStep(m, q(['B']), r.map, true, 1 / 60)
+  ok(fx.filter(f => f.t === 'tap' && f.code === 'Escape').length === 1, 'menu: B still closes, once')
+}
+// 13. M189: the hotbar sides are refused; the signature's chord swaps over; reset gives the defaults back, keys kept
+{
+  ok(padBind(map, 'move.jump', 'DLEFT') === null && padBind(map, 'move.jump', 'DRIGHT') === null, 'd-pad sides stay on the hotbar')
+  ok(padBind(map, 'item.drop', 'A') === null, 'an action the open world does not list is refused')
+  const r = padBind(map, 'cast.signature', 'R3')!
+  ok(JSON.stringify(r.map['cast.signature'].pad) === '["R3"]' && (r.map['cast.signature'].padChord ?? []).length === 0, 'signature onto R3: one button, no chord')
+  const t = padBind(r.map, 'cast.signature', 'A')!
+  ok(t.swapped === 'move.jump' && JSON.stringify(t.map['move.jump'].pad) === '["R3"]', 'a second move swaps jump onto R3')
+  const u = padBind(map, 'cast.signature', 'X')!
+  ok(u.swapped === 'world.interact' && JSON.stringify(u.map['world.interact'].padChord) === '["RB","LB"]', 'a chord-only action hands its chord to the one it displaced')
+  const keyed = { ...t.map, 'move.jump': { ...t.map['move.jump'], keys: ['KeyK'] } }
+  const z = padReset(keyed)
+  ok(PAD_ROW_IDS.every(id => JSON.stringify(z[id].pad) === JSON.stringify(map[id].pad) && JSON.stringify(z[id].padChord ?? []) === JSON.stringify(map[id].padChord ?? [])), 'reset: every pad button back to default')
+  ok(JSON.stringify(z['move.jump'].keys) === '["KeyK"]', 'reset keeps the keyboard keys')
+  const bridge = readFileSync('src/app/shimmer/open/shared/pad-bridge.tsx', 'utf8'), opts = readFileSync('src/app/shimmer/open/options.tsx', 'utf8')
+  ok(/if \(capture\) \{[\s\S]{0,320}return\n/.test(bridge) && /ver !== mapVer/.test(bridge), 'the bridge hands a press to a rebind and re-reads a saved map')
+  ok(/<PadBindings \/>/.test(opts) && /padCapture\(/.test(opts) && /padReset\(/.test(opts), 'Options lists the controller and rebinds through the bridge')
 }
 
 console.log(`pad: ${pass} ok, ${fails.length} fail`)

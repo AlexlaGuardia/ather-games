@@ -22,6 +22,11 @@ import { oneOfEachSeed, lendAllGuns, takeBackGuns } from './shared/owner-grants'
 import { getLoadout, setLoadout, useLoadout } from './shared/loadout'
 import { setPlayTogether } from './shared/play-together'
 import { ACTIONS, RESERVED, useKeymap, keyFor, keyName, setBinding, resetKeymap, setCapturing, installKeymap } from './shared/keymap'
+import { PAD_ROW_IDS, PAD_FIXED, OPEN_CODE, padBind, padReset } from './shared/pad'
+import { padCapture, savePadMap, usePadSeenKind } from './shared/pad-bridge'
+import { load as loadBindings } from '@/lib/input/bindings'
+import { hintFor, padName } from '@/lib/input/hints'
+import type { ActionId } from '@/lib/input/actions'
 
 function Toggle({ label, on, onFlip, sub, id }: { label: string; on: boolean; onFlip: () => void; sub?: string; id: string }) {
   return (
@@ -70,6 +75,54 @@ function Bindings() {
       })}
       <p className="text-[11.5px] italic leading-snug hk-faint" style={hearthDisplay}>A key already in use swaps over. Esc cancels. Esc, Tab, the arrows and the mouse stay where they are.</p>
       <OptionRow onClick={resetKeymap} label="Reset keys" tail="defaults" />
+    </div>
+  )
+}
+
+/** M189 the controller's buttons, in the words the keys use (keymap ACTIONS); the three with no key say it plainly.
+ *  Placeholder words (for @lark): 'fire', 'aim', 'close', the notes under the list. */
+const PAD_EXTRA: Partial<Record<ActionId, string>> = { 'world.mine': 'fire', 'world.place': 'aim · sights', 'ui.close': 'close · back' }
+const padLabel = (id: ActionId) => PAD_EXTRA[id] ?? ACTIONS.find(a => a.code === OPEN_CODE[id])?.label ?? id
+
+/** ★ M189 REBINDING THE CONTROLLER: pick an action, press a pad button. A button already in use swaps over. */
+function PadBindings() {
+  const kind = usePadSeenKind() ?? 'generic'
+  const [map, setMap] = useState(() => loadBindings())
+  const [listen, setListen] = useState<ActionId | null>(null)
+  const [said, setSaid] = useState('')
+  useEffect(() => {
+    if (!listen) return
+    padCapture(b => {
+      const r = padBind(loadBindings(), listen, b)
+      if (!r) setSaid(`${padName(b, kind)} stays on the hotbar`)
+      else { savePadMap(r.map); setMap(r.map); setSaid(r.swapped ? `swapped: ${padLabel(r.swapped)} is now on ${hintFor(r.map, r.swapped, 'pad', kind) ?? 'nothing'}` : '') }
+      setListen(null)
+    })
+    const esc = (e: KeyboardEvent) => { if (e.code === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); setListen(null) } }
+    window.addEventListener('keydown', esc, true)
+    return () => { padCapture(null); window.removeEventListener('keydown', esc, true) }
+  }, [listen, kind])
+  return (
+    <div className="grid gap-1" data-padbinds>
+      {PAD_ROW_IDS.map(id => {
+        const on = listen === id
+        return (
+          <button key={id} type="button" data-padbind={id} onClick={() => { setSaid(''); setListen(on ? null : id) }}
+            className="flex items-center justify-between gap-3 rounded-[9px] px-2.5 py-1.5 text-left text-[12.5px] transition-all"
+            style={{ background: on ? 'rgba(200,100,42,.16)' : 'rgba(255,250,238,.55)', boxShadow: on ? 'inset 0 0 0 1.5px #c8642a' : '0 1px 2px rgba(58,39,22,.14)' }}>
+            <span className="hk-soft">{padLabel(id)}</span>
+            <span data-padglyph className="min-w-[64px] text-center rounded-[6px] px-2 py-0.5 font-bold tabular-nums"
+              style={{ background: on ? '#c8642a' : 'rgba(58,39,22,.10)', color: on ? '#fbf4e4' : '#3a2716' }}>
+              {on ? 'press a button' : hintFor(map, id, 'pad', kind) ?? '—'}
+            </span>
+          </button>
+        )
+      })}
+      {said && <p data-padsaid className="text-[12px] font-bold leading-snug hk-ember">{said}</p>}
+      <p className="text-[11.5px] italic leading-snug hk-faint" style={hearthDisplay}>
+        A button already in use swaps over. {PAD_FIXED.map(b => padName(b, kind)).join(' and ')} step the hotbar. In a menu, {padName('A', kind)} picks and {padName('B', kind)} closes whatever you bound.
+      </p>
+      <OptionRow onClick={() => { const m = padReset(loadBindings()); savePadMap(m); setMap(m); setSaid(''); setListen(null) }} label="Reset controller" tail="defaults" />
     </div>
   )
 }
@@ -170,6 +223,8 @@ export function OpenOptions({ onClose, keys = WALK_KEYS, extraGame, inGarden = f
           <OptionRow onClick={resetSettings} label="Reset look settings" tail="defaults" />
           <OptionHead>Keys</OptionHead>
           <Bindings />
+          <OptionHead>Controller</OptionHead>
+          <PadBindings />
           <OptionHead>Fixed</OptionHead>
           <div className="grid gap-1" data-keys>
             {keys.map(([k, what]) => (

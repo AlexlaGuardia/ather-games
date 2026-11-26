@@ -20,6 +20,7 @@ import type { ActionId, PadButton } from '@/lib/input/actions'
 import type { BindingMap } from '@/lib/input/bindings'
 import type { PadSample } from '@/lib/input/gamepad'
 import { chordOf, padPressed, stickMove } from '@/lib/input/resolve'
+import { DEFAULTS, ALL_ACTIONS } from '@/lib/input/actions'
 
 /** voxel3d action → the open-world key code it presses. Only actions the open world HAS are listed (no place, drop, craft, rotate). */
 export const OPEN_CODE: Partial<Record<ActionId, string>> = {
@@ -40,6 +41,8 @@ export const FIRE_ACTION: ActionId = 'world.mine'
 export const AIM_ACTION: ActionId = 'world.place'
 /** In a menu these still mean what they mean outside it (close, options, map). Everything else is navigation. */
 const MENU_PASS: readonly ActionId[] = ['ui.close', 'ui.settings', 'ui.map']
+/** The buttons a menu reads for itself (pick, close, move, tabs), never rebound inside a panel. */
+export const MENU_FIXED: readonly PadButton[] = ['A', 'B', 'LB', 'RB', 'DUP', 'DDOWN', 'DLEFT', 'DRIGHT']
 
 /** Full stick = this many radians a second of turn. A squared curve keeps a small push fine for aiming. */
 export const PAD_LOOK_RAD_S = 3.2
@@ -86,7 +89,12 @@ export function padStep(s: PadState, pad: PadSample | null, map: BindingMap, men
 
   if (menuOpen) {
     out.push(...releaseAll(s))
-    for (const id of MENU_PASS) if (pressed.has(id)) out.push({ t: 'tap', code: OPEN_CODE[id]! })
+    // M189: a menu's own buttons (A pick, B close, the d-pad, LB / RB tabs) stay put whatever the player rebound, so a
+    // pad can always find its way out of a panel. An action moved ONTO one of them waits until the panel is shut.
+    const taps = new Set<string>()
+    for (const id of MENU_PASS) if (pressed.has(id) && map[id].pad.some(b => edge(b) && !MENU_FIXED.includes(b))) taps.add(OPEN_CODE[id]!)
+    if (edge('B')) taps.add('Escape')
+    for (const code of taps) out.push({ t: 'tap', code })
     if (edge('DUP')) out.push({ t: 'nav', dir: 'up' })
     if (edge('DDOWN')) out.push({ t: 'nav', dir: 'down' })
     if (edge('DLEFT')) out.push({ t: 'nav', dir: 'left' })
@@ -126,10 +134,10 @@ export function padStep(s: PadState, pad: PadSample | null, map: BindingMap, men
   return out
 }
 
-/** The small on-screen legend while a pad is in use. Placeholder words (for @lark). */
-export const PAD_HINTS: { b: PadButton; label: string }[] = [
-  { b: 'A', label: 'jump' }, { b: 'X', label: 'use' }, { b: 'Y', label: 'draw' }, { b: 'RT', label: 'fire' },
-  { b: 'LT', label: 'aim' }, { b: 'DUP', label: 'bag' }, { b: 'SELECT', label: 'map' }, { b: 'START', label: 'options' },
+/** The small on-screen legend while a pad is in use, by ACTION (M189: it names whatever button the player bound). Placeholder words (for @lark). */
+export const PAD_HINTS: { id: ActionId; label: string }[] = [
+  { id: 'move.jump', label: 'jump' }, { id: 'world.interact', label: 'use' }, { id: 'item.draw', label: 'draw' }, { id: 'world.mine', label: 'fire' },
+  { id: 'world.place', label: 'aim' }, { id: 'ui.inventory', label: 'bag' }, { id: 'ui.map', label: 'map' }, { id: 'ui.settings', label: 'options' },
 ]
 export const PAD_MENU_HINTS: { b: PadButton; label: string }[] = [{ b: 'A', label: 'pick' }, { b: 'B', label: 'close' }]
 
@@ -148,3 +156,39 @@ export function padPrompt(text: string, glyph: string | null): string {
 }
 /** Chrome runs audio only after a real click / key / tap; a pad press is not one. Placeholder words (for @lark). */
 export const SOUND_OFF_NOTE = { click: 'Sound is off · click or press a key once to turn it on', tap: 'Sound is off · tap the screen once to turn it on' }
+
+// ── M189: rebinding the controller (Alex 11-26: 'i need to be able to customize each button for the controller') ──────
+// The SAME 08-28 BindingMap voxel3d's BindingsPanel edits (shimmer.voxel.bindings.v1, a DEVICE key like the open world's
+// keymap, open.keymap.v1: the hands, not the keeper). Only each action's `pad` / `padChord` change; `keys` never do.
+/** The open-world actions a player can move to another button, in the order Options lists them. */
+export const PAD_ROW_IDS: readonly ActionId[] = [
+  'move.jump', 'move.slide', 'world.interact', 'item.draw', 'world.mine', 'world.place',
+  'cast.focus', 'cast.tactical', 'cast.signature', 'ui.inventory', 'ui.map', 'ui.settings', 'ui.close',
+]
+/** Buttons no action can take: the d-pad's sides step the hotbar (padStep reads them directly). */
+export const PAD_FIXED: readonly PadButton[] = ['DLEFT', 'DRIGHT']
+
+/** Put `id` on button `b`. Another listed action already on `b` SWAPS onto `id`'s old button (nothing is left dead).
+ *  null = refused (a fixed button, or an action not in the list). Pure: returns a new map. */
+export function padBind(map: BindingMap, id: ActionId, b: PadButton): { map: BindingMap; swapped: ActionId | null } | null {
+  if (PAD_FIXED.includes(b) || !PAD_ROW_IDS.includes(id)) return null
+  const oldPad = map[id].pad, oldChord = chordOf(map[id])
+  const next: BindingMap = { ...map, [id]: { ...map[id], pad: [b], padChord: [] } }
+  let swapped: ActionId | null = null
+  for (const o of PAD_ROW_IDS) {
+    if (o === id || !map[o].pad.includes(b)) continue
+    const pad = [...map[o].pad.filter(x => x !== b), ...oldPad.filter(x => x !== b && !map[o].pad.includes(x))]
+    // an action that only had a chord (the signature, RB + LB) hands its chord over when the other has no button left
+    const padChord = pad.length === 0 && chordOf(map[o]).length === 0 ? [...oldChord] : [...chordOf(map[o])]
+    next[o] = { ...map[o], pad, padChord }
+    swapped ??= o
+  }
+  return { map: next, swapped }
+}
+
+/** Every action's controller buttons back to the 08-28 defaults; keyboard keys untouched. */
+export function padReset(map: BindingMap): BindingMap {
+  const out = { ...map }
+  for (const id of ALL_ACTIONS) out[id] = { ...map[id], pad: [...DEFAULTS[id].pad], padChord: [...(DEFAULTS[id].padChord ?? [])] }
+  return out
+}
