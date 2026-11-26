@@ -465,6 +465,7 @@ Steps (one worker each, in order; each keeps `beta-m7-saves` green):
 - 11-23 08:4x Alex on Nyx + ships: agreed Nyx is thin; M73 opening chain next. On a flyable skyship: "I'm not on board for 3, I'm thinking it's just a gate to space maps" → DECIDED: NO flight system. A repaired ship = a GATE to space maps (board it, pick a destination, load the map; the Hask wreck is the first, its SOS = the destination-list question). Ship repair loop = canon ask to Magii.
 
 ## Alex's queue (🔒: look / feel / canon; clear it when you have a minute)
+- M145+M212 live: judge arrow + '!' look (docs/looks/m145-m212-2026-11-26/; '!' reads big up close) and pick the next 'firsts' for M145 s2 (pack, map, seeds, tools, waymark, training, party).
 - M205: tag a Supplier zone 'Ather Trading Co.' where it stands in the Nyx builder (panel is live, no zone tagged yet).
 - **M181 Rune Hold door on old saves (11-26, LIVE):** the fold map lists Rune Hold once Greg's gems are handed, The Dig starts, or you hold a city door. An old keeper with none of those loses the door from the map until one happens. OK, or should every old save keep it?
 - **Your Glade draft (11-25 17:5x):** would not publish as it stands: 'Mallow's house has a door nobody can stand at' (yours to move) and 'Carpentry room stands in a solid piece' (on purpose: M183 lets pieces stand on a room's floor). Lilies are in Plants (Place mode): pink + white, not gold.
