@@ -22,7 +22,7 @@ export const MEATS: Readonly<Record<string, FoodDef>> = {
   tuskroot_cut: { name: 'Tuskroot Cut', blurb: 'A rich, fatty cut from a farmed Tuskroot. It roasts in its own fat.' },
   hearthwing_eggs: { name: 'Hearthwing Eggs', blurb: 'Speckled eggs, packed snug for the road. Set them in the coals.' },
 }
-/** M205: the staples a farmers market supplier sells (canon world/cuisine.md › Grains & Starches: Capgrain line 19, Rootbulb
+/** M205: the staples the Trading Co. supplier sells (canon world/cuisine.md › Grains & Starches: Capgrain line 19, Rootbulb
  *  line 20; names + looks are canon, blurbs await @lark). Rootbulb is "roasted": it roasts at the hearth. Capgrain is flour for
  *  bread / porridge / stews: the hearth is open coals, no vessel (09-15), so it has no recipe yet (a later slice). */
 export const STAPLES: Readonly<Record<string, FoodDef>> = {
@@ -39,7 +39,7 @@ export const DISHES: Readonly<Record<string, FoodDef & { heal: number }>> = {
   roast_shimmerscale_fillet: { name: 'Roast Shimmerscale Fillet', blurb: 'A Shimmerscale fillet off the coals. Hold it and click to eat. Heals 40.', heal: 40 },
   roast_ribboneel_fillet: { name: 'Roast Ribboneel Fillet', blurb: 'Ribboneel roasted on the hearth. Hold it and click to eat. Heals 60.', heal: 60 },
   roast_clickclaw_meat: { name: 'Roast Clickclaw', blurb: 'Clickclaw meat done in the coals. Hold it and click to eat. Heals 45.', heal: 45 },
-  // M205: a Rootbulb off a farmers market supplier roasts (Jin's heal; name + blurb await @lark)
+  // M205: a Rootbulb off the Trading Co. supplier roasts (Jin's heal; name + blurb await @lark)
   roast_rootbulb: { name: 'Roast Rootbulb', blurb: 'A rootbulb roasted in the coals. Hold it and click to eat. Heals 30.', heal: 30 },
 }
 

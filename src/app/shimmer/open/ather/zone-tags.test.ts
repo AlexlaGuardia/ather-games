@@ -43,14 +43,14 @@ ok(zoneUse({ tag: { kind: 'home', ref: 'x' } }) === null, 'home with no name: no
 
 // SUPPLIER = placeholder only
 // M205: supplier KINDS come first in the list now; the message-line case is a trade-goods stand-in (the first non-kind entry)
-const firstSup = supplierChoices().find(c => c.ref !== 'farmers-market')!
+const firstSup = supplierChoices().find(c => c.ref !== 'trade-co')!
 const s = zoneUse({ tag: { kind: 'supplier', ref: firstSup.ref, name: firstSup.name } })
 ok(s?.kind === 'supplier' && zoneSay(s) === `Supplier: ${firstSup.name}` && zonePrompt(s) === `E · Supplier: ${firstSup.name}`, 'Supplier: placeholder line with the stand-in name')
 const s2 = zoneUse({ tag: { kind: 'supplier', ref: firstSup.ref } })
 ok(s2?.kind === 'supplier' && s2.name === firstSup.name, 'supplier with only a ref: the good\'s own name')
 ok(s?.kind === 'supplier' && !s.sells, 'M205: a stand-in supplier opens no buy panel')
-const fm = zoneUse({ tag: { kind: 'supplier', ref: 'farmers-market', name: 'Farmers market' } })
-ok(fm?.kind === 'supplier' && fm.sells === 'farmers-market' && zonePrompt(fm) === 'E · Farmers market', 'M205: a farmers-market supplier carries its kind; prompt = the tag name')
+const fm = zoneUse({ tag: { kind: 'supplier', ref: 'trade-co', name: 'Ather Trading Co.' } })
+ok(fm?.kind === 'supplier' && fm.sells === 'trade-co' && zonePrompt(fm) === 'E · Ather Trading Co.', 'M205: a trade-co supplier carries its kind; prompt = the tag name')
 
 // homeTalk: every Glade home the popup offers maps to its existing talk when that NPC stands here
 const here = { greg: true, friends: ['otto', 'tess', 'bonn'], fennel: 'moonwell:fennel', folk: ['moonwell:fennel', 'moonwell:hazel', 'moonwell:sax'] }

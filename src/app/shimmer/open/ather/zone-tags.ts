@@ -7,7 +7,7 @@
 //   · OTHER    -> locked: E says so (a plain placeholder line), nothing to enter.
 //   · SHOP     -> E opens THAT storefront's existing panel (business/shop-panel.tsx ShopPanel, the one its continent door opens).
 //   · HOME     -> E shows "<Resident>'s home" and, when that NPC is in the Glade, opens their existing talk (homeTalk). NPCs do not move.
-//   · SUPPLIER -> a supplier KIND (M205: business/suppliers.ts, the farmers market) carries `sells` = that kind: E opens its buy panel
+//   · SUPPLIER -> a supplier KIND (M205: business/suppliers.ts, the Ather Trading Co.) carries `sells` = that kind: E opens its buy panel
 //                (Nyx continent: nyx-zones.tsx). Any other supplier ref (the trade-goods stand-ins): E shows "Supplier: <name>" only.
 // An untagged zone, or a tag whose shop / name is unknown, gets no E point (nothing true to say).
 import { FRONT_SHOPS } from '../business/doors'

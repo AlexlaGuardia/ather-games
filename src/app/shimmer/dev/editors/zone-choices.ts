@@ -6,7 +6,7 @@
 //   SHOP     the canon storefronts (business/doors.ts FRONT_SHOPS): one entry per shop, its own name.
 //   SUPPLIER no 'supplier' list exists anywhere in the game or the canon files (11-23). Stand-in: the trade goods (trade.ts GOODS),
 //            "who supplies what", by the good's own name. FLAGGED for the hub / Magii; swap the source here when one is ruled.
-//            M205: the supplier KINDS (business/suppliers.ts SUPPLIER_KINDS: 'Farmers market') come FIRST; a zone tagged with one
+//            M205: the supplier KINDS (business/suppliers.ts SUPPLIER_KINDS: 'Ather Trading Co.') come FIRST; a zone tagged with one
 //            opens that kind's buy panel in the game. The trade-goods stand-ins stay below (message line only).
 import type { BuilderMap } from '../../world/builder'
 import type { ZoneKind } from '../../world/builder-zones'

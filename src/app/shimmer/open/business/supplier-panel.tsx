@@ -1,8 +1,8 @@
 'use client'
 // ── BETA M205 s1 (+ M115): A SUPPLIER ZONE'S BUY PANEL (Nyx continent) ──
-// E at a zone tagged Supplier with a kind (business/suppliers.ts; today the farmers market) opens this: the kind's bulk lots, a
-// ONE-TIME buy each (the season contract is a later slice). Title = the zone's OWN tag name (Alex names it in the builder; the
-// market's canon name + who runs it are Magii's, open): no keeper speaks. Lines are plain placeholders for @lark, like the
+// E at a zone tagged Supplier with a kind (business/suppliers.ts; today the Ather Trading Co.) opens this: the kind's bulk lots, a
+// ONE-TIME buy each (the season contract is a later slice). Title = the zone's OWN tag name (the builder's pick: the
+// Trading Co.'s own name, ruled athernyx 35c83eb): no keeper speaks. Lines are plain placeholders for @lark, like the
 // Smokehouse panel (shop-panel.tsx SmokehousePanel), whose layout this copies.
 import { useState } from 'react'
 import { HearthFrame, H, hearthDisplay, HearthButton } from '../../ui/hearth'

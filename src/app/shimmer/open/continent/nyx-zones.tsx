@@ -6,7 +6,7 @@
 // the Driver); this component draws the parts and runs the E points.
 //   · SHOP     -> onShop(id): the page opens that storefront's own ShopPanel (deed `zone:<id>`, not `front:<id>`: MarketView closes
 //                a `front:` panel when you are far from THAT shop's town door, and a zone's shop stands somewhere else).
-//   · SUPPLIER with a kind (M205: `sells`, the farmers market) -> onSupplier(kind): the page opens that kind's buy panel (deed
+//   · SUPPLIER with a kind (M205: `sells`, the Ather Trading Co.) -> onSupplier(kind): the page opens that kind's buy panel (deed
 //                `supplier:<kind>`; it closes when you walk WALK_OFF from the E point, like a zone's shop).
 //   · OTHER / HOME / other SUPPLIER -> the message line only (no continent resident list exists; zone-choices.ts).
 import { useEffect, useMemo, useRef } from 'react'

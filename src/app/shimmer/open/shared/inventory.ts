@@ -146,7 +146,7 @@ for (const id of SEED_IDS) { OPEN_ITEMS[id] = { name: SEED_NAME, blurb: SEED_BLU
 // COOKING (2026-11-17, ather/cooking.ts): Smokehouse meat (RULED 11-17) and the hearth's roasts (ruled 09-15). Raw meat is a
 //    material; a dish is held and clicked to eat (ather/page.tsx). Icons: tools/art/food_icons.py.
 for (const [id, f] of Object.entries(MEATS)) { OPEN_ITEMS[id] = { name: f.name, blurb: f.blurb, icon: `/open/icons/${id.replace(/_/g, '-')}.svg`, stack: 99, kind: 'material' }; ITEM_GROUP[id] = 'cooking' }
-// M205: the farmers market supplier's staples (Rootbulb, Capgrain; ather/cooking.ts STAPLES). Code-drawn icons.
+// M205: the Trading Co. supplier's staples (Rootbulb, Capgrain; ather/cooking.ts STAPLES). Code-drawn icons.
 for (const [id, f] of Object.entries(STAPLES)) { OPEN_ITEMS[id] = { name: f.name, blurb: f.blurb, icon: `/open/icons/${id}.svg`, stack: 99, kind: 'material' }; ITEM_GROUP[id] = 'cooking' }
 for (const [id, f] of Object.entries(DISHES)) { OPEN_ITEMS[id] = { name: f.name, blurb: f.blurb, icon: `/open/icons/${id.replace(/_/g, '-')}.svg`, stack: 20, kind: 'material' }; ITEM_GROUP[id] = 'cooking' }
 // M206 THE FILET TAB (ather/cooking.ts FILET): fillets + Shimmerscale scales, made at the Rinnshop. Kept by the cooking room

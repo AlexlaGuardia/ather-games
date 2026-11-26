@@ -1,6 +1,6 @@
-// ── BETA M205 s1 (+ M115): A FARMERS MARKET SUPPLIER ZONE ON NYX OPENS A BUY PANEL (world-M205, 2026-11-26) ──
+// ── BETA M205 s1 (+ M115): AN ATHER TRADING CO. SUPPLIER ZONE ON NYX OPENS A BUY PANEL (world-M205, 2026-11-26) ──
 // No live Nyx zone exists yet (placement is Alex's), so the check brings a FIXTURE and removes it: owner writes the Nyx draft =
-// live + ONE zone tagged Supplier / 'farmers-market' / name 'Farmers market' (front N) and PUBLISHES. Then, per viewport
+// live + ONE zone tagged Supplier / 'trade-co' / name 'Ather Trading Co.' (front N) and PUBLISHES. Then, per viewport
 // (390x844 TOUCH: the E pill 'buy'; 1280x800 desktop: the E key), a FRESH keeper (no owner key) on foot at the zone's E point:
 //   the crosshair finds it (a supplier with a kind) -> E opens the supplier panel titled with the zone's own name -> buy Rootbulb +
 //   Capgrain -> the purse drops by both prices, both lots in the bag (open.inv.v1).
@@ -69,11 +69,11 @@ try {
   await probe.ctx.close()
   ok(!!s, `nyx: flat dry land found near ${p0.id} (${s?.x}, ${s?.z})`)
   if (!s) throw new Error('no land')
-  const Z = { id: 'zc-m205', x0: s.x, z0: s.z, x1: s.x + 8, z1: s.z + 6, h: 0, prev: {}, tag: { kind: 'supplier', ref: 'farmers-market', name: 'Farmers market', front: 'n' } }
+  const Z = { id: 'zc-m205', x0: s.x, z0: s.z, x1: s.x + 8, z1: s.z + 6, h: 0, prev: {}, tag: { kind: 'supplier', ref: 'trade-co', name: 'Ather Trading Co.', front: 'n' } }
   const D = { x: (Z.x0 + Z.x1) / 2, z: Z.z0 - 0.6 }
   const liveL = JSON.parse(liveText0) as { zones?: unknown[] }
   const d = await bpost({ action: 'draft', layer: { ...liveL, zones: [...(liveL.zones ?? []), Z] } })
-  ok(!!d && !d.status, `owner: the nyx draft = live + 1 Supplier zone (farmers-market) (${d?.status ?? 'ok'})`)
+  ok(!!d && !d.status, `owner: the nyx draft = live + 1 Supplier zone (trade-co) (${d?.status ?? 'ok'})`)
   const pub = await bpost({ action: 'publish', note: 'check: m205-market-check' }); published = !!pub && !pub.status
   ok(published, `nyx: PUBLISH ok (${pub?.status ?? 'ok'})`)
 
@@ -88,10 +88,10 @@ try {
     await at(D.x, D.z - 3, Math.PI, -0.1)
     ok((await Dv('foot') as { mode: string }).mode === 'foot', `${tag}: a fresh keeper (no owner key) is on foot on the continent`)
     const ds = await kp.evaluate(() => (window as any).__nyxZones?.doors() ?? []) as { x: number; z: number; u: { kind: string; sells?: string } }[]
-    ok(ds.length === 1 && Math.abs(ds[0].x - D.x) < 1e-6 && Math.abs(ds[0].z - D.z) < 1e-6 && ds[0].u.sells === 'farmers-market', `${tag}: ONE E point, a supplier selling farmers-market (${JSON.stringify(ds.map(q => q.u))})`)
+    ok(ds.length === 1 && Math.abs(ds[0].x - D.x) < 1e-6 && Math.abs(ds[0].z - D.z) < 1e-6 && ds[0].u.sells === 'trade-co', `${tag}: ONE E point, a supplier selling trade-co (${JSON.stringify(ds.map(q => q.u))})`)
     let reach: { kind?: string; sells?: string } | null = null
     for (let t = 0; t < 4 && !reach?.sells; t++) { await at(D.x, D.z - 1.6, Math.PI, -0.25 - t * 0.1); reach = await kp.evaluate(() => (window as any).__nyxZones?.reach() ?? null) }
-    ok(reach?.kind === 'supplier' && reach.sells === 'farmers-market', `${tag}: the crosshair finds the market's E point (${JSON.stringify(reach)})`)
+    ok(reach?.kind === 'supplier' && reach.sells === 'trade-co', `${tag}: the crosshair finds the market's E point (${JSON.stringify(reach)})`)
     if (touch) {
       ok(await kp.evaluate(() => !!document.querySelector('[data-touch="buy"]')), `${tag}: the E pill reads 'buy'`)
       await kp.screenshot({ path: `${out}/${tag}-a-reach.png` })
@@ -99,7 +99,7 @@ try {
     } else await kp.keyboard.press('KeyE')
     await sleep(1500)
     const title = await kp.evaluate(() => document.querySelector('[data-panel="supplier-panel"]')?.textContent ?? '') as string
-    ok(title.includes('Farmers market') && title.includes('Rootbulb') && title.includes('Capgrain'), `${tag}: E opens the supplier panel, titled with the zone's name, Rootbulb + Capgrain listed`)
+    ok(title.includes('Ather Trading Co.') && title.includes('Rootbulb') && title.includes('Capgrain'), `${tag}: E opens the supplier panel, titled with the zone's name, Rootbulb + Capgrain listed`)
     await kp.screenshot({ path: `${out}/${tag}-b-panel.png` })
     const m0 = await purse(kp), b0 = await bagOf(kp)
     await clickSel(kp, '[data-buy="rootbulb"] button'); await sleep(700)
