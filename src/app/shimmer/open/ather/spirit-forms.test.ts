@@ -3,7 +3,7 @@
 // Reads the shipped glbs: each form is rigged on the Vulnyx's own M132 plan (same bones, every clip), is bigger than her base
 // (every evolution grows the spirit: spirits-species.md, Spirit Scale), and carries the coat of its locked picture.
 import * as fs from 'fs'
-import { SECOND_FORMS, formGrow, SPIRIT_ELEMENTS, SPIRIT_MODELS, SPIRIT_RIGS, formLook, rigLook, spiritModelFor } from './spirit-models'
+import { MARLOTL_RIG, SECOND_FORMS, formGrow, SPIRIT_ELEMENTS, SPIRIT_MODELS, SPIRIT_RIGS, formLook, rigLook, spiritModelFor } from './spirit-models'
 
 let pass = 0
 const fails: string[] = []
@@ -45,14 +45,33 @@ for (const el of SPIRIT_ELEMENTS) {
   const coat = el === 'mana' ? b > g && r > g : el === 'storm' ? b > r && b > g && r < 200 : el === 'earth' ? r > g && g > b : g > r && b > r
   ok(coat, `fox ${el}: coat ${[r, g, b].map(Math.round)}`)
 }
+// ── M202 MARLOTL: Manalotl's Water form, her OWN creature and her own skeleton (not the Manalotl's), dial 1.4 by length ──
+{ const L = formLook('axolotl', 'water')!, b = SPIRIT_RIGS.axolotl!
+  ok(!!L && L.name === 'marlotl' && L.url === '/open/spirits/marlotl-rigged.glb' && L.form === 'water', `axolotl water: Marlotl ${L?.url}`)
+  ok(!!L.rig && L.rig === MARLOTL_RIG && L.rig !== b.rig, 'axolotl water: her own rig')
+  ok(formGrow('marlotl') === 1.4, `axolotl water: size dial ${formGrow('marlotl')}`)
+  const len = L.h * MARLOTL_RIG.glbLen, baseLen = b.h * b.rig!.glbLen
+  ok(Math.abs(len - 0.9 * 1.4) < 1e-9 && Math.abs(len / baseLen - 1.4) < 0.01, `axolotl water: 1.4 x her base's length (${len.toFixed(3)} vs ${baseLen.toFixed(3)} m)`)
+  ok((L.trot.stride ?? 0) > (b.trot.stride ?? 0), 'axolotl water: her stride grows with her')
+  ok(fs.existsSync('public' + L.url), `axolotl water: ${L.url} shipped`)
+  const { j, col, n } = glb(L.url), names = (j.nodes as { name: string }[]).map(x => x.name), clips = (j.animations as { name: string }[]).map(a => a.name)
+  ok(['body', 'eyes', 'b_root', 'b_neck', 'b_head'].every(x => names.includes(x)), `axolotl water: nodes ${names.slice(0, 6)}`)
+  ok(['idle', 'walk', 'run', 'sit', 'lie'].every(c => clips.includes(c)) && L.rig!.lie === true, `axolotl water: clips ${clips}`)
+  ok(j.skins?.[0]?.joints?.length === 24, 'axolotl water: 24 bones')
+  // her glb's nose-to-tail is the glbLen her size reads (within 2%)
+  const pos = j.accessors[j.meshes.find((m: { name: string }) => m.name === 'body').primitives[0].attributes.POSITION]
+  ok(Math.abs((pos.max[2] - pos.min[2]) / MARLOTL_RIG.glbLen - 1) < 0.02, `axolotl water: glb length ${(pos.max[2] - pos.min[2]).toFixed(3)} = glbLen ${MARLOTL_RIG.glbLen}`)
+  const [r, g, bb] = mean(col, n); ok(g > r + 40 && bb > r + 40, `axolotl water: a teal coat ${[r, g, bb].map(Math.round)}`) }
 // her base form's coat is gold: a second form never ships the base colours by mistake
 { const { col, n } = glb(SPIRIT_RIGS.fox!.url), [r, g, b] = mean(col, n); ok(r > b + 60 && g > b, `base Vulnyx stays gold ${[r, g, b].map(Math.round)}`) }
 
 // ── picking ──
 ok(formLook('fox', null) === null && formLook('fox', undefined) === null, 'no element = no form (her base)')
 ok(formLook(null, 'mana') === null, 'no species = no form')
-ok(formLook('axolotl', 'water') === null, 'a species whose forms are not modelled yet keeps her base')
-ok(Object.keys(SECOND_FORMS).length === 1, 'slice 1 = the Vulnyx line only')
+// M202 Marlotl (the Manalotl line begins): her Water form is modelled, the other three Manalotl forms are not yet
+ok(formLook('water-bear', 'earth') === null, 'a species whose forms are not modelled yet keeps her base')
+ok(formLook('axolotl', 'mana') === null && formLook('axolotl', 'storm') === null && formLook('axolotl', 'earth') === null, 'a Manalotl form not modelled yet = her base')
+ok(Object.keys(SECOND_FORMS).sort().join() === 'axolotl,fox', 'the Vulnyx line + the Manalotl line')
 ok(new Set(SPIRIT_ELEMENTS.map(e => formLook('fox', e)!.url)).size === 4, 'four distinct forms')
 // rigLook: a form stays itself when rigs are on; ?rig=0 (the frame measure) gives her species' old model, never a rigged glb unrigged
 const v = formLook('fox', 'storm')!

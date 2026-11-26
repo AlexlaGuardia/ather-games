@@ -270,14 +270,29 @@ export const FORM_GROW = 1.2
 // Vulnix (v2, her own body: long, slim and level, a wave tail that rises and breaks forward with flame tongues, current ridges
 // and bubble domes on the coat, a water curl on the withers, webbed toes; docs/looks/m202-vulnix-v2-2026-11-26) 1.4 as her
 // sisters; her floor + hull are deeper than s1's so she keeps the art's teal (Vulnarc read paler than her art).
-export const FORM_GROW_BY: Readonly<Record<string, number>> = { vulnore: 1.4, vulnara: 1.4, vulnarc: 1.4, vulnix: 1.4 }
+// Marlotl (Manalotl's Water form, the first of the Manalotl line; her own body: webbed gill fins, a dorsal crest, a tall paddle
+// tail fin, a long slim trunk on sprawled legs; docs/looks/m202-marlotl-2026-11-26) 1.4 x the Manalotl's 0.90 m nose to tail.
+export const FORM_GROW_BY: Readonly<Record<string, number>> = { vulnore: 1.4, vulnara: 1.4, vulnarc: 1.4, vulnix: 1.4, marlotl: 1.4 }
 export const formGrow = (name: string): number => FORM_GROW_BY[name] ?? FORM_GROW
 const secondForm = (sp: Species, form: SpiritElement, name: string, emissive: string, hull: string): SpiritLook => {
   const b = SPIRIT_RIGS[sp]!, g = formGrow(name)
   return { ...b, name, form, url: `/open/spirits/${name}-rigged.glb`, h: b.h * g, skin: { emissive, emissiveI: 0.14 }, hull: { color: hull, opacity: 0.38 },
     trot: grownTrot(b.trot, b.h, b.h * g) }
 }
-export const SECOND_FORMS: Partial<Record<Species, Record<SpiritElement, SpiritLook>>> = {
+// M202 Marlotl: her own skeleton (rig_marlotl.py: the M132 quadruped plan, a salamander's sprawl for both gaits, sit + lie), so
+// her own RigLook; sized by length like her base (GROWN.axolotl.length x her dial over her glb's nose-to-tail).
+export const MARLOTL_RIG: RigLook = {
+  glbLen: 1.92, pivot: { x: 0, z: 0 }, clipV: { walk: 0.30 / 0.69, run: 0.95 / 0.69 }, runAt: [0.6, 0.5], hull: 0.026,
+  neck: 'b_neck', head: 'b_head', lie: true, cadence: 9, avatar: { z: -0.3, far: 1.9 },
+}
+const marlotl = (): SpiritLook => {
+  const L = secondForm('axolotl', 'water', 'marlotl', '#3fc4c0', '#b4f0ea'), h = GROWN.axolotl.length! * formGrow('marlotl') / MARLOTL_RIG.glbLen
+  return { ...L, h, rig: MARLOTL_RIG }
+}
+/** her glb's height standing (the idle clip's mean), glb units (rig metrics) */
+export const MARLOTL_GLB_TALL = 0.735
+export const SECOND_FORMS: Partial<Record<Species, Partial<Record<SpiritElement, SpiritLook>>>> = {
+  axolotl: { water: marlotl() },
   fox: {
     mana: secondForm('fox', 'mana', 'vulnara', '#b49cff', '#e8dcff'),
     storm: secondForm('fox', 'storm', 'vulnarc', '#a8d2ff', '#dcecff'),
