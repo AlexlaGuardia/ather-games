@@ -10,6 +10,7 @@ const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); retu
 const url = flag('--url', 'https://ather.games'), out = flag('--out', '/tmp'), PHONE = process.argv.includes('--phone')
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 const res: Record<string, unknown> = { url, phone: PHONE }
+await import('node:fs').then(fs => fs.mkdirSync(out, { recursive: true }))
 const errs: string[] = []
 const fails: string[] = []
 const ok = (c: unknown, m: string) => { console.log(`${c ? '✓' : '✗'} ${m}`); if (!c) fails.push(m) }
@@ -102,6 +103,7 @@ try {
   try { await A.screenshot({ path: `${out}/m188-${PHONE ? 390 : 'desk'}-2-bars.png` }) } catch { /* slow frame */ }
   // B leaves: B's bars go, and A's bar for B goes
   ok(await chordTab(B), 'B opens the Chord tab to leave')
+  await B.waitForSelector('[data-act="leave-party"]', { timeout: 10000 })   // the tab's useParty reads the code a tick after mount
   await B.click('[data-act="leave-party"]')
   ok(await poll(async () => (await mp(B, 'party')) === null, 10000), 'B left the chord')
   await closeOpts(B)
