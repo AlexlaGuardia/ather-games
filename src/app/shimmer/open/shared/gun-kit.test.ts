@@ -41,7 +41,8 @@ ok(modelOf({ id: 'backbone', slot: 'LONGBARREL' }) === live.backbone, 'letting g
 // every model a player draws today, byte for byte as it was before M149 (verified against HEAD's data 11-24; change it only with a look Alex OK'd)
 { const all = [...(['SIDEARM', 'SHORTBARREL', 'LONGBARREL', 'BREACHER', 'REACHER'] as const).map(slot => modelOf({ id: 'x', slot })), live.backbone, live['charred-rifle'], ...Object.entries(KIT_GUNS).flatMap(([id, g]) => sightsFor(g).map(s => kitModel(id as KitGunId, s)))]
   ok(createHash('sha1').update(JSON.stringify(all)).digest('hex') === 'cc8dcb4a4cf7e9942e85f4298c84102af7350861', 'every model in the game is byte-identical to before M149: ' + createHash('sha1').update(JSON.stringify(all)).digest('hex')) }
-const SLOT: Record<V2GunId, 'LONGBARREL' | 'REACHER'> = { backbone: 'LONGBARREL', 'charred-rifle': 'LONGBARREL', lance: 'REACHER' }
+const SLOT: Record<V2GunId, 'LONGBARREL' | 'REACHER' | 'SHORTBARREL'> = { backbone: 'LONGBARREL', 'charred-rifle': 'LONGBARREL', lance: 'REACHER', spitter: 'SHORTBARREL' }
+ok(Object.keys(V2_GUNS).includes('spitter') && V2_GUNS.spitter.own === 'iron' && V2_GUNS.spitter.parts.some(p => p.c === 'bronze'), 'M196: the Spitter is in the new family, iron by default, with bronze on it')
 for (const g of Object.values(V2_GUNS)) {
   const shipped = modelOf({ id: 'x', slot: SLOT[g.id] })
   ok(same(g.grip, shipped.grip) && same(g.fore, shipped.fore), `new ${g.id}: grip/fore are the shipped anchors (a saved hand tune lands)`)

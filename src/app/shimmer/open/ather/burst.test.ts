@@ -3,7 +3,7 @@
 import { newCombat, stepCombat, stepTrigger, dropBurst, fire, reload, type Combat, type Terrain } from './combat'
 import { RANGE_GUNS, RHYTHM_DIALS, burstCycle, withRhythm, holdGun, stepGun, type RangeGun, type Round } from '../shared/gunplay'
 import { weaponDef } from '../../engine/weapons'
-import { dialedGun, setRhythm, setGunTune, selectGunTune, resetGunTune, defaultsFor, settleAt, SETTLE_S } from '../shared/fp-gun'
+import { dialedGun, setRhythm, setGunTune, selectGunTune, resetGunTune, defaultsFor, settleAt, SETTLE_S, GUN_DEFAULTS } from '../shared/fp-gun'
 let pass = 0; const fails: string[] = []
 const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
 const FLAT: Terrain = { heightAt: () => -50, walkable: () => true }
@@ -63,15 +63,34 @@ for (const period of [2, 3, 5, 9, 38]) { const n = drive(mk(), 5, 1 / 60, t => M
 
 // every other gun: rows untouched, and fire() still one round per call
 const ROWS = { repeater: [0.22, 10, 16, 1, 0], spitter: [0.11, 7, 11, 1, 0], roar: [0.8, 7, 9, 1, 0], lance: [0.5, 22, 34, 1, 0], 'charred-rifle': [0.9, 34, 55, 1, 0] } as Record<string, number[]>
-for (const [id, r] of Object.entries(ROWS)) { const g = RANGE_GUNS.find(x => x.id === id)!; ok(JSON.stringify([g.fireCd, g.damage, g.crit, g.burst, g.burstGap]) === JSON.stringify(r), `${id} changed`); ok(dialedGun(g) === g && withRhythm(g, 0.1, 0.5) === g, `${id}: no rhythm`) }
+// M197 (meaning moved): a single gun now HAS a rhythm, its fire interval; undialled it is the row, and `gap` never touches it
+for (const [id, r] of Object.entries(ROWS)) { const g = RANGE_GUNS.find(x => x.id === id)!; ok(JSON.stringify([g.fireCd, g.damage, g.crit, g.burst, g.burstGap]) === JSON.stringify(r), `${id} changed`); ok(dialedGun(g) === g && withRhythm(g, 0.1) === g && withRhythm(g, 0.1, g.fireCd) === g, `${id}: undialled = the row`) }
 { const c = mk(RANGE_GUNS.find(g => g.id === 'lance')!); ok(fire(c, eye, aim) && !fire(c, eye, aim) && c.keeper.ammo === c.gun.clip - 1, 'Lance: one round a call') }
 
+// M195 (Alex 11-26, the Gun Tuner paste, word for word): every keeper's Backbone holds and fires on these numbers
+{ const PASTE = '{"gun":"backbone","S":1.2,"HIP_X":0.145,"HIP_Y":-0.175,"HIP_Z":-0.355,"ADS_DIST":0.34,"ADS_IN":0.15,"ADS_OUT":0.11,"BOB":0.014,"BOB_ADS":0.17,"KICK_Z":0.05,"KICK_PITCH":0.075,"KICK_DECAY":2,"HAND":0.85,"R_DX":0.002,"R_DY":0.044,"R_DZ":0.08,"R_PITCH":-1.12,"R_ROLL":0.8,"L_DX":-0.012,"L_DY":-0.032,"L_DZ":-0.032,"L_PITCH":1.34,"L_ROLL":-2.17,"BURST_GAP":0.07,"BURST_DELAY":0.6}'
+  const want = JSON.parse(PASTE), d = defaultsFor('backbone'), live = dialedGun(bb)
+  const got = JSON.stringify({ gun: 'backbone', ...Object.fromEntries(Object.keys(GUN_DEFAULTS).map(k => [k, d[k as keyof typeof d]])), BURST_GAP: live.burstGap, BURST_DELAY: live.fireCd })
+  ok(got === PASTE, `M195: the Backbone everyone gets = Alex's paste (${got})`)
+  ok(want.BURST_GAP === live.burstGap && want.BURST_DELAY === live.fireCd && near(3 * live.damage / burstCycle(live), DPS, 1e-6), "M195: Alex's rhythm, the Backbone's damage a second kept")
+  ok(JSON.stringify(defaultsFor('lance')) !== JSON.stringify(d) && defaultsFor('lance').KICK_Z === 0.162, 'M195: the Lance keeps its 11-22 hold (M190)') }
+// M197: a single gun's fire interval feeds the live gun (dialedGun), damage a second held, clamped, kept by a hand slider, reset
+{ const sp = RANGE_GUNS.find(g => g.id === 'spitter')!, dps = sp.damage / sp.fireCd
+  selectGunTune('spitter'); setRhythm('spitter', { FIRE_INTERVAL: 0.2 }); const w = dialedGun(sp)
+  ok(w.fireCd === 0.2 && near(w.damage / w.fireCd, dps, 1e-9), `M197: Spitter dialled to 0.2 s fires at it, ${w.damage.toFixed(2)} a round, damage a second held`)
+  { const n = drive(mk(w), 1, 1 / 60, () => true).length, r = drive(mk(sp), 1, 1 / 60, () => true).length; ok(n >= 5 && n <= 6 && r >= 9, `M197: held 1 s at 0.2 s = ${n} rounds (the row: ${r})`) }
+  setGunTune({ HIP_X: defaultsFor('spitter').HIP_X }); ok(dialedGun(sp).fireCd === 0.2, 'M197: a hand slider keeps the fire interval')
+  ok(withRhythm(sp, undefined, 0).fireCd === RHYTHM_DIALS.fire.min && withRhythm(sp, undefined, NaN) === sp, 'M197: a silly interval is clamped, a broken one is the row')
+  resetGunTune(); ok(dialedGun(sp) === sp, 'M197: reset = the row') }
+selectGunTune('backbone'); resetGunTune()
+
 // the dials
-ok(withRhythm(bb, 0.09, 0.45) === bb && dialedGun(bb) === bb, 'on its own rhythm = the row itself')
+ok(withRhythm(bb, 0.09, 0.45) === bb, 'on its own rhythm = the row itself')
 for (const [g, d] of [[0.04, 0.3], [0.16, 0.9], [0.1, 0.6]]) { const w = withRhythm(bb, g, d); ok(near(3 * w.damage / burstCycle(w), DPS, 1e-6), `dial ${g} / ${d}: damage a second holds`) }
 { const w = withRhythm(bb, 0, 0); ok(w.burstGap === RHYTHM_DIALS.gap.min && w.fireCd === RHYTHM_DIALS.delay.min, 'a silly dial is clamped'); ok(withRhythm(bb, NaN, NaN) === bb, 'a broken dial is the row') }
-selectGunTune('backbone'); setRhythm('backbone', { BURST_DELAY: 0.6 }); ok(dialedGun(bb).fireCd === 0.6 && dialedGun(bb).burstGap === 0.09, 'one dial moved, the other its row')
-setGunTune({ HIP_X: defaultsFor('backbone').HIP_X }); ok(dialedGun(bb).fireCd === 0.6, 'a hand slider keeps the rhythm'); resetGunTune(); ok(dialedGun(bb) === bb, 'reset = the row')
+// M195 (meaning moved): undialled, the Backbone is on its BAKED rhythm (0.07 / 0.6), not the row's
+selectGunTune('backbone'); setRhythm('backbone', { BURST_DELAY: 0.5 }); ok(dialedGun(bb).fireCd === 0.5 && dialedGun(bb).burstGap === 0.07, 'one dial moved, the other its baked rhythm')
+setGunTune({ HIP_X: defaultsFor('backbone').HIP_X }); ok(dialedGun(bb).fireCd === 0.5, 'a hand slider keeps the rhythm'); resetGunTune(); ok(dialedGun(bb).fireCd === 0.6 && dialedGun(bb).burstGap === 0.07, 'reset = the baked rhythm')
 
 // the settle cue: nothing until the last of the delay, home exactly when ready
 ok(settleAt(0.2, 0.45) === 0 && settleAt(0.45 - SETTLE_S / 2, 0.45) > 0.4 && near(settleAt(0.45, 0.45), 1) && settleAt(RHYTHM_DIALS.gap.max, RHYTHM_DIALS.delay.min) < 1e-6, 'the settle sits just before ready, never inside a burst')

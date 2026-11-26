@@ -15,7 +15,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
-import { FpGun, ScopeRing, VM, GUN_DEFAULTS, setGunTune, resetGunTune, loadGunTune, selectGunTune, defaultsFor, dialedGun, previewGunModel, setRhythm, noteCycle, type FpGunApi, type GunTune } from '../../open/shared/fp-gun'
+import { FpGun, ScopeRing, VM, GUN_DEFAULTS, setGunTune, resetGunTune, loadGunTune, selectGunTune, defaultsFor, dialedGun, rhythmDefaultsFor, previewGunModel, setRhythm, noteCycle, type FpGunApi, type GunTune } from '../../open/shared/fp-gun'
 import { RANGE_GUNS, RHYTHM_DIALS, burstCycle, holdGun, stepGun, type GunState, type RangeGun } from '../../open/shared/gunplay'
 import { playShot } from '../../open/shared/gun-sound'
 import { OPTICS, viewFov, opticOf } from '../../open/shared/optics'
@@ -66,17 +66,20 @@ const GROUPS: { title: string; note: string; show: Preview; knobs: Knob[] }[] = 
 const chip: React.CSSProperties = { background: '#211f2b', border: '1px solid #38344a', color: '#ddd6ea', padding: '5px 10px', borderRadius: 4, fontSize: 11, cursor: 'pointer' }
 
 /** Feeds the rig a synthetic input for the preview, every frame. Fire shoots a round every 0.6 s. */
+let shots = 0   // M197: rounds the Fire preview has let go (the fire-rate check reads __gunTuner)
 function Driver({ api, gun, preview, paused }: { api: React.RefObject<FpGunApi | null>; gun: RangeGun; preview: Preview; paused: boolean }) {
   const fired = useRef(-Infinity), held = useRef<GunState | null>(null)
   useFrame((_, dt) => {
     const now = performance.now()
-    if (preview === 'fire' && gun.burst > 1 && !paused) {
+    if (preview === 'fire' && !paused) {
       // M148: a burst gun fires as it does in hand, trigger held: its own rhythm, its sound (a spent clip refills at once)
+      // M197: every gun now, on its dialled fire rate (single guns re-fire at their fire interval, held)
       const g = held.current && held.current.gun.id === gun.id ? held.current : (held.current = holdGun(gun))
       g.gun = gun; if (g.ammo <= 0 || g.reloading > 0) { g.ammo = gun.clip; g.reloading = 0 }
       const n = stepGun(g, Math.min(dt, 0.05), true, { x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: -1 }, Math.random, []).length
-      if (n) { fired.current = now; noteCycle(gun.fireCd); playShot(gun.id) }
-    } else if (preview === 'fire' && gun.burst <= 1 && now - fired.current > 600) fired.current = now
+      if (n) { fired.current = now; if (gun.burst > 1) noteCycle(gun.fireCd); playShot(gun.id); shots += n }
+      ;(window as unknown as { __gunTuner?: unknown }).__gunTuner = { id: gun.id, fireCd: gun.fireCd, burstGap: gun.burstGap, shots }
+    }
     api.current?.step({ gun, aiming: preview === 'aim', speed: preview === 'run' ? 6.5 : 0, firedAt: fired.current, reloading: false, now }, paused ? 0 : dt)
   })
   return null
@@ -115,7 +118,11 @@ export default function GunTuner() {
   const row = RANGE_GUNS.find(g => g.id === gunId) ?? RANGE_GUNS[0], gun = dialedGun(row)
   // per gun (11-19): picking a gun loads ITS numbers into the sliders
   useEffect(() => { selectGunTune(gunId); bump(n => n + 1) }, [gunId])
-  const values = () => JSON.stringify({ gun: gunId, ...Object.fromEntries(Object.keys(GUN_DEFAULTS).map(k => [k, VM[k as keyof GunTune]])), ...(gun.burst > 1 ? { BURST_GAP: gun.burstGap, BURST_DELAY: gun.fireCd } : {}) })
+  const values = () => JSON.stringify({ gun: gunId, ...Object.fromEntries(Object.keys(GUN_DEFAULTS).map(k => [k, VM[k as keyof GunTune]])), ...(gun.burst > 1 ? { BURST_GAP: gun.burstGap, BURST_DELAY: gun.fireCd } : { FIRE_INTERVAL: gun.fireCd }) })
+  const base = rhythmDefaultsFor(row)   // M197: what the dials read with nobody's moves (the row, under any baked rhythm)
+  const dials = gun.burst > 1
+    ? ([['BURST_GAP', 'round gap (s)', RHYTHM_DIALS.gap, gun.burstGap, base.burstGap], ['BURST_DELAY', 'burst delay (s)', RHYTHM_DIALS.delay, gun.fireCd, base.fireCd]] as const)
+    : ([['FIRE_INTERVAL', 'fire interval (s)', RHYTHM_DIALS.fire, gun.fireCd, base.fireCd]] as const)
 
   return (
     <div style={{ height: '100dvh', display: 'flex', background: '#14131a' }}>
@@ -138,22 +145,20 @@ export default function GunTuner() {
           {PREVIEWS.map(p => <button key={p.id} data-preview={p.id} onClick={() => setPreview(p.id)} style={{ ...chip, opacity: preview === p.id ? 1 : 0.45 }}>{p.label}</button>)}
           <button onClick={() => setPaused(!paused)} style={{ ...chip, opacity: paused ? 1 : 0.45 }}>{paused ? 'Paused' : 'Pause'}</button>
         </div>
-        {row.burst > 1 && (
           <section data-rhythm style={{ marginBottom: 12 }}>
             <button onClick={() => setPreview('fire')} style={{ all: 'unset', cursor: 'pointer', display: 'block' }}>
-              <span className="gx-label" style={{ fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: preview === 'fire' ? '#e8b04a' : '#c8b98a' }}>Burst</span>
+              <span className="gx-label" style={{ fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: preview === 'fire' ? '#e8b04a' : '#c8b98a' }}>{gun.burst > 1 ? 'Burst' : 'Fire rate'}</span>
               <span style={{ fontSize: 10, color: '#8b8598', marginLeft: 6 }}>its rhythm, trigger held</span>
             </button>
-            {([['BURST_GAP', 'round gap (s)', RHYTHM_DIALS.gap, gun.burstGap, row.burstGap], ['BURST_DELAY', 'burst delay (s)', RHYTHM_DIALS.delay, gun.fireCd, row.fireCd]] as const).map(([k, label, d, v, def]) => (
+            {dials.map(([k, label, d, v, def]) => (
               <label key={k} style={{ display: 'grid', gridTemplateColumns: '92px 1fr 46px', gap: 6, alignItems: 'center', fontSize: 11, marginTop: 4 }}>
                 <span style={{ color: '#b5afc2' }}>{label}</span>
                 <input type="range" data-knob={k} min={d.min} max={d.max} step={d.step} value={v} onChange={e => { setRhythm(row.id, { [k]: Number(e.target.value) }); setPreview('fire'); bump(x => x + 1) }} />
-                <span style={{ fontVariantNumeric: 'tabular-nums', textAlign: 'right', color: v === def ? '#8b8598' : '#e8b04a' }}>{v.toFixed(3)}</span>
+                <span data-dial-val={k} style={{ fontVariantNumeric: 'tabular-nums', textAlign: 'right', color: v === def ? '#8b8598' : '#e8b04a' }}>{v.toFixed(3)}</span>
               </label>
             ))}
-            <div data-rhythm-read style={{ fontSize: 10, color: '#8b8598', marginTop: 4 }}>cycle {burstCycle(gun).toFixed(2)} s · {gun.damage.toFixed(1)} damage a round · {(gun.burst * gun.damage / burstCycle(gun)).toFixed(1)} a second (held steady)</div>
+            <div data-rhythm-read style={{ fontSize: 10, color: '#8b8598', marginTop: 4 }}>cycle {burstCycle(gun).toFixed(2)} s · {gun.damage.toFixed(1)} damage a round{gun.pellets > 1 ? ` x ${gun.pellets}` : ''} · {(gun.burst * gun.pellets * gun.damage / burstCycle(gun)).toFixed(1)} a second (held steady)</div>
           </section>
-        )}
         {GROUPS.map(g => (
           <section key={g.title} style={{ marginBottom: 12 }}>
             <button onClick={() => setPreview(g.show)} style={{ all: 'unset', cursor: 'pointer', display: 'block' }}>

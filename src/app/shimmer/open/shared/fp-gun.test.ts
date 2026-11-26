@@ -43,6 +43,9 @@ ok(Object.values(TINTS).every(t => /^#[0-9a-f]{6}$/i.test(t.hex)), 'every tint i
 
 // Alex's 11-22 per-gun hands (SPITTER + BACKBONE) are the SHIPPED numbers: every key of the handoff file, read from the file itself
 { const tune = JSON.parse(readFileSync(new URL('../../../../../docs/handoff/gun-hands-tune-2026-11-22.json', import.meta.url), 'utf8')) as Record<string, Record<string, number>>
+  // M195 (Alex 11-26): the Backbone's hands are now his Gun Tuner paste (docs/handoff/gun-tune-backbone-2026-11-26.json, word for word)
+  tune.backbone = JSON.parse(readFileSync(new URL('../../../../../docs/handoff/gun-tune-backbone-2026-11-26.json', import.meta.url), 'utf8'))
+  delete tune.backbone.gun; delete tune.backbone.BURST_GAP; delete tune.backbone.BURST_DELAY
   for (const g of ['spitter', 'backbone']) {
     ok(GUN_TUNE_KEYS.every(k => defaultsFor(g)[k] === tune[g][k]) && Object.keys(tune[g]).length === GUN_TUNE_KEYS.length, `${g}: every hands key ships as Alex tuned it`)
     selectGunTune(g); ok(GUN_TUNE_KEYS.every(k => VM[k] === tune[g][k]), `${g}: in hand, the live numbers are his`)
@@ -52,7 +55,7 @@ ok(Object.values(TINTS).every(t => /^#[0-9a-f]{6}$/i.test(t.hex)), 'every tint i
 
 // M190 (Alex 11-26: the Lance 'floating in front', wrong size): the Lance holds like the Backbone, not on the 11-18 base
 { selectGunTune('lance'); const t = JSON.parse(readFileSync(new URL('../../../../../docs/handoff/gun-hands-tune-2026-11-22.json', import.meta.url), 'utf8')).backbone as Record<string, number>
-  ok(GUN_TUNE_KEYS.every(k => VM[k] === t[k]), "lance: in hand, every key is the Backbone's tuned hold")
+  ok(GUN_TUNE_KEYS.every(k => VM[k] === t[k]), "lance: in hand, every key is the Backbone's 11-22 tuned hold (M195 moved the Backbone, not the Lance)")
   ok(VM.S >= 1.1 && VM.HIP_Z > -0.42, `lance: in-hand size + reach match the tuned family (S ${VM.S}, HIP_Z ${VM.HIP_Z})`) }
 
 console.log(`fp-gun: ${pass} pass, ${fail} fail`)

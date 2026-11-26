@@ -47,7 +47,7 @@ const slots = (z0: number, n: number, step: number, y: number, h: number, w: num
 const channel = (z0: number, z1: number, y: number, w: number): Part[] => SIDES.flatMap(x => [0.005, -0.005].map(d => box([x * w, y + d, (z0 + z1) / 2], [0.003, 0.0034, z1 - z0], 'slot')))
 const bore = (z: number, y: number, d: number): Part => cyl([0, y, z], d, 0.002, 'slot', 'z', 14)
 
-export type V2GunId = 'backbone' | 'charred-rifle' | 'lance'
+export type V2GunId = 'backbone' | 'charred-rifle' | 'lance' | 'spitter'
 export interface V2Gun { id: V2GunId; name: string; parts: Part[]; grip: Model['grip']; fore: Model['fore']; railTop: number; seatZ: number; own: V2SightId; sights: V2SightId[]; hold?: Partial<GunTune> }
 const GRIP: Model['grip'] = [0, -0.06, 0.1], FORE: Model['fore'] = [0, -0.06, -0.26]
 // a gun nobody has tuned yet sits at the Backbone's size and hands here (preview only: it is under every baked and saved tune)
@@ -85,6 +85,19 @@ export const V2_GUNS: Record<V2GunId, V2Gun> = {
     bar([0, 0.001, -0.239], cut(0.046, 0.07, 0.008), 0.2, 'iron', 0.002), ...slots(-0.313, 8, 0.0215, 0.001, 0.048, 0.025),
     cyl([0, 0, -0.5], 0.032, 0.33, 'iron'), ...[-0.43, -0.55].map(z => cyl([0, 0, z], 0.042, 0.02, 'bronze', 'z', 16)), cyl([0, 0, -0.655], 0.04, 0.04, 'iron'), cyl([0, 0, -0.7], 0.054, 0.05, 'bronze', 'z', 16), bore(-0.7255, 0, 0.03),
     ...core(-0.028, -0.064), ...trigger(0.046, -0.078), grip(0.02, -0.05), ...stock(0.02),
+  ] },
+  // M196 (Alex 11-26: "remodel each gun as it gets tested"): the SPITTER, the shortbarrel (canon: SMG, high rate, burns hot fast).
+  // PLACEHOLDER LOOK for Alex to judge, off the same locked card: a short iron receiver, the family's chamber smaller, the shroud in
+  // dull BRONZE (the Spitter's mark in the family), a stub barrel with a bronze muzzle, the core below, a short stub stock. No
+  // magazine. grip / fore are the shipped SHORTBARREL anchors, so Alex's 11-22 Spitter hand tune still lands.
+  spitter: { id: 'spitter', name: 'Spitter', grip: [0, -0.06, 0.03], fore: [0, -0.04, -0.2], railTop: 0.047, seatZ: -0.03, own: 'iron', sights: ['iron', 'holo'], parts: [
+    slab([[-0.17, 0.045], [0.08, 0.045], [0.095, 0.025], [0.095, -0.03], [0.065, -0.05], [-0.155, -0.05], [-0.17, -0.035]], 0.046, 'iron', 0, 0.002),
+    ...channel(-0.15, 0.06, 0.018, 0.023), ...chamber(-0.07, -0.004, 0.072, 0.023), ...lever(0.005, -0.02, 0.023), ...gauge(0.055, -0.02, 0.023, 'bronze', 0.028),
+    bar([0, -0.002, -0.235], cut(0.046, 0.07, 0.008), 0.13, 'bronze', 0.002), ...slots(-0.292, 5, 0.0215, -0.002, 0.044, 0.023),
+    cyl([0, -0.002, -0.33], 0.024, 0.07, 'iron'), cyl([0, -0.002, -0.375], 0.038, 0.03, 'bronze', 'z', 16), bore(-0.3905, -0.002, 0.022),
+    ...core(-0.12, -0.05, 0.85), ...trigger(-0.044, -0.078), grip(-0.07, -0.05),
+    slab([[0.095, 0.025], [0.2, 0.03], [0.2, -0.07], [0.185, -0.07], [0.12, -0.03], [0.095, -0.03]], 0.03, 'iron', 0, 0.003),
+    slab([[0.199, 0.034], [0.214, 0.034], [0.214, -0.074], [0.199, -0.074]], 0.036, 'bronze', 0, 0.002),
   ] },
 }
 

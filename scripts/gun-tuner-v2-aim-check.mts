@@ -25,7 +25,7 @@ const chips = await p.evaluate(() => [...document.querySelectorAll('[data-sight]
 say(chips.some(c => c[0] === 'iron'), `Iron chip exists (${JSON.stringify(chips)})`)
 say(chips.find(c => c[1] === '1')?.[0] === 'iron', 'Iron is the lit (default) chip')
 const R: Record<string, any> = {}
-for (const [g, s] of [['backbone', 'iron'], ['backbone', 'holo'], ['backbone', 'prism'], ['lance', 'iron'], ['lance', 'prism'], ['charred-rifle', 'ring']]) {
+for (const [g, s] of [['backbone', 'iron'], ['backbone', 'holo'], ['backbone', 'prism'], ['lance', 'iron'], ['lance', 'prism'], ['charred-rifle', 'ring'], ['spitter', 'iron'], ['spitter', 'holo']]) {
   await load(`gun=${g}&set=new&preview=aim&sight=${s}`); const r = await px(); R[`${g}:${s}`] = r
   say(r.ads >= 0.99 && Math.hypot(r.dx, r.dy) < 4, `${g} new ${s}: aim point ${r.dx.toFixed(1)},${r.dy.toFixed(1)} px from centre (ads ${r.ads.toFixed(2)})`)
 }

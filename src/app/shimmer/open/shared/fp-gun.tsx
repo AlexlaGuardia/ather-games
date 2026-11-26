@@ -69,6 +69,10 @@ export const GUN_DEFAULTS: Readonly<GunTune> = {
 //   tunes it in /shimmer/dev/guns (a paste lands here and replaces this line).
 const BACKBONE_HOLD: Partial<GunTune> = { S: 1.2, HIP_X: 0.145, HIP_Y: -0.175, HIP_Z: -0.355, ADS_DIST: 0.34, ADS_IN: 0.15, ADS_OUT: 0.11, BOB: 0.006, BOB_ADS: 0.12, KICK_Z: 0.162, KICK_PITCH: 0.255, KICK_DECAY: 2,
     HAND: 0.85, R_DX: 0.002, R_DY: 0.044, R_DZ: 0.08, R_PITCH: -1.12, R_ROLL: 0.8, L_DX: -0.012, L_DY: -0.032, L_DZ: -0.032, L_PITCH: 1.34, L_ROLL: -2.17 }
+// M195 (Alex 11-26, from the Gun Tuner, word for word): the Backbone everyone holds. Its rhythm (BURST_GAP / BURST_DELAY) is in
+//   GUN_RHYTHM_BAKED below. The Lance keeps the 11-22 hold above (M190) until Alex tunes it.
+const BACKBONE_M195: Partial<GunTune> = { S: 1.2, HIP_X: 0.145, HIP_Y: -0.175, HIP_Z: -0.355, ADS_DIST: 0.34, ADS_IN: 0.15, ADS_OUT: 0.11, BOB: 0.014, BOB_ADS: 0.17, KICK_Z: 0.05, KICK_PITCH: 0.075, KICK_DECAY: 2,
+    HAND: 0.85, R_DX: 0.002, R_DY: 0.044, R_DZ: 0.08, R_PITCH: -1.12, R_ROLL: 0.8, L_DX: -0.012, L_DY: -0.032, L_DZ: -0.032, L_PITCH: 1.34, L_ROLL: -2.17 }
 export const GUN_BAKED: Readonly<Record<string, Partial<GunTune>>> = {
   // Alex 11-19, the Repeater: bigger in hand, closer and lower, a stronger kick that settles fast, fuller gloves
   repeater: { S: 1.18, HIP_X: 0.07, HIP_Y: -0.125, HIP_Z: -0.365, ADS_DIST: 0.155, ADS_IN: 0.13, ADS_OUT: 0.13, BOB: 0.008, BOB_ADS: 0.19,
@@ -77,8 +81,8 @@ export const GUN_BAKED: Readonly<Record<string, Partial<GunTune>>> = {
   // Alex 11-22, the SPITTER (docs/handoff/gun-hands-tune-2026-11-22.json, all 23 keys)
   spitter: { S: 1.2, HIP_X: 0.13, HIP_Y: -0.19, HIP_Z: -0.385, ADS_DIST: 0.295, ADS_IN: 0.15, ADS_OUT: 0.11, BOB: 0.012, BOB_ADS: 0.15, KICK_Z: 0.034, KICK_PITCH: 0.01, KICK_DECAY: 40,
     HAND: 0.64, R_DX: -0.004, R_DY: 0.018, R_DZ: 0.034, R_PITCH: -1.07, R_ROLL: -1.23, L_DX: -0.022, L_DY: -0.07, L_DZ: 0.12, L_PITCH: -2.11, L_ROLL: -0.36 },
-  // Alex 11-22, the BACKBONE (same file, all 23 keys): a heavy kick that comes home slowly
-  backbone: BACKBONE_HOLD,
+  // M195 (Alex 11-26): the BACKBONE, his tuner paste (11-22's heavy slow kick was BACKBONE_HOLD)
+  backbone: BACKBONE_M195,
   // M190: the Lance holds like the Backbone (see BACKBONE_HOLD) until Alex tunes it
   lance: BACKBONE_HOLD,
 }
@@ -86,7 +90,14 @@ export const GUN_BAKED: Readonly<Record<string, Partial<GunTune>>> = {
 export const VM: GunTune = { ...GUN_DEFAULTS }
 /** M148: a burst gun's rhythm on this browser (seconds between its rounds, and from its last round to the next burst), kept beside
  *  that gun's hand tune in GUN_TUNE_KEY. Absent = the gun's row. */
-export interface Rhythm { BURST_GAP?: number; BURST_DELAY?: number }
+export interface Rhythm { BURST_GAP?: number; BURST_DELAY?: number; FIRE_INTERVAL?: number }
+export const RHYTHM_KEYS = ['BURST_GAP', 'BURST_DELAY', 'FIRE_INTERVAL'] as const
+/** M195: a gun's rhythm everyone fires (Alex's tuner pastes land here); this browser's dials sit on top. Absent = the gun's row.
+ *  M197: a single-fire gun's dial is FIRE_INTERVAL (seconds between rounds); a burst gun's are BURST_GAP + BURST_DELAY. */
+export const GUN_RHYTHM_BAKED: Readonly<Record<string, Rhythm>> = {
+  backbone: { BURST_GAP: 0.07, BURST_DELAY: 0.6 },   // M195, Alex 11-26
+}
+const rhythmOf = (t: Rhythm | undefined): Rhythm => Object.fromEntries(RHYTHM_KEYS.filter(k => typeof t?.[k] === 'number').map(k => [k, t![k]]))
 export const GUN_TUNE_KEY = 'open:gun-tune.v2'
 export const GUN_TUNE_KEYS = Object.keys(GUN_DEFAULTS) as (keyof GunTune)[]
 let holds: Record<string, Partial<GunTune>> = {}   // M149 preview only: how an UNTUNED gun's new model sits, under every baked / saved tune
@@ -105,8 +116,7 @@ export function loadGunTune(): void {
 }
 export function setGunTune(patch: Partial<GunTune>): void {
   for (const k of GUN_TUNE_KEYS) if (typeof patch[k] === 'number') VM[k] = patch[k]!
-  const { BURST_GAP, BURST_DELAY } = tuned[curGun] ?? {}   // the rhythm stays with the hands
-  tuned[curGun] = { ...Object.fromEntries(GUN_TUNE_KEYS.map(k => [k, VM[k]])), ...(BURST_GAP != null ? { BURST_GAP } : {}), ...(BURST_DELAY != null ? { BURST_DELAY } : {}) }
+  tuned[curGun] = { ...Object.fromEntries(GUN_TUNE_KEYS.map(k => [k, VM[k]])), ...rhythmOf(tuned[curGun]) }   // the rhythm stays with the hands
   try { localStorage.setItem(GUN_TUNE_KEY, JSON.stringify(tuned)) } catch { /* private window */ }
 }
 /** this gun back to everyone's numbers (its baked tune, else the defaults) */
@@ -114,10 +124,12 @@ export function resetGunTune(): void { delete tuned[curGun]; try { localStorage.
 let loaded = false
 /** the gun as this browser fires it: its row, on the tuner's rhythm if one was dialled (gunplay withRhythm) */
 export function dialedGun<G extends RangeGun>(g: G): G {
-  if (g.burst <= 1) return g
   if (!loaded && typeof localStorage !== 'undefined') { loaded = true; loadGunTune() }
-  const t = tuned[g.id]; return t ? withRhythm(g, t.BURST_GAP, t.BURST_DELAY) : g
+  const t = { ...(GUN_RHYTHM_BAKED[g.id] ?? {}), ...rhythmOf(tuned[g.id]) }
+  return g.burst > 1 ? withRhythm(g, t.BURST_GAP, t.BURST_DELAY) : withRhythm(g, undefined, t.FIRE_INTERVAL)
 }
+/** M197: a gun's rhythm with nobody's dials: its row under the baked rhythm (the tuner greys a dial that matches it) */
+export const rhythmDefaultsFor = <G extends RangeGun>(g: G): G => { const t = GUN_RHYTHM_BAKED[g.id] ?? {}; return g.burst > 1 ? withRhythm(g, t.BURST_GAP, t.BURST_DELAY) : withRhythm(g, undefined, t.FIRE_INTERVAL) }
 export function setRhythm(id: string, patch: Rhythm): void {
   tuned[id] = { ...(tuned[id] ?? {}), ...patch }
   try { localStorage.setItem(GUN_TUNE_KEY, JSON.stringify(tuned)) } catch { /* private window */ }

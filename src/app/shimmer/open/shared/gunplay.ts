@@ -76,12 +76,18 @@ export const RANGE_GUNS: RangeGun[] = ([
 ] as RangeGun[]).map(quicken)
 /** a burst gun's full cycle, first round to first round (its trigger held) */
 export const burstCycle = (g: { burst: number; burstGap: number; fireCd: number }) => (g.burst - 1) * g.burstGap + g.fireCd
-export const RHYTHM_DIALS = { gap: { min: 0.04, max: 0.16, step: 0.005 }, delay: { min: 0.3, max: 0.9, step: 0.01 } } as const
+export const RHYTHM_DIALS = { gap: { min: 0.04, max: 0.16, step: 0.005 }, delay: { min: 0.3, max: 0.9, step: 0.01 }, fire: { min: 0.05, max: 1.5, step: 0.01 } } as const
 const clampTo = (v: number, d: { min: number; max: number }) => Math.max(d.min, Math.min(d.max, v))
 /** M148: a burst gun on another rhythm (the gun tuner's dials). Damage per round follows the cycle, so a rhythm never changes the
- *  gun's damage per second. Same object back when nothing moves, and for every gun that fires single rounds. */
+ *  gun's damage per second. Same object back when nothing moves.
+ *  M197: a single-fire gun takes `delay` as its FIRE INTERVAL (seconds between rounds, RHYTHM_DIALS.fire); `gap` is ignored. */
 export function withRhythm<G extends RangeGun>(g: G, gap?: number, delay?: number): G {
-  if (g.burst <= 1) return g
+  if (g.burst <= 1) {
+    const fireCd = Number.isFinite(delay) ? clampTo(delay!, RHYTHM_DIALS.fire) : g.fireCd
+    if (fireCd === g.fireCd) return g
+    const k = fireCd / g.fireCd
+    return { ...g, fireCd, damage: g.damage * k, crit: g.crit * k }
+  }
   const burstGap = Number.isFinite(gap) ? clampTo(gap!, RHYTHM_DIALS.gap) : g.burstGap, fireCd = Number.isFinite(delay) ? clampTo(delay!, RHYTHM_DIALS.delay) : g.fireCd
   if (burstGap === g.burstGap && fireCd === g.fireCd) return g
   const k = burstCycle({ burst: g.burst, burstGap, fireCd }) / burstCycle(g)
