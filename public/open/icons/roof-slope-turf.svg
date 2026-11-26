@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- A sloped turf roof. Code-drawn filler (tools/art/furniture_icons.py). -->
+  <ellipse cx="16" cy="28" rx="11" ry="2" fill="#000" opacity=".22"/>
+  <path d="M3 12 L29 20 L29 24 L3 16 Z" fill="#7fae5a" stroke="#3f6428" stroke-width="0.8"/><rect x="5" y="16" width="2.4" height="10" rx="0.6" fill="#d9a957" stroke="#8a5f24" stroke-width=".8"/><rect x="25" y="22" width="2.4" height="4" rx="0.6" fill="#d9a957" stroke="#8a5f24" stroke-width=".8"/>
+</svg>

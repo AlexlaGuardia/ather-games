@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- A pair of shutters. Code-drawn filler (tools/art/furniture_icons.py). -->
+  <ellipse cx="16" cy="28" rx="11" ry="2" fill="#000" opacity=".22"/>
+  <rect x="5" y="5" width="10" height="20" rx="0.4" fill="#f0c773" stroke="#8a5f24" stroke-width=".8"/><rect x="17" y="5" width="10" height="20" rx="0.4" fill="#f0c773" stroke="#8a5f24" stroke-width=".8"/><path d="M6 10 L14 10 M6 15 L14 15 M6 20 L14 20 M18 10 L26 10 M18 15 L26 15 M18 20 L26 20" stroke="#8a5f24" stroke-width="0.6" fill="none"/>
+</svg>

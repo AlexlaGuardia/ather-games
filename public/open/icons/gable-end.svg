@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- A gable end. Code-drawn filler (tools/art/furniture_icons.py). -->
+  <ellipse cx="16" cy="28" rx="11" ry="2" fill="#000" opacity=".22"/>
+  <path d="M3 25 L16 7 L29 25 Z" fill="#d9a957" stroke="#8a5f24" stroke-width="0.8"/><path d="M10 15.5 L10 25 M16 7 L16 25 M22 15.5 L22 25" stroke="#8a5f24" stroke-width="0.6" fill="none"/>
+</svg>

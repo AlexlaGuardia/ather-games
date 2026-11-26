@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- A beam. Code-drawn filler (tools/art/furniture_icons.py). -->
+  <ellipse cx="16" cy="28" rx="11" ry="2" fill="#000" opacity=".22"/>
+  <rect x="2" y="12" width="28" height="5" rx="0.4" fill="#f0c773" stroke="#8a5f24" stroke-width=".8"/><path d="M3 14.5 L29 14.5" stroke="#d9a957" stroke-width="0.7" fill="none"/>
+</svg>

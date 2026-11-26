@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- A porch. Code-drawn filler (tools/art/furniture_icons.py). -->
+  <ellipse cx="16" cy="28" rx="11" ry="2" fill="#000" opacity=".22"/>
+  <path d="M4 6 L28 6 L30 9 L2 9 Z" fill="#d9a957" stroke="#8a5f24" stroke-width="0.8"/><rect x="4" y="9" width="2.4" height="13" rx="0.6" fill="#d9a957" stroke="#8a5f24" stroke-width=".8"/><rect x="25.6" y="9" width="2.4" height="13" rx="0.6" fill="#d9a957" stroke="#8a5f24" stroke-width=".8"/><rect x="2" y="22" width="28" height="4" rx="0.3" fill="#f0c773" stroke="#8a5f24" stroke-width=".8"/>
+</svg>

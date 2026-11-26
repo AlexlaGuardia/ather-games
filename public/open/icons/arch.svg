@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- A stone arch. Code-drawn filler (tools/art/furniture_icons.py). -->
+  <ellipse cx="16" cy="28" rx="11" ry="2" fill="#000" opacity=".22"/>
+  <path d="M4 26 L4 12 A12 10 0 0 1 28 12 L28 26 L22 26 L22 14 A6 5 0 0 0 10 14 L10 26 Z" fill="#dcd6c8" stroke="#7c7566" stroke-width="0.8"/>
+</svg>

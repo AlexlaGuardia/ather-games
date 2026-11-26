@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- A doorway in a wall. Code-drawn filler (tools/art/furniture_icons.py). -->
+  <ellipse cx="16" cy="28" rx="11" ry="2" fill="#000" opacity=".22"/>
+  <path d="M4 4 L28 4 L28 26 L21 26 L21 10 L11 10 L11 26 L4 26 Z" fill="#d9a957" stroke="#8a5f24" stroke-width="0.8"/><path d="M8 6 L8 25 M24 6 L24 25" stroke="#8a5f24" stroke-width="0.6" fill="none"/>
+</svg>

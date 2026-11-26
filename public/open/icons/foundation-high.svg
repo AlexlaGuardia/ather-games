@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- A high stone foundation. Code-drawn filler (tools/art/furniture_icons.py). -->
+  <ellipse cx="16" cy="28" rx="11" ry="2" fill="#000" opacity=".22"/>
+  <path d="M8 9 L24 9 L28 13 L4 13 Z" fill="#dcd6c8" stroke="#7c7566" stroke-width="0.8"/><rect x="4" y="13" width="24" height="12" rx="0.3" fill="#bdb6a6" stroke="#7c7566" stroke-width=".8"/><path d="M4 19 L28 19 M10 13 L10 19 M20 13 L20 19 M14 19 L14 25 M24 19 L24 25" stroke="#7c7566" stroke-width="0.5" fill="none"/>
+</svg>

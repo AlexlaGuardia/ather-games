@@ -79,7 +79,9 @@ no([{ ...s0, x: -122.5, z: 110.5 }], /Carpentry room is in the Moonwell/, 'pool'
 { const j = gladeJetty(), hit: string[] = []; for (const e of [[j.x0, j.z0, j.x0 - j.x1, j.z0 - j.z1], [j.x1, j.z1, j.x1 - j.x0, j.z1 - j.z0]]) for (let m = 2; m < 4.4; m += 0.2) { const k = Math.hypot(e[2], e[3]), x = e[0] + e[2] / k * m, z = e[1] + e[3] / k * m, p = roomPad({ ...s0, x, z })!; if (!rectPoints(p).some(q => pondDepthIn(q.x, q.z) > 0)) hit.push(`${rectsOverlap(p, { x: (j.x0 + j.x1) / 2, z: (j.z0 + j.z1) / 2, yaw: Math.atan2(j.x1 - j.x0, j.z1 - j.z0), w: j.w, d: Math.hypot(j.x1 - j.x0, j.z1 - j.z0) })}:${/in the Moonwell/.test(problems([{ ...s0, x, z }]).join())}`) }
   console.log('  jetty end, dry:', hit.join(' ') || 'never'); ok(hit.every(h => h === 'true:true' || h === 'false:false'), 'the jetty, over dry ground') }
 { const p = at(-3, -1.5), r = problems(putPlace([s0], 'jars', { x: p.x, z: p.z, q: 0 })); ok(r.some(q => /(Yarrow's jars stands in Carpentry room|Carpentry room stands in Yarrow's jars)/.test(q)), `the crate on its floor: ${r}`) }
-{ const c = yarrowCrate()!.crate, r = problems([{ ...s0, x: c.x, z: c.z }]); ok(r.some(q => /Carpentry room stands in Yarrow's (house|jars)/.test(q)), `the crate: ${r}`) }
+// M209: either side may say it. Glade v17 (e721152c) MOVED Yarrow's house, and a moved place is asked before a room, so the pair now
+// reads "Yarrow's house stands in Carpentry room" (said once per pair); the refusal is the same.
+{ const c = yarrowCrate()!.crate, r = problems([{ ...s0, x: c.x, z: c.z }]); ok(r.some(q => /(Carpentry room stands in Yarrow's (house|jars)|Yarrow's (house|jars) stands in Carpentry room)/.test(q)), `the crate: ${r}`) }
 no([s0, { ...R('cooking', s0.x + 5, s0.z, 0, 'pq2') }], /Carpentry room stands in Cooking room/, 'two rooms, said once')
 ok(!problems([s0, R('cooking', s0.x + 8, s0.z, 0, 'pq2')]).some(q => /stands in/.test(q)), 'edge to edge is fine')
 { const H = putPlace([s0], 'home', { x: s0.x, z: s0.z - 1, q: 0 }), r = problems(H); ok(r.some(q => /Greg's home stands in Carpentry room/.test(q)), `a house moved onto a room: ${r}`) }

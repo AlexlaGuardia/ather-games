@@ -121,6 +121,78 @@ PIECES = {
         r(4, 6, 24, 20, '#a4573f', '#5e2f22', 0.4) + r(3.4, 24, 25.2, 2.4, '#7a3f2e', '#5e2f22', 0.3)
         + ''.join(f'<path d="M4 {y} L28 {y}" stroke="#5e2f22" stroke-width=".5"/>' for y in (10, 14, 18, 22))),
 }
+# M209 (11-26): the M169 Build pieces shipped as bag items naming icons that were never drawn (the bag drew a
+# broken image). Code-drawn filler by shape family, same 32x32 frame; the wood is the piece's main material.
+def P(d, fill, stroke, w=.8):
+    return f'<path d="{d}" fill="{fill}" stroke="{stroke}" stroke-width="{w}"/>'
+def L(d, stroke, w=.6):
+    return f'<path d="{d}" stroke="{stroke}" stroke-width="{w}" fill="none"/>'
+CLAY, CLAY_D, TURF, TURF_D = '#b8603f', '#6e3322', '#7fae5a', '#3f6428'
+def floor_up(h, m, d, wide=False):
+    x0, x1 = (2, 30) if wide else (5, 27)
+    return (r(x0 + 3, 6, x1 - x0 - 6, 3, m, d, 0.3) + r(x0, 9, x1 - x0, 3, h, d, 0.3)
+            + r(x0 + 1, 12, 2.4, 14, m, d) + r(x1 - 3.4, 12, 2.4, 14, m, d))
+def stair(h, m, d, left=False, right=False):
+    s = ''.join(r(6 + 4 * i, 22 - 4 * i, 20 - 4 * i, 4, h if i % 2 else m, d, 0.3) for i in range(4))
+    if left: s += L('M6 16 L22 4', d, 1.2) + L('M7 22 L7 16 M15 18 L15 10', d, .8)
+    if right: s += L('M10 18 L26 6', d, 1.2) + L('M25 7 L25 22', d, .8)
+    return s
+def railing(h, m, d, wide=False):
+    x0, x1 = (2, 30) if wide else (7, 25)
+    posts = range(x0, x1 + 1, 7 if wide else 6)
+    return r(x0 - 1, 10, x1 - x0 + 2, 2.4, h, d, 0.4) + ''.join(r(x - 1, 12, 2, 14, m, d, 0.3) for x in posts)
+def roof_body(shape, kind):
+    c, k = (CLAY, CLAY_D) if kind == 'tile' else (TURF, TURF_D)
+    def body(h, m, d):
+        if shape == 'gable': s = P('M2 22 L16 6 L30 22 Z', c, k) + r(6, 22, 20, 4, m, d, 0.3)
+        elif shape == 'slope': s = P('M3 12 L29 20 L29 24 L3 16 Z', c, k) + r(5, 16, 2.4, 10, m, d) + r(25, 22, 2.4, 4, m, d)
+        else: s = P('M4 12 L28 12 L30 16 L2 16 Z', c, k) + r(3, 16, 26, 2.6, m, d, 0.3) + r(5, 18.6, 2.4, 7.4, m, d) + r(24.6, 18.6, 2.4, 7.4, m, d)
+        lines = ''.join(L(f'M{x} {9 if shape == "gable" else 12} L{x} 22', k, .5) for x in (10, 16, 22)) if kind == 'tile' else ''
+        return s + lines
+    return body
+BUILD = {
+    'upper_floor': ('goldwood', 'An upper floor on posts.', lambda h, m, d: floor_up(h, m, d)),
+    'upper_floor_wide': ('goldwood', 'A wide upper floor on posts.', lambda h, m, d: floor_up(h, m, d, True)),
+    'door': ('goldwood', 'A plank door.', lambda h, m, d: r(9, 3, 14, 23, m, d, 0.8) + L('M13 4 L13 25 M17 4 L17 25', d) + '<circle cx="20" cy="15" r="1.1" fill="#4e4a47"/>'),
+    'window': ('goldwood', 'A square window.', lambda h, m, d: r(7, 6, 18, 18, m, d, 0.5) + r(9.5, 8.5, 13, 13, '#bfe2f2', d, 0.3) + L('M16 8.5 L16 21.5 M9.5 15 L22.5 15', d, .9)),
+    'round_window': ('goldwood', 'A round window.', lambda h, m, d: '<circle cx="16" cy="15" r="10" fill="' + m + '" stroke="' + d + '" stroke-width=".8"/><circle cx="16" cy="15" r="7" fill="#bfe2f2" stroke="' + d + '" stroke-width=".6"/>' + L('M16 8 L16 22 M9 15 L23 15', d, .9)),
+    'shutters': ('goldwood', 'A pair of shutters.', lambda h, m, d: r(5, 5, 10, 20, h, d, 0.4) + r(17, 5, 10, 20, h, d, 0.4) + L('M6 10 L14 10 M6 15 L14 15 M6 20 L14 20 M18 10 L26 10 M18 15 L26 15 M18 20 L26 20', d)),
+    'arch': ('stone', 'A stone arch.', lambda h, m, d: P('M4 26 L4 12 A12 10 0 0 1 28 12 L28 26 L22 26 L22 14 A6 5 0 0 0 10 14 L10 26 Z', h, d)),
+    'doorway': ('goldwood', 'A doorway in a wall.', lambda h, m, d: P('M4 4 L28 4 L28 26 L21 26 L21 10 L11 10 L11 26 L4 26 Z', m, d) + L('M8 6 L8 25 M24 6 L24 25', d)),
+    'half_wall': ('goldwood', 'A half-height wall.', lambda h, m, d: r(4, 14, 24, 12, m, d, 0.4) + r(3.4, 12.6, 25.2, 2, d, d, 0.3) + L('M10 15 L10 25 M16 15 L16 25 M22 15 L22 25', d)),
+    'wall_end': ('goldwood', 'A wall end post.', lambda h, m, d: r(6, 6, 14, 20, m, d, 0.4) + r(20, 4, 5, 22, h, d, 0.4)),
+    'wall_corner': ('goldwood', 'A wall corner.', lambda h, m, d: P('M4 8 L16 12 L16 26 L4 22 Z', m, d) + P('M16 12 L28 8 L28 22 L16 26 Z', h, d)),
+    'column': ('goldwood', 'A wooden column.', lambda h, m, d: r(11, 3, 10, 2.6, d, d, 0.3) + r(12.5, 5.6, 7, 18, h, d, 0.4) + r(11, 23.6, 10, 2.6, d, d, 0.3)),
+    'stone_column': ('stone', 'A stone column.', lambda h, m, d: r(10, 3, 12, 3, m, d, 0.3) + r(12, 6, 8, 17, h, d, 0.4) + L('M14.5 7 L14.5 22 M17.5 7 L17.5 22', d, .5) + r(10, 23, 12, 3, m, d, 0.3)),
+    'stair': ('goldwood', 'A flight of stairs.', lambda h, m, d: stair(h, m, d)),
+    'stair_rail_left': ('goldwood', 'Stairs, railed on the left.', lambda h, m, d: stair(h, m, d, left=True)),
+    'stair_rail_right': ('goldwood', 'Stairs, railed on the right.', lambda h, m, d: stair(h, m, d, right=True)),
+    'stair_railed': ('goldwood', 'Stairs, railed on both sides.', lambda h, m, d: stair(h, m, d, True, True)),
+    'railing': ('goldwood', 'A railing.', lambda h, m, d: railing(h, m, d)),
+    'railing_wide': ('goldwood', 'A wide railing.', lambda h, m, d: railing(h, m, d, True)),
+    'fence': ('goldwood', 'A fence.', lambda h, m, d: r(3, 11, 26, 2, m, d, 0.3) + r(3, 18, 26, 2, m, d, 0.3) + ''.join(P(f'M{x} 26 L{x} 9 L{x + 1.5} 7 L{x + 3} 9 L{x + 3} 26 Z', h, d) for x in (5, 14.5, 24))),
+    'fence_gate': ('goldwood', 'A fence gate.', lambda h, m, d: r(4, 6, 3, 20, m, d, 0.4) + r(25, 6, 3, 20, m, d, 0.4) + r(8, 9, 16, 15, h, d, 0.4) + L('M8 9 L24 24 M12 9 L12 24 M16 9 L16 24 M20 9 L20 24', d)),
+    'ramp': ('goldwood', 'A ramp.', lambda h, m, d: P('M3 26 L29 10 L29 26 Z', h, d) + L('M9 22.3 L9 26 M15 18.6 L15 26 M21 14.9 L21 26', d)),
+    'ladder': ('goldwood', 'A ladder.', lambda h, m, d: r(9, 3, 2.4, 23, m, d) + r(20.6, 3, 2.4, 23, m, d) + ''.join(r(11, y, 9.6, 1.8, h, d, 0.3) for y in (6, 11, 16, 21))),
+    'ceiling': ('goldwood', 'A ceiling.', lambda h, m, d: P('M6 6 L26 6 L30 12 L2 12 Z', h, d) + r(2, 12, 28, 2.4, m, d, 0.3) + L('M11 6 L9 12 M16 6 L16 12 M21 6 L23 12', d)),
+    'beam': ('goldwood', 'A beam.', lambda h, m, d: r(2, 12, 28, 5, h, d, 0.4) + L('M3 14.5 L29 14.5', m, .7)),
+    'roof_gable_tile': ('goldwood', 'A clay-tile gable roof.', roof_body('gable', 'tile')),
+    'roof_gable_turf': ('goldwood', 'A turf gable roof.', roof_body('gable', 'turf')),
+    'roof_slope_tile': ('goldwood', 'A sloped clay-tile roof.', roof_body('slope', 'tile')),
+    'roof_slope_turf': ('goldwood', 'A sloped turf roof.', roof_body('slope', 'turf')),
+    'roof_flat_tile': ('goldwood', 'A flat clay-tile roof.', roof_body('flat', 'tile')),
+    'roof_flat_turf': ('goldwood', 'A flat turf roof.', roof_body('flat', 'turf')),
+    'gable_end': ('goldwood', 'A gable end.', lambda h, m, d: P('M3 25 L16 7 L29 25 Z', m, d) + L('M10 15.5 L10 25 M16 7 L16 25 M22 15.5 L22 25', d)),
+    'foundation_low': ('stone', 'A low stone foundation.', lambda h, m, d: P('M8 16 L24 16 L28 20 L4 20 Z', h, d) + r(4, 20, 24, 5, m, d, 0.3) + L('M10 20 L10 25 M18 20 L18 25 M24 20 L24 25', d, .5)),
+    'foundation_high': ('stone', 'A high stone foundation.', lambda h, m, d: P('M8 9 L24 9 L28 13 L4 13 Z', h, d) + r(4, 13, 24, 12, m, d, 0.3) + L('M4 19 L28 19 M10 13 L10 19 M20 13 L20 19 M14 19 L14 25 M24 19 L24 25', d, .5)),
+    'found_step': ('stone', 'A stone step.', lambda h, m, d: P('M9 17 L23 17 L26 20 L6 20 Z', h, d) + r(6, 20, 20, 5, m, d, 0.3)),
+    'found_steps': ('stone', 'Stone steps.', lambda h, m, d: r(5, 20, 22, 5, m, d, 0.3) + r(9, 15, 18, 5, h, d, 0.3) + r(13, 10, 14, 5, m, d, 0.3)),
+    'deck': ('goldwood', 'A deck.', lambda h, m, d: P('M7 12 L25 12 L30 18 L2 18 Z', h, d) + r(2, 18, 28, 2.6, m, d, 0.3) + r(4, 20.6, 2.4, 5.4, m, d) + r(25.6, 20.6, 2.4, 5.4, m, d) + L('M11 12 L8 18 M16 12 L16 18 M21 12 L24 18', d)),
+    'porch': ('goldwood', 'A porch.', lambda h, m, d: P('M4 6 L28 6 L30 9 L2 9 Z', m, d) + r(4, 9, 2.4, 13, m, d) + r(25.6, 9, 2.4, 13, m, d) + r(2, 22, 28, 4, h, d, 0.3)),
+    'balcony': ('goldwood', 'A balcony.', lambda h, m, d: r(3, 17, 26, 3, h, d, 0.3) + r(3, 8, 26, 2, m, d, 0.3) + ''.join(r(x, 10, 1.6, 7, m, d, 0.2) for x in (5, 10, 15, 20, 25)) + P('M6 20 L10 26 L12 26 L9 20 Z', m, d) + P('M26 20 L22 26 L20 26 L23 20 Z', m, d)),
+    'chimney': ('stone', 'A brick chimney.', lambda h, m, d: r(10, 7, 12, 19, '#a4573f', '#5e2f22', 0.4) + r(9, 5, 14, 3, '#7a3f2e', '#5e2f22', 0.3) + ''.join(L(f'M10 {y} L22 {y}', '#5e2f22', .5) for y in (11, 15, 19, 23))),
+}
+PIECES.update(BUILD)
 for pid, (wood, note, body) in PIECES.items():
     with open(os.path.join(OUT, pid.replace('_', '-') + '.svg'), 'w') as f:
         f.write(icon(body, wood, note))

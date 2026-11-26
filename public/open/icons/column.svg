@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- A wooden column. Code-drawn filler (tools/art/furniture_icons.py). -->
+  <ellipse cx="16" cy="28" rx="11" ry="2" fill="#000" opacity=".22"/>
+  <rect x="11" y="3" width="10" height="2.6" rx="0.3" fill="#8a5f24" stroke="#8a5f24" stroke-width=".8"/><rect x="12.5" y="5.6" width="7" height="18" rx="0.4" fill="#f0c773" stroke="#8a5f24" stroke-width=".8"/><rect x="11" y="23.6" width="10" height="2.6" rx="0.3" fill="#8a5f24" stroke="#8a5f24" stroke-width=".8"/>
+</svg>

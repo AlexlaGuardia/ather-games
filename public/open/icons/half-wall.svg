@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- A half-height wall. Code-drawn filler (tools/art/furniture_icons.py). -->
+  <ellipse cx="16" cy="28" rx="11" ry="2" fill="#000" opacity=".22"/>
+  <rect x="4" y="14" width="24" height="12" rx="0.4" fill="#d9a957" stroke="#8a5f24" stroke-width=".8"/><rect x="3.4" y="12.6" width="25.2" height="2" rx="0.3" fill="#8a5f24" stroke="#8a5f24" stroke-width=".8"/><path d="M10 15 L10 25 M16 15 L16 25 M22 15 L22 25" stroke="#8a5f24" stroke-width="0.6" fill="none"/>
+</svg>
