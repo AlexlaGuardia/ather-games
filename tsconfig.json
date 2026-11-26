@@ -42,6 +42,8 @@
     ".next-play/dev/types/**/*.ts",
     ".next-assets/types/**/*.ts",
     ".next-assets/dev/types/**/*.ts",
+    ".next-shared/types/**/*.ts",
+    ".next-shared/dev/types/**/*.ts",
     ".next_b/types/**/*.ts",
     ".next_b/dev/types/**/*.ts"
   ],
