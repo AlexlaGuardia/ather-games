@@ -12,6 +12,7 @@ import { HOLLOW_LOOK, createHollowGeo, createHollowMat, applyHollowLook, goopSur
          setHollowBorrow, BORROW, type HollowLook } from './hollow-look'
 import { skyEnvironment, borrowedSky, NIGHT_BORROW } from './sky-env'
 import { SKY } from './sky-palette'
+import { readUnlessArchived } from '../testing/archived'
 
 let pass = 0
 const fails: string[] = []
@@ -71,7 +72,10 @@ const FORMS = ['warden', 'stalker', 'caster'] as const
 // state that made this look unjudgeable in the first place.
 {
   const world = codeOnly(readFileSync(new URL('./VoxelWorld.tsx', import.meta.url), 'utf8'))
-  const page = codeOnly(readFileSync(new URL('../dev/grey/page.tsx', import.meta.url), 'utf8'))
+  // M214: the dev/grey bench was archived (DEV_ARCHIVE.md); its asserts sleep until it is restored.
+  const pageRaw = readUnlessArchived('src/app/shimmer/dev/grey/page.tsx')
+  const page = pageRaw === null ? '' : codeOnly(pageRaw)
+  const okP = (c: boolean, l: string) => { if (pageRaw !== null) ok(c, l) }
 
   // ★★ THE SEAM MOVED ONE HOP AND IS STILL A SEAM (2026-09-06, sprites lane). These two lines used
   // to read `createHollowMat()` and `createHollowGeo()` straight out of `VoxelWorld`, and they went
@@ -91,26 +95,26 @@ const FORMS = ['warden', 'stalker', 'caster'] as const
   // ⚠ `createHollowGeo` KEEPS A CONSUMER, and this asserts it rather than assuming it. The world was
   // its main caller; if `/shimmer/dev/grey` ever stops calling it too, it becomes an exported
   // primitive nobody draws — the unwired-module shape this line of work has now hit four times.
-  ok(/createHollowGeo\(\)/.test(page),
+  okP(/createHollowGeo\(\)/.test(page),
      '⚠ the three flat silhouettes still have a consumer — the grey bench judges the LOOK against them')
   ok(!/MeshLambertMaterial\(\{ color: 0x3f423d/.test(world), 'nor of the greys')
 
-  ok(/createHollowMat\(look\)/.test(page), 'the page builds from the same factory, varying the dials')
-  ok(/applyHollowLook\(/.test(page), 'and re-points them in place rather than reallocating')
-  ok(/HOLLOW_LOOK\.colour/.test(page), 'starting from the SHIPPED values, so load == what the game draws')
+  okP(/createHollowMat\(look\)/.test(page), 'the page builds from the same factory, varying the dials')
+  okP(/applyHollowLook\(/.test(page), 'and re-points them in place rather than reallocating')
+  okP(/HOLLOW_LOOK\.colour/.test(page), 'starting from the SHIPPED values, so load == what the game draws')
   // ⚠ DERIVED, NEVER RESTATED. This listed the three greys as literals — so the day anyone retuned
   // HOLLOW_LOOK.colour the assert would have gone on guarding three colours that no longer ship,
   // green by asking about a world that had stopped existing (the 2026-09-05 disarmed-guard shape).
   for (const f of FORMS) {
     const hex = `0x${HOLLOW_LOOK.colour[f].toString(16)}`
-    ok(!page.includes(hex), `⚠ the page restates no colour of its own (${f} ${hex})`)
+    okP(!page.includes(hex), `⚠ the page restates no colour of its own (${f} ${hex})`)
   }
 
   // ⚠ THE CLOCK. The rig reads dayProgress(), so a page-local hour would light the scene by a rule
   // the world does not have — and setTimePin is MODULE state, so leaving it pinned darkens the app.
-  ok(/setTimePin\(hour \* 24\)/.test(page), 'the page pins the clock through the shipped mechanism')
-  ok(/return \(\) => setTimePin\(null\)/.test(page), '★ and RELEASES it on unmount — a dev tool must not leave the game at midnight')
-  ok(/<VoxelDayNight \/>/.test(page), 'and lights the scene with the real rig, not a hand-lit approximation')
+  okP(/setTimePin\(hour \* 24\)/.test(page), 'the page pins the clock through the shipped mechanism')
+  okP(/return \(\) => setTimePin\(null\)/.test(page), '★ and RELEASES it on unmount — a dev tool must not leave the game at midnight')
+  okP(/<VoxelDayNight \/>/.test(page), 'and lights the scene with the real rig, not a hand-lit approximation')
 }
 
 // ── 4b. AND THE RULE IS THE RULE, NOT THE FILE IT WAS FIRST WRITTEN ABOUT ───────────────────────
@@ -129,9 +133,11 @@ const FORMS = ['warden', 'stalker', 'caster'] as const
 //
 // So this block asserts the RULE across every Hollow bench, not the file the rule was found in.
 {
-  const benches = ['../dev/grey/page.tsx', '../dev/hollow/page.tsx'] as const
+  const benches = ['src/app/shimmer/dev/grey/page.tsx', 'src/app/shimmer/dev/hollow/page.tsx'] as const
   for (const rel of benches) {
-    const src = codeOnly(readFileSync(new URL(rel, import.meta.url), 'utf8'))
+    const raw = readUnlessArchived(rel)   // M214: both benches archived (DEV_ARCHIVE.md); the rule re-arms on restore
+    if (raw === null) continue
+    const src = codeOnly(raw)
     ok(/<VoxelDayNight \/>/.test(src), `${rel} lights itself with the SHIPPED rig`)
     // ⚠ The ban is on the AMBIENT/SUN rig only. A bench may still hang a local prop lamp — the
     // tended plot's warm pointLight is the whole point of that half of dev/hollow.

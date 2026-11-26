@@ -18,36 +18,21 @@ export interface CommandEntry {
 }
 
 export const COMMAND_REGISTRY: CommandEntry[] = [
-  // SPRITES group
-  { id: 'sprites', label: 'Spirits', keywords: ['sprite', 'fox', 'owl'], category: 'editor', action: 'switchMode', mode: 'sprites' },
-  { id: 'player', label: 'Player', keywords: ['character'], category: 'editor', action: 'switchMode', mode: 'player' },
-  { id: 'items', label: 'Items', keywords: ['inventory', 'equipment'], category: 'editor', action: 'switchMode', mode: 'items' },
-  { id: 'furniture', label: 'Furniture', keywords: ['decoration', 'house'], category: 'editor', action: 'switchMode', mode: 'furniture' },
-  { id: 'nodes', label: 'Nodes', keywords: ['resource', 'gather'], category: 'editor', action: 'switchMode', mode: 'nodes' },
-
-  // WORLD group
-  { id: 'map', label: 'Map', keywords: ['world', 'zone', 'tilemap'], category: 'editor', action: 'switchMode', mode: 'map' },
-  { id: 'structures', label: 'Structures', keywords: ['building', 'stamp'], category: 'editor', action: 'switchMode', mode: 'structures' },
-  { id: 'npcs', label: 'NPCs', keywords: ['character', 'villager'], category: 'editor', action: 'switchMode', mode: 'npcs' },
-
-  // SYSTEMS group
-  { id: 'battle', label: 'Battle', keywords: ['combat', 'fight'], category: 'editor', action: 'switchMode', mode: 'battle' },
+  // M214: only the editors the live game reads (see EDITOR_MAP in ../page.tsx); the rest are in DEV_ARCHIVE.md.
+  { id: 'terrain', label: 'Creative mode', keywords: ['world', 'builder', 'terrain', 'zones', 'creative'], category: 'editor', action: 'switchMode', mode: 'terrain' },
+  { id: 'spirits', label: 'Spirit gallery', keywords: ['spirit', 'model', 'form', 'gallery'], category: 'editor', action: 'switchMode', mode: 'spirits' },
   { id: 'moves', label: 'Moves', keywords: ['attack', 'ability'], category: 'editor', action: 'switchMode', mode: 'moves' },
-  { id: 'farming', label: 'Farming', keywords: ['crops', 'harvest'], category: 'editor', action: 'switchMode', mode: 'farming' },
-  { id: 'exchange', label: 'Exchange', keywords: ['trade', 'shop', 'market'], category: 'editor', action: 'switchMode', mode: 'exchange' },
-  { id: 'encounters', label: 'Encounters', keywords: ['zone', 'spawn'], category: 'editor', action: 'switchMode', mode: 'encounters' },
-  { id: 'alchemy', label: 'Alchemy', keywords: ['potion', 'recipe', 'brew'], category: 'editor', action: 'switchMode', mode: 'alchemy' },
-  { id: 'quests', label: 'Quests', keywords: ['task', 'mission'], category: 'editor', action: 'switchMode', mode: 'quests' },
   { id: 'evolution', label: 'Evolution', keywords: ['evolve', 'stage'], category: 'editor', action: 'switchMode', mode: 'evolution' },
-  { id: 'resources', label: 'Resources', keywords: ['material', 'ingredient'], category: 'editor', action: 'switchMode', mode: 'resources' },
   { id: 'tools', label: 'Tools', keywords: ['equipment', 'gear'], category: 'editor', action: 'switchMode', mode: 'tools' },
+  { id: 'alchemy', label: 'Alchemy', keywords: ['potion', 'recipe', 'brew'], category: 'editor', action: 'switchMode', mode: 'alchemy' },
+  { id: 'farming', label: 'Farming', keywords: ['crops', 'harvest'], category: 'editor', action: 'switchMode', mode: 'farming' },
+  { id: 'resources', label: 'Resources', keywords: ['material', 'ingredient'], category: 'editor', action: 'switchMode', mode: 'resources' },
+  { id: 'items', label: 'Items', keywords: ['inventory', 'icon'], category: 'editor', action: 'switchMode', mode: 'items' },
   { id: 'skills', label: 'Skills', keywords: ['ability', 'talent'], category: 'editor', action: 'switchMode', mode: 'skills' },
   { id: 'mana', label: 'Mana', keywords: ['magic', 'energy'], category: 'editor', action: 'switchMode', mode: 'mana' },
   { id: 'daycycle', label: 'Day/Night', keywords: ['time', 'cycle', 'clock'], category: 'editor', action: 'switchMode', mode: 'daycycle' },
-
-  // TOOLS group
-  { id: 'banner', label: 'Banner', keywords: ['header', 'title'], category: 'editor', action: 'switchMode', mode: 'banner' },
-  { id: 'spinner', label: 'Spinner', keywords: ['loading', 'wheel'], category: 'editor', action: 'switchMode', mode: 'spinner' },
+  { id: 'doctor', label: 'Doctor', keywords: ['check', 'lint'], category: 'editor', action: 'switchMode', mode: 'doctor' },
+  { id: 'meshbench', label: 'Mesh Bench', keywords: ['voxel', 'mesh'], category: 'editor', action: 'switchMode', mode: 'meshbench' },
 
   // Links
   { id: 'index', label: 'All dev pages', keywords: ['index', 'home', 'everything', 'list'], category: 'editor', action: 'switchMode', mode: 'index' },

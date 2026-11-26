@@ -14,6 +14,7 @@ import * as THREE from 'three'
 import { createHollowMeta, updateHollowMeta, disposeHollowMetas, META_BOX, META_RES } from './hollow-meta'
 import { hollowField, HOLLOW_STRIDE_S } from './hollow-pose'
 import { codeOnly } from '../testing/guard'
+import { readUnlessArchived } from '../testing/archived'
 
 let pass = 0
 const fails: string[] = []
@@ -207,10 +208,13 @@ function bounds(m: THREE.Mesh): THREE.Box3 {
     '★★ and drives it from a FRAME LOOP — a field built once and never updated is a statue')
   ok(/disposeHollowMetas\(/.test(rig), 'and releases the shared materials on unmount')
 
-  const benchRaw = readFileSync(new URL('../dev/hollow/page.tsx', import.meta.url), 'utf8')
-  ok(/<HollowFused\s/.test(codeOnly(benchRaw)), '★★ and a page MOUNTS it — the field is reachable by eye')
-  ok(/^import \{ HollowFused \} from '\.\.\/\.\.\/voxel3d\/HollowFused'$/m.test(benchRaw),
-    'from the bench, by import, not by copy')
+  // M214: the dev/hollow bench was archived (DEV_ARCHIVE.md); these sleep until it is restored.
+  const benchRaw = readUnlessArchived('src/app/shimmer/dev/hollow/page.tsx')
+  if (benchRaw !== null) {
+    ok(/<HollowFused\s/.test(codeOnly(benchRaw)), '★★ and a page MOUNTS it — the field is reachable by eye')
+    ok(/^import \{ HollowFused \} from '\.\.\/\.\.\/voxel3d\/HollowFused'$/m.test(benchRaw),
+      'from the bench, by import, not by copy')
+  }
 }
 
 console.log(`   res ${META_RES}^3 · box ${META_BOX}`)

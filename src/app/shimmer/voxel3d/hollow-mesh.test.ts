@@ -29,6 +29,7 @@ import { hollowField, REST, FORM_SCALE, DENSITY, REACH, type Anchor } from './ho
 import { BONE, boneName, type BoneName } from './hollow-body'
 import { createHollowMat, HOLLOW_LOOK, type HollowForm } from './hollow-look'
 import { codeOnly, noComments, strip } from '../testing/guard'
+import { readUnlessArchived } from '../testing/archived'
 
 let pass = 0
 const fails: string[] = []
@@ -364,15 +365,18 @@ for (const f of FORMS) {
   ok(/disposeHollowMeshBody/.test(host),
     '⚠ and the host releases the PER-BODY geometry, which the blob rig never had to')
 
-  const page = codeOnly(readFileSync('src/app/shimmer/dev/hollow/page.tsx', 'utf8'))
-  ok(/import \{ HollowMesh \}/.test(page) && /<HollowMesh/.test(page),
+  // M214: the dev/hollow bench was archived (DEV_ARCHIVE.md); its two asserts sleep until it is restored.
+  const benchRaw = readUnlessArchived('src/app/shimmer/dev/hollow/page.tsx')
+  const page = codeOnly(benchRaw ?? '')
+  const okP = (c: boolean, l: string) => { if (benchRaw !== null) ok(c, l) }
+  okP(/import \{ HollowMesh \}/.test(page) && /<HollowMesh/.test(page),
     "★★ and the BENCH mounts it — the chain module → host → page, all three links, because two of them were green while the third was missing on 09-05")
   // ⚠ `codeOnly` strips string contents, and a TS string-literal type is a string to it — so the
   // default-surface claim has to be read with comments stripped instead, which hands a comment the
   // power to satisfy it (PATTERNS 2026-08-22, documenting a marker created a marker). Asserted to
   // appear EXACTLY ONCE, so prose about it cannot stand in for it.
-  const pageNC = noComments(readFileSync('src/app/shimmer/dev/hollow/page.tsx', 'utf8'))
-  ok((pageNC.match(/useState<'mesh'/g) ?? []).length === 1,
+  const pageNC = noComments(benchRaw ?? '')
+  okP((pageNC.match(/useState<'mesh'/g) ?? []).length === 1,
     "★ the modelled mesh is the bench's DEFAULT surface, declared exactly once; the other three are the comparison")
 
   // ── ★★★ AND THE WORLD, WHICH IS THE CONSUMER THAT ACTUALLY MATTERS ────────────────────────

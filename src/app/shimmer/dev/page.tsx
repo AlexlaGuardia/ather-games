@@ -9,67 +9,38 @@ import DevIndex from './templates/DevIndex'
 import InspectorSidebar from './templates/InspectorSidebar'
 import { InspectorContext } from './templates/inspector-context'
 
-const SpriteEditor = dynamic(() => import('./editors/SpriteEditor'))
-const PlayerEditor = dynamic(() => import('./editors/PlayerEditor'))
-const MapEditor = dynamic(() => import('./editors/MapEditor'))
-const BattleTester = dynamic(() => import('./editors/BattleTester'))
-const ItemEditor = dynamic(() => import('./editors/ItemEditor'))
-const NodeEditor = dynamic(() => import('./editors/NodeEditor'))
-const BannerEditor = dynamic(() => import('./editors/BannerEditor'))
-const FurnitureEditor = dynamic(() => import('./editors/FurnitureEditor'))
-const StructureBuilder = dynamic(() => import('./editors/StructureBuilder'))
-const FarmingEditor = dynamic(() => import('./editors/FarmingEditor'))
-const GEEditor = dynamic(() => import('./editors/GEEditor'))
-const EncounterEditor = dynamic(() => import('./editors/EncounterEditor'))
+// ★ M214 (Alex 11-26: 'a graveyard of old tools... make this a usable place'). Only editors whose data the
+// LIVE open world reads stay here; the pixel-era tabs (Art, Player, Objects, Nodes, Map, Structures, NPCs,
+// Battle, Banner, Puppet) and the unread ones (Exchange, Encounters, Quests, Weather, Grimoire, Spinner) were
+// removed, git keeps them: see DEV_ARCHIVE.md at the repo root for each one's last sha.
+const ItemEditor = dynamic(() => import('./editors/ItemEditor'))            // ITEM_ICONS: the live HUD paints these
+const FarmingEditor = dynamic(() => import('./editors/FarmingEditor'))      // voxel/crops.ts CROP_DEFS
 const AlchemyEditor = dynamic(() => import('./editors/AlchemyEditor'))
-const QuestEditor = dynamic(() => import('./editors/QuestEditor'))
-const SpinnerEditor = dynamic(() => import('./editors/SpinnerEditor'))
-const EvolutionEditor = dynamic(() => import('./editors/EvolutionEditor'))
-const ResourcesEditor = dynamic(() => import('./editors/ResourcesEditor'))
+const EvolutionEditor = dynamic(() => import('./editors/EvolutionEditor'))  // evolution-config: second forms read it
+const ResourcesEditor = dynamic(() => import('./editors/ResourcesEditor'))  // world/resources: forestry reads it
 const ToolsEditor = dynamic(() => import('./editors/ToolsEditor'))
 const SkillsEditor = dynamic(() => import('./editors/SkillsEditor'))
 const MovesEditor = dynamic(() => import('./editors/MovesEditor'))
-const NPCEditor = dynamic(() => import('./editors/NPCEditor'))
 const DayCycleEditor = dynamic(() => import('./editors/DayCycleEditor'))
-const ManaEditor = dynamic(() => import('./editors/ManaEditor'))
-const PuppetEditor = dynamic(() => import('./editors/PuppetEditor'))
-const GrimoireEditor = dynamic(() => import('./editors/GrimoireEditor'))
-const WeatherEditor = dynamic(() => import('./editors/WeatherEditor'))
+const ManaEditor = dynamic(() => import('./editors/ManaEditor'))            // engine/mana: alchemy reads it
 const MeshBench = dynamic(() => import('./editors/MeshBench'))
 const DoctorPanel = dynamic(() => import('./editors/DoctorPanel'))
 const TerrainEditor = dynamic(() => import('./editors/TerrainEditor'))   // BETA M62: sculpt the real Wilds
 const SpiritGallery = dynamic(() => import('./editors/SpiritGallery'), { ssr: false })   // BETA M213: every spirit model on a dial
 
-type EditorMode = 'index' | 'sprites' | 'player' | 'map' | 'battle' | 'items' | 'nodes' | 'banner' | 'furniture' | 'structures' | 'farming' | 'exchange' | 'encounters' | 'alchemy' | 'quests' | 'spinner' | 'evolution' | 'resources' | 'tools' | 'skills' | 'moves' | 'npcs' | 'daycycle' | 'mana' | 'puppet' | 'grimoire' | 'weather' | 'doctor' | 'meshbench' | 'terrain' | 'spirits'
+type EditorMode = 'index' | 'items' | 'farming' | 'alchemy' | 'evolution' | 'resources' | 'tools' | 'skills' | 'moves' | 'daycycle' | 'mana' | 'doctor' | 'meshbench' | 'terrain' | 'spirits'
 
-// Component map — replaces 25 conditional renders
 const EDITOR_MAP: Record<Exclude<EditorMode, 'index'>, { component: ComponentType<any>; deployable: boolean }> = {
-  sprites:    { component: SpriteEditor,        deployable: true },
-  player:     { component: PlayerEditor,        deployable: true },
   items:      { component: ItemEditor,          deployable: true },
-  furniture:  { component: FurnitureEditor,     deployable: true },
-  nodes:      { component: NodeEditor,          deployable: true },
-  map:        { component: MapEditor,           deployable: false },
-  structures: { component: StructureBuilder,    deployable: false },
-  npcs:       { component: NPCEditor,          deployable: true },
-  battle:     { component: BattleTester,        deployable: false },
   moves:      { component: MovesEditor,         deployable: true },
   farming:    { component: FarmingEditor,       deployable: true },
-  exchange:   { component: GEEditor,            deployable: true },
-  encounters: { component: EncounterEditor,     deployable: true },
   alchemy:    { component: AlchemyEditor,       deployable: true },
-  quests:     { component: QuestEditor,         deployable: true },
   evolution:  { component: EvolutionEditor,     deployable: true },
   resources:  { component: ResourcesEditor,     deployable: true },
   tools:      { component: ToolsEditor,         deployable: true },
   skills:     { component: SkillsEditor,        deployable: true },
   mana:       { component: ManaEditor,          deployable: true },
   daycycle:   { component: DayCycleEditor,      deployable: true },
-  banner:     { component: BannerEditor,        deployable: false },
-  spinner:    { component: SpinnerEditor,       deployable: false },
-  puppet:     { component: PuppetEditor,         deployable: false },
-  grimoire:   { component: GrimoireEditor,      deployable: false },
-  weather:    { component: WeatherEditor,       deployable: true },
   doctor:     { component: DoctorPanel,         deployable: false },
   meshbench:  { component: MeshBench,           deployable: false },
   terrain:    { component: TerrainEditor,       deployable: false },
@@ -78,47 +49,27 @@ const EDITOR_MAP: Record<Exclude<EditorMode, 'index'>, { component: ComponentTyp
 
 const TAB_GROUPS: { label: string; tabs: { id: EditorMode; label: string }[]; links?: { href: string; label: string }[] }[] = [
   {
-    label: 'Sprites',
+    label: 'World',
     tabs: [
-      { id: 'player', label: 'Player' },
-      { id: 'items', label: 'Items' },
-      { id: 'nodes', label: 'Nodes' },
+      { id: 'terrain', label: 'Creative mode' },   // M83: was 'Terrain'; 11-23 Alex: 'creative mode' (the World Builder: terrain, voids, zones, overlay)
     ],
   },
   {
     label: 'Spirits',
     tabs: [
       { id: 'spirits', label: 'Gallery' },   // M213: the models on a dial
-      { id: 'grimoire', label: 'Grimoire' },
-      { id: 'sprites', label: 'Art' },
-      { id: 'puppet', label: 'Puppet' },
       { id: 'moves', label: 'Moves' },
       { id: 'evolution', label: 'Evolution' },
-      { id: 'encounters', label: 'Encounters' },
-      { id: 'battle', label: 'Battle' },
-    ],
-  },
-  {
-    label: 'World',
-    tabs: [
-      { id: 'map', label: 'Map' },
-      { id: 'terrain', label: 'Creative mode' },   // M83: was 'Terrain'; 11-23 Alex: 'creative mode' (the World Builder: terrain, voids, zones, overlay)
-      { id: 'structures', label: 'Structures' },
-      { id: 'furniture', label: 'Objects' },
-      { id: 'npcs', label: 'NPCs' },
-    ],
-    links: [
-      { href: '/shimmer/dev/dialogue', label: 'Dialogue' },
     ],
   },
   {
     label: 'Craft',
     tabs: [
-      { id: 'farming', label: 'Farming' },
-      { id: 'resources', label: 'Resources' },
       { id: 'tools', label: 'Tools' },
       { id: 'alchemy', label: 'Alchemy' },
-      { id: 'exchange', label: 'Exchange' },
+      { id: 'farming', label: 'Farming' },
+      { id: 'resources', label: 'Resources' },
+      { id: 'items', label: 'Items' },
     ],
   },
   {
@@ -126,16 +77,12 @@ const TAB_GROUPS: { label: string; tabs: { id: EditorMode; label: string }[]; li
     tabs: [
       { id: 'skills', label: 'Skills' },
       { id: 'mana', label: 'Mana' },
-      { id: 'quests', label: 'Quests' },
       { id: 'daycycle', label: 'Day/Night' },
-      { id: 'weather', label: 'Weather' },
     ],
   },
   {
-    label: 'Tools',
+    label: 'Checks',
     tabs: [
-      { id: 'banner', label: 'Banner' },
-      { id: 'spinner', label: 'Spinner' },
       { id: 'doctor', label: 'Doctor' },
       { id: 'meshbench', label: 'Mesh Bench' },
     ],
@@ -241,7 +188,7 @@ function EditorHub() {
   }), [])
 
   // Editors that keep state between tab switches (mounted once, hidden when inactive)
-  const PERSISTENT_MODES: Exclude<EditorMode, 'index'>[] = ['map']
+  const PERSISTENT_MODES: Exclude<EditorMode, 'index'>[] = []
   const [visitedPersistent, setVisitedPersistent] = useState<Set<Exclude<EditorMode, 'index'>>>(new Set())
   useEffect(() => {
     const m = mode as Exclude<EditorMode, 'index'>
@@ -263,7 +210,7 @@ function EditorHub() {
     <InspectorContext.Provider value={inspectorContextValue}>
       <div className="min-h-screen bg-[#0a0a1a] text-white flex">
         <div className="flex-1 min-w-0 p-6">
-          <div className={mode === 'map' || mode === 'structures' ? 'max-w-[1400px] mx-auto' : 'max-w-[1100px] mx-auto'}>
+          <div className={'max-w-[1100px] mx-auto'}>
 
             {/* Header bar */}
             <div className="flex items-center gap-4 mb-5">

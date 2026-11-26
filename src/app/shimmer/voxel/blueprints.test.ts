@@ -14,6 +14,7 @@ import { MAT } from './depth'
 import { ALL_BLOCKS, type BlockSkill } from './registry'
 import { ALL_PIECES, pieceDef, cellsOf } from './pieces'
 import { normalize, pieceFootprint, stampPieces, type BlueprintPiece } from './blueprints'
+import { readUnlessArchived } from '../testing/archived'
 
 let pass = 0
 const fails: string[] = []
@@ -170,11 +171,12 @@ const cell = (x: number, y: number, z: number, m: number = S): BlueprintCell => 
 // before anything is judged (canon gate, 08-22).
 {
   const root = join(__dirname, '../../..')
-  const page = readFileSync(join(root, 'app/shimmer/dev/worktable/page.tsx'), 'utf8')
+  // M214: the voxel worktable bench was archived (DEV_ARCHIVE.md); its page asserts sleep, the route + proxy ones stay.
+  const page = readUnlessArchived('src/app/shimmer/dev/worktable/page.tsx') ?? ''
   const route = readFileSync(join(root, 'app/shimmer/save-blueprint/route.ts'), 'utf8')
   const proxy = readFileSync(join(root, 'proxy.ts'), 'utf8')
 
-  ok(page.length > 2000 && route.length > 1000 && proxy.length > 500,
+  ok((page === '' || page.length > 2000) && route.length > 1000 && proxy.length > 500,
     '★★★ BLIND CHECK: all three files were actually read, so a verdict below means something')
 
   // ★★★ THE ROUTE IS PROTECTED BY ITS NAME, SO THE NAME IS ASSERTED — AND SO IS THE PREMISE.
@@ -206,6 +208,7 @@ const cell = (x: number, y: number, z: number, m: number = S): BlueprintCell => 
 
   // ★★ THE PALETTE IS DERIVED. A hand-kept list of material ids here would be a third dialect of
   // the building vocabulary and would go stale the day a block is added.
+  if (page) {
   ok(/ALL_BLOCKS\.filter\(b => b\.placeable\)/.test(page),
     '★★★ the worktable palette comes off the registry\'s own `placeable` flag, not a literal list')
 
@@ -219,6 +222,7 @@ const cell = (x: number, y: number, z: number, m: number = S): BlueprintCell => 
     '★★ every texture is sliced out of the array the game samples')
   ok(!/function paintFor|const paintFor/.test(page),
     '★ and the page defines no paint function of its own — seven previews that re-derived were right while the game was wrong')
+  }
 }
 
 // ── 11. ★★★ THE PALETTE MUST NOT BURY THE THING BELOW IT ──────────────────────────────────────
@@ -228,7 +232,8 @@ const cell = (x: number, y: number, z: number, m: number = S): BlueprintCell => 
 // exist because the defect returns for free the day someone adds blocks, and nothing would say so.
 {
   const root = join(__dirname, '../../..')
-  const page = readFileSync(join(root, 'app/shimmer/dev/worktable/page.tsx'), 'utf8')
+  const page = readUnlessArchived('src/app/shimmer/dev/worktable/page.tsx') ?? ''   // M214: archived bench
+  if (page) {
 
   // ⚠⚠ COMMENTS STRIPPED FIRST, AND THE MUTATION SWEEP IS WHY. The first cut of this guard did a
   // bare `indexOf('saved structures')` — and the page's own FAMILY docstring EXPLAINS the burial by
@@ -256,6 +261,7 @@ const cell = (x: number, y: number, z: number, m: number = S): BlueprintCell => 
     '★★★ families come off `skill ?? fastSkill`, the registry\'s own answer to "what tool does this want"')
   ok(/isHalfMat/.test(page) && !/endsWith\('? ?Slab/.test(page),
     '★★ and a slab is identified by the shipped predicate, never by its name ending in " Slab"')
+  }
 }
 
 // ── 12. ★★★ EVERY PLACEABLE BLOCK LANDS IN EXACTLY ONE FAMILY ─────────────────────────────────
@@ -292,7 +298,8 @@ const cell = (x: number, y: number, z: number, m: number = S): BlueprintCell => 
 {
   const root = join(__dirname, '../../..')
   const route = readFileSync(join(root, 'app/shimmer/save-blueprint/route.ts'), 'utf8')
-  const page = readFileSync(join(root, 'app/shimmer/dev/worktable/page.tsx'), 'utf8')
+  const page = readUnlessArchived('src/app/shimmer/dev/worktable/page.tsx') ?? ''   // M214: archived bench
+  if (page) {
 
   // The key the LIST endpoint actually answers with, read off the route rather than restated here.
   const served = (route.match(/NextResponse\.json\(\{\s*([a-zA-Z]+)\s*\}\)/) ?? [])[1]
@@ -303,6 +310,7 @@ const cell = (x: number, y: number, z: number, m: number = S): BlueprintCell => 
     'a missing side means this reader lost its subject, not that the contract holds')
   ok(served === read,
     `★★★ the list endpoint's key and the page's read are the same word (route '${served}' vs page '${read}')`)
+  }
 }
 
 // ── 14. ★★★ A BLUEPRINT CARRIES PIECES, BECAUSE BLOCKS ALONE CANNOT MAKE A BUILDING ───────────

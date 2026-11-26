@@ -30,7 +30,7 @@
  *
  * Run: `npx tsx src/app/shimmer/dev/dev-claims.test.ts` (repo convention — there is no vitest).
  */
-import { readFileSync } from 'node:fs'
+import { readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { codeOnly } from '../testing/guard'
 
@@ -90,6 +90,8 @@ const RETIRED: RetiredClaim[] = [
 
 // ⚠ An empty table makes every loop below vacuous, which is the assert-that-cannot-fire trap.
 ok(RETIRED.length > 0, 'BLIND: no retired claims registered, so this guard checks nothing')
+const archive = existsSync(join(ROOT, 'DEV_ARCHIVE.md')) ? read('DEV_ARCHIVE.md') : ''
+let asleep = 0
 
 for (const r of RETIRED) {
   const hostCode = codeOnly(read(r.host))
@@ -99,6 +101,15 @@ for (const r of RETIRED) {
   // page's old wording may have become true again; re-read it rather than deleting this row.
   ok(hasProof, `PREMISE GONE: ${r.host} no longer calls ${r.proof} — the claim "${r.claim}" may be true again, re-read ${r.page}`)
 
+  // ★ M214 (2026-11-26): a page that was ARCHIVED (removed from the app, listed in DEV_ARCHIVE.md) makes no
+  // claim to anybody, so its row sleeps until the page is restored, and re-arms by itself when it is. A page
+  // that is missing WITHOUT an archive row is a broken path, not a retirement, and stays red.
+  if (!existsSync(join(ROOT, r.page))) {
+    const route = '/' + r.page.replace(/^src\/app\//, '').replace(/\/page\.tsx$/, '')
+    ok(archive.includes('| `' + route + '` |'), `PAGE GONE, NOT ARCHIVED: ${r.page} does not exist and DEV_ARCHIVE.md has no row for ${route}`)
+    asleep++
+    continue
+  }
   // Direction 2 — given the premise, the page must not still be saying the retired thing.
   if (hasProof) {
     const pageText = read(r.page)
@@ -116,7 +127,7 @@ for (const r of RETIRED) {
   ok(!hostCode.includes('zzz-never-present-token'), 'CONTROL: codeOnly matched a token that cannot exist, so matching proves nothing')
 }
 
-console.log(`dev-claims: ${pass} pass, ${fails.length} fail  (${RETIRED.length} retired claims watched)`)
+console.log(`dev-claims: ${pass} pass, ${fails.length} fail  (${RETIRED.length} retired claims watched, ${asleep} asleep on archived pages)`)
 if (fails.length) {
   for (const f of fails) console.error(`  ✗ ${f}`)
   process.exit(1)

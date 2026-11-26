@@ -15,6 +15,7 @@ import { createHollowBody, updateHollowBody, disposeHollowBodies, BUCKETS, boneN
 import { hollowField, hollowPose, MAX_BLOB_R, HOLLOW_STRIDE_S } from './hollow-pose'
 import { createHollowMat, HOLLOW_LOOK, type HollowForm } from './hollow-look'
 import { codeOnly } from '../testing/guard'
+import { readUnlessArchived } from '../testing/archived'
 
 let pass = 0
 const fails: string[] = []
@@ -217,11 +218,14 @@ ok(legAngles.size === 1 && [...legAngles][0] === 0,
 
   // ★ And the component is MOUNTED. A consumer nothing renders is the same dead end one file out,
   // which is exactly how the rig sat unseen: `hollow-body` had a test, and the test was the consumer.
-  const benchRaw = readFileSync(new URL('../dev/hollow/page.tsx', import.meta.url), 'utf8')
-  const bench = codeOnly(benchRaw)
-  ok(/<HollowRig\s/.test(bench), '★★ and a page MOUNTS that component — the rig is reachable by eye')
-  ok(/^import \{ HollowRig \} from '\.\.\/\.\.\/voxel3d\/HollowRig'$/m.test(benchRaw),
-    'from the bench, by import, not by copy')
+  // M214: the dev/hollow bench was archived (DEV_ARCHIVE.md); these sleep until it is restored.
+  const benchRaw = readUnlessArchived('src/app/shimmer/dev/hollow/page.tsx')
+  if (benchRaw !== null) {
+    const bench = codeOnly(benchRaw)
+    ok(/<HollowRig\s/.test(bench), '★★ and a page MOUNTS that component — the rig is reachable by eye')
+    ok(/^import \{ HollowRig \} from '\.\.\/\.\.\/voxel3d\/HollowRig'$/m.test(benchRaw),
+      'from the bench, by import, not by copy')
+  }
 }
 
 // ── ★★★ AND THE BONES CANNOT BE MISTAKEN FOR THE BLOBS ────────────────────────────────────────

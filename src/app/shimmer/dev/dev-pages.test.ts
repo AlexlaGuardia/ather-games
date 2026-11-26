@@ -123,22 +123,42 @@ for (const p of DEV_PAGES) {
   ok(DEV_ERAS[p.era] !== undefined, `UNKNOWN ERA: ${p.path} is in "${p.era}", which DEV_ERAS does not define`)
 }
 ok(DEV_ERA_ORDER[0] === 'live', 'LIVE GAME MUST LEAD: DEV_ERA_ORDER[0] is not "live"')
-ok(DEV_ERA_ORDER[DEV_ERA_ORDER.length - 1] === 'old', 'OLD VERSIONS MUST BE LAST: they are the folded archive')
 for (const e of DEV_ERA_ORDER) ok(DEV_ERAS[e] !== undefined, `ORDERED ERA UNDEFINED: "${e}"`)
 for (const path of LIVE_PAGES) {
   const p = DEV_PAGES.find(x => x.path === path)
   ok(p !== undefined && p.era === 'live', `LIVE PAGE NOT LIVE: ${path} serves the open world but is ${p ? `in era "${p.era}"` : 'unregistered'}`)
 }
 for (const path of OTHER_PAGES) ok(DEV_PAGES.find(x => x.path === path)?.era === 'other', `OTHER-GAME PAGE MISPLACED: ${path} should be era "other"`)
-// A page imports the open world's models => it must not sit in the archive. Reading the source is the
-// measurement; a hand list alone is a mirror. locomotion and day-night alone do not count (11-14 sweep).
-for (const p of DEV_PAGES.filter(x => x.era === 'old' && x.path.startsWith('/shimmer/dev/'))) {
-  const f = join(DEV, p.path.slice('/shimmer/dev/'.length), 'page.tsx')
-  if (!existsSync(f)) continue
-  const imports = [...readFileSync(f, 'utf8').matchAll(/from '[./]*\/open\/shared\/([^']+)'/g)].map(m => m[1])
-  const modelImports = imports.filter(i => i !== 'locomotion' && i !== 'day-night')
-  ok(modelImports.length === 0, `OLD PAGE IMPORTS THE LIVE GAME: ${p.path} imports open/shared/${modelImports.join(', ')} but is filed under old versions`)
+// ★ M214 (2026-11-26, Alex: 'a graveyard of old tools'). The old era is GONE from the app, not folded: 30
+// voxel / play3d / pixel routes were removed with an ordinary commit and DEV_ARCHIVE.md names each one's sha.
+// (Replaces the 11-19 asserts "OLD VERSIONS MUST BE LAST" and "an old page may not import the live game":
+// their subject, the old era, no longer exists.) Two gates take their place:
+//   (a) no dev route imports the archived engines (voxel3d / play3d) - that import IS what made a page old;
+//   (b) every route the archive lists stays out of the app and out of the registry, and carries a sha.
+const ARCHIVED_ENGINE = /from '(?:(?:\.\.?\/)+|@\/app\/shimmer\/)(voxel3d|play3d)\//
+for (const path of shimmerDevRoutes) {
+  const dir = join(DEV, path.slice('/shimmer/dev/'.length))
+  for (const f of readdirSync(dir).filter(n => /\.tsx?$/.test(n) && !/\.test\./.test(n))) {
+    const m = readFileSync(join(dir, f), 'utf8').match(ARCHIVED_ENGINE)
+    ok(!m, `ARCHIVED ENGINE: ${path}/${f} imports ${m?.[1]}/ - an old-era page; archive it (DEV_ARCHIVE.md) instead of shipping it`)
+  }
 }
+const ARCHIVE = join(process.cwd(), 'DEV_ARCHIVE.md')
+ok(existsSync(ARCHIVE), 'DEV_ARCHIVE.md is missing: the removed routes have no way back')
+const archived = existsSync(ARCHIVE)
+  ? [...readFileSync(ARCHIVE, 'utf8').matchAll(/^\| `(\/[^`]+)` \| `([0-9a-f]{7,40})` \|/gm)].map(m => ({ path: m[1], sha: m[2] }))
+  : []
+ok(archived.length >= 30, `BLIND: DEV_ARCHIVE.md lists ${archived.length} routes, the M214 removal was 30 - the row regex has stopped seeing the table`)
+for (const a of archived) {
+  ok(!registered.has(a.path), `ARCHIVED BUT REGISTERED: ${a.path} is in DEV_ARCHIVE.md and still on the index`)
+  ok(!existsSync(fileFor(a.path)), `ARCHIVED BUT SHIPPING: ${a.path} is in DEV_ARCHIVE.md but ${fileFor(a.path)} exists`)
+}
+
+// ★ M214: the landing leads with the Creative mode pill (the World Builder, ?mode=terrain).
+const indexSrc = readFileSync(join(DEV, 'templates/DevIndex.tsx'), 'utf8')
+const pillAt = indexSrc.indexOf('data-creative-pill')
+ok(pillAt > 0 && indexSrc.includes("'terrain'"), 'NO CREATIVE PILL: DevIndex no longer renders the Creative mode pill that opens ?mode=terrain')
+ok(pillAt > 0 && pillAt < indexSrc.indexOf('data-live-tools'), 'CREATIVE PILL NOT FIRST: the pill must come before the live tools')
 
 // ⚠ A group missing from DEV_GROUP_ORDER does not error — it silently renders NOTHING, so the
 // pages in it vanish from the index while still passing every check above. That is this file's own

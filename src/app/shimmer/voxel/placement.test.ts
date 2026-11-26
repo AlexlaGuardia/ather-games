@@ -10,6 +10,7 @@ import { placementProblems, placementSiteProblems } from './placement'
 import { makeBlueprint } from './blueprints'
 import { MAT } from './depth'
 import type { Stamp } from './stamps'
+import { readUnlessArchived } from '../testing/archived'
 
 let pass = 0
 const fails: string[] = []
@@ -38,10 +39,14 @@ ok(placementSiteProblems(stamp, { ...flat, reserved: [{ x: 120, z: 120, name: 'G
 {
   const strip = (raw: string) => raw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
   const at = (p: string) => strip(readFileSync(join(process.cwd(), p), 'utf-8'))
-  const page = at('src/app/shimmer/dev/worktable/page.tsx')
-  ok(/fetch\('\/shimmer\/save-placement'/.test(page) && /method: 'PUT'/.test(page), 'the worktable PUTs to /shimmer/save-placement')
-  ok(/place in world/.test(page), 'the button exists on the page')
-  ok(/next deploy/.test(page), '★ the page says a placement is live at the next deploy — "I placed it and nothing happened" is the first bug otherwise')
+  // M214: the voxel worktable bench was archived (DEV_ARCHIVE.md); its page asserts sleep, the route ones stay.
+  const pageRaw = readUnlessArchived('src/app/shimmer/dev/worktable/page.tsx')
+  if (pageRaw !== null) {
+    const page = strip(pageRaw)
+    ok(/fetch\('\/shimmer\/save-placement'/.test(page) && /method: 'PUT'/.test(page), 'the worktable PUTs to /shimmer/save-placement')
+    ok(/place in world/.test(page), 'the button exists on the page')
+    ok(/next deploy/.test(page), '★ the page says a placement is live at the next deploy — "I placed it and nothing happened" is the first bug otherwise')
+  }
   const route = at('src/app/shimmer/save-placement/route.ts')
   for (const v of ['GET', 'PUT', 'DELETE']) ok(new RegExp(`export async function ${v}`).test(route), `the route exports ${v}`)
   ok(/placementProblems\(/.test(route) && /placementSiteProblems\(/.test(route), 'the route judges shape AND ground through the shared functions')

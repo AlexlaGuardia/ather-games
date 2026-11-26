@@ -179,7 +179,8 @@ for (const body of [BODIES.voxel, BODIES.play3d]) {
   const hits = execSync(
     `grep -rlE "from '[^']*rune-hold'" --include=*.ts --include=*.tsx ${root}src/app/shimmer || true`,
     { encoding: 'utf8' }).trim().split('\n').filter(Boolean).map(f => f.split('/shimmer/')[1]).sort()
-  const allowed = ['dev/runehold/page.tsx', 'play3d/rune-hold.test.ts']
+  // M214 (2026-11-26): the ruler (dev/runehold) was archived, see DEV_ARCHIVE.md; only the test imports it now.
+  const allowed = ['play3d/rune-hold.test.ts']
   ok(JSON.stringify(hits) === JSON.stringify(allowed),
      `the greybox stays an instrument — imported only by its ruler and its test (found: ${hits.join(', ')})`)
 }
