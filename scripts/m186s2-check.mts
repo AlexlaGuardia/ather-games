@@ -101,7 +101,7 @@ for (const [vp, w, h] of (phoneOnly ? [['phone', 390, 844]] : deskOnly ? [['desk
       await p.mouse.move(200, 200); await p.mouse.move(260, 240, { steps: 4 }); await sleep(400)
       ok(await cursor() !== 'none', `${vp}: B. the mouse moves -> a cursor (${await cursor()})`)
       ok(await ev(() => (window as any).__pad.kind()) === null && !(await ev(() => !!document.querySelector('[data-pad-hint]'))), `${vp}: B. the mouse took over: no pad chip`)
-      ok(await ev(() => document.body.innerText.includes('Click to play')), `${vp}: B. Click to play is back`)
+      ok(await poll(() => ev(() => /Click to (play|resume)/.test(document.body.innerText)), 5000), `${vp}: B. the click card is back (after the A click the page says 'Click to resume', as without a pad)`)
       await press('R3'); await sleep(300)
       ok(await cursor() === 'none' && await ev(() => (window as any).__pad.kind()) === 'playstation', `${vp}: B. a pad press -> hidden again (${await cursor()})`)
     }
