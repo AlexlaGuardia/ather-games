@@ -110,6 +110,7 @@ for (const [vp, w, h] of (phoneOnly ? [['phone', 390, 844]] : deskOnly ? [['desk
     ok(await poll(() => ev(() => (window as any).__ather.zone() === 'glade' && !!(window as any).__greg), 120000), `${vp}: C. in the Glade`); await sleep(4000)
     const near = () => ev(() => (window as any).__ather?.near?.()?.kind ?? null)
     const at = async (x: number, z: number, yaw: number) => { await poll(() => ev(() => !!(window as any).__ather?.gladeAt), 30000); return ev((x, z, y) => (window as any).__ather.gladeAt(x, z, y), x, z, yaw) }
+    await poll(() => ev(() => { const g = (window as any).__greg; const v = typeof g === 'function' ? g() : typeof g?.at === 'function' ? g.at() : g; return !!v && typeof v.x === 'number' }), 30000)
     const greg = await ev(() => { const g = (window as any).__greg; const v = typeof g === 'function' ? g() : typeof g.at === 'function' ? g.at() : g; return { x: v.x, z: v.z } })
     let faced = false
     for (const d of [2, 1.6, 2.4]) { for (let i = 0; i < 12 && !faced; i++) { const a = i * Math.PI / 6; await at(greg.x + Math.sin(a) * d, greg.z + Math.cos(a) * d, a); faced = await poll(async () => (await near()) === 'greg', 2500) } if (faced) break }
@@ -133,7 +134,7 @@ if (!phoneOnly) {
     await p.goto(`${url}/shimmer/open/ather?hour=13&waymark=greg`, { waitUntil: 'load', timeout: 240000 })
     ok(await poll(() => ev(() => (window as any).__ather?.zone?.() === 'wilds'), 240000), `keys: in the Wilds`)
     await sleep(5000)
-    await p.keyboard.down('KeyW'); await sleep(6000); await p.keyboard.up('KeyW'); await sleep(500)
+    await p.keyboard.down('KeyW'); await poll(() => ev(() => ((window as any).__sfx?.played?.()['step-grass'] ?? 0) > 0), 20000); await p.keyboard.up('KeyW'); await sleep(500)
     const r = await ev(() => ({ st: ((window as any).__acs as AudioContext[]).map(c => c.state).join(','), played: (window as any).__sfx?.played?.()['step-grass'] ?? 0 }))
     ok(r.st.length > 0 && r.st.split(',').every(s => s === 'running') && r.played > 0, `keys: a keyboard-only start has sound (${JSON.stringify(r)})`)
     ok(!(await ev(() => !!document.querySelector('[data-audio-locked]'))), `keys: no 'sound is off' note`)
