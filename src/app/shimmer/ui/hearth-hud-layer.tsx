@@ -27,6 +27,7 @@ import { getEquippedTool, getToolDef, type EquippedTools } from '../engine/tools
 import { xpForSkillLevel, type SkillSet } from '../engine/skills'
 import type { Vitals } from '../engine/vitals'
 import type { ActiveBuffs } from '../engine/potion-effects'
+import { toolDial } from './tool-stage'
 
 export type ToolFamily = typeof TOOL_FAMILIES[number]
 
@@ -57,6 +58,7 @@ export function toolReadout(tools: EquippedTools, skills: SkillSet, family: Tool
     family, level: sk.level, active: activeTool === family,
     xpPct: Math.min(1, sk.xp / Math.max(1, xpForSkillLevel(sk.level))),
     tier: def?.tier ?? 0, basic: def?.basic ?? false, name: def?.name,
+    dial: toolDial(tools, family),   // M184: empty until given, the stage, the upgrade's ring
   }
 }
 
@@ -66,15 +68,37 @@ export function toolReadout(tools: EquippedTools, skills: SkillSet, family: Tool
 function Socket({ face, r, glyph }: { face: HudFace; r: ReturnType<typeof toolReadout>; glyph?: (f: ToolFamily) => React.ReactNode }) {
   const t = HUD_FACES[face]
   const RING_R = 21, RING_C = 2 * Math.PI * RING_R
+  const d = r.dial, OUT_R = 23.2, OUT_C = 2 * Math.PI * OUT_R
+  // M184: an EMPTY dial (the friend has not handed this tool yet): the well, a dashed rim, a faint glyph; no level, no dots
+  if (!d.held) return (
+    <div data-socket={r.family} data-held="0" data-stage="-1" className="relative w-full h-full rounded-full" style={{ background: t.well, opacity: 0.55 }}>
+      <svg viewBox="0 0 48 48" className="absolute inset-0 w-full h-full">
+        <circle cx="24" cy="24" r={RING_R} fill="none" stroke={face === 'full' ? 'rgba(58,39,22,.35)' : 'rgba(255,255,255,.3)'} strokeWidth="1.4" strokeDasharray="3 3" />
+      </svg>
+      <svg viewBox="0 0 24 24" className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4" style={{ opacity: 0.4 }}
+           fill="none" stroke={t.count} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        {glyph ? glyph(r.family) : null}
+      </svg>
+    </div>
+  )
   return (
-    <div data-socket={r.family} className="relative w-full h-full rounded-full" style={{ background: t.well, boxShadow: r.active ? t.wellSelShadow : `${t.ring}, ${t.ringShadow}` }}>
+    <div data-socket={r.family} data-held="1" data-stage={d.stage} data-tool={d.toolId ?? ''} data-ring={d.ringPct === null ? '' : d.ringPct.toFixed(3)}
+         className="relative w-full h-full rounded-full" style={{ background: t.well, boxShadow: r.active ? t.wellSelShadow : `${t.ring}, ${t.ringShadow}` }}>
+      {/* M184: the upgrade's BORDER RING, its own colour, the arc = durability left */}
+      {d.ringPct !== null && d.ringColor && (
+        <svg viewBox="0 0 48 48" className="absolute -inset-[3px] w-[calc(100%+6px)] h-[calc(100%+6px)] -rotate-90" data-ring-arc>
+          <circle cx="24" cy="24" r={OUT_R} fill="none" stroke="rgba(0,0,0,.28)" strokeWidth="2.4" />
+          <circle cx="24" cy="24" r={OUT_R} fill="none" stroke={d.ringColor} strokeWidth="2.4" strokeLinecap="round"
+                  strokeDasharray={OUT_C} strokeDashoffset={OUT_C * (1 - d.ringPct)} />
+        </svg>
+      )}
       <svg viewBox="0 0 48 48" className="absolute inset-0 w-full h-full -rotate-90">
         <circle cx="24" cy="24" r={RING_R} fill="none" stroke={face === 'full' ? 'rgba(58,39,22,.14)' : 'rgba(255,255,255,.12)'} strokeWidth="2" />
         <circle cx="24" cy="24" r={RING_R} fill="none" stroke={face === 'full' ? '#5f7d45' : '#9cc58a'} strokeWidth="2.2" strokeLinecap="round"
                 strokeDasharray={RING_C} strokeDashoffset={RING_C * (1 - r.xpPct)} />
       </svg>
       <svg viewBox="0 0 24 24" className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-[60%] w-4 h-4"
-           fill="none" stroke={t.count} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+           fill="none" stroke={d.tint ?? t.count} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         {glyph ? glyph(r.family) : <text x="12" y="16" textAnchor="middle" fontSize="12" fill={t.count} stroke="none" style={hearthDisplay}>{r.family[0].toUpperCase()}</text>}
       </svg>
       <div className="absolute bottom-1 left-1/2 -translate-x-1/2 flex gap-0.5">
@@ -102,7 +126,8 @@ export function Corner({ face, size, mana, readouts, glyph }: {
   readouts: ReturnType<typeof toolReadout>[]
   glyph?: (f: ToolFamily) => React.ReactNode
 }) {
-  const ANGLES = [180, 137, 93, 50]
+  // four sockets at hud-corner's bearings; three (the open world, M184) spread over the same arc
+  const ANGLES = readouts.length === 3 ? [180, 115, 50] : [180, 137, 93, 50]
   return (
     <div className="absolute bottom-4 right-4 pointer-events-none"
          style={{ '--tool-arc-r': 'clamp(108px, 16vw, 122px)', ...(size === 'compact' ? { transform: 'scale(.63)', transformOrigin: 'bottom right' } : {}) } as React.CSSProperties}>
@@ -127,7 +152,9 @@ export function Corner({ face, size, mana, readouts, glyph }: {
 }
 
 // ── the layer ────────────────────────────────────────────────────────────────────────────────
-export function HearthHudLayer({ face = 'full', size: sizeIn, entries, sel, held, dimmed, onSelect, objective, vitals, mana, buffs, tools, skills, activeTool, glyph, door = false, topLeftFrom = 0, clock = true, mapFrame = true, slots = true }: {
+export function HearthHudLayer({ face = 'full', size: sizeIn, entries, sel, held, dimmed, onSelect, objective, vitals, mana, buffs, tools, skills, activeTool, glyph, door = false, topLeftFrom = 0, clock = true, mapFrame = true, slots = true, families = TOOL_FAMILIES }: {
+  /** which tool families get a dial (the open world: its three, M184). Default: all four */
+  families?: readonly ToolFamily[]
   /** The host has an options door under the map (the world does) — the clock steps left of it. */
   door?: boolean
   /**
@@ -170,9 +197,9 @@ export function HearthHudLayer({ face = 'full', size: sizeIn, entries, sel, held
   const size = sizeIn ?? live
   const box = hudMapBox(size)
   const readouts = tools.current && skills.current
-    ? TOOL_FAMILIES.map(f => toolReadout(tools.current!, skills.current!, f, activeTool))
+    ? families.map(f => toolReadout(tools.current!, skills.current!, f, activeTool))
     : []
-  const pips: ToolPip[] = readouts.map(r => ({ family: r.family, level: r.level, xpPct: r.xpPct, active: r.active }))
+  const pips: ToolPip[] = readouts.map(r => ({ family: r.family, level: r.level, xpPct: r.xpPct, active: r.active, held: r.dial.held, stage: r.dial.stage, ringPct: r.dial.ringPct, ringColor: r.dial.ringColor }))
   // Compact's lip carries health only (the orb still stands), so with no health there is no lip.
   const lip = size === 'compact' ? (vitals ? <HearthLip face={face} vitals={vitals} /> : undefined)
     : size === 'phone' ? <HearthLip face={face} vitals={vitals} mana={mana} tools={<HearthToolPips face={face} pips={pips} />} />

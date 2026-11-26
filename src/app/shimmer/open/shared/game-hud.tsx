@@ -38,8 +38,10 @@ import { hearthDisplay, hearthBody } from '../../ui/hearth'
 import type { HudSize } from '../../ui/hud-flag'
 import type { HotbarEntry } from '../../hud/hotbar'
 import { HOTBAR_SLOTS } from '../../hud/hotbar'
-import { TOOL_FAMILIES, ToolGlyph } from '../../hud/hud-corner'
-import { ensureBasicTools, type EquippedTools } from '../../engine/tools'
+import { ToolGlyph } from '../../hud/hud-corner'
+import { type EquippedTools } from '../../engine/tools'
+import { OPEN_TOOL_FAMILIES } from '../../ui/tool-stage'
+import { loadTools, TOOLS_EVENT } from '../ather/rinsticks'
 import { createSkillSet, type SkillSet } from '../../engine/skills'
 import type { Vitals } from '../../engine/vitals'
 import { hudSay, linesAt, subscribe, type Line } from './hud-say'
@@ -191,7 +193,14 @@ export function GameHud({ size, pose, marks, vitals, mana, tools, skills, entrie
   minimap?: React.ReactNode
   status?: readonly Status[]
 }) {
-  const basicTools = useRef<EquippedTools>(ensureBasicTools({}))
+  // M184: the server (no save) draws the three dials EMPTY, and so does the first client render; a page that does not hold
+  // the tools itself (the continent) gets the keeper's own after mount, so a newborn sees the same empty dials there
+  const noTools = useRef<EquippedTools>({}), ownTools = useRef<EquippedTools>({})
+  useEffect(() => {
+    if (tools) return
+    const on = () => { ownTools.current = loadTools() }; on()
+    addEventListener(TOOLS_EVENT, on); return () => removeEventListener(TOOLS_EVENT, on)
+  }, [tools])
   const basicSkills = useRef<SkillSet>(createSkillSet())
   // ★ the server has no save, so it draws the orb with a fresh keeper's tools + skills; the first client render must match it
   // (a leveled keeper's real levels on that render were a hydration mismatch, React #418, 11-18). Real ones after mount.
@@ -202,8 +211,8 @@ export function GameHud({ size, pose, marks, vitals, mana, tools, skills, entrie
     let seen = Math.max(0, ...linesAt().map(l => l.id))
     return subscribe(() => { const n = linesAt().filter(l => l.kind === 'morel' && l.id > seen); for (const l of linesAt()) seen = Math.max(seen, l.id); if (n.length) sfx('morel-chime') })
   }, [])
-  const T = (mounted && tools) || basicTools, S = (mounted && skills) || basicSkills
-  const readouts = T.current && S.current ? TOOL_FAMILIES.map(f => toolReadout(T.current!, S.current!, f, null)) : []
+  const T = mounted ? (tools ?? ownTools) : noTools, S = (mounted && skills) || basicSkills
+  const readouts = T.current && S.current ? OPEN_TOOL_FAMILIES.map(f => toolReadout(T.current!, S.current!, f, null)) : []
   const box = hudMapBox(size)
   const tray = trayBox(size)
   const [vw, setVw] = React.useState(1280), [vh, setVh] = React.useState(800)
@@ -255,7 +264,7 @@ export function GameHud({ size, pose, marks, vitals, mana, tools, skills, entrie
     return (
       <div className={`contents ${HEARTH_FONT_VARS}`}>
         <HearthHudLayer face={FACE} size="phone" entries={entries} sel={shown} held={null} dimmed={dimmed} onSelect={onSelect}
-          objective={null} vitals={vitals} mana={mana} tools={T} skills={S} activeTool={null} glyph={glyph} mapFrame={false} />
+          objective={null} vitals={vitals} mana={mana} tools={T} skills={S} activeTool={null} glyph={glyph} mapFrame={false} families={OPEN_TOOL_FAMILIES} />
         {/* 11-18 (play's 390x844 shot): the screen-centred compass ran under the minimap; slide it left just enough */}
         <HearthCompass face={FACE} pose={pose} marks={marks} size="phone" centerX={phoneCompassX} />
         <XpBar face={FACE} size="phone" centerX={phoneCompassX} top={8 + XP_BELOW_COMPASS} />

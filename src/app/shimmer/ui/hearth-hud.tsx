@@ -537,15 +537,26 @@ export function HearthLip({ face, vitals, mana, tools }: {
 
 /** A tool as a pip: phone-sized stand-in for a `hud-corner` socket. Level in the middle, XP as a
  *  ring, the act-here ember when that family is working. Data in, so the corner derives it. */
-export type ToolPip = { family: string; level: number; xpPct: number; active: boolean }
+export type ToolPip = { family: string; level: number; xpPct: number; active: boolean
+  /** M184: false = an EMPTY pip (the tool not handed yet); stage 0 worn, 1..3 upgrades; ringPct / ringColor = the upgrade's ring */
+  held?: boolean; stage?: number; ringPct?: number | null; ringColor?: string | null }
 export function HearthToolPips({ face, pips }: { face: HudFace; pips: readonly ToolPip[] }) {
   const t = HUD_FACES[face]
   const R = 9, C = 2 * Math.PI * R
   return (
     <div className="flex items-center gap-1 shrink-0">
-      {pips.map(p => (
-        <div key={p.family} title={p.family} className="relative w-[22px] h-[22px] rounded-full grid place-items-center"
+      {pips.map(p => p.held === false ? (
+        <div key={p.family} title={p.family} data-pip={p.family} data-held="0" className="relative w-[22px] h-[22px] rounded-full"
+             style={{ background: t.well, opacity: 0.55, outline: `1px dashed ${face === 'full' ? 'rgba(58,39,22,.4)' : 'rgba(255,255,255,.35)'}`, outlineOffset: -3 }} />
+      ) : (
+        <div key={p.family} title={p.family} data-pip={p.family} data-held="1" data-stage={p.stage ?? ''} className="relative w-[22px] h-[22px] rounded-full grid place-items-center"
              style={{ background: t.well, boxShadow: p.active ? t.wellSelShadow : t.wellShadow }}>
+          {p.ringColor && p.ringPct != null && (   // M184: the upgrade's ring, its colour, the arc = durability left
+            <svg viewBox="0 0 26 26" className="absolute -inset-[2px] w-[26px] h-[26px] -rotate-90" data-ring-arc>
+              <circle cx="13" cy="13" r="12" fill="none" stroke={p.ringColor} strokeWidth="1.6" strokeLinecap="round"
+                      strokeDasharray={2 * Math.PI * 12} strokeDashoffset={2 * Math.PI * 12 * (1 - p.ringPct)} />
+            </svg>
+          )}
           <svg viewBox="0 0 22 22" className="absolute inset-0 -rotate-90">
             <circle cx="11" cy="11" r={R} fill="none" stroke={face === 'full' ? H.moss : '#9cc58a'} strokeWidth="2"
                     strokeDasharray={C} strokeDashoffset={C * (1 - Math.max(0, Math.min(1, p.xpPct)))} strokeLinecap="round" />
