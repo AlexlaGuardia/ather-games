@@ -8,7 +8,7 @@
 // party / podium / potion party / swaray; the panel fits the screen; 0 page errors.
 //   npx tsx scripts/m188-stone-check.mts [--url https://ather.games] [--phone] [--out dir]
 import puppeteer, { type Page } from 'puppeteer-core'
-import { CHORDSTONE, GATE_FACE } from '../src/app/shimmer/open/ather/plot'
+import { CHORDSTONE, GATE, GATE_FACE } from '../src/app/shimmer/open/ather/plot'
 import { chordColour } from '../src/app/shimmer/open/shared/chord'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), out = flag('--out', '/tmp'), PHONE = process.argv.includes('--phone')
@@ -22,11 +22,13 @@ const mp = (p: Page, f: string) => p.evaluate((k: string) => (window as any).__m
 const selfId = (p: Page) => p.evaluate(() => localStorage.getItem('ather:mp:id'))
 const TUT = { v: 1, live: false, greg: { welcome: true, moglins: true, spirits: true, wilds: true }, heard: ['otto', 'tess', 'bonn', 'fennel'], gifts: ['grimoire', 'spike', 'pruner', 'seeds', 'bait', 'rinquest'], b2: 'accepted', baitDay: null, m70: 'none', m70node: null, m70side: 'none', folded: true }
 const tag = PHONE ? 390 : 'desk'
-const shot = async (p: Page, n: string) => { try { await p.screenshot({ path: `${out}/${tag}-${n}.png` }) } catch { /* slow frame */ } }
+const hideCard = (p: Page) => p.evaluate(() => { const hits = [...document.querySelectorAll('div')].filter(d => /Click to play|Tap to play/.test(d.textContent ?? '')); for (const d of hits.filter(d => !hits.some(o => o !== d && d.contains(o)))) (d as HTMLElement).style.visibility = 'hidden' }).catch(() => {})
+const shot = async (p: Page, n: string) => { await hideCard(p); try { await p.screenshot({ path: `${out}/${tag}-${n}.png` }) } catch { /* slow frame */ } }
 const open = async (who: string): Promise<Page> => {
   const p = await (await br.createBrowserContext()).newPage()
   await p.setViewport(PHONE ? { width: 390, height: 844, isMobile: true, hasTouch: true, deviceScaleFactor: 1 } : { width: 1280, height: 800 })
   p.on('pageerror', e => errs.push(`${who}: ${String(e).slice(0, 180)}`))
+  await p.evaluateOnNewDocument('window.__name = (f) => f')   // tsx names inner arrows with __name
   await p.evaluateOnNewDocument((tut: unknown) => {
     if (sessionStorage.getItem('m188s2')) return; sessionStorage.setItem('m188s2', '1')
     localStorage.setItem('ather:shimmer:birthRune', 'star'); localStorage.setItem('open.tutorial.v1', JSON.stringify(tut))
@@ -65,6 +67,7 @@ try {
   ok(dark && dark.lights.length === 0, `before any chord the stone's top is dark (${dark?.lights.length} lights)`)
   await shot(A, 'a-stone-dark')
   ok(await openStone(A), 'E opens the Chordstone panel')
+  await poll(async () => !!(await A.$('[data-friends-online]')), 10000)   // the card's chord code is read a tick after mount
   const lay = await A.evaluate(() => {
     const r = (s: string) => { const e = document.querySelector(s); if (!e) return null; const b = e.getBoundingClientRect(); return { l: b.left, r: b.right, t: b.top, b: b.bottom, w: b.width } }
     return { panel: r('[data-panel="chordstone"]'), friends: r('[data-card="friends"]'), cluster: r('[data-card="cluster"]'), brew: r('[data-card="brewings"]'), mode: document.querySelector('[data-cards]')?.getAttribute('data-cards'), vw: innerWidth,
@@ -86,6 +89,7 @@ try {
   ok(/send chord invites|Invite/i.test(signHint), 'the centre card offers chord invites to friends (sign-in line for a keeper with no account)')
   // B joins in its own centre card
   ok(await openStone(B), 'B opens its Chordstone')
+  if (!(await poll(async () => !!(await B.$('[data-panel="chordstone"] [data-party-input]')), 15000))) console.log('B panel:', (await B.$eval('[data-panel="chordstone"]', e => e.textContent ?? '').catch(() => 'none')).slice(0, 400))
   await B.type('[data-panel="chordstone"] [data-party-input]', String(code)); await B.click('[data-panel="chordstone"] [data-act="join-party"]')
   ok(await poll(async () => (await mp(B, 'party')) === code, 10000), 'B rang into the chord from the centre card')
   // the lights: two on each stone, one per keeper, in each one's chord colour
@@ -107,12 +111,15 @@ try {
     if (PHONE) await A.evaluate((t: string) => { const b = [...document.querySelectorAll<HTMLElement>('[data-panel="chordstone"] button')].find(x => (x.textContent ?? '').trim().toLowerCase() === t); b?.click() }, id === 'cluster' ? 'cluster' : 'brewings')
     ok(await poll(async () => !!(await A.$(`[data-card="${id}"] [data-coming]`)), 4000), `${id} card is there, honestly 'coming'`)
     if (PHONE) await shot(A, `d-${id}`)
+    if (id === 'cluster') ok((await A.$$('[data-cluster-seat]')).length === 4, 'the cluster card has four seats')
+    else ok(!!(await A.$('[data-brew-tab="find"]')) && !!(await A.$('[data-brew-tab="host"]')), 'the brewings card has Find + Host')
   }
-  ok((await A.$$('[data-cluster-seat]')).length === 4, 'the cluster card has four seats')
-  ok(!!(await A.$('[data-brew-tab="find"]')) && !!(await A.$('[data-brew-tab="host"]')), 'the brewings card has Find + Host')
   await closeStone(A)
   ok(!(await A.$('[data-panel="chordstone"]')), 'the panel closes')
-  await A.evaluate((s: typeof STAND) => (window as any).__ather.tp(s.x + Math.sin(s.yaw) * 3.5, s.z + Math.cos(s.yaw) * 3.5, s.yaw), STAND); await sleep(2500)
+  // a wider look: from the gate's face side, the gate and the lit stone together
+  const face = { x: Math.sin(GATE_FACE), z: Math.cos(GATE_FACE) }, T = { x: (CHORDSTONE.x + GATE.x) / 2, z: (CHORDSTONE.z + GATE.z) / 2 }
+  const V = { x: T.x + face.x * 6.5 + side.x * 2, z: T.z + face.z * 6.5 + side.z * 2 }
+  await A.evaluate((v: { x: number; z: number }, yaw: number) => (window as any).__ather.tp(v.x, v.z, yaw), V, Math.atan2(-(T.x - V.x), -(T.z - V.z))); await sleep(2500)
   await shot(A, 'e-stone-lit')
 } catch (e) { ok(false, `threw: ${String(e).slice(0, 300)}`) }
 ok(errs.length === 0, `0 page errors (${errs.slice(0, 3).join(' | ')})`)
