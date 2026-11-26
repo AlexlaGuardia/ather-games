@@ -3,7 +3,7 @@
 // Reads the shipped glbs: each form is rigged on the Vulnyx's own M132 plan (same bones, every clip), is bigger than her base
 // (every evolution grows the spirit: spirits-species.md, Spirit Scale), and carries the coat of its locked picture.
 import * as fs from 'fs'
-import { type SpiritElement, AURLOTL_RIG, ARCLOTL_RIG, CRAGLOTL_RIG, LOTL_GLB_TALL, BEAR_GLB_TALL, LUMEBEAR_RIG, VOLTBEAR_RIG, TIDEBEAR_RIG, CRAGBEAR_GLB_TALL, CRAGBEAR_RIG, MARLOTL_RIG, SECOND_FORMS, formGrow, SPIRIT_ELEMENTS, SPIRIT_MODELS, SPIRIT_RIGS, formLook, rigLook, spiritModelFor } from './spirit-models'
+import { type SpiritElement, AURLOTL_RIG, ARCLOTL_RIG, CRAGLOTL_RIG, LOTL_GLB_TALL, BEAR_GLB_TALL, LUMEBEAR_RIG, VOLTBEAR_RIG, TIDEBEAR_RIG, NOCT_GLB_TALL, NOCTARC_RIG, NOCTARA_RIG, NOCTORE_RIG, NOCTIX_RIG, NOCTYX_RIG, CRAGBEAR_GLB_TALL, CRAGBEAR_RIG, MARLOTL_RIG, SECOND_FORMS, formGrow, SPIRIT_ELEMENTS, SPIRIT_MODELS, SPIRIT_RIGS, formLook, rigLook, spiritModelFor } from './spirit-models'
 
 let pass = 0
 const fails: string[] = []
@@ -140,6 +140,34 @@ for (const [el, name, rig] of BEARS) {
 // her base form's coat is gold: a second form never ships the base colours by mistake
 { const { col, n } = glb(SPIRIT_RIGS.fox!.url), [r, g, b] = mean(col, n); ok(r > b + 60 && g > b, `base Vulnyx stays gold ${[r, g, b].map(Math.round)}`) }
 
+// M202 the Noctyx line: each form her own creature on the base's flier rig plan (32 bones, idle/walk = hop/run = fly/sit/lie)
+const NOCTS: [SpiritElement, string, typeof NOCTYX_RIG][] = [['storm', 'noctarc', NOCTARC_RIG], ['mana', 'noctara', NOCTARA_RIG], ['earth', 'noctore', NOCTORE_RIG], ['water', 'noctix', NOCTIX_RIG]]
+for (const [el, name, rig] of NOCTS) {
+  const L = formLook('bat', el)!, b = SPIRIT_RIGS.bat!
+  ok(!!L && L.name === name && L.url === `/open/spirits/${name}-rigged.glb` && L.form === el, `bat ${el}: ${name} ${L?.url}`)
+  ok(L.rig === rig && rig !== b.rig && !!rig.fly, `bat ${el}: her own rig, still a flier`)
+  ok(formGrow(name) === 1.4 && Math.abs(L.h / b.h - 1.4) < 1e-9, `bat ${el}: size dial ${formGrow(name)}`)
+  ok(fs.existsSync('public' + L.url), `bat ${el}: ${L.url} shipped`)
+  const { j, col, n } = glb(L.url), names = (j.nodes as { name: string }[]).map(x => x.name), clips = (j.animations as { name: string }[]).map(a => a.name)
+  const pos = j.accessors[j.meshes.find((m: { name: string }) => m.name === 'body').primitives[0].attributes.POSITION]
+  ok(['body', 'eyes', 'b_root', 'b_neck', 'b_head', 'b_lids', 'b_arm1_l'].every(x => names.includes(x)) && j.skins?.[0]?.joints?.length === 32, `bat ${el}: nodes + 32 bones`)
+  ok(['idle', 'walk', 'run', 'sit', 'lie'].every(c => clips.includes(c)), `bat ${el}: clips ${clips}`)
+  ok(Math.abs(pos.max[1] / NOCT_GLB_TALL[name] - 1) < 0.04, `bat ${el}: glb height ${pos.max[1].toFixed(3)} = NOCT_GLB_TALL ${NOCT_GLB_TALL[name]}`)
+  // her element's coat (magii.md: Mana violet, Storm blue, Earth brown, Water teal), never the base Noctyx's purple
+  const [r, g, bb] = mean(col, n)
+  ok(el === 'mana' ? bb > g + 25 && r > g + 10 : el === 'storm' ? bb > r + 40 && bb > g + 15 : el === 'earth' ? r > g + 20 && g > bb : g > r + 40 && bb > r + 40, `bat ${el}: her ${el} coat ${[r, g, bb].map(Math.round)}`)
+}
+// a flier's front width is mostly her wing span, so her profile is width + front depth + back depth in the same eight bands
+{ const prof = (u: string) => { const { j } = glb(u), b = fs.readFileSync('public' + u), bin = b.subarray(20 + b.readUInt32LE(12) + 8)
+    const a = j.accessors[j.meshes.find((m: { name: string }) => m.name === 'body').primitives[0].attributes.POSITION], v = j.bufferViews[a.bufferView], o = (v.byteOffset ?? 0) + (a.byteOffset ?? 0)
+    const w = new Array(24).fill(-9), top = a.max[1]
+    for (let i = 0; i < a.count; i++) { const x = Math.abs(bin.readFloatLE(o + i * 12)), y = bin.readFloatLE(o + i * 12 + 4), z = bin.readFloatLE(o + i * 12 + 8), k = Math.min(7, Math.floor(y / top * 8)); w[k] = Math.max(w[k], x); w[8 + k] = Math.max(w[8 + k], z); w[16 + k] = Math.max(w[16 + k], -z) }
+    return w }
+  const P = [SPIRIT_RIGS.bat!.url, ...NOCTS.map(x => formLook('bat', x[0])!.url)].map(prof); let same = 0, least = 9
+  for (let a = 0; a < P.length; a++) for (let c = a + 1; c < P.length; c++) { const d = Math.max(...P[a].map((x, i) => Math.abs(x - P[c][i]))); least = Math.min(least, d); if (d < 0.06) same++ }
+  ok(same === 0, `the Noctyx line: five distinct silhouettes, base included (least profile difference ${least.toFixed(3)} glb units)`) }
+ok(new Set(SPIRIT_ELEMENTS.map(e => formLook('bat', e)!.url)).size === 4, 'the Noctyx line: four distinct forms')
+
 // ── picking ──
 ok(formLook('fox', null) === null && formLook('fox', undefined) === null, 'no element = no form (her base)')
 ok(formLook(null, 'mana') === null, 'no species = no form')
@@ -147,7 +175,7 @@ ok(formLook(null, 'mana') === null, 'no species = no form')
 ok(formLook('owl', 'earth') === null, 'a species whose forms are not modelled yet keeps her base')
 // M202 Cragbear (the Dewbear line begins): her Earth form is modelled, the other three Dewbear forms are not yet
 ok(new Set(SPIRIT_ELEMENTS.map(e => formLook('water-bear', e)!.url)).size === 4, 'the Dewbear line: four distinct forms')
-ok(Object.keys(SECOND_FORMS).sort().join() === 'axolotl,fox,water-bear', 'the Vulnyx line + the Manalotl line + the Dewbear line')
+ok(Object.keys(SECOND_FORMS).sort().join() === 'axolotl,bat,fox,water-bear', 'the Vulnyx line + the Manalotl line + the Dewbear line + the Noctyx line')
 ok(new Set(SPIRIT_ELEMENTS.map(e => formLook('fox', e)!.url)).size === 4, 'four distinct forms')
 // rigLook: a form stays itself when rigs are on; ?rig=0 (the frame measure) gives her species' old model, never a rigged glb unrigged
 const v = formLook('fox', 'storm')!
