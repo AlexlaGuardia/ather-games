@@ -114,8 +114,10 @@ export default function GunTuner() {
     return () => { previewGunModel(v2.id, null); bump(n => n + 1) }
   }, [v2, sight])
   const fov = preview === 'aim' && sight ? viewFov(75, OPTICS[V2_SIGHTS[sight].optic]) : 75
-  useEffect(() => { loadGunTune(); bump(n => n + 1) }, [])
-  const row = RANGE_GUNS.find(g => g.id === gunId) ?? RANGE_GUNS[0], gun = dialedGun(row)
+  const [ready, setReady] = useState(false)
+  useEffect(() => { loadGunTune(); setReady(true) }, [])
+  // M197: this browser's dials only after mount (the server has no localStorage: reading them in the first render broke hydration)
+  const row = RANGE_GUNS.find(g => g.id === gunId) ?? RANGE_GUNS[0], gun = ready ? dialedGun(row) : rhythmDefaultsFor(row)
   // per gun (11-19): picking a gun loads ITS numbers into the sliders
   useEffect(() => { selectGunTune(gunId); bump(n => n + 1) }, [gunId])
   const values = () => JSON.stringify({ gun: gunId, ...Object.fromEntries(Object.keys(GUN_DEFAULTS).map(k => [k, VM[k as keyof GunTune]])), ...(gun.burst > 1 ? { BURST_GAP: gun.burstGap, BURST_DELAY: gun.fireCd } : { FIRE_INTERVAL: gun.fireCd }) })
