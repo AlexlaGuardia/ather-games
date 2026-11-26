@@ -28,7 +28,7 @@ import { adoptFound, adoptFoundCells, floorAt } from './plot-found'
 import { cellMid, shaftBlocked, shaftTop } from './lift'
 import { normQ, quad, quadBounds, quadsHit, rectQuad, isWholeQ, type Rect, type Quad } from './build-prefs'
 import { BODY_R } from '../shared/locomotion'
-import { buildSolids, opens, type SolidPart } from './build-catalog'   // M169 s2: what of a cut piece blocks
+import { buildSolids, opens, raised as onWallTops, type SolidPart } from './build-catalog'   // M169 s2: what of a cut piece blocks
 import { adoptWalls, adoptCarry, adoptRoof, adoptFloors, adoptPaid, wallRects, type Walls, type RoofStyle, type Floors } from './plot-walls'
 
 export type RoomKind = 'rinnshop' | 'farm' | 'cooking' | 'alchemy' | 'smith' | 'carpentry' | 'stonemason'
@@ -487,7 +487,7 @@ export function partBoxes(parts: readonly SolidPart[], x: number, z: number, q: 
   const a = (q * Math.PI) / 2, c = Math.cos(a), s = Math.sin(a)
   return parts.flatMap(t => { const px = x + t.x * c - t.z * s, pz = z + t.x * s + t.z * c
     const rs = isWholeQ(q) ? [quadBounds(px, pz, t.w, t.d, q)] : t.w >= t.d ? panelChain(px, pz, t.w, t.d, q) : panelChain(px, pz, t.d, t.w, q + 1)
-    return rs.map(k => ({ x0: k.x0, x1: k.x1, z0: k.z0, z1: k.z1, y0: base - 0.5, y1: base + t.h, ...(t.ladder ? { ladder: true as const } : {}) })) })   // M169 s3b: a ladder stays a ladder to the walker
+    return rs.map(k => ({ x0: k.x0, x1: k.x1, z0: k.z0, z1: k.z1, y0: t.y !== undefined ? base + t.y : base - 0.5, y1: base + t.h, ...(t.ladder ? { ladder: true as const } : {}) })) })   // M169 s3b: a ladder stays a ladder to the walker
 }
 /** one placed piece's walker boxes on a floor at `base` (rooms + Creative zones share it: zone-parts.ts) */
 export function onePieceBoxes(p: Pick<Piece, 'item' | 'x' | 'z' | 'q' | 'open'>, base: number): Box[] {
@@ -526,19 +526,22 @@ export function canPlacePiece(works: Works, owned: ReadonlySet<string>, item: st
     if (Math.hypot(px - c.x, pz - c.z) < c.r) return { ok: false, why: 'Leave room around the gate, Gregory and the table.' }
   }
   const pad = 0.15, mine = pieceQuad(item, x, z, q), hit = (b: { x0: number; x1: number; z0: number; z1: number }) => quadsHit(mine, rectQuad(b), pad)   // M98: the turned footprint, not its axis box
-  for (const r of works.rooms) {
+  // M169 s4: a piece up on the wall tops (an upper floor, a roof) rests ON the walls and over heads: no wall, doorway, bench or
+  // Keepstone below refuses it, and it clashes only with another such piece
+  const up = onWallTops(f), layer = (g: typeof f) => g.slab ? 0 : onWallTops(g) ? 2 : 1
+  if (!up) for (const r of works.rooms) {
     if (wallsOf(r).some(hit)) return { ok: false, why: `In the wall of your ${ROOMS[r.kind].name}.` }
     const d = doorOf(r)
     if (!r.shell && Math.hypot(d.x - x, d.z - z) < 1.6) return { ok: false, why: 'That blocks the doorway.' }   // M97: a shell has no door
     if (crowdsBench(r, item, mine)) return { ok: false, why: 'That crowds the bench.' }   // M183: was any piece within 1.6 m of the bench
   }
-  if (!site && allChests(works).some(c => quadsHit(mine, chestQuad(c), pad))) return { ok: false, why: 'Too close to a Keepstone.' }
+  if (!site && !up && allChests(works).some(c => quadsHit(mine, chestQuad(c), pad))) return { ok: false, why: 'Too close to a Keepstone.' }
   // M98 s2: furniture may stand TOUCHING furniture (the anchor lands a row flush: bench to bench, a table pushed to a bench);
   // only a real overlap refuses, with 5 mm of float slack. Walls and Keepstones keep their 0.15 m clearance.
   // M98b: a slab and a piece never clash (the piece stands ON it); slab against slab does.
-  if (works.pieces.some(p => FURNITURE[p.item] && !!FURNITURE[p.item].slab === !!f.slab && quadsHit(mine, pieceQuad(p.item, p.x, p.z, p.q), -0.005))) return { ok: false, why: 'Something already stands there.' }
-  if (planned.some(p => !!FURNITURE[p.item].slab === !!f.slab && quadsHit(mine, pieceQuad(p.item, p.x, p.z, p.q), -0.005))) return { ok: false, why: 'A planned piece is there.' }
-  if (wallRects(works.walls ?? {}).some(hit)) return { ok: false, why: 'In one of your walls.' }
+  if (works.pieces.some(p => FURNITURE[p.item] && layer(FURNITURE[p.item]) === layer(f) && quadsHit(mine, pieceQuad(p.item, p.x, p.z, p.q), -0.005))) return { ok: false, why: 'Something already stands there.' }
+  if (planned.some(p => layer(FURNITURE[p.item]) === layer(f) && quadsHit(mine, pieceQuad(p.item, p.x, p.z, p.q), -0.005))) return { ok: false, why: 'A planned piece is there.' }
+  if (!up && wallRects(works.walls ?? {}).some(hit)) return { ok: false, why: 'In one of your walls.' }
   if (inv && countOf(inv, item) < 1) return { ok: false, why: `No ${f.name} in the bag.` }
   return { ok: true }
 }

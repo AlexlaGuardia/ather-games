@@ -44,7 +44,7 @@ import { stairBoxes, landingRails, stairCellSet, toggleStair, dirOfYaw, type Sta
 import { deckRect, planDecks, eraseDecks, deckBoxes, supported as deckSupported, builtDeckCells, DECK_T, type Decks } from './plot-decks'
 import { colBoxes, toggleCol, colAt, paintColumn, colColour, colStandsOn, parseCol, COL_T, type Cols, trimmedRect, COL_CAP } from './plot-cols'
 import { FURNITURE, REFINE, STONE_REFINE, BENCH_JOBS, KEEPSTONES, isPiece, ALC_LIVE, WOOD_COLOR, type Job } from './furniture'
-import { buildCatalog, buildBoxes, opens, type PieceBox } from './build-catalog'   // M169
+import { buildCatalog, buildBoxes, opens, pieceSpan, type PieceBox } from './build-catalog'   // M169
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'   // M169 s2: CutBody
 import { BuildIcon } from './build-icon'
 import { AlchemyPanel } from './alchemy-panel'
@@ -1422,8 +1422,8 @@ function PieceMesh({ p, y = GROUND_Y }: { p: Piece; y?: number }) {
 }
 /** M143: a piece only planned: a see-through sheet of its size, like a planned wall */
 function PlannedPiece({ p, y }: { p: Piece; y: number }) {
-  const f = FURNITURE[p.item]
-  return <mesh name="planned-piece" position={[p.x, y + f.h / 2, p.z]} rotation-y={-p.q * Math.PI / 2}><boxGeometry args={[f.w, f.h, f.d]} /><meshBasicMaterial color={SHEET} transparent opacity={0.45} depthWrite={false} /></mesh>
+  const f = FURNITURE[p.item], [lo, hi] = pieceSpan(f)   // M169 s4: a piece on the wall tops is planned up there
+  return <mesh name="planned-piece" position={[p.x, y + (lo + hi) / 2, p.z]} rotation-y={-p.q * Math.PI / 2}><boxGeometry args={[f.w, hi - lo, f.d]} /><meshBasicMaterial color={SHEET} transparent opacity={0.45} depthWrite={false} /></mesh>
 }
 /** The piece's ghost: the real piece, tinted, snapped to the quarter metre in front of the keeper. */
 function PieceGhost({ pose, owned, item, q, plan, from }: { pose: React.MutableRefObject<Pose>; owned: ReadonlySet<string>; item: string; q: number; plan?: boolean; from?: string }) {
@@ -1437,7 +1437,7 @@ function PieceGhost({ pose, owned, item, q, plan, from }: { pose: React.MutableR
   return (
     <group ref={g} rotation-y={-q * Math.PI / 2}>
       <PieceBody item={item} />
-      <mesh position-y={f.h / 2}><boxGeometry args={[f.w + 0.06, f.h + 0.06, f.d + 0.06]} /><meshBasicMaterial ref={mat} color={GHOST_OK} transparent opacity={0.3} depthWrite={false} /></mesh>
+      <mesh position-y={(pieceSpan(f)[0] + f.h) / 2}><boxGeometry args={[f.w + 0.06, f.h - pieceSpan(f)[0] + 0.06, f.d + 0.06]} /><meshBasicMaterial ref={mat} color={GHOST_OK} transparent opacity={0.3} depthWrite={false} /></mesh>
     </group>
   )
 }

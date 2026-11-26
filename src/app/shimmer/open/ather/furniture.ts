@@ -77,6 +77,9 @@ export interface PieceDef {
    *  building + textures NOTES (Magii 246c2cc / 9c9e688): doorway 2 x 2.2 m, leaves 0.94 x 2.14, window band 1.0 to 2.2 m, round
    *  pane 0.9 m at 1.6 m, shutter leaves 0.5 x 1.2 m, half wall = the railing's 1.0 m. Each stands on the 4.8 m wall panel grid. */
   shape?: 'door' | 'window' | 'round' | 'shutters' | 'arch' | 'doorway' | 'half' | 'end' | 'corner' | 'stair' | 'railing' | 'fence' | 'gate' | 'ramp' | 'ladder'
+    | 'upper' | 'ceiling' | 'beam' | 'flat' | 'gable' | 'slope' | 'gable_end' | 'chimney'
+  /** BETA M169 s4: a roof's skin, the keeper's choice (Magii 246c2cc / 9c9e688): fired clay tile or living turf */
+  skin?: 'tile' | 'turf'
   /** BETA M169 s3: a stair's railings: on its left ('l'), its right ('r') or both ('lr'), as seen climbing it. Absent = none. */
   rails?: 'l' | 'r' | 'lr'
   /** M110 s1: a TRAINING piece: party spirits may play at it as they please (spirit-trot.ts PLAY), each play nudging this ONE
@@ -123,6 +126,9 @@ export const FURNITURE: Readonly<Record<string, PieceDef>> = {
   goldwood_slab_wide: { name: 'Wide Goldwood Floor Slab', blurb: 'Four square metres of goldwood floor in one piece.', recipe: [{ id: 'goldwood_plank', n: 4 }], w: 2, d: 2, h: 0.12, solid: true, wood: 'goldwood', slab: true, build: 'Floors' },
   stone_slab: { name: 'Stone Floor Slab', blurb: 'A square metre of cut stone floor.', recipe: [{ id: 'stone_brick', n: 1 }], w: 1, d: 1, h: 0.12, solid: true, wood: 'stone', slab: true, build: 'Floors' },
   stone_slab_wide: { name: 'Wide Stone Floor Slab', blurb: 'Four square metres of cut stone floor in one piece.', recipe: [{ id: 'stone_brick', n: 4 }], w: 2, d: 2, h: 0.12, solid: true, wood: 'stone', slab: true, build: 'Floors' },
+  // BETA M169 s4: upper floors, laid ON the 4.8 m wall tops (build-catalog.ts UP): here beside the slabs so the plan catalog keeps its order
+  upper_floor: { name: 'Upper floor', blurb: 'Four square metres of goldwood floor, laid on the tops of the walls.', recipe: [{ id: 'goldwood_plank', n: 4 }], w: 2, d: 2, h: 5.0, solid: true, wood: 'goldwood', shape: 'upper', build: 'Floors' },
+  upper_floor_wide: { name: 'Wide upper floor', blurb: 'Sixteen square metres of goldwood floor, laid on the tops of the walls.', recipe: [{ id: 'goldwood_plank', n: 14 }], w: 4, d: 4, h: 5.0, solid: true, wood: 'goldwood', shape: 'upper', build: 'Floors' },
   // M98b b2: free-build wall panels. Size = a drawn wall's (plot-walls WALL_T 0.3 x WALL_H 4.8; build-prefs.test asserts it, this
   // file may not import). Cost = a drawn wall's 1.5 per metre, rounded up per panel. Blurbs are placeholders for @lark.
   goldwood_panel: { name: 'Goldwood Wall Panel', blurb: 'A metre of goldwood wall that stands on its own, at any angle.', recipe: [{ id: 'goldwood_plank', n: 2 }], w: 1, d: 0.3, h: 4.8, solid: true, wood: 'goldwood', panel: true, build: 'Walls' },
@@ -162,6 +168,22 @@ export const FURNITURE: Readonly<Record<string, PieceDef>> = {
   // BETA M169 s3b (Alex 11-25 'yes'): a ladder up to the 4.8 m wall top; walk into it and you climb it (shared/locomotion.ts ladder
   //    rule), on and off at the top and the bottom. Cost (Jin's): 4 planks (two stiles, sixteen rungs; a stair's 12 is a staircase).
   ladder: { name: 'Ladder', blurb: 'A goldwood ladder up to the top of a wall.', recipe: [{ id: 'goldwood_plank', n: 4 }], w: 0.6, d: 0.1, h: 4.8, solid: true, wood: 'goldwood', shape: 'ladder', build: 'Ramps + ladders' },
+  // BETA M169 s4 (Alex 11-25: roofs + ceilings, upper floors, chimney; sizes Magii 246c2cc, skins 9c9e688: clay tile OR living turf,
+  //    the keeper chooses): everything but the chimney stands ON the 4.8 m wall tops (build-catalog.ts UP / RAISED): an upper floor
+  //    is laid on them (top 5.0 m, an easy step off a stair's or a ladder's top), a ceiling hangs flush between them, a beam under
+  //    them, a roof rests on them. Roofs come in 2 m sections across a 4.6 m span (a 4 m room and its 0.3 m eaves), chained end to
+  //    end; a gable end closes the triangle. Costs (Jin's, placeholders until s6's kiln and clay tiles): tile = Stone Brick (what the
+  //    plot's roofs bill today, plot-bom.ts), turf = goldwood bark, both on goldwood plank battens. Names = plain nouns; blurbs = @lark.
+  ceiling: { name: 'Ceiling', blurb: 'Goldwood boards on two joists, level with the tops of the walls.', recipe: [{ id: 'goldwood_plank', n: 3 }], w: 2, d: 2, h: 4.8, solid: true, wood: 'goldwood', shape: 'ceiling', build: 'Roofs + ceilings' },
+  beam: { name: 'Beam', blurb: 'A four metre goldwood beam to span the tops of two walls.', recipe: [{ id: 'goldwood_plank', n: 2 }], w: 4, d: 0.3, h: 4.8, solid: true, wood: 'goldwood', shape: 'beam', build: 'Roofs + ceilings' },
+  roof_gable_tile: { name: 'Gable roof, clay tile', blurb: 'Two metres of pitched roof in fired clay tiles.', recipe: [{ id: 'goldwood_plank', n: 2 }, { id: 'stone_brick', n: 6 }], w: 2, d: 4.6, h: 6.38, solid: true, wood: 'goldwood', shape: 'gable', skin: 'tile', build: 'Roofs + ceilings' },
+  roof_gable_turf: { name: 'Gable roof, turf', blurb: 'Two metres of pitched roof under living turf.', recipe: [{ id: 'goldwood_plank', n: 2 }, { id: 'goldwood_bark', n: 6 }], w: 2, d: 4.6, h: 6.38, solid: true, wood: 'goldwood', shape: 'gable', skin: 'turf', build: 'Roofs + ceilings' },
+  roof_slope_tile: { name: 'Sloped roof, clay tile', blurb: 'Two metres of roof sloping one way, in fired clay tiles.', recipe: [{ id: 'goldwood_plank', n: 2 }, { id: 'stone_brick', n: 6 }], w: 2, d: 4.6, h: 6.44, solid: true, wood: 'goldwood', shape: 'slope', skin: 'tile', build: 'Roofs + ceilings' },
+  roof_slope_turf: { name: 'Sloped roof, turf', blurb: 'Two metres of roof sloping one way, under living turf.', recipe: [{ id: 'goldwood_plank', n: 2 }, { id: 'goldwood_bark', n: 6 }], w: 2, d: 4.6, h: 6.44, solid: true, wood: 'goldwood', shape: 'slope', skin: 'turf', build: 'Roofs + ceilings' },
+  roof_flat_tile: { name: 'Flat roof, clay tile', blurb: 'Four square metres of flat roof in fired clay tiles.', recipe: [{ id: 'goldwood_plank', n: 1 }, { id: 'stone_brick', n: 3 }], w: 2, d: 2, h: 5.02, solid: true, wood: 'goldwood', shape: 'flat', skin: 'tile', build: 'Roofs + ceilings' },
+  roof_flat_turf: { name: 'Flat roof, turf', blurb: 'Four square metres of flat roof under living turf.', recipe: [{ id: 'goldwood_plank', n: 1 }, { id: 'goldwood_bark', n: 3 }], w: 2, d: 2, h: 5.02, solid: true, wood: 'goldwood', shape: 'flat', skin: 'turf', build: 'Roofs + ceilings' },
+  gable_end: { name: 'Gable end', blurb: 'The goldwood triangle that closes the end of a pitched roof.', recipe: [{ id: 'goldwood_plank', n: 3 }], w: 4, d: 0.3, h: 6.24, solid: true, wood: 'goldwood', shape: 'gable_end', build: 'Roofs + ceilings' },
+  chimney: { name: 'Chimney', blurb: 'A brick stack from the ground up past the roof.', recipe: [{ id: 'stone_brick', n: 8 }], w: 0.9, d: 0.9, h: 7.2, solid: true, wood: 'stone', tint: '#a4573f', shape: 'chimney', build: 'Chimney' },
   lift: { name: 'Lift', blurb: 'A goldwood car on cords, a stone weight hung beside it. Pull the cord for a floor and up or down you go.', recipe: [{ id: 'goldwood_plank', n: 8 }, { id: 'stone_brick', n: 4 }], w: 1.0, d: 1.0, h: 2.0, solid: false, wood: 'goldwood', shaft: true },
   // ── UNIQUE pieces, Nyx-side (Alex 11-17: "unique pieces are SOLD FOR MARKS by the carpenter + other Nyx-side shops";
   //    Magii c52ba1c: which shops stock decor is ours, no new names). Made of the continent's canon goods (game/economy.md:

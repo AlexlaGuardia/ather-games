@@ -117,7 +117,8 @@ export function plotFootprints(pieces: readonly PlotPiece[]): PieceFoot[] {
   for (const p of pieces) {
     const f = FURNITURE[p.item]; if (!f || isGround(p.item)) continue
     const cut = buildSolids(f, !!p.open)   // M169 s2: a cut piece is in her way by its parts only: she walks through an open door, a doorway, an arch
-    if (cut) { cut.forEach((t, k) => { const r = turned(p.x, p.z, p.q ?? 0, t.x, t.z, t.w, t.d); out.push({ id: k ? `${p.id}#${k}` : p.id, rect: r, parts: [r], train: false }) }); continue }
+    if (cut) { cut.forEach((t, k) => { if ((t.y ?? 0) > 2) return   // M169 s4: a part up on the wall tops is over a spirit's head
+      const r = turned(p.x, p.z, p.q ?? 0, t.x, t.z, t.w, t.d); out.push({ id: k ? `${p.id}#${k}` : p.id, rect: r, parts: [r], train: false }) }); continue }
     const q = p.q ?? 0, rect = turned(p.x, p.z, q, 0, 0, f.w, f.d), kind = f.train ? (f.play ?? 'leap') : null
     const parts = kind === 'leap' ? [-1, 1].map(k => turned(p.x, p.z, q, k * (f.w / 2 - 0.05), 0, 0.1, f.d))
       : kind === 'guard' ? [-1, 1].map(k => turned(p.x, p.z, q, k * (f.w / 2 - 0.1), 0, 0.22, f.d))

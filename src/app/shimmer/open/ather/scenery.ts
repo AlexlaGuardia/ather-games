@@ -29,7 +29,7 @@ export interface SceneryKind {
   k: string; group: SceneryGroup; label: string; sub?: BuildSub
   w: number; d: number; h: number; solid: boolean; floats?: true
   box?: { w: number; d: number; h: number }; panel?: boolean
-  arms?: readonly { x: number; z: number; w: number; d: number; h: number; ladder?: true }[]; ends?: readonly (readonly [number, number])[]
+  arms?: readonly { x: number; z: number; w: number; d: number; h: number; y?: number; ladder?: true }[]; ends?: readonly (readonly [number, number])[]
   model: { glb: string; fit: number; look?: string; yaw?: number; glow?: number } | { crystal: string } | { piece: string } | { filler: string } | { node: string } | { room: GladeRoom }
 }
 const words = (id: string) => { const s = id.replace(/[_-]+/g, ' '); return s[0].toUpperCase() + s.slice(1) }
@@ -172,10 +172,10 @@ export function sceneryBoxes(items: readonly PlacedProp[]): Box[] {
           const o = ((i + 0.5) / n - 0.5) * L, [sx, sz] = turned(along ? o : 0, along ? 0 : o, p.q)
           return quadBounds(x + sx, z + sz, along ? L / n : w, along ? d : L / n, p.q) })
         return rs.map(r => { const mid = p.y + gx * ((r.x0 + r.x1) / 2 - p.x) + gz * ((r.z0 + r.z1) / 2 - p.z), e = (Math.abs(gx) * (r.x1 - r.x0) + Math.abs(gz) * (r.z1 - r.z0)) / 2
-          return { x0: r.x0, x1: r.x1, z0: r.z0, z1: r.z1, y0: mid - e - 0.5, y1: mid + e + a.h * p.s } })
+          return { x0: r.x0, x1: r.x1, z0: r.z0, z1: r.z1, y0: a.y !== undefined ? mid - e + a.y * p.s : mid - e - 0.5, y1: mid + e + a.h * p.s } })
       }
       const rs = isWholeQ(p.q) ? [quadBounds(x, z, w, d, p.q)] : w >= d ? panelChain(x, z, w, d, p.q) : panelChain(x, z, d, w, p.q + 1)
-      return rs.map(r => ({ x0: r.x0, x1: r.x1, z0: r.z0, z1: r.z1, y0: p.y - 0.5, y1: p.y + a.h * p.s, ...(a.ladder ? { ladder: true as const } : {}) }))   // M169 s3b: Creative's ladder climbs too
+      return rs.map(r => ({ x0: r.x0, x1: r.x1, z0: r.z0, z1: r.z1, y0: a.y !== undefined ? p.y + a.y * p.s : p.y - 0.5, y1: p.y + a.h * p.s, ...(a.ladder ? { ladder: true as const } : {}) }))   // M169 s3b: Creative's ladder climbs too
     }))
     const b = K.box ?? K, w = b.w * p.s, d = b.d * p.s
     const ks = K.box ? [quadBounds(p.x, p.z, w, d, 0)] : K.panel && !isWholeQ(p.q) ? panelChain(p.x, p.z, w, d, p.q) : [quadBounds(p.x, p.z, w, d, p.q)]

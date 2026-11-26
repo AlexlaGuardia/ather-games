@@ -31,6 +31,26 @@ export const RAMP = { strips: 12, rise: 0.1 } as const
 /** M169 s3b: a ladder's two stiles and its rungs (a rung every `rung` m from the first one up) */
 export const LADDER = { stile: 0.07, rung: 0.3, rungT: 0.04 } as const
 export const RAIL = { h: 1.0, post: 0.1, hand: 0.1, handT: 0.06, bal: 0.04, low: 0.15, lowT: 0.05, mid: 0.55 } as const
+/** M169 s4: what sits ON the 4.8 m wall tops: an upper floor is laid on them (its top `floorT` over the wall top, one easy step
+ *  off the stair's or the ladder's top), a ceiling hangs flush between them (its top the wall top), a beam spans under them, a roof
+ *  rests on them. Pitch = the build's plot roofs (plot-walls.ts: 0.72 m rise per metre of half span); a sloped roof is drawn and
+ *  walked as courses (stepped strips, each one rise under the walker's 0.5 m step). Colours are PLACEHOLDERS until s6's finishes. */
+export const UP = { top: 4.8, floorT: 0.2, ceilT: 0.06, joist: 0.14, beam: 0.3, flatT: 0.22, pitch: 0.72, courseT: 0.12, under: 0.3 } as const
+/** M169 s4 (Magii 246c2cc / 9c9e688: the keeper chooses the roof skin): fired clay tile (Sadlands blue clay) or living turf */
+export const SKIN = { tile: '#5b7ea6', tileEdge: '#3f5a7a', turf: '#6e9b4c', turfEdge: '#6b4f33' } as const
+/** M169 s4: the pieces that stand on the wall tops, not on the floor: they clash only with each other (rooms.ts canPlacePiece) and
+ *  never with a wall, a table or a keeper's head under them */
+export const RAISED: ReadonlySet<string> = new Set(['upper', 'ceiling', 'beam', 'gable', 'slope', 'flat', 'gable_end'])
+export const raised = (f: PieceDef | undefined) => !!f?.shape && RAISED.has(f.shape)
+/** the courses of a sloped roof: `n` strips of width `run` from the eave (`z0`, local, moving by `dir`) up, each `r` higher */
+export function courses(f: Pick<PieceDef, 'd' | 'shape'>): { z: number; run: number; bottom: number; top: number }[] {
+  const gable = f.shape === 'gable', half = gable ? f.d / 2 : f.d, rise = UP.pitch * (gable ? half : half / 2), n = gable ? 6 : 12, run = half / n, r = rise / n
+  const one = (dir: number, z0: number) => Array.from({ length: n }, (_, k) => ({ z: z0 + dir * (k + 0.5) * run, run, bottom: UP.top + k * r, top: UP.top + k * r + UP.courseT }))
+  return gable ? [...one(-1, f.d / 2), ...one(1, -f.d / 2)] : one(-1, f.d / 2)
+}
+/** a gable end's columns: a stepped triangle `w` wide from the wall top to the gable's peak (rise of a gable over the same span) */
+export const gableCols = (f: Pick<PieceDef, 'w'>) => { const n = 8, cw = f.w / n, peak = UP.pitch * f.w / 2
+  return Array.from({ length: n }, (_, k) => { const x = -f.w / 2 + (k + 0.5) * cw; return { x, w: cw, top: UP.top + peak * (1 - Math.abs(x) / (f.w / 2)) + cw * UP.pitch / 2 } }) }
 /** a stair step's local box: n = 1..steps from the bottom (+z end), climbing toward -z */
 export const stepZ = (f: Pick<PieceDef, 'd'>, n: number, tread: number) => f.d / 2 - (n - 0.5) * tread
 /** the x of a stair's railing on side k (-1 left, +1 right, seen climbing toward -z: left = -x) */
@@ -111,6 +131,26 @@ function cutBoxes(f: PieceDef, open: boolean): PieceBox[] {
       ;[-1, 1].forEach(k => out.push(bx(k * (w / 2 - LADDER.stile / 2), h / 2, 0, LADDER.stile, h, d, c)))
       for (let y = LADDER.rung; y < h - 0.05; y += LADDER.rung) out.push(bx(0, y, 0, w - 2 * LADDER.stile, LADDER.rungT, LADDER.rungT, tr))
       return out }
+    case 'upper': {   // M169 s4: a floor laid on the wall tops, plank seams every third of a metre
+      const T = UP.top, n = Math.round(w * 3); out.push(bx(0, T + UP.floorT / 2, 0, w, UP.floorT, d, c), bx(0, T + 0.03, 0, w + 0.02, 0.06, d + 0.02, tr))
+      for (let k = 0; k < n - 1; k++) out.push(bx(-w / 2 + (k + 1) * w / n, T + UP.floorT + 0.003, 0, 0.025, 0.006, d - 0.02, DARK))
+      return out }
+    case 'ceiling': {   // M169 s4: boards flush with the wall tops, two joists under them
+      const T = UP.top; out.push(bx(0, T - UP.ceilT / 2, 0, w, UP.ceilT, d, c))
+      ;[-1, 1].forEach(k => out.push(bx(0, T - UP.ceilT - UP.joist / 2, k * d / 4, w, UP.joist, 0.12, tr)))
+      return out }
+    case 'beam': out.push(bx(0, UP.top - UP.beam / 2, 0, w, UP.beam, d, c), bx(0, UP.top - UP.beam - 0.02, 0, w - 0.1, 0.04, d - 0.06, tr)); return out
+    case 'flat': { const k = f.skin === 'turf'   // M169 s4: a slab on the wall tops in its skin, an edge band under it
+      out.push(bx(0, UP.top + UP.flatT - 0.05, 0, w, 0.1, d, k ? SKIN.turf : SKIN.tile), bx(0, UP.top + (UP.flatT - 0.1) / 2, 0, w, UP.flatT - 0.1, d, k ? SKIN.turfEdge : SKIN.tileEdge))
+      return out }
+    case 'gable': case 'slope': { const k = f.skin === 'turf', sk = k ? SKIN.turf : SKIN.tile, ed = k ? SKIN.turfEdge : SKIN.tileEdge   // courses, eave to ridge
+      for (const t of courses(f)) out.push(bx(0, (t.bottom + t.top) / 2, t.z, w, UP.courseT, t.run + 0.04, sk), bx(0, t.bottom + 0.015, t.z, w + 0.04, 0.03, t.run + 0.04, ed))
+      const top = Math.max(...courses(f).map(t => t.top)); if (f.shape === 'gable') out.push(bx(0, top + 0.04, 0, w + 0.04, 0.08, 0.2, ed))
+      return out }
+    case 'gable_end': for (const g of gableCols(f)) out.push(bx(g.x, (UP.top + g.top) / 2, 0, g.w, g.top - UP.top, d, c)); return out
+    case 'chimney': {   // M169 s4: a brick stack from the ground past a gable's ridge, a wider cap, a dark flue mouth
+      out.push(bx(0, h / 2, 0, w, h, d, c), bx(0, 0.09, 0, w + 0.04, 0.18, d + 0.04, tr), bx(0, h - 0.12, 0, w + 0.12, 0.24, d + 0.12, tr), bx(0, h + 0.002, 0, w - 0.3, 0.004, d - 0.3, '#2a2420'))
+      return out }
     case 'corner': {   // an L in a 1 x 1 m square: one arm along its back (local -z), one down its left (local -x), meeting in the corner
       const t = 0.3, H = h
       for (const [x, z, aw, ad] of [[0, -w / 2 + t / 2, w, t], [-w / 2 + t / 2, t / 2, t, d - t]] as const)
@@ -119,9 +159,10 @@ function cutBoxes(f: PieceDef, open: boolean): PieceBox[] {
   }
   return out
 }
-/** a part of a piece that BLOCKS the walker: local middle (x, z), size w x d, h tall from the floor */
+/** a part of a piece that BLOCKS the walker: local middle (x, z), size w x d, h tall from the floor (its TOP); `y` = M169 s4: its
+ *  BOTTOM when it is up in the air (an upper floor, a roof): a keeper walks under it. Absent = from the floor. */
 /** `ladder`: M169 s3b: the walker climbs this box (terrain-world ladderAt; it still blocks like any part) */
-export interface SolidPart { x: number; z: number; w: number; d: number; h: number; ladder?: true }
+export interface SolidPart { x: number; z: number; w: number; d: number; h: number; y?: number; ladder?: true }
 /** M169 s2: what of a cut piece blocks (null = not a cut piece: its whole footprint, the old rule). A shut door's leaves block the
  *  whole doorway; an open door, a doorway or an arch blocks nothing (the lintel is over a keeper's head). A window is a wall. */
 export function buildSolids(f: PieceDef, open = false): SolidPart[] | null {
@@ -136,9 +177,20 @@ export function buildSolids(f: PieceDef, open = false): SolidPart[] | null {
     case 'ladder': return [{ x: 0, z: 0, w: f.w, d: f.d, h: f.h, ladder: true }]   // M169 s3b: one thin box, climbed from either face
     case 'ramp': return Array.from({ length: RAMP.strips }, (_, i) => ({ x: 0, z: stepZ(f, i + 1, f.d / RAMP.strips), w: f.w, d: f.d / RAMP.strips, h: (i + 1) * RAMP.rise }))
     case 'gate': return open ? [-1, 1].map(k => ({ x: k * (f.w / 2 - RAIL.post / 2), z: 0, w: RAIL.post, d: f.d, h: f.h })) : [{ x: 0, z: 0, w: f.w, d: f.d, h: f.h }]
+    case 'upper': return [{ x: 0, z: 0, w: f.w, d: f.d, y: UP.top, h: UP.top + UP.floorT }]   // M169 s4: walk on it, walk under it
+    case 'ceiling': return [{ x: 0, z: 0, w: f.w, d: f.d, y: UP.top - UP.under, h: UP.top }]
+    case 'beam': return [{ x: 0, z: 0, w: f.w, d: f.d, y: UP.top - UP.beam, h: UP.top }]
+    case 'flat': return [{ x: 0, z: 0, w: f.w, d: f.d, y: UP.top, h: UP.top + UP.flatT }]
+    case 'gable': case 'slope': return courses(f).map(t => ({ x: 0, z: t.z, w: f.w, d: t.run, y: t.top - UP.under, h: t.top }))   // each course a step
+    case 'gable_end': return gableCols(f).map(g => ({ x: g.x, z: 0, w: g.w, d: f.d, y: UP.top, h: g.top }))
     case 'corner': return [{ x: 0, z: -f.w / 2 + 0.15, w: f.w, d: 0.3, h: f.h }, { x: -f.w / 2 + 0.15, z: 0.15, w: 0.3, d: f.d - 0.3, h: f.h }]
     default: return [{ x: 0, z: 0, w: f.w, d: f.d, h: f.h }]
   }
+}
+/** M169 s4: the height a piece fills, [bottom, top]: a piece on the wall tops starts up there (its planned sheet and its ghost box) */
+export function pieceSpan(f: PieceDef): [number, number] {
+  const s = raised(f) ? buildSolids(f) : null
+  return [s?.length ? Math.min(...s.map(t => t.y ?? 0)) : 0, f.h]
 }
 /** the boxes a building piece is drawn with (null = not a box-built building piece: the game draws it its own way). `open` = a
  *  door's leaves / a window's shutters stand open (M169 s2). */

@@ -19,8 +19,8 @@ const plan = (w: Works, item: string, dx: number, dz: number, q = 0, from?: stri
 const bag = (n: Record<string, number>) => Object.entries(n).reduce((i, [id, k]) => give(i, id, k).inv, newInv())
 
 // the bench and the catalog
-ok(PLAN_PIECES.length === 27 && PLAN_PIECES.every(id => FURNITURE[id].slab || FURNITURE[id].panel || FURNITURE[id].shape), `the 27 pieces: 8 slabs + panels, 9 cut pieces (M169 s2), 9 stairs / railings / fences / ramp (s3), the ladder (s3b) (${PLAN_PIECES.length})`)
-ok(PIECE_JOBS.length - BENCH_JOBS.length === 27 && BENCH_JOBS.every(j => !PLAN_PIECES.includes(j.id)), 'the bench lists none of them, everything else as before')
+ok(PLAN_PIECES.length === 39 && PLAN_PIECES.every(id => FURNITURE[id].slab || FURNITURE[id].panel || FURNITURE[id].shape), `the 27 pieces: 8 slabs + panels, 9 cut pieces (M169 s2), 9 stairs / railings / fences / ramp (s3), the ladder (s3b), 12 roofs / ceilings / upper floors / chimney (s4) (${PLAN_PIECES.length})`)
+ok(PIECE_JOBS.length - BENCH_JOBS.length === 39 && BENCH_JOBS.every(j => !PLAN_PIECES.includes(j.id)), 'the bench lists none of them, everything else as before')
 ok(PLAN_PIECES.every(id => ALL_JOBS.some(j => j.id === id)), 'a job already running still finishes (the queue knows it)')
 // planning one: nothing spent, nothing solid, nothing near
 let w = plan(base(), 'goldwood_slab_wide', 0, 0); w = plan(w, 'stone_slab', 1.5, 0); w = plan(w, 'goldwood_panel_wide', 0, 0, 0.5); w = plan(w, 'brick_panel', 4, 4)
