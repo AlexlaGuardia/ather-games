@@ -71,6 +71,7 @@ const open = async (who: { id: string; name: string } | null, label: string): Pr
   const p = await (await br.createBrowserContext()).newPage()
   await p.setViewport(PHONE ? { width: 390, height: 844, isMobile: true, hasTouch: true, deviceScaleFactor: 1 } : { width: 1280, height: 800 })
   p.on('pageerror', e => errs.push(`${label}: ${String(e).slice(0, 180)}`))
+  p.on('console', m => { if (process.env.M208_DEBUG) console.log(`    [${label}] ${m.text().slice(0, 160)}`) })
   await p.evaluateOnNewDocument('window.__name = (f) => f')
   if (who) await p.setCookie({ name: 'ather_session', value: mintSession(who.id, who.name), domain: new URL(url).hostname, path: '/', httpOnly: true })
   await p.evaluateOnNewDocument((tut: unknown, id: string | null, chord: string) => {
@@ -89,7 +90,7 @@ const mpZone = (p: Page) => p.evaluate(() => (window as any).__mp.zone() as stri
 const reach = async (P: Page, idA: string, who: string) => {
   for (let i = 0; i < 2; i++) {
     if (await poll(async () => (await mpZone(P)) === `open:plot:${idA}`, 60000)) return true
-    console.log(`  (${who} not on ash's ground yet, try ${i + 1}: visit log ${JSON.stringify(await P.evaluate(() => (window as any).__visit?.log?.() ?? null))})`)
+    console.log(`  (${who} not on ash's ground yet, try ${i + 1}: visit log ${JSON.stringify(await P.evaluate(() => (window as any).__visit?.log?.() ?? null))}, roster ${JSON.stringify(await P.evaluate(() => ({ party: localStorage.getItem('ather:mp:party'), url: location.search, mp: (window as any).__mp?.party?.() })))})`)
     if (i === 0) await load(P, `&visit=${idA}&vn=ash`)
   }
   return false

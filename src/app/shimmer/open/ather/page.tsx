@@ -246,6 +246,8 @@ type Near = null | { kind: 'gate' } | { kind: 'greg' } | { kind: 'friend'; f: Ga
 // ★ held until the save owner is known (shared/owner-ready.tsx: the 11-18 'rooms vanished on refresh' fix)
 /** M61: a mate's island alone on the Green (the frame nobody is linked into) */
 const SOLO_FRAME = clusterFrame(null, [])
+/** M208 s2: a ?visit link's host, kept across the one cloud-adoption reload (sessionStorage, this tab only) */
+const VISIT_LINK_KEY = 'ather:visit:link'
 const gladeFriendsAt = () => gladeKeepers().filter((k): k is typeof k & { id: GardenFriend } => (GARDEN_FRIENDS as readonly string[]).includes(k.id))   // M68 s3a: Otto, Tess, Bonn
 /** M155: where someone of the tour stands now, as drawn (a Moglin: their placed spot until the Glade is drawn) */
 const gladeTalkerAt = (f: Talker): { x: number; z: number } | null => isGuideId(f) ? gladeFolkDrawn.find(k => k.id === `${GLADE.id}:${f}`) ?? gladeClusterSpot(`${GLADE.id}:${f}`) : gladeFriendsAt().find(k => k.id === f) ?? null
@@ -537,15 +539,24 @@ function AtherSliceGame() {
         const v = visitVerdict(hostHome(host), VISIT_ASK_MS * asks++)
         if (v === 'wait') return
         clearInterval(asking)
+        try { sessionStorage.removeItem(VISIT_LINK_KEY) } catch { /* private mode */ }   // M208 s2: the link's visit is answered
         if (v === 'go') { startVisit(host, name); return }
         noteVisit('refused:not-home'); hudSay(`Could not reach ${name || 'a friend'}'s plot. They may have left it.`, 'info', 5)
       }
       asking = setInterval(ask, VISIT_ASK_MS); ask()
     }
     setVisitHandler(go)
-    const q = new URLSearchParams(window.location.search), h = q.get('visit')
+    // M208 s2 fix: a signed-in keeper's first load can RELOAD once to adopt the account's cloud save (cloud-sync.tsx), and the
+    // link's ?visit was already stripped: the visit was lost. The link's visit is kept in sessionStorage for that one reload.
+    const q = new URLSearchParams(window.location.search)
+    let h = q.get('visit'), vn = q.get('vn') ?? ''
+    try {
+      if (h) sessionStorage.setItem(VISIT_LINK_KEY, JSON.stringify({ h, vn, t: Date.now() }))
+      else { const p = JSON.parse(sessionStorage.getItem(VISIT_LINK_KEY) ?? 'null') as { h?: unknown; vn?: unknown; t?: unknown } | null; if (p && typeof p.h === 'string' && typeof p.t === 'number' && Date.now() - p.t < 30_000) { h = p.h; vn = typeof p.vn === 'string' ? p.vn : '' } }
+      if (!h) sessionStorage.removeItem(VISIT_LINK_KEY)
+    } catch { /* private mode: the link works without the reload guard */ }
     if (h) {
-      go(h, q.get('vn') ?? '')
+      go(h, vn)
       const url = new URL(window.location.href); url.searchParams.delete('visit'); url.searchParams.delete('vn'); window.history.replaceState(null, '', url)
     }
     return () => { clearInterval(asking); setVisitHandler(null); endVisit() }
