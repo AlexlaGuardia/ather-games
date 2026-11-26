@@ -1,7 +1,7 @@
 // M184 s2: the tool panel reads the game's own tables. Run: npx tsx src/app/shimmer/open/ather/tool-panel.test.ts
 import { toolPanel, verdictOf, treeRows, crystalRows } from './tool-panel'
 import { TOOL_DEFS } from '../../engine/tools'
-import { TREE_DIAL, CRYSTAL_DIAL, HIGH_GEM_DIAL, SEEP_DIAL, manaNeed, gatherSecs, cycleBudget } from './gather-dials'
+import { TREE_DIAL, CRYSTAL_DIAL, HIGH_GEM_DIAL, SEEP_DIAL, STONE_DIAL, manaNeed, gatherSecs, cycleBudget } from './gather-dials'
 import { rungOf } from './focuses'
 import { easeOf } from './rinsticks'
 
@@ -34,7 +34,7 @@ for (const [id, fam] of [['worn_blade', 'forestry'], ['goldwood_blade', 'forestr
 ok(worn.rows[0].verdict === 'ok' && worn.rows[1].verdict === 'ok' && worn.rows[2].verdict === 'slow' && worn.rows[3].verdict === 'weak', `worn verdicts ${worn.rows.map(r => r.verdict)}`)
 ok(worn.rows[3].mana === 900 && worn.rows[2].mana === 300, `worn starwillow 300 / dawnwood 900 (${worn.rows[2].mana}/${worn.rows[3].mana})`)
 // verdict = the mana against one cycle's budget
-for (const d of [...Object.values(TREE_DIAL), ...CRYSTAL_DIAL.slice(1), HIGH_GEM_DIAL, ...Object.values(SEEP_DIAL)]) for (const r of [1, 2, 3, 4]) {
+for (const d of [...Object.values(TREE_DIAL), ...CRYSTAL_DIAL.slice(1), HIGH_GEM_DIAL, ...Object.values(SEEP_DIAL), STONE_DIAL]) for (const r of [1, 2, 3, 4]) {
   const v = verdictOf(d, r), want = r >= d.need ? 'ok' : manaNeed(d, r) > cycleBudget(d) ? 'weak' : 'slow'
   ok(v === want, `verdict need ${d.need} rung ${r}: ${v} want ${want}`)
 }
@@ -43,10 +43,13 @@ ok([...treeRows(3), ...crystalRows(4)].every(r => r.verdict === 'ok'), 'the top 
 // the spike (M185 s1): one row per node kind, the four gems each their own; every number the dial of the kind's tier
 const spAll = toolPanel({ prospecting: eq('worn_spike') }, 'prospecting')
 // M185 s2: the three mana seeps follow Raw Mana; they pay shards only (no blankstone), their own dial
-ok(spAll.rows.map(r => r.name).join() === 'Raw Mana,Small Mana Seep,Medium Mana Seep,Large Mana Seep,Aqual,Dinloid,Fuli,Rhyloid,Pure Mana Core,Ather Crystal', `crystal rows ${spAll.rows.map(r => r.name)}`)
+ok(spAll.rows.map(r => r.name).join() === 'Raw Mana,Stone,Small Mana Seep,Medium Mana Seep,Large Mana Seep,Aqual,Dinloid,Fuli,Rhyloid,Pure Mana Core,Ather Crystal', `crystal rows ${spAll.rows.map(r => r.name)}`)
 const seepRows = spAll.rows.filter(r => / Mana Seep$/.test(r.name))
 seepRows.forEach((row, i) => { const d = Object.values(SEEP_DIAL)[i]; ok(row.mana === Math.round(manaNeed(d, 1)) && row.resetMin === d.respawnMs / 60000 && row.drops.startsWith('Raw Mana Shard ') && !row.drops.includes('Blankstone'), `seep ${row.name} ${JSON.stringify(row)}`) })
-const sp = { ...spAll, rows: spAll.rows.filter(r => !/ Mana Seep$/.test(r.name)) }
+// M185 s3: Stone follows Raw Mana (the two plain rock rows); any spike, blankstone only, its own dial
+{ const st = spAll.rows.find(r => r.name === 'Stone')!
+  ok(st.mana === Math.round(manaNeed(STONE_DIAL, 1)) && st.resetMin === STONE_DIAL.respawnMs / 60000 && st.need === 1 && st.verdict === 'ok' && st.drops.startsWith('Blankstone 2-4 ') && !st.drops.includes('Shard'), `stone row ${JSON.stringify(st)}`) }
+const sp = { ...spAll, rows: spAll.rows.filter(r => !/ Mana Seep$/.test(r.name) && r.name !== 'Stone') }
 ok(sp.rows.map(r => r.name).join() === 'Raw Mana,Aqual,Dinloid,Fuli,Rhyloid,Pure Mana Core,Ather Crystal', `crystal rows ${sp.rows.map(r => r.name)}`)
 const DIALS = [CRYSTAL_DIAL[1], CRYSTAL_DIAL[2], CRYSTAL_DIAL[2], HIGH_GEM_DIAL, HIGH_GEM_DIAL, CRYSTAL_DIAL[3], CRYSTAL_DIAL[4]]
 sp.rows.forEach((row, i) => ok(row.mana === Math.round(manaNeed(DIALS[i], 1)) && row.resetMin === DIALS[i].respawnMs / 60000 && row.need === DIALS[i].need, `crystal ${row.name} ${JSON.stringify(row)}`))

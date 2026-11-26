@@ -98,7 +98,7 @@ for (const [vp, w, h] of (phoneOnly ? [['phone', 390, 844]] : deskOnly ? [['desk
   for (let i = 0; i < 12 && !pn; i++) { await sleep(300); pn = await readPanel(p) }
   ok(pn?.name === 'Goldwood Spike', `${vp}: the panel names the Goldwood Spike (${pn?.name})`)
   // M185 s2: the mana seeps' rows sit between Raw Mana and the gems (m185-seeps-check asserts them); this check reads the rest
-  ok(pn?.rows.filter(r => !/Mana Seep:/.test(r)).join() === 'Raw Mana:6:ok,Aqual:12:ok,Dinloid:12:ok,Fuli:300:slow,Rhyloid:300:slow,Pure Mana Core:300:slow,Ather Crystal:1400:weak', `${vp}: Goldwood rows ${pn?.rows.join()}`)
+  ok(pn?.rows.filter(r => !/Mana Seep:|^Stone:/.test(r)).join() === 'Raw Mana:6:ok,Aqual:12:ok,Dinloid:12:ok,Fuli:300:slow,Rhyloid:300:slow,Pure Mana Core:300:slow,Ather Crystal:1400:weak', `${vp}: Goldwood rows ${pn?.rows.join()}`)
   if (process.env.SHOT_DIR) await p.screenshot({ path: `${process.env.SHOT_DIR}/m185-panel-${vp}.png` }).catch(() => {})
   await p.keyboard.press('Escape'); await sleep(500)
   // the Escape that shuts the panel can also open Options (no pointer lock headless), and Options FREEZES the game: a channel

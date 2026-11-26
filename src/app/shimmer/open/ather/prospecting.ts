@@ -23,7 +23,7 @@
 //
 // ★ PURE but for the guarded localStorage load/save and a tiny subscribe store (as forestry.ts).
 
-import { CRYSTAL_DIAL, HIGH_GEM_DIAL, SEEP_DIAL, type GatherDial } from './gather-dials'
+import { CRYSTAL_DIAL, HIGH_GEM_DIAL, SEEP_DIAL, STONE_DIAL, type GatherDial } from './gather-dials'
 import { addOpenXp, type Zone } from './forestry'
 import { perkFires, activeCompanion, perkLabel, GEM_DROP_CHANCE, GEM_ITEM } from '../shared/companion'
 import { gardenKey } from '@/lib/keeper-local'
@@ -33,8 +33,8 @@ import { withDewls } from './dewl'
 import { KEEPSTONE_FIND, keepstoneFor } from './furniture'
 
 /** what stands on the rock. `egg` = a Wooded Trails element node: which element is only known when it shatters. */
-export type CrystalKind = 'raw' | 'violet' | 'storm' | 'earth' | 'water' | 'egg' | 'pure' | 'ather' | SeepKind
-export const CRYSTAL_KINDS: CrystalKind[] = ['raw', 'violet', 'storm', 'earth', 'water', 'egg', 'pure', 'ather', 'seep_s', 'seep_m', 'seep_l']
+export type CrystalKind = 'raw' | 'violet' | 'storm' | 'earth' | 'water' | 'egg' | 'pure' | 'ather' | SeepKind | 'stone'
+export const CRYSTAL_KINDS: CrystalKind[] = ['raw', 'violet', 'storm', 'earth', 'water', 'egg', 'pure', 'ather', 'seep_s', 'seep_m', 'seep_l', 'stone']
 // ★ M185 s2 (RULED athernyx c73ab4e, CANON_GAPS 'The four gems as the Wilds' mining nodes'): MANA SEEPS. Mana seeps out of a gap
 // in the ground, pools in one spot and crystallises into raw mana shards; small / medium / large by the leak, the bigger the
 // more shards and the rarer. On screen it is a 'mana seep', NEVER a spring or a well (mana-well = the Anemonyx fountain), and
@@ -50,6 +50,52 @@ export const SEEP_SHARDS: Record<SeepKind, readonly [number, number]> = { seep_s
 export const SEEP_SHARE: Record<SeepKind, number> = { seep_s: 0.6, seep_m: 0.3, seep_l: 0.1 }
 /** a raw-node roll's place inside its band (0..1) → which seep stands there */
 export const seepOf = (u: number): SeepKind => (u < SEEP_SHARE.seep_s ? 'seep_s' : u < SEEP_SHARE.seep_s + SEEP_SHARE.seep_m ? 'seep_m' : 'seep_l')
+// ★ M185 s3 (Alex 11-26: "stone nodes apear near the other nodes like chains so a player can find groups of nodes"; placement +
+// numbers are Jin's, RULED c73ab4e): STONE. A plain boulder that pays BLANKSTONE (the base stone every letter, brick and stucco
+// starts from), no crystal. Stones never stand alone: wilds.ts walks a CHAIN of them out from a crystal node or a seep
+// (stoneChain), so where you find one node you find a string of them. Any spike works it (STONE_DIAL), canon's lowest grade.
+export const isStone = (k: string): k is 'stone' => k === 'stone'
+/** blankstone a stone gives: [min, max] (the companion's perk may add one) */
+export const STONE_BLANKS = [2, 4] as const
+/** the chain: how often a node has one, how many stones, how far the first stands off the node and each next from the last (m),
+ *  how much the walk may bend at each step (rad). Placeholder numbers (Jin's, 11-26). */
+export const STONE_CHAIN = { p: 0.3, min: 3, max: 5, first: 3, step: [2.2, 3.2] as const, turn: 0.7 }
+/** a node's own deterministic rolls, from its id (the chain must never move: a worked stone's id is saved) */
+export function idRoll(id: string): (salt: number) => number {
+  let h = 0x811c9dc5
+  for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 0x01000193)
+  return (salt: number) => {
+    let x = Math.imul(h ^ Math.imul(salt + 1, 0x9e3779b1), 0x85ebca6b)
+    x = Math.imul(x ^ (x >>> 13), 0xc2b2ae35)
+    return ((x ^ (x >>> 16)) >>> 0) / 4294967296
+  }
+}
+/** The stones walked out from one node: offsets from it (m) with their index k, or [] when this node has none. Stone k's id is
+ *  `${node id}s${k}`. `fits(dx, dz)` says whether a stone may stand there (water, cliff, trunk, path, another node): a blocked
+ *  step bends to the other side and further (BENDS) before that stone is given up, so a chain wraps round what is in its way. */
+/** no two nodes of a chain closer than this (m) */
+export const STONE_GAP = 1.6
+export const BENDS = [0, 0.9, -0.9, 1.8, -1.8, 2.7, -2.7] as const
+export function stoneChain(roll: (salt: number) => number, fits: (dx: number, dz: number) => boolean = () => true): { dx: number; dz: number; k: number }[] {
+  const C = STONE_CHAIN
+  if (roll(0) >= C.p) return []
+  const n = C.min + Math.min(C.max - C.min, Math.floor(roll(1) * (C.max - C.min + 1)))
+  let a = roll(2) * Math.PI * 2, x = 0, z = 0
+  const out: { dx: number; dz: number; k: number }[] = []
+  for (let k = 0; k < n; k++) {
+    if (k) a += (roll(10 + k) * 2 - 1) * C.turn
+    const d = k ? C.step[0] + roll(20 + k) * (C.step[1] - C.step[0]) : C.first
+    const flip = roll(50 + k) < 0.5 ? 1 : -1
+    for (const b of BENDS) {
+      const t = a + b * flip, nx = x + Math.cos(t) * d, nz = z + Math.sin(t) * d
+      // never back onto the node or its own earlier stones (a bent walk can fold back on itself)
+      if (Math.hypot(nx, nz) < STONE_GAP || out.some(p => Math.hypot(p.dx - nx, p.dz - nz) < STONE_GAP) || !fits(nx, nz)) continue
+      a = t; x = nx; z = nz; out.push({ dx: x, dz: z, k })
+      break
+    }
+  }
+  return out
+}
 export type Element = 'violet' | 'storm' | 'earth' | 'water'
 export const ELEMENTS: Element[] = ['violet', 'storm', 'earth', 'water']
 // ★ M185 s1 (RULED athernyx c73ab4e, Magii + Alex 11-26): THE FOUR GEMS ARE THE ELEMENT CRYSTALS. Each grade IS an element's
@@ -63,14 +109,15 @@ export const CRYSTAL_NAME: Record<CrystalKind, string> = {
   raw: 'Raw Mana', violet: GEM.violet, storm: GEM.storm, earth: GEM.earth, water: GEM.water,
   egg: 'Hidden Crystal', pure: 'Pure Mana Core', ather: 'Ather Crystal',
   seep_s: 'Small Mana Seep', seep_m: 'Medium Mana Seep', seep_l: 'Large Mana Seep',
+  stone: 'Stone',
 }
 /** canon's grade (XP, reset, dewls): the four gems share one (game/shimmer-skilling.md's element row) */
-export const TIER: Record<CrystalKind, 1 | 2 | 3 | 4> = { raw: 1, violet: 2, storm: 2, earth: 2, water: 2, egg: 2, pure: 3, ather: 4, seep_s: 1, seep_m: 1, seep_l: 1 }
+export const TIER: Record<CrystalKind, 1 | 2 | 3 | 4> = { raw: 1, violet: 2, storm: 2, earth: 2, water: 2, egg: 2, pure: 3, ather: 4, seep_s: 1, seep_m: 1, seep_l: 1, stone: 1 }
 /** M185 s1: low gems first (Alex's pick, 11-26): Aqual + Dinloid take the Goldwood spike, Fuli + Rhyloid the Shimmeroak. The
  *  hidden one may be any of the four, so it asks the higher one (never a Goldwood back door to Fuli). */
 export const HIGH_GEMS: readonly CrystalKind[] = ['violet', 'storm', 'egg']
 /** the gather dial a node is worked by (the page, the tool panel) */
-export const crystalDial = (kind: CrystalKind): GatherDial => (isSeep(kind) ? SEEP_DIAL[kind] : HIGH_GEMS.includes(kind) ? HIGH_GEM_DIAL : CRYSTAL_DIAL[TIER[kind]])
+export const crystalDial = (kind: CrystalKind): GatherDial => (isStone(kind) ? STONE_DIAL : isSeep(kind) ? SEEP_DIAL[kind] : HIGH_GEMS.includes(kind) ? HIGH_GEM_DIAL : CRYSTAL_DIAL[TIER[kind]])
 /** canon's ladder: XP, respawn (game/shimmer-skilling.md › Prospecting) */
 export const XP = [0, 20, 60, 150, 400] as const
 export const RESPAWN_MS = CRYSTAL_DIAL.map(d => d.respawnMs)
@@ -82,6 +129,7 @@ export const CRYSTAL_ITEM: Record<Exclude<CrystalKind, 'egg'>, string> = {
   raw: 'raw_mana_shard', violet: 'violet_crystal', storm: 'storm_crystal', earth: 'earth_crystal', water: 'water_crystal',
   pure: 'pure_mana_core', ather: 'ather_crystal',
   seep_s: 'raw_mana_shard', seep_m: 'raw_mana_shard', seep_l: 'raw_mana_shard',
+  stone: 'blankstone',
 }
 
 // biome ids, matched to wilds.ts › BIOME (literal, as forestry.ts)
@@ -164,8 +212,8 @@ export function mine(kind: CrystalKind, id: string, rand: () => number = Math.ra
 export function minePlan(kind: CrystalKind, rand: () => number = Math.random): { drops: { id: string; n: number }[]; found: Exclude<CrystalKind, 'egg'>; perk?: string } {
   const found: Exclude<CrystalKind, 'egg'> = kind === 'egg' ? ELEMENTS[Math.min(3, Math.floor(rand() * 4))] : kind
   const tier = TIER[kind]
-  const sh = isSeep(found) ? SEEP_SHARDS[found] : null
-  // a seep is a pool, not rock: shards only, no blankstone (M185 s2)
+  const sh = isSeep(found) ? SEEP_SHARDS[found] : isStone(found) ? STONE_BLANKS : null
+  // a seep is a pool, not rock: shards only, no blankstone (M185 s2); a stone is blankstone only (M185 s3)
   const drops = sh ? [{ id: CRYSTAL_ITEM[found], n: sh[0] + Math.floor(rand() * (sh[1] - sh[0] + 1)) }]
     : [{ id: BLANKSTONE, n: 1 + (rand() < 0.5 ? 1 : 0) }, { id: CRYSTAL_ITEM[found], n: found === 'raw' ? 1 + Math.floor(rand() * 3) : 1 }]
   // Gemsense (Glowmite @15, Gemdigger @100): a bonus shard of what broke; Gemdigger's pouch now and then a gem too

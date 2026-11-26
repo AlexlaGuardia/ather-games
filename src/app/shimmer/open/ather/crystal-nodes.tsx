@@ -12,7 +12,7 @@ import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import type { Wilds, Crystal } from './wilds'
-import { CRYSTAL_KINDS, SEEPS, isSeep, isMined, subscribeProspecting, prospectingRev, TIER, type CrystalKind, type SeepKind } from './prospecting'
+import { CRYSTAL_KINDS, SEEPS, isSeep, isStone, isMined, subscribeProspecting, prospectingRev, TIER, type CrystalKind, type SeepKind } from './prospecting'
 import { dayProgress, daylight } from '../../engine/day-cycle'
 
 /** one soft round falloff for every node's glow (made once) */
@@ -40,6 +40,8 @@ export const CRYSTAL_LOOK: Record<CrystalKind, { color: string; glow: string; k:
   seep_s: { color: '#e8eaf2', glow: '#a8b8ff', k: 0.45 },
   seep_m: { color: '#e8eaf2', glow: '#a8b8ff', k: 0.5 },
   seep_l: { color: '#e8eaf2', glow: '#a8b8ff', k: 0.55 },
+  // M185 s3: stone = blankstone's own pale even grey (no light inside: it is not crystal); its body = StoneMesh
+  stone:  { color: '#bdb7ab', glow: '#e4ded2', k: 0 },
 }
 const EGG_HUES = ['#e0304a', '#bfe4ff', '#22c070', '#fff6ea'].map(c => new THREE.Color(c))
 
@@ -229,6 +231,52 @@ function SeepMesh({ nodes, kind, crack, heightAt }: { nodes: Crystal[]; kind: Se
   )
 }
 
+// ── M185 s3: STONE, drawn. A pale squat boulder of blankstone (two blocks leaning together), clearly lighter than the dark crag
+// foot under the crystals so a chain reads as a string of the same thing. Worked = a low heap of rubble until it grows back.
+// No glow: stone is not lit from within (the light law is crystal's). One instanced mesh live + one worked, per tile.
+export function stoneGeometry() {
+  const a = new THREE.DodecahedronGeometry(0.42, 0); a.scale(1.15, 0.8, 1); a.translate(0, 0.28, 0)
+  const b = new THREE.DodecahedronGeometry(0.28, 0); b.scale(1, 0.9, 1.1); b.rotateY(0.6); b.translate(0.36, 0.2, 0.12)
+  const c = new THREE.DodecahedronGeometry(0.2, 0); c.translate(-0.3, 0.13, -0.16)
+  const m = mergeGeometries([a.toNonIndexed(), b.toNonIndexed(), c.toNonIndexed()])!
+  m.computeVertexNormals()
+  return m
+}
+function rubbleGeometry() {
+  const parts: THREE.BufferGeometry[] = []
+  for (const [x, z, r] of [[0.15, 0.05, 0.14], [-0.16, 0.1, 0.11], [0.02, -0.18, 0.1], [-0.05, 0.02, 0.09]]) { const g = new THREE.DodecahedronGeometry(r, 0); g.scale(1, 0.6, 1); g.translate(x, r * 0.5, z); parts.push(g.toNonIndexed()) }
+  return mergeGeometries(parts)!
+}
+function StoneMesh({ nodes }: { nodes: Crystal[] }) {
+  const live = useRef<THREE.InstancedMesh>(null), dead = useRef<THREE.InstancedMesh>(null)
+  const rev = useSyncExternalStore(subscribeProspecting, prospectingRev, () => 0)
+  const body = useMemo(stoneGeometry, []), rubble = useMemo(rubbleGeometry, [])
+  useEffect(() => () => { body.dispose(); rubble.dispose() }, [body, rubble])
+  useEffect(() => {
+    if (!live.current || !dead.current) return
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3(), e = new THREE.Euler()
+    const hide = new THREE.Matrix4().makeScale(0, 0, 0), now = Date.now()
+    nodes.forEach((c, k) => {
+      const gone = isMined(c.id, now)
+      p.set(c.x, c.y - 0.06, c.z); q.setFromEuler(e.set(0, c.rot, 0)); s.set(c.s, c.s, c.s)
+      live.current!.setMatrixAt(k, gone ? hide : m.compose(p, q, s))
+      dead.current!.setMatrixAt(k, gone ? m.compose(p, q, s) : hide)
+    })
+    live.current.instanceMatrix.needsUpdate = true; dead.current.instanceMatrix.needsUpdate = true
+  }, [nodes, rev])
+  if (!nodes.length) return null
+  return (
+    <>
+      <instancedMesh frustumCulled={false} ref={live} args={[body, undefined, nodes.length]}>
+        <meshLambertMaterial color={CRYSTAL_LOOK.stone.color} flatShading />
+      </instancedMesh>
+      <instancedMesh frustumCulled={false} ref={dead} args={[rubble, undefined, nodes.length]}>
+        <meshLambertMaterial color="#8f8a80" flatShading />
+      </instancedMesh>
+    </>
+  )
+}
+
 /** the crag foot under every node, one mesh for the tile */
 function Feet({ nodes }: { nodes: Crystal[] }) {
   const ref = useRef<THREE.InstancedMesh>(null)
@@ -252,14 +300,16 @@ export function Crystals({ W }: { W: Pick<Wilds, 'crystals'> & { heightAt?: (x: 
   const hAt = useMemo(() => W.heightAt ? (x: number, z: number) => W.heightAt!(x, z) : undefined, [W])
   const crack = useMemo(crackGeometry, [])
   useEffect(() => () => crack.dispose(), [crack])
-  const byKind = useMemo(() => CRYSTAL_KINDS.filter(k => !isSeep(k)).map(k => [k, W.crystals.filter(c => c.kind === k)] as const), [W])
+  const byKind = useMemo(() => CRYSTAL_KINDS.filter(k => !isSeep(k) && !isStone(k)).map(k => [k, W.crystals.filter(c => c.kind === k)] as const), [W])
   const seeps = useMemo(() => SEEPS.map(k => [k, W.crystals.filter(c => c.kind === k)] as const), [W])
-  const rocks = useMemo(() => W.crystals.filter(c => !isSeep(c.kind)), [W])
+  const rocks = useMemo(() => W.crystals.filter(c => !isSeep(c.kind) && !isStone(c.kind)), [W])
+  const stones = useMemo(() => W.crystals.filter(c => isStone(c.kind)), [W])
   return (
     <>
       <Feet nodes={rocks} />
       {byKind.map(([k, ns]) => <KindMesh key={k} kind={k} nodes={ns} cluster={cluster} chips={chips} />)}
       {seeps.map(([k, ns]) => <SeepMesh key={k} kind={k} nodes={ns} crack={crack} heightAt={hAt} />)}
+      <StoneMesh nodes={stones} />
     </>
   )
 }

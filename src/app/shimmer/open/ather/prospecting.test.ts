@@ -34,7 +34,9 @@ for (const t of index.tiles) {
   const b = readFileSync(D + t.name + '.bin'), bio = readFileSync(D + t.name + '.biome')
   const zm = new Map(t.nodes.map(n => [`${n.i},${n.j}`, n.zone ?? 'meadows']))
   const W = parseWilds(meta, new Int16Array(b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength)), new Uint8Array(bio), (i, j) => (zm.get(`${i},${j}`) ?? 'meadows') as Zone)
-  tiles++; total += W.crystals.length; maxTile = Math.max(maxTile, W.crystals.length)
+  // M185 s3: the density guard counts crystals + seeps; the stone chains have their own guards (m185-stone.test.ts)
+  const xs = W.crystals.filter(c => c.kind !== 'stone').length
+  tiles++; total += xs; maxTile = Math.max(maxTile, xs)
   for (const c of W.crystals) {
     const zone = zm.get(`${Math.min(4, Math.floor((c.x + 500) / 200))},${Math.min(4, Math.floor((c.z + 500) / 200))}`) ?? 'meadows'
     ;(byZone[zone] ??= {})[c.kind] = (byZone[zone][c.kind] ?? 0) + 1

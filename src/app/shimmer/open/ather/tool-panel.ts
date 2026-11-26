@@ -12,7 +12,7 @@ import { TREE_DIAL, manaNeed, gatherSecs, cycleBudget, type GatherDial } from '.
 import { rungOf } from './focuses'
 import { easeOf } from './rinsticks'
 import { TREE_KINDS, TREE_NAME, SAPLING_CHANCE, MAST_CHANCE, logItem, saplingItem } from './forestry'
-import { CRYSTAL_KINDS, CRYSTAL_NAME, TIER, BLANKSTONE, CRYSTAL_ITEM, crystalDial, isSeep, SEEP_SHARDS } from './prospecting'
+import { CRYSTAL_KINDS, CRYSTAL_NAME, TIER, BLANKSTONE, CRYSTAL_ITEM, crystalDial, isSeep, isStone, SEEP_SHARDS, STONE_BLANKS } from './prospecting'
 import { DEWL, DEWLS_BY_TIER } from './dewl'
 import { itemDef } from '../shared/inventory'
 
@@ -52,13 +52,15 @@ export function crystalRows(rung: number): NodeRow[] {
   // M185 s1: one row per node kind, so the four gems (Aqual, Dinloid, Fuli, Rhyloid) each have their own line, in ladder order;
   // the hidden one is left out (it is found, not listed)
   // (lowest grade first within a need: Aqual before Dinloid, Fuli before Rhyloid, canon world/ather.md › THE FOUR GRADES)
-  const ORDER = ['raw', 'seep_s', 'seep_m', 'seep_l', 'water', 'earth', 'violet', 'storm', 'pure', 'ather'] as const
+  const ORDER = ['raw', 'stone', 'seep_s', 'seep_m', 'seep_l', 'water', 'earth', 'violet', 'storm', 'pure', 'ather'] as const
   const kinds = (CRYSTAL_KINDS.filter(k => k !== 'egg') as Exclude<typeof CRYSTAL_KINDS[number], 'egg'>[])
     .sort((a, b) => crystalDial(a).need - crystalDial(b).need || ORDER.indexOf(a) - ORDER.indexOf(b))
   return kinds.map(k => {
     const tier = TIER[k]
     // M185 s2: a mana seep pays raw mana shards only (more from a bigger one)
     if (isSeep(k)) return row(CRYSTAL_NAME[k], crystalDial(k), rung, `${nm(CRYSTAL_ITEM[k])} ${SEEP_SHARDS[k].join('-')} · ${nm(DEWL)} ${DEWLS_BY_TIER[tier]}`)
+    // M185 s3: a stone pays blankstone only
+    if (isStone(k)) return row(CRYSTAL_NAME[k], crystalDial(k), rung, `${nm(BLANKSTONE)} ${STONE_BLANKS.join('-')} · ${nm(DEWL)} ${DEWLS_BY_TIER[tier]}`)
     return row(CRYSTAL_NAME[k], crystalDial(k), rung, `${nm(BLANKSTONE)} 1-2 · ${nm(CRYSTAL_ITEM[k])} ${k === 'raw' ? '1-3' : '1'} · ${nm(DEWL)} ${DEWLS_BY_TIER[tier]}`)
   })
 }

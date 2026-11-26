@@ -39,6 +39,8 @@ export const SEEP_DIAL = {
   seep_m: { need: 1, drain: 2, mana: 10, low: [300, 900], respawnMs: min(5) },
   seep_l: { need: 2, drain: 3, mana: 16, low: [120, 900], respawnMs: min(10) },
 } as const satisfies Record<string, GatherDial>
+/** M185 s3: STONE (prospecting.ts › stoneChain), canon's lowest grade: any spike, cheap, quick back. Placeholder numbers (Jin's). */
+export const STONE_DIAL: GatherDial = { need: 1, drain: 2, mana: 5, low: [300, 900], respawnMs: min(2) }
 export const BETTER = 0.85
 /** stay this close (m) to the node or it lets go: a little past the reach that started it */
 export const HOLD_RANGE = 13

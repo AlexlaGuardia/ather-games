@@ -72,7 +72,7 @@ const main = async () => {
   ok(P.crystalDial('raw').respawnMs === P.RESPAWN_MS[1] && P.crystalDial('water').respawnMs === P.RESPAWN_MS[2] && P.crystalDial('ather').respawnMs === P.RESPAWN_MS[4], 'an s1 reset moved')
 
   // 6. the tool panel lists the three sizes after Raw Mana, before the gems
-  const rows = crystalRows(goldwood).map(r => r.name)
+  const rows = crystalRows(goldwood).map(r => r.name).filter(r => r !== 'Stone')   // M185 s3 added a Stone row after Raw Mana
   ok(rows.slice(0, 4).join() === 'Raw Mana,Small Mana Seep,Medium Mana Seep,Large Mana Seep', `panel rows ${rows}`)
   ok(rows.slice(4).join() === 'Aqual,Dinloid,Fuli,Rhyloid,Pure Mana Core,Ather Crystal', `panel gems moved ${rows}`)
   ok(crystalRows(goldwood).find(r => r.name === 'Large Mana Seep')!.drops.startsWith('Raw Mana Shard 4-7'), 'large seep drops line')

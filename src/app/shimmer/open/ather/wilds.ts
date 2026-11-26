@@ -8,7 +8,7 @@
 
 import { meteredFetch } from '../shared/load-progress'   // M187
 import { treeFor, TRUNK, type Zone, type TreeKind } from './forestry'
-import { crystalFor, type CrystalKind } from './prospecting'
+import { crystalFor, idRoll, stoneChain, type CrystalKind } from './prospecting'
 import type { Box, Shape } from '../terrain-world'
 import { VOIDED_W, type VoidField } from './wilds-voids'
 import { relieve, outcropsIn, outcropRoll } from './relief'
@@ -216,6 +216,33 @@ function* parseSteps(meta: WildsMeta, dm: Int16Array, biomes: Uint8Array, zoneAt
     for (let k = 0; k < 6; k++) ring += heightAt(lx + Math.cos(k * Math.PI / 3) * o.R * 1.6, lz + Math.sin(k * Math.PI / 3) * o.R * 1.6) / 6
     if (heightAt(lx, lz) - ring < 1.5 || rawAt(x, z) < meta.waterY + 0.4 || (voids && voids.weight(x + ox, z + oz) > 0)) continue
     crystals.push({ x, z, y: heightAt(x, z), kind: c.kind, s: 0.8 + outcropRoll(o, 304) * 0.5, rot: outcropRoll(o, 305) * Math.PI * 2, id: `${meta.name}:o${o.i}_${o.j}` })
+  }
+
+  // ★ M185 s3: STONE IN CHAINS (prospecting.ts › stoneChain). Off each crystal node / seep a string of stones may walk out, so
+  // nodes come in groups. Rolled from the node's id (never moves); stone k is `<node id>s<k>`. A stone that would stand in water,
+  // on a cliff, on a path, in a trunk, over a void, off the tile or on another node is skipped; the rest of the chain still walks.
+  {
+    const taken = new Set<string>(), key = (x: number, z: number) => `${Math.floor(x / 1.6)},${Math.floor(z / 1.6)}`
+    const near = (x: number, z: number) => { const i = Math.floor(x / 1.6), j = Math.floor(z / 1.6); for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) if (taken.has(`${i + a},${j + b}`)) return true; return false }
+    for (const c of crystals) taken.add(key(c.x, c.z))
+    const parents = crystals.slice()
+    let n = 0
+    for (const c of parents) {
+      if (++n % 64 === 0) yield
+      const roll = idRoll(c.id)
+      const fits = (dx: number, dz: number) => {
+        const x = c.x + dx, z = c.z + dz
+        if (Math.abs(x) > hx - 2 || Math.abs(z) > hz - 2) return false
+        if (rawAt(x, z) < meta.waterY + 0.4 || slopeOf(rawAt, x, z) > 0.9 || slopeOf(heightAt, x, z) > 1.1) return false
+        if (near(x, z) || trees.some(t => Math.abs(t.x - x) < 1.8 && Math.abs(t.z - z) < 1.8)) return false
+        return !((voids && voids.weight(x + ox, z + oz) > 0) || clear?.(x + ox, z + oz))
+      }
+      for (const { dx, dz, k } of stoneChain(roll, fits)) {
+        const x = c.x + dx, z = c.z + dz
+        taken.add(key(x, z))
+        crystals.push({ x, z, y: heightAt(x, z), kind: 'stone', s: 0.75 + roll(30 + k) * 0.5, rot: roll(40 + k) * Math.PI * 2, id: `${c.id}s${k}` })
+      }
+    }
   }
 
   // Trunk boxes in a cell grid for `solids` (the walker asks a small box many times a frame).
