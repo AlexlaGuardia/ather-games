@@ -3,7 +3,7 @@
 // Reads the shipped glbs: each form is rigged on the Vulnyx's own M132 plan (same bones, every clip), is bigger than her base
 // (every evolution grows the spirit: spirits-species.md, Spirit Scale), and carries the coat of its locked picture.
 import * as fs from 'fs'
-import { type SpiritElement, AURLOTL_RIG, ARCLOTL_RIG, CRAGLOTL_RIG, LOTL_GLB_TALL, CRAGBEAR_GLB_TALL, CRAGBEAR_RIG, MARLOTL_RIG, SECOND_FORMS, formGrow, SPIRIT_ELEMENTS, SPIRIT_MODELS, SPIRIT_RIGS, formLook, rigLook, spiritModelFor } from './spirit-models'
+import { type SpiritElement, AURLOTL_RIG, ARCLOTL_RIG, CRAGLOTL_RIG, LOTL_GLB_TALL, BEAR_GLB_TALL, LUMEBEAR_RIG, VOLTBEAR_RIG, TIDEBEAR_RIG, CRAGBEAR_GLB_TALL, CRAGBEAR_RIG, MARLOTL_RIG, SECOND_FORMS, formGrow, SPIRIT_ELEMENTS, SPIRIT_MODELS, SPIRIT_RIGS, formLook, rigLook, spiritModelFor } from './spirit-models'
 
 let pass = 0
 const fails: string[] = []
@@ -108,6 +108,34 @@ for (const el of SPIRIT_ELEMENTS) {
   ok(Math.abs(pos.max[1] / CRAGBEAR_GLB_TALL - 1) < 0.03, `water-bear earth: glb height ${pos.max[1].toFixed(3)} = CRAGBEAR_GLB_TALL ${CRAGBEAR_GLB_TALL}`)
   // the earth coat: a warm orange-brown barrel (red over green over blue), never the Dewbear's pale dew blue
   const [r, g, bb] = mean(col, n); ok(r > g + 30 && g > bb, `water-bear earth: an earth coat ${[r, g, bb].map(Math.round)}`) }
+// ── M202 the rest of the Dewbear line: each her OWN creature with her own skeleton (not Cragbear's, not the Dewbear's), dial 1.4 ──
+const BEARS: [SpiritElement, string, typeof CRAGBEAR_RIG][] = [['mana', 'lumebear', LUMEBEAR_RIG], ['storm', 'voltbear', VOLTBEAR_RIG], ['water', 'tidebear', TIDEBEAR_RIG]]
+for (const [el, name, rig] of BEARS) {
+  const L = formLook('water-bear', el)!, b = SPIRIT_RIGS['water-bear']!
+  ok(!!L && L.name === name && L.url === `/open/spirits/${name}-rigged.glb` && L.form === el, `water-bear ${el}: ${name} ${L?.url}`)
+  ok(L.rig === rig && rig !== b.rig && rig !== CRAGBEAR_RIG, `water-bear ${el}: her own rig`)
+  ok(formGrow(name) === 1.4 && Math.abs(L.h / b.h - 1.4) < 1e-9, `water-bear ${el}: size dial ${formGrow(name)}`)
+  ok(fs.existsSync('public' + L.url), `water-bear ${el}: ${L.url} shipped`)
+  const { j, col, n } = glb(L.url), names = (j.nodes as { name: string }[]).map(x => x.name), clips = (j.animations as { name: string }[]).map(a => a.name)
+  ok(['body', 'eyes', 'b_root', 'b_neck', 'b_head'].every(x => names.includes(x)) && j.skins?.[0]?.joints?.length === 24, `water-bear ${el}: nodes + 24 bones`)
+  ok(['idle', 'walk', 'run', 'sit', 'lie'].every(c => clips.includes(c)), `water-bear ${el}: clips ${clips}`)
+  const pos = j.accessors[j.meshes.find((m: { name: string }) => m.name === 'body').primitives[0].attributes.POSITION]
+  ok(Math.abs((pos.max[2] - pos.min[2]) / rig.glbLen - 1) < 0.03, `water-bear ${el}: glb length ${(pos.max[2] - pos.min[2]).toFixed(3)} = glbLen ${rig.glbLen}`)
+  ok(Math.abs(pos.max[1] / BEAR_GLB_TALL[name] - 1) < 0.04, `water-bear ${el}: glb height ${pos.max[1].toFixed(3)} = BEAR_GLB_TALL ${BEAR_GLB_TALL[name]}`)
+  // her element's coat (canon accents, magii.md: Mana violet, Storm blue, Water teal), never the Dewbear's pale dew blue
+  const [r, g, bb] = mean(col, n)
+  ok(el === 'mana' ? bb > g + 40 && r > g + 15 : el === 'storm' ? bb > r + 40 && bb > g + 15 : g > r + 40 && bb > r + 40, `water-bear ${el}: her ${el} coat ${[r, g, bb].map(Math.round)}`)
+}
+// her own creature: no two forms of the line share a silhouette. Her front profile = her width (glb units) in eight height bands of
+// her own height, read off her body's vertices; two forms whose profiles never differ by 0.06 would be one body recoloured.
+{ const prof = (e: SpiritElement) => { const { j } = glb(formLook('water-bear', e)!.url), b = fs.readFileSync('public' + formLook('water-bear', e)!.url), bin = b.subarray(20 + b.readUInt32LE(12) + 8)
+    const a = j.accessors[j.meshes.find((m: { name: string }) => m.name === 'body').primitives[0].attributes.POSITION], v = j.bufferViews[a.bufferView], o = (v.byteOffset ?? 0) + (a.byteOffset ?? 0)
+    const w = new Array(8).fill(0), top = a.max[1]
+    for (let i = 0; i < a.count; i++) { const x = Math.abs(bin.readFloatLE(o + i * 12)), y = bin.readFloatLE(o + i * 12 + 4), k = Math.min(7, Math.floor(y / top * 8)); w[k] = Math.max(w[k], x) }
+    return w }
+  const P = (['earth', ...BEARS.map(x => x[0])] as SpiritElement[]).map(prof); let same = 0, least = 9
+  for (let a = 0; a < P.length; a++) for (let c = a + 1; c < P.length; c++) { const d = Math.max(...P[a].map((x, i) => Math.abs(x - P[c][i]))); least = Math.min(least, d); if (d < 0.06) same++ }
+  ok(same === 0, `the Dewbear line: four distinct silhouettes (least profile difference ${least.toFixed(3)} glb units)`) }
 { const { col, n } = glb(SPIRIT_RIGS['water-bear']!.url), [r, g, b] = mean(col, n); ok(b >= r, `base Dewbear stays dew blue ${[r, g, b].map(Math.round)}`) }
 // her base form's coat is gold: a second form never ships the base colours by mistake
 { const { col, n } = glb(SPIRIT_RIGS.fox!.url), [r, g, b] = mean(col, n); ok(r > b + 60 && g > b, `base Vulnyx stays gold ${[r, g, b].map(Math.round)}`) }
@@ -118,7 +146,7 @@ ok(formLook(null, 'mana') === null, 'no species = no form')
 // M202: the whole Manalotl line is modelled (Marlotl, Aurlotl, Arclotl, Craglotl); see the line block above
 ok(formLook('owl', 'earth') === null, 'a species whose forms are not modelled yet keeps her base')
 // M202 Cragbear (the Dewbear line begins): her Earth form is modelled, the other three Dewbear forms are not yet
-ok(formLook('water-bear', 'mana') === null && formLook('water-bear', 'storm') === null && formLook('water-bear', 'water') === null, 'a Dewbear form not modelled yet = her base')
+ok(new Set(SPIRIT_ELEMENTS.map(e => formLook('water-bear', e)!.url)).size === 4, 'the Dewbear line: four distinct forms')
 ok(Object.keys(SECOND_FORMS).sort().join() === 'axolotl,fox,water-bear', 'the Vulnyx line + the Manalotl line + the Dewbear line')
 ok(new Set(SPIRIT_ELEMENTS.map(e => formLook('fox', e)!.url)).size === 4, 'four distinct forms')
 // rigLook: a form stays itself when rigs are on; ?rig=0 (the frame measure) gives her species' old model, never a rigged glb unrigged

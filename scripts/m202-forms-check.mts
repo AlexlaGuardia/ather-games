@@ -6,10 +6,11 @@
 //  PLAYER 2 `?form=storm` without the owner cookie: her base Vulnyx, no form glb asked for (the preview is owner-only).   3 0 page errors.
 // M202 Marlotl: --species axolotl = the Manalotl line (one bloomed Manalotl; owner ?form=water = Marlotl; player ?form=water = base).
 // M202 Cragbear: --species water-bear = the Dewbear line (owner ?form=earth = Cragbear; player ?form=earth = base Dewbear).
+//   + Lumebear / Voltbear / Tidebear: owner ?form=mana|storm|water, each sized by BEAR_GLB_TALL.
 //   OWNER_KEY=... npx tsx scripts/m202-forms-check.mts [--species fox|axolotl|water-bear] [--shots dir] [--url https://ather.games]
 import puppeteer, { type Page } from 'puppeteer-core'
 import { mkdirSync } from 'fs'
-import { CRAGBEAR_GLB_TALL, LOTL_GLB_TALL, SECOND_FORMS, SPIRIT_ELEMENTS, SPIRIT_RIGS, formGrow } from '../src/app/shimmer/open/ather/spirit-models'
+import { BEAR_GLB_TALL, LOTL_GLB_TALL, SECOND_FORMS, SPIRIT_ELEMENTS, SPIRIT_RIGS, formGrow } from '../src/app/shimmer/open/ather/spirit-models'
 import { aimAt } from './lib/aim.mts'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const SP = flag('--species', 'fox') as 'fox' | 'axolotl' | 'water-bear', url = flag('--url', 'https://ather.games'), shots = flag('--shots', ''), KEY = process.env.OWNER_KEY
@@ -56,7 +57,7 @@ const measure = (p: Page) => p.evaluate(async () => {
 const hideCard = (p: Page) => p.evaluate(() => { const h = [...document.querySelectorAll('div')].filter(d => d.textContent?.includes('Click to play')); for (const d of h.filter(d => !h.some(o => o !== d && d.contains(o)))) (d as HTMLElement).style.visibility = 'hidden' }).catch(() => {})
 
 const base = SPIRIT_RIGS[SP]!
-const MID_AIM = new Set(['vulnix', 'marlotl', 'cragbear', 'aurlotl', 'arclotl', 'craglotl'])
+const MID_AIM = new Set(['vulnix', 'marlotl', 'cragbear', 'aurlotl', 'arclotl', 'craglotl', 'lumebear', 'voltbear', 'tidebear'])
 const only = flag('--forms', '').split(',').filter(Boolean)
 for (const el of SPIRIT_ELEMENTS.filter(e => SECOND_FORMS[SP]?.[e] && (!only.length || only.includes(e)))) {
   const L = SECOND_FORMS[SP]![el]!, file = L.url.split('/').pop()!
@@ -67,7 +68,7 @@ for (const el of SPIRIT_ELEMENTS.filter(e => SECOND_FORMS[SP]?.[e] && (!only.len
   // assert. The mounted assert above is what says she draws as the form. A pot with `element` set (M201) never asks for the base.
   ok(got.includes(file), `1 ${el}: ${file} asked for`); console.log(`NOTE 1 ${el}: glbs asked for: ${got.join(', ')}`)
   // M202 Marlotl: the Manalotl line is sized by LENGTH (0.90 m x her dial), so her standing height is her glb's (rig metrics) x look h
-  const want = SP === 'fox' ? 0.70 * formGrow(L.name) : (SP === 'water-bear' ? CRAGBEAR_GLB_TALL : LOTL_GLB_TALL[L.name]) * L.h
+  const want = SP === 'fox' ? 0.70 * formGrow(L.name) : (SP === 'water-bear' ? BEAR_GLB_TALL[L.name] : LOTL_GLB_TALL[L.name]) * L.h
   ok(!!m && m.h > want * 0.9 && m.h < want * 1.1, `1 ${el}: grown past her base to ~${want.toFixed(2)} m: ${m?.h.toFixed(3)} m standing (look h ${m?.look.toFixed(3)})`)
   if (shots && m) { await p.evaluate((x: number, z: number) => (window as any).__ather.tp(x + 1.4, z + 1.1, 0), m.x, m.z); await sleep(900)
     // after the tp she walks to the keeper: aim only once she has SETTLED (two reads 0.5 s apart within 2 cm; 12 s cap), else the still
@@ -89,7 +90,7 @@ for (const el of SPIRIT_ELEMENTS.filter(e => SECOND_FORMS[SP]?.[e] && (!only.len
 }
 { const pel = SP === 'fox' ? 'storm' : SP === 'water-bear' ? 'earth' : 'water', { p, got } = await open(false, `&form=${pel}`); const m = await measure(p)
   ok(!!m && m.urls[base.url] === 1 && Object.keys(m.urls).length === 1, `2 player ?form=${pel}: her base ${SP} (${JSON.stringify(m?.urls)})`)
-  ok(!got.some(g => /(vuln(ara|arc|ore|ix)|marlotl|aurlotl|arclotl|craglotl|cragbear)-/.test(g)), `2 player: no form glb asked for (${got.join(', ')})`)
+  ok(!got.some(g => /(vuln(ara|arc|ore|ix)|marlotl|aurlotl|arclotl|craglotl|cragbear|lumebear|voltbear|tidebear)-/.test(g)), `2 player: no form glb asked for (${got.join(', ')})`)
   await p.browserContext().close() }
 ok(errs.length === 0, `3 page errors: ${errs.length} ${errs.slice(0, 3).join(' | ')}`)
 await br.close()
