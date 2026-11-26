@@ -143,6 +143,14 @@ for (const [vp, w, h] of (phoneOnly ? [['phone', 390, 844]] : deskOnly ? [['desk
       ok(/Stone, growing back/.test(after), `${vp} wilds: the worked Stone is growing back (${(after.match(/[^\n]*growing back[^\n]*/) ?? [''])[0].slice(0, 80)})`)
       if (process.env.SHOT_DIR) await p.screenshot({ path: `${process.env.SHOT_DIR}/m185s3-worked-${vp}.png` }).catch(() => {})
       const next = await goAim(S1)
+      // a step back for Alex's look: the chain as a group (shots only)
+      if (process.env.SHOT_DIR) {
+        const TM = 1000, ox = S0.sx - S0.cx, oz = S0.sz - S0.cz, wx = S0.cx + ox * 2.4 + S0.tx * TM, wz = S0.cz + oz * 2.4 + S0.ty * TM
+        const yaw = Math.atan2(ox, oz)
+        await p.evaluate((a) => { const A = (window as any).__ather; A.tp(a.wx, a.wz, a.yaw); A.look(a.yaw, -0.32) }, { wx, wz, yaw }); await sleep(2500)
+        await p.evaluate((a) => (window as any).__ather.look(a.yaw, -0.32), { yaw }); for (let j = 0; j < 4; j++) await frame()
+        await p.screenshot({ path: `${process.env.SHOT_DIR}/m185s3-group-${vp}.png` }).catch(() => {})
+      }
       ok(next?.id === S1.id && next.kind === 'stone', `${vp} wilds: the chain's next stone stands in the page's world (${JSON.stringify(next)})`)
     }
   }
