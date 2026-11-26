@@ -3,7 +3,7 @@
 // Reads the shipped glbs: each form is rigged on the Vulnyx's own M132 plan (same bones, every clip), is bigger than her base
 // (every evolution grows the spirit: spirits-species.md, Spirit Scale), and carries the coat of its locked picture.
 import * as fs from 'fs'
-import { FORM_GROW, SECOND_FORMS, formGrow, SPIRIT_ELEMENTS, SPIRIT_MODELS, SPIRIT_RIGS, formLook, rigLook, spiritModelFor } from './spirit-models'
+import { SECOND_FORMS, formGrow, SPIRIT_ELEMENTS, SPIRIT_MODELS, SPIRIT_RIGS, formLook, rigLook, spiritModelFor } from './spirit-models'
 
 let pass = 0
 const fails: string[] = []
@@ -32,8 +32,8 @@ for (const el of SPIRIT_ELEMENTS) {
   ok(L.form === el, `fox ${el}: look.form`)
   ok(!!L.rig && L.rig === base.rig, `fox ${el}: rigged on the Vulnyx plan`)
   ok(L.h > base.h * 1.1 && Math.abs(L.h - base.h * formGrow(L.name!)) < 1e-9, `fox ${el}: grown past her base by her own dial (${L.h.toFixed(3)} vs ${base.h.toFixed(3)})`)
-  // M202 v2: Vulnore's, Vulnara's and Vulnarc's dials are 1.4 (Alex 11-26, ~1.0 m); Vulnix (s1) keeps FORM_GROW until her redo
-  ok(formGrow(L.name!) === (el === 'earth' || el === 'mana' || el === 'storm' ? 1.4 : FORM_GROW), `fox ${el}: size dial ${formGrow(L.name!)}`)
+  // M202 v2: all four of the Vulnyx line (Vulnore, Vulnara, Vulnarc, Vulnix) are their own creatures at dial 1.4 (Alex 11-26, ~1.0 m)
+  ok(formGrow(L.name!) === 1.4, `fox ${el}: size dial ${formGrow(L.name!)}`)
   ok((L.trot.stride ?? 0) > (base.trot.stride ?? 0), `fox ${el}: her stride grows with her`)
   ok(fs.existsSync('public' + L.url), `fox ${el}: ${L.url} shipped`)
   const { j, col, n } = glb(L.url), names = (j.nodes as { name: string }[]).map(x => x.name), clips = (j.animations as { name: string }[]).map(a => a.name)

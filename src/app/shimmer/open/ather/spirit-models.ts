@@ -267,7 +267,10 @@ export const FORM_GROW = 1.2
 // amethyst shards; docs/looks/m202-vulnara-v2-2026-11-26) 1.4 too: her head and body sit at the Vulnyx's glb scale.
 // Vulnarc (v2, her own body: crackled storm plates with pale seams, a jagged crest from crown down the spine, a brush kinked like
 // a bolt, big paws, the chest carried low; docs/looks/m202-vulnarc-v2-2026-11-26) 1.4 as her sisters.
-export const FORM_GROW_BY: Readonly<Record<string, number>> = { vulnore: 1.4, vulnara: 1.4, vulnarc: 1.4 }
+// Vulnix (v2, her own body: long, slim and level, a wave tail that rises and breaks forward with flame tongues, current ridges
+// and bubble domes on the coat, a water curl on the withers, webbed toes; docs/looks/m202-vulnix-v2-2026-11-26) 1.4 as her
+// sisters; her floor + hull are deeper than s1's so she keeps the art's teal (Vulnarc read paler than her art).
+export const FORM_GROW_BY: Readonly<Record<string, number>> = { vulnore: 1.4, vulnara: 1.4, vulnarc: 1.4, vulnix: 1.4 }
 export const formGrow = (name: string): number => FORM_GROW_BY[name] ?? FORM_GROW
 const secondForm = (sp: Species, form: SpiritElement, name: string, emissive: string, hull: string): SpiritLook => {
   const b = SPIRIT_RIGS[sp]!, g = formGrow(name)
@@ -279,7 +282,7 @@ export const SECOND_FORMS: Partial<Record<Species, Record<SpiritElement, SpiritL
     mana: secondForm('fox', 'mana', 'vulnara', '#b49cff', '#e8dcff'),
     storm: secondForm('fox', 'storm', 'vulnarc', '#a8d2ff', '#dcecff'),
     earth: secondForm('fox', 'earth', 'vulnore', '#ffae4a', '#ffe2b4'),
-    water: secondForm('fox', 'water', 'vulnix', '#6fe6f0', '#c8f6ff'),
+    water: secondForm('fox', 'water', 'vulnix', '#2fb4c4', '#9fe4ec'),
   },
 }
 /** M202: her second form's look when she has evolved (`element` set) and her species has its forms modelled, else null */
