@@ -360,6 +360,24 @@ cmd_sweep() {
   npx tsx scripts/sweep.mts "$@"
 }
 
+# ── ★ ONE TYPECHECK AT A TIME (2026-11-26, serb) ─────────────────────────────────────────────────
+# `npx tsc --noEmit` on this app peaks at ~2 GB. With four lanes each gating its ship on it, two ran at
+# once (3.8 GB) and those were the ~2 GB 'MainThread' victims mem-watcher shed on 11-26. The tree is
+# shared and tsconfig is incremental (tsconfig.tsbuildinfo), so a queued check after a peer's is also
+# FAST: it reuses the peer's work. Usage: `tools/coord.sh tsc [extra tsc args]`, exit code = tsc's.
+cmd_tsc() {
+  mkdir -p "$COORD_DIR"
+  (
+    if ! flock -n 8; then
+      echo ">> coord tsc: another lane's typecheck is running; queued behind it (one at a time, ~2 GB each)" >&2
+      flock -w 1200 8 || { echo "coord tsc: waited 20 min for the typecheck lock; giving up" >&2; exit 1; }
+    fi
+    cmd_memgate 2200 900 "typecheck" || exit 1
+    cd "$REPO"
+    npx tsc --noEmit "$@"
+  ) 8>"$COORD_DIR/tsc.lock"
+}
+
 cmd_build() {
   local msg="${*:-deploy}"
   acquire_lock || exit 1
@@ -752,5 +770,6 @@ case "${1:-status}" in
   browser) shift; cmd_browser "$@" ;;
   reap)    cmd_reap ;;
   memgate) shift; cmd_memgate "$@" ;;
-  *) echo "usage: coord {claim <lane> [note] | status | build [msg] | sweep [args] | release [lane] | reap | lock | unlock | browser run <what> -- <cmd...>|up <what>|down | memgate <mb> [max_s] [what]}"; exit 1 ;;
+  tsc)     shift; cmd_tsc "$@" ;;
+  *) echo "usage: coord {claim <lane> [note] | status | build [msg] | sweep [args] | release [lane] | reap | lock | unlock | browser run <what> -- <cmd...>|up <what>|down | memgate <mb> [max_s] [what] | tsc [args]}"; exit 1 ;;
 esac
