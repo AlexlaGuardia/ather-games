@@ -48,6 +48,7 @@ import { buildCatalog, buildBoxes, opens, pieceSpan, type PieceBox } from './bui
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'   // M169 s2: CutBody
 import { BuildIcon } from './build-icon'
 import { AlchemyPanel } from './alchemy-panel'
+import { useWideLayout, GAP, GUTTER } from './wide-panel'   // M199
 import { loadAssign, mayUse } from './train-assign'   // M118 s2: the keeper's assign-a-piece gate
 import { PlanterPanel, GrimoirePanel, getPots, setPots, settlePlanter, useBook, type BankStore } from './spirit-panels'
 import { liftPiece } from './piece-lift'
@@ -1786,11 +1787,8 @@ export function stationTick(now = Date.now()) {
   if (first && Object.keys(away).length) reportAway(away)
 }
 const fmtSecs = (ms: number) => { const s = Math.max(0, Math.ceil(ms / 1000)); return s >= 3600 ? `${Math.floor(s / 3600)} h ${Math.floor((s % 3600) / 60)} min` : s >= 60 ? `${Math.floor(s / 60)} min ${s % 60} s` : `${s} s` }
-function useNarrow() {
-  const [n, setN] = useState(() => typeof window !== 'undefined' && window.innerWidth < 760)
-  useEffect(() => { const f = () => setN(window.innerWidth < 760); window.addEventListener('resize', f); return () => window.removeEventListener('resize', f) }, [])
-  return n
-}
+// M199: the wide layout's body caps (the overlay pads 34 top / 16 bottom; a frame's wood + plaque ~ 40, the bench's tab rail ~ 84)
+const STORE_FIT = '!max-h-[calc(100vh_-_96px)]', NOW_FIT = '!max-h-[24vh]', WORK_FIT = '!max-h-[max(140px,calc(76vh_-_215px))]'
 const QTYS = [1, 10, 99, 'max'] as const
 type Qty = (typeof QTYS)[number]
 interface Pick { job: Job | null; qty: Qty }
@@ -1818,7 +1816,7 @@ function TabRail({ tabs, on, go }: { tabs: BenchTab[]; on: BenchTab; go: (t: Ben
 }
 
 function BenchPanel({ room, onClose }: { room: Room; onClose: () => void }) {
-  const inv = useInv(), w = useWorks(), def = ROOMS[room.kind], bankNow = useBank(), narrow = useNarrow()
+  const inv = useInv(), w = useWorks(), def = ROOMS[room.kind], bankNow = useBank(), lay = useWideLayout(), narrow = !lay.wide
   const spirits3d = useSpiritsDev()   // M110 s1 / M123 s2: training pieces for every keeper (true)
   const r = w.rooms.find(x => x.id === room.id) ?? room   // the live room (its store moves under the panel)
   const [pick, setPick] = useState<Pick>({ job: null, qty: 10 })
@@ -1883,25 +1881,27 @@ function BenchPanel({ room, onClose }: { room: Room; onClose: () => void }) {
     }
   })()
   const work = (
-    <HearthFrame title={def.name} maxWidth={520} onClose={onClose} fixed dataPanel="bench" backdrop={false} bodyClass={dim}
+    <HearthFrame title={def.name} maxWidth={narrow ? 520 : lay.craft} onClose={onClose} fixed dataPanel="bench" backdrop={false} bodyClass={narrow ? dim : WORK_FIT}
       head={<TabRail tabs={tabs} on={tab} go={go} />}>
       <div data-bench-body={tab} style={{ padding: '12px 16px 14px', display: 'grid', gap: 12 }}>{body}</div>
     </HearthFrame>
   )
   // what is crafting NOW gets its own panel (Alex 11-20: "its own panel ... a buffer bar so the player can actively see the thing crafting")
   const now = (
-    <HearthFrame title="Crafting" maxWidth={narrow ? 520 : 400} onClose={onClose} fixed dataPanel="crafting" backdrop={false} closable={false} bodyClass={dim}>
+    <HearthFrame title="Crafting" maxWidth={narrow ? 520 : lay.craft} onClose={onClose} fixed dataPanel="crafting" backdrop={false} closable={false} bodyClass={narrow ? dim : NOW_FIT}>
       <div style={{ padding: '24px 16px 14px' }}><WorkView r={r} /></div>
     </HearthFrame>
   )
-  const store = <StorePanel r={r} pick={pick} narrow={narrow} onClose={onClose} />
+  const store = <StorePanel r={r} pick={pick} narrow={narrow} width={lay.store} onClose={onClose} />
   return (
     <div data-station={r.kind} className="fixed inset-0 z-[60] bg-black/25 backdrop-blur-[3px] pointer-events-auto overflow-y-auto" onClick={onClose} onContextMenu={e => e.preventDefault()}
-      style={{ display: 'flex', flexDirection: narrow ? 'column' : 'row', alignItems: narrow ? 'center' : 'flex-start', justifyContent: 'center', gap: narrow ? 22 : 18, padding: narrow ? '34px 0 24px' : '6vh 16px 24px' }}>
+      style={{ display: 'flex', flexDirection: narrow ? 'column' : 'row', alignItems: narrow ? 'center' : 'flex-start', justifyContent: 'center', gap: narrow ? 22 : GAP, padding: narrow ? '34px 0 24px' : `34px ${GUTTER}px 16px` }}>
       {narrow ? <>{now}{work}{store}</> : (
+        // M199 (Alex 11-26): wide before it scrolls. Store on the LEFT, the crafting centre (what is crafting now, over the
+        // bench's tabs) on the RIGHT, side by side; every body is capped to the screen's height so the overlay itself never scrolls.
         <>
-          {work}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 26 }}>{now}{store}</div>
+          <div data-wide-col="store">{store}</div>
+          <div data-wide-col="craft" style={{ display: 'flex', flexDirection: 'column', gap: 26 }}>{now}{work}</div>
         </>
       )}
     </div>
@@ -1910,7 +1910,7 @@ function BenchPanel({ room, onClose }: { room: Room; onClose: () => void }) {
 
 /** The store panel: the station's own store, and a SOURCE (your pack, or the Keepstone) to move things in from. Whatever the
  *  selected job needs is lit, with have / need. One tap moves 1 / 10 / all of an item. */
-function StorePanel({ r, pick, narrow, onClose }: { r: Room; pick: Pick; narrow: boolean; onClose: () => void }) {
+function StorePanel({ r, pick, narrow, width = 400, onClose }: { r: Room; pick: Pick; narrow: boolean; width?: number; onClose: () => void }) {
   const inv = useInv(), bank = useBank(), store = roomStore(r)
   const [src, setSrc] = useState<'pack' | 'bank'>('pack')
   const need = new Map<string, number>()
@@ -1930,7 +1930,7 @@ function StorePanel({ r, pick, narrow, onClose }: { r: Room; pick: Pick; narrow:
   const back = (k: number) => { touchWork(r.id); const m = takeFromRoom(getW(), r.id, k, getInv()); if (m.moved) { setWorks(m.works); setInv(m.inv) } else if ('why' in m && m.why) hudSay(m.why, 'info') }
   const tab = (on: boolean): React.CSSProperties => ({ border: 0, borderRadius: 10, height: 32, padding: '0 14px', cursor: 'pointer', font: '700 12px system-ui', letterSpacing: '.06em', textTransform: 'uppercase', background: on ? H.ink : 'rgba(58,39,22,.08)', color: on ? '#fff' : H.ink })
   return (
-    <HearthFrame title="Store" maxWidth={narrow ? 520 : 400} onClose={onClose} fixed dataPanel="station-store" backdrop={false} bodyClass={narrow ? '!max-h-none' : ''}>
+    <HearthFrame title="Store" maxWidth={narrow ? 520 : width} onClose={onClose} fixed dataPanel="station-store" backdrop={false} bodyClass={narrow ? '!max-h-none' : STORE_FIT}>
       <div data-room-store={r.kind} style={{ padding: '26px 16px 14px', display: 'grid', gap: 10 }}>
         <div>
           <div style={lab}>In the station · {store.stacks.length} / {ROOM_STORE_SLOTS} · keeps {ROOM_KEEPS[r.kind]}</div>

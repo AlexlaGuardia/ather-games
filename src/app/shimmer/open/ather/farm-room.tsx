@@ -17,6 +17,7 @@ import { plumbingOf, capacityOf, wholeOf, msToNext, settle, stale, draw, freshWa
 import { loadFarmSave, saveFarmSave, freshFarmSave, plantAt, harvestAt, feedAt, seedsReach, dosesOf, roomLeft, msLeft, isArmed, BEDS, type FarmSave } from './farmroom'
 import { roomStore, ROOM_STORE_SLOTS, ROOM_KEEPS, stockRoomFromBag, takeFromRoom, toWorld, ROOMS, type Room, type Works, type StoreMove } from './rooms'
 import { GROUND_Y } from './plot'
+import { useWideLayout, wideSingle } from './wide-panel'
 import { isVisiting, visitFarm, visitWater, subscribeVisit } from './plot-visit'
 import { adoptFarm } from './farmroom'
 import { adoptWater } from './water'
@@ -84,7 +85,7 @@ function Cell({ s, ...rest }: { s: { id: string; n: number } | null } & React.HT
 
 // ── the panel ─────────────────────────────────────────────────────────────────────────────────────────────────
 export function FarmPanel({ room, works, setWorks, onClose }: { room: Room; works: Works; setWorks: (w: Works) => void; onClose: () => void }) {
-  const inv = useInv(), save = useFarm(), now = useNow(1000), wsave = useWater()
+  const inv = useInv(), save = useFarm(), now = useNow(1000), wsave = useWater(), lay = useWideLayout()   // M199
   const r = works.rooms.find(x => x.id === room.id) ?? room
   const pl = plumbingOf(works.pieces), cap = capacityOf(pl), have = wholeOf(wsave, pl, now), next = msToNext(wsave, pl, now)
   useEffect(() => { settleWater(works.pieces) }, [works.pieces])
@@ -122,9 +123,10 @@ export function FarmPanel({ room, works, setWorks, onClose }: { room: Room; work
     if (!m.inv.slots[sel]) setSel(null); setCount(1)
   }
   return (
-    <HearthFrame title="Farm" maxWidth={560} onClose={onClose} fixed dataPanel="farm">
-      <div data-farm-root style={{ padding: '26px 16px 14px', display: 'grid', gap: 12 }}>
-        <div>
+    // M199 (Alex 11-26): wide before it scrolls. Desktop / landscape: the store and the composter on the LEFT, the beds on the RIGHT
+    <HearthFrame title="Farm" maxWidth={lay.wide ? wideSingle(lay.vw) : 560} onClose={onClose} fixed dataPanel="farm" bodyClass={lay.wide ? '!max-h-[calc(100vh_-_96px)]' : ''}>
+      <div data-farm-root style={{ padding: '26px 16px 14px', display: 'grid', gap: lay.wide ? '12px 18px' : 12, alignItems: 'start', ...(lay.wide ? { gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 3fr)', gridTemplateAreas: '"store beds" "compost beds"' } : {}) }}>
+        <div data-wide-col="beds" style={lay.wide ? { gridArea: 'beds' } : undefined}>
           <div style={lab}>The beds</div>
           <div style={{ fontSize: 12.5, color: H.inkSoft, margin: '4px 0 8px' }}>Plant a seed, wait, harvest. A crop comes up the grade of its seed, and two seeds come back. A watered bed grows in three quarters of the time.</div>
           <div data-water={have} data-water-cap={cap} data-taps={pl.taps} style={{ fontSize: 12.5, color: H.ink, margin: '0 0 8px', fontVariantNumeric: 'tabular-nums' }}>
@@ -174,7 +176,7 @@ export function FarmPanel({ room, works, setWorks, onClose }: { room: Room; work
           )}
         </div>
 
-        <div data-composter data-compost-charge={farm.charge} data-armed={String(armed)} data-doses={doses}>
+        <div style={lay.wide ? { gridArea: 'compost' } : undefined} data-composter data-compost-charge={farm.charge} data-armed={String(armed)} data-doses={doses}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
             <div style={{ ...lab, flex: 1 }}>The composter</div>
             <span data-armed-label style={{ fontSize: 12, fontWeight: 800, color: armed ? '#3f8a3a' : H.inkSoft }}>{armed ? 'Armed' : 'Not armed'}</span>
@@ -200,7 +202,7 @@ export function FarmPanel({ room, works, setWorks, onClose }: { room: Room; work
           )}
         </div>
 
-        <div data-room-store="farm">
+        <div data-room-store="farm" data-wide-col="store" style={lay.wide ? { gridArea: 'store' } : undefined}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ ...lab, flex: 1 }}>The store · {store.stacks.length} / {ROOM_STORE_SLOTS} · keeps {ROOM_KEEPS.farm}</div>
             <span data-act="stock-room"><HearthButton small onClick={() => apply(stockRoomFromBag(works, r.id, getInv(), { hotbar: true }))}>Stock from the bag</HearthButton></span>

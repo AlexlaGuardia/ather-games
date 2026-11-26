@@ -71,9 +71,10 @@ async function session(w: number, h: number, touch = false) {
     await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 180000 }); await sleep(3500)
   }
   await s.open()
-  const panels = await p.evaluate(() => { const a = document.querySelector('[data-panel="bench"]')?.getBoundingClientRect(), b = document.querySelector('[data-panel="station-store"]')?.getBoundingClientRect(); return a && b ? { aR: a.right, bL: b.left } : null })
+  // M199 (Alex 11-26) REWROTE this assert: the store moved to the LEFT of the work panel (was: store right of it)
+  const panels = await p.evaluate(() => { const a = document.querySelector('[data-panel="bench"]')?.getBoundingClientRect(), b = document.querySelector('[data-panel="station-store"]')?.getBoundingClientRect(); return a && b ? { aL: a.left, bR: b.right } : null })
   ok(!!panels, '1. E at the bench: the station panel AND a separate store panel are up')
-  ok(!!panels && panels.bL >= panels.aR - 1, `   desktop: side by side (work panel ends x=${panels?.aR.toFixed(0)}, store starts x=${panels?.bL.toFixed(0)})`)
+  ok(!!panels && panels.bR <= panels.aL + 1, `   desktop: side by side, store on the left (store ends x=${panels?.bR.toFixed(0)}, work panel starts x=${panels?.aL.toFixed(0)})`)
   ok(await p.evaluate(() => [...document.querySelectorAll('[data-bench-tab]')].map(e => e.getAttribute('data-bench-tab')).join() === 'refine,furniture,blades,keeper'), '   bench tabs: Refine / Furniture / Blades / Keeper (icons)')
   ok(await p.evaluate(() => !!document.querySelector('[data-panel="crafting"]') && !document.querySelector('[data-panel="bench"] [data-work]')), '   what is crafting sits in its OWN panel, not in the bench panel')
   ok(await p.evaluate(() => !!document.querySelector('[data-panel="bench"] [data-craft-tiles]')), '   jobs are icon tiles, not a list')

@@ -8,6 +8,7 @@ import { HearthFrame, HearthButton, H } from '../../ui/hearth'
 import { getInv, setInv, useInv } from '../shared/bag'
 import { give, take, itemDef, type Inv } from '../shared/inventory'
 import { hudSay } from '../shared/hud-say'
+import { useWideLayout, wideSingle } from './wide-panel'   // M199
 import { ALC_STATIONS, ALC_POTIONS, ALC_POTION_ORDER, INTERMEDIATES, stepsAt, chainOf, pickFor, gradeFrom, gradeOrNull, fills, type AlcStation, type Have } from './alchemy-set'
 import { loadRuns, saveRuns, startRun, collectRun, runFrac, runLeft, type Runs } from './alchemy-runs'
 import { extraBottles } from './alchemist-boon'
@@ -40,7 +41,7 @@ function nextLine(potion: string, k: number): string {
 /** M57 s2: `boon` = the best alchemist standing near this piece (alchemist-boon.ts), read when a brew FINISHES here. A check may
  *  set window.__alcRoll (a number in [0,1)) to fix the roll; otherwise Math.random. */
 export function AlchemyPanel({ pid, station, onClose, footer, boon }: { pid: string; station: AlcStation; onClose: () => void; footer?: ReactNode; boon?: () => { chance: number; name: string } }) {
-  const inv = useInv(), have = haveOf(inv), def = ALC_STATIONS[station]
+  const inv = useInv(), have = haveOf(inv), def = ALC_STATIONS[station], lay = useWideLayout()
   const [runs, setRuns] = useState<Runs>(() => loadRuns())
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 250); return () => clearInterval(t) }, [])
@@ -69,9 +70,9 @@ export function AlchemyPanel({ pid, station, onClose, footer, boon }: { pid: str
   }
   const steps = stepsAt(station)
 
-  return (
-    <HearthFrame title={def.name} maxWidth={460} onClose={onClose} fixed dataPanel="alchemy">
-      <div data-alc-station={station} style={{ padding: '26px 16px 14px', display: 'grid', gap: 12 }}>
+  // M199 (Alex 11-26): wide before it scrolls. Desktop / landscape: what the station is and is doing on the LEFT, its steps on the
+  // RIGHT, side by side; a portrait phone keeps the one column in the old order.
+  const info = <>
         <div style={{ fontSize: 13, color: H.inkSoft }}>{def.blurb}</div>
         {run && (
           <div data-alc-run={`${run.potion}:${run.k}`} style={{ display: 'grid', gap: 6, padding: 10, borderRadius: 12, background: 'rgba(143,184,255,.12)' }}>
@@ -93,6 +94,8 @@ export function AlchemyPanel({ pid, station, onClose, footer, boon }: { pid: str
             ))}
           </div>
         )}
+    </>
+  const work = <>
         <div style={{ display: 'grid', gap: 8 }}>
           {steps.map(({ potion, k, step }) => {
             const p = ALC_POTIONS[potion], last = k === p.steps.length - 1, pick = pickFor(step, have)
@@ -118,8 +121,18 @@ export function AlchemyPanel({ pid, station, onClose, footer, boon }: { pid: str
           })}
         </div>
         {infusionsAt(station).length > 0 && <InfusionList station={station} have={have} />}
+    </>
+  const tail = <>
         <div style={{ fontSize: 11.5, color: H.inkSoft }}>Higher-grade crops make a stronger potion. The best you carry goes in first.</div>
         {footer}
+    </>
+  return (
+    <HearthFrame title={def.name} maxWidth={lay.wide ? wideSingle(lay.vw) : 460} onClose={onClose} fixed dataPanel="alchemy" bodyClass={lay.wide ? '!max-h-[calc(100vh_-_96px)]' : ''}>
+      <div data-alc-station={station} style={{ padding: '26px 16px 14px', display: 'grid', gap: lay.wide ? 18 : 12, alignItems: 'start', gridTemplateColumns: lay.wide ? 'minmax(0, 5fr) minmax(0, 7fr)' : undefined }}>
+        {lay.wide ? (<>
+          <div data-wide-col="info" style={{ display: 'grid', gap: 12 }}>{info}{tail}</div>
+          <div data-wide-col="steps" style={{ display: 'grid', gap: 12 }}>{work}</div>
+        </>) : <>{info}{work}{tail}</>}
       </div>
     </HearthFrame>
   )
