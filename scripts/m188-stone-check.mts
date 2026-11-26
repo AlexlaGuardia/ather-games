@@ -4,7 +4,7 @@
 // in the centre card. PASS = the stone stands beside the gate (E prompt 'the Chordstone'); before the chord its top is dark;
 // after, each keeper's stone burns TWO lights, one per keeper, each in that keeper's chord colour (the Chord tab's colour);
 // the panel opens on E with the centre card in front (friends online + count, the chord + Copy invite link that copies),
-// left = cluster card (four seats, 'coming'), right = brewings card (Find / Host, 'coming'); the words never say
+// left = cluster card (four seats; live since M188 s3), right = brewings card (Find / Host, 'coming'); the words never say
 // party / podium / potion party / swaray; the panel fits the screen; 0 page errors.
 //   npx tsx scripts/m188-stone-check.mts [--url https://ather.games] [--phone] [--out dir]
 import puppeteer, { type Page } from 'puppeteer-core'
@@ -109,9 +109,11 @@ try {
   // the side cards: phone = via the rail; their 'coming' states
   for (const id of ['cluster', 'brewings'] as const) {
     if (PHONE) await A.evaluate((t: string) => { const b = [...document.querySelectorAll<HTMLElement>('[data-panel="chordstone"] button')].find(x => (x.textContent ?? '').trim().toLowerCase() === t); b?.click() }, id === 'cluster' ? 'cluster' : 'brewings')
-    ok(await poll(async () => !!(await A.$(`[data-card="${id}"] [data-coming]`)), 4000), `${id} card is there, honestly 'coming'`)
+    // M188 s3: the cluster card is LIVE (signed out here: it says to sign in; m188-cluster-check plays it); brewings stays 'coming' (s4)
+    if (id === 'cluster') ok(await poll(async () => !!(await A.$('[data-card="cluster"]')) && !(await A.$('[data-card="cluster"] [data-coming]')), 4000), 'cluster card is there and live (no longer coming)')
+    else ok(await poll(async () => !!(await A.$(`[data-card="${id}"] [data-coming]`)), 4000), `${id} card is there, honestly 'coming'`)
     if (PHONE) await shot(A, `d-${id}`)
-    if (id === 'cluster') ok((await A.$$('[data-cluster-seat]')).length === 4, 'the cluster card has four seats')
+    if (id === 'cluster') ok(!!(await A.$('[data-cluster-signin]')), 'the cluster card asks an anonymous keeper to sign in (clusters are accounts-only; the four seats are proved by m188-cluster-check)')
     else ok(!!(await A.$('[data-brew-tab="find"]')) && !!(await A.$('[data-brew-tab="host"]')), 'the brewings card has Find + Host')
   }
   await closeStone(A)

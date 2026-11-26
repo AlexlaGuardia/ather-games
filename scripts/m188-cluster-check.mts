@@ -64,7 +64,7 @@ const open = async (who: { id: string; name: string }): Promise<Page> => {
   await p.evaluateOnNewDocument((tut: unknown, id: string) => {
     if (sessionStorage.getItem('m188s3')) return; sessionStorage.setItem('m188s3', '1')
     localStorage.setItem('ather:epoch', '2')
-    for (const pre of ['', `u:${id}:`]) {
+    for (const pre of [`u:${id}:`]) {   // the ACCOUNT's keys only: a bare (anonymous) keeper pops 'Add this keeper to your roster?'
       localStorage.setItem(`${pre}ather:shimmer:birthRune`, 'star'); localStorage.setItem(`${pre}ather:shimmer:runes`, JSON.stringify(['star']))
       localStorage.setItem(`${pre}open.tutorial.v1`, JSON.stringify(tut))
     }
