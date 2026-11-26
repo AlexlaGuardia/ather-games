@@ -19,6 +19,6 @@ sc.world = bpy.data.worlds.new('w'); sc.world.use_nodes = True; sc.world.node_tr
 gm = bpy.data.materials.new('g'); gm.use_nodes = True; n = gm.node_tree; n.nodes.clear(); o = n.nodes.new('ShaderNodeOutputMaterial'); e = n.nodes.new('ShaderNodeEmission'); e.inputs[0].default_value = (.11, .19, .10, 1); n.links.new(e.outputs[0], o.inputs[0])
 bpy.ops.mesh.primitive_plane_add(size=60, location=(0, 0, -.0005)); bpy.context.object.data.materials.append(gm)
 cam = bpy.data.cameras.new('c'); co = bpy.data.objects.new('c', cam); sc.collection.objects.link(co); sc.camera = co; cam.type = 'ORTHO'; cam.ortho_scale = x0 + .1
-sc.render.resolution_x, sc.render.resolution_y = W, Hh; c = Vector((x0 / 2 - .06, 0, .38))
+sc.render.resolution_x, sc.render.resolution_y = W, Hh; c = Vector((x0 / 2 - .06, 0, .46))
 for f, az, el in (('front', 0, .05), ('tq', -.55, .14)):
     d = Vector((math.sin(az) * math.cos(el), -math.cos(az) * math.cos(el), math.sin(el))); co.location = c + d * 6; co.rotation_euler = (-d).to_track_quat('-Z', 'Y').to_euler(); sc.render.filepath = f'{out}_{f}.png'; bpy.ops.render.render(write_still=True)
