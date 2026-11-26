@@ -42,11 +42,15 @@
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# --own (anywhere): this lane gets its OWN next dev instead of joining the shared one. See below.
+OWN=0; _args=()
+for _a in "$@"; do if [ "$_a" = "--own" ]; then OWN=1; else _args+=("$_a"); fi; done
+set -- "${_args[@]+"${_args[@]}"}"
 LANE="${1:-}"
 PORT="${2:-}"
 
 if [ -z "$LANE" ]; then
-  echo "usage: tools/devwin.sh <lane> [port]   (lane = world|sprites|play|assets|...)" >&2
+  echo "usage: tools/devwin.sh <lane> [port] [--own]   (lane = world|sprites|play|assets|...)" >&2
   exit 2
 fi
 
@@ -104,6 +108,31 @@ fi
 if port_listening "$PORT"; then
   echo "refusing: :$PORT is already in use by something that is not this lane's devwin (ss -ltnp | grep :$PORT)." >&2
   exit 1
+fi
+
+# ── --own: the escape hatch (2026-11-26, Alex's call) ─────────────────────────────────────────────
+# For a lane that truly needs isolation from the shared server: it is changing next.config / env /
+# middleware, or it needs a clean restart without kicking every other lane's preview. It is the old
+# per-lane server (own `.next-<lane>`, own port, ~2 GB), so it waits at the memory gate first, and its
+# record carries own=1 so it never counts as a user keeping the shared server alive.
+if [ "$OWN" = 1 ]; then
+  "$REPO/tools/coord.sh" memgate 2500 600 "own dev server for '$LANE'" || exit 1
+  DIST=".next-$LANE"
+  echo ">> lane '$LANE' --own: its own next dev, dist=$DIST port=$PORT (~2 GB; the shared server is untouched)"
+  env NEXT_DIST_DIR="$DIST" npx next dev -p "$PORT" &
+  DEV_PID=$!
+  printf 'lane=%s\npid=%s\nport=%s\nsession=%s\nts=%s\nown=1\n' "$LANE" "$DEV_PID" "$PORT" "${COORD_SESSION:-}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$REG"
+  echo ">> registered: $REG (pid $DEV_PID, own). 'coord release $LANE' or 'coord reap' stops it"
+  cleanup_own() {
+    if kill -0 "$DEV_PID" 2>/dev/null; then pkill -TERM -P "$DEV_PID" 2>/dev/null || true; kill -TERM "$DEV_PID" 2>/dev/null || true; fi
+    rm -f "$REG"
+    head="$(mktemp)"
+    if git -C "$REPO" show HEAD:tsconfig.json > "$head" 2>/dev/null && ! cmp -s "$REPO/tsconfig.json" "$head"; then cp "$head" "$REPO/tsconfig.json"; echo ">> restored tsconfig.json from HEAD"; fi
+    rm -f "$head"
+  }
+  trap cleanup_own EXIT INT TERM
+  wait "$DEV_PID"
+  exit $?
 fi
 
 shared_ensure || { echo "devwin: shared dev server unavailable; rely on tests or try again." >&2; exit 1; }

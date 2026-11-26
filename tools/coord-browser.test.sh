@@ -37,18 +37,18 @@ ran=0; COORD_WIN=play C browser run "x" -- bash -c "touch $T/ran" >/dev/null 2>"
 held && grep -q '^owner=world' "$T/browser"; ok $? "run: a refused run leaves the holder's lock alone"
 COORD_WIN=world C browser down >/dev/null
 # killed (TERM): the trap releases and the child dies too
-COORD_WIN=world COORD_DIR="$T" COORD_SESSION=test tools/coord.sh browser run "long" -- sleep 30 >/dev/null 2>&1 & w=$!
+COORD_WIN=world COORD_DIR="$T" COORD_SESSION=test tools/coord.sh browser run "long" -- sleep 30.737 >/dev/null 2>&1 & w=$!
 for _ in $(seq 1 50); do held && break; sleep 0.1; done
 held; ok $? "run: holds while its command runs"
 COORD_WIN=play C browser run "x" -- true >/dev/null 2>&1; [ $? = 1 ]; ok $? "run: a live run refuses a second run"
 COORD_WIN=world C browser run "x" -- true >/dev/null 2>&1; [ $? = 1 ]; ok $? "run: a live run refuses a second run from the SAME window"
 kill -TERM "$w"; wait "$w"; rc=$?
 [ "$rc" = 143 ] && ! held; ok $? "run: killed with TERM -> released, exit 143 (got $rc)"
-! pgrep -x -f 'sleep 30' >/dev/null; ok $? "run: the TERMed wrapper took its child down with it"
+! pgrep -x -f 'sleep 30.737' >/dev/null; ok $? "run: the TERMed wrapper took its child down with it"
 # SIGKILL (no trap can run): the dead pid is stale AT ONCE, status says so, up and run take over
-COORD_WIN=world COORD_DIR="$T" COORD_SESSION=test tools/coord.sh browser run "doomed" -- sleep 30 >/dev/null 2>&1 & w=$!
+COORD_WIN=world COORD_DIR="$T" COORD_SESSION=test tools/coord.sh browser run "doomed" -- sleep 30.737 >/dev/null 2>&1 & w=$!
 for _ in $(seq 1 50); do held && break; sleep 0.1; done
-kill -KILL "$w"; wait "$w" 2>/dev/null; pkill -x -f 'sleep 30' 2>/dev/null
+kill -KILL "$w"; wait "$w" 2>/dev/null; pkill -x -f 'sleep 30.737' 2>/dev/null
 held; ok $? "run: SIGKILL leaves the file behind (the case the pid rule exists for)"
 C browser status | grep -q "STALE (holder pid $w is dead)"; ok $? "status: a dead-pid holder reads STALE at once"
 COORD_WIN=play C browser up "after a kill" >/dev/null 2>"$T/err"; rc=$?

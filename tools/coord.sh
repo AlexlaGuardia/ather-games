@@ -663,6 +663,7 @@ cmd_status() {
       elif ! devwin_owned "$dl"; then state="⚠ ORPHAN — no claim on the lane and none by its session; 'coord reap' stops it"
       else state="live"
       fi
+      grep -q '^own=1' "$f" 2>/dev/null && state="$state (--own server)"
       printf "  %-8s pid %-8s :%-5s %-9s %-16s %s\n" "$dl" "${dp:-?}" "$dport" "$dage" "${dsess:+session ${dsess:0:8}}" "$state"
     done
   else
@@ -671,7 +672,7 @@ cmd_status() {
   if [ -f "$SHARED_REC" ]; then
     local sp; sp=$(shared_pid)
     if shared_alive; then
-      printf "  %-8s pid %-8s :%-5s %s\n" "SHARED" "$sp" "$DEV_SHARED_PORT" "live, $(shared_users) lane(s) forwarding, $(ps -o rss= -p "$sp" 2>/dev/null | awk '{s+=$1} END{print int(s/1024)}')MB wrapper; 'coord reap' stops it once unused"
+      printf "  %-8s pid %-8s :%-5s %s\n" "SHARED" "$sp" "$DEV_SHARED_PORT" "live, $(shared_users) lane(s) forwarding, $(shared_tree_rss_mb) MB (recycled when idle >= 3000 MB); 'coord reap' stops it once unused"
     else
       printf "  %-8s pid %-8s :%-5s %s\n" "SHARED" "${sp:-?}" "$DEV_SHARED_PORT" "DEAD (shed?): the next devwin.sh restarts it"
     fi
@@ -771,5 +772,8 @@ case "${1:-status}" in
   reap)    cmd_reap ;;
   memgate) shift; cmd_memgate "$@" ;;
   tsc)     shift; cmd_tsc "$@" ;;
-  *) echo "usage: coord {claim <lane> [note] | status | build [msg] | sweep [args] | release [lane] | reap | lock | unlock | browser run <what> -- <cmd...>|up <what>|down | memgate <mb> [max_s] [what] | tsc [args]}"; exit 1 ;;
+  shared-recycle)  # [--if-bloated <mb> <idle_s>]: restart the shared dev server now, or only when bloated + idle
+    shift
+    if [ "${1:-}" = "--if-bloated" ]; then shared_recycle_if_bloated "${2:-3000}" "${3:-300}"; else shared_recycle; fi ;;
+  *) echo "usage: coord {claim <lane> [note] | status | build [msg] | sweep [args] | release [lane] | reap | lock | unlock | browser run <what> -- <cmd...>|up <what>|down | memgate <mb> [max_s] [what] | tsc [args] | shared-recycle [--if-bloated <mb> <idle_s>]}"; exit 1 ;;
 esac
