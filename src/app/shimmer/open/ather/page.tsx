@@ -78,6 +78,7 @@ import { WildsScene } from './wilds-scene'
 import { FoldMap, GregPanel, LANDING, type Dest } from './panels'
 import { gregTalk } from './greg-talk'
 import { tutStart, tutNode, grimoireGift, pedestalOwed, type TutCursor } from './glade-greg-talk'   // M68 s2 (+ M123 s1 pedestalOwed)
+import { armArrow } from '../shared/first-arrow'   // BETA M145: the first-time arrow at the grimoire's slot
 import { useSpiritsDev } from './spirit-model'   // M123: Greg's grimoire hand-over for a legacy keeper (every keeper since s2)
 import { loadTut, saveTut, gift as tutGift, allHeard, tessPacket, type Tut, type Gift as TutGift } from './glade-tutorial'
 import { gardenOpen, foldOffered, foldNode, buyPick, FOLD_TEXT, type FoldStep } from './garden-fold'   // M71 s1: Greg folds the first garden
@@ -1532,7 +1533,7 @@ function AtherSliceGame() {
         if (g.give) {
           const r = give(getInv(), 'grimoire_pedestal', 1)
           if (r.left) { hudSay('Your bag is full. Make room for the grimoire.', 'info'); return false }
-          setInv(r.inv); hudSay(`${FURNITURE.grimoire_pedestal.name} · in your bag`, 'item')
+          setInv(r.inv); hudSay(`${FURNITURE.grimoire_pedestal.name} · in your bag`, 'item'); armArrow('grimoire')   // M145: Beat 1 only (a legacy keeper's hand-over never arms)
         }
         setTut(tutGift(tut, 'grimoire').t); return true
       },
@@ -1905,7 +1906,7 @@ function AtherSliceGame() {
       <GameHud size={hudSize} pose={poseRef} marks={marksRef} vitals={vitalsRef} mana={manaRef} entries={hotbar} sel={litSlot(stance, inv)} onSelect={i => setStance(st => selectSlot(st, i, getInv()))} onEquip={i => setStance(st => equipSlot(st, i, getInv()))} tools={toolsRef} skills={skillsRef} casts={castHud}
         // never dimmed in the Ather (Alex 11-17: 'the hotbar stays greyed out and doesnt highlight'): the plot uses the bar now
         // (Keepstones, furniture, bait), and HearthHotbar drops the selected slot's light while dimmed (selected = i === sel && !dimmed)
-        dimmed={false} input={!panel && !fade && !optionsOpen && !building}
+        dimmed={false} input={!panel && !fade && !optionsOpen && !building} fight={!!chud?.champ}
         minimap={ww && zone.kind !== 'glade' && <AtherMiniMap size={hudSize} zone={zone.kind} world={ww} wrev={wrev} fog={fog} tileOff={tileOff} pose={poseRef} waymarks={waymarks} regionsByTile={regionsByTile} cluster={cl.frame}
           owned={owned} onExpand={() => setPanel({ kind: 'map', view: 'ather', travel: false })} quest={fsOn} />}
         status={[

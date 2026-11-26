@@ -416,6 +416,7 @@ const OWNERS: Record<string, string> = {
   'open.chain.v1': 'open/shared/opening-chain.ts',   // BETA M73: the opening chain
   'open.morelintro.v1': 'open/shared/morel-intro.ts',   // BETA M155 s2
   'open.repair.v1': 'open/shared/ship-repair.ts',   // BETA M108: Kael's ship repair, stage 1
+  'open.arrows.v1': 'open/shared/first-arrow.ts',   // BETA M145: first-time arrows
   'open.keeper.name.v1': '../../lib/keeper-roster.ts',   // M66 s3: the name a player gives a keeper (KEEPER_NAME_KEY)
 }
 ok(Object.keys(OWNERS).length === KEEPER_KEYS.length,

@@ -15,6 +15,7 @@ import * as THREE from 'three'
 import { guides, postEntries, setActive, type Zone } from './shared/journal'
 import { FADE_S, fadeStep } from './shared/quest-fade'
 import { GuideRoute, clear, maxRiseAlong, trailAhead, type RoadGraph, type RouteWorld } from './shared/gps-route'
+import { QuestBang } from './quest-bang'   // BETA M212: the tutorial '!' over the step's target
 
 const TRAIL_REACH = 48, TRAIL_STEP = 1.6, MAX_DOTS = 3 * Math.ceil(TRAIL_REACH / TRAIL_STEP), MAX_BEACONS = 8
 const FACE_DEG = 18
@@ -121,6 +122,7 @@ export function QuestGuide({ zone, ground, feetY, water, roads }: { zone: Zone; 
       <instancedMesh ref={dots} args={[undefined, mats.dot, MAX_DOTS]} frustumCulled={false} renderOrder={8}><circleGeometry args={[1, 10]} /></instancedMesh>
       <instancedMesh ref={beams} args={[beamGeo, mats.beam, MAX_BEACONS]} frustumCulled={false} renderOrder={8} />
       <instancedMesh ref={rings} args={[undefined, mats.ring, MAX_BEACONS]} frustumCulled={false} renderOrder={8}><ringGeometry args={[0.86, 1, 28]} /></instancedMesh>
+      <QuestBang zone={zone} ground={ground} />
     </>
   )
 }

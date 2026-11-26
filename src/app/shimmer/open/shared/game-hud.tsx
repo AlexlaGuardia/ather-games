@@ -49,6 +49,7 @@ import { createSkillSet, type SkillSet } from '../../engine/skills'
 import type { Vitals } from '../../engine/vitals'
 import { hudSay, linesAt, subscribe, type Line } from './hud-say'
 import { play as sfx } from './sfx'   // M36 batch 2: Morel's chime (proposed = silent until Alex's yay)
+import { ARROWS, arrowShows, current, retireArrow, slotOf, useArrows } from './first-arrow'   // BETA M145: first-time arrows
 /** how long the wheel's cursor stays lit without a roll */
 const BROWSE_MS = 2500
 
@@ -172,7 +173,51 @@ function StatusChips({ items, top, right, maxW }: { items: readonly Status[]; to
   )
 }
 
-export function GameHud({ size, pose, marks, vitals, mana, tools, skills, entries, sel, onSelect, onEquip, casts, dimmed, input, minimap, status = [] }: {
+/** ★ BETA M145 THE FIRST-TIME ARROW: one big arrow at the hotbar slot the game just put something new into (shared/first-arrow.ts
+ *  arms it; pages never draw it). Measured off the live slot (both layouts), it points DOWN at a bar on the bottom edge (phone)
+ *  and UP at the top-left bar (desktop). Gone for good when the slot is picked (used) or the arrow is clicked (dismissed);
+ *  hidden while a talk box / panel / fight has the screen. No words. Reduced motion: no bob. Look = Jin's guess (Alex's call). */
+const ARROW_CSS = '@keyframes first-arrow-up{0%,100%{transform:translateY(0)}50%{transform:translateY(10px)}}'
+  + '@keyframes first-arrow-down{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}'
+  + '.first-arrow-up{animation:first-arrow-up .9s ease-in-out infinite}.first-arrow-down{animation:first-arrow-down .9s ease-in-out infinite}'
+  + '@media (prefers-reduced-motion: reduce){.first-arrow-up,.first-arrow-down{animation:none}}'
+function FirstArrow({ entries, sel, show, phone }: { entries: readonly (HotbarEntry | null)[]; sel: number; show: boolean; phone: boolean }) {
+  const id = current(useArrows())
+  const slot = id ? slotOf(ARROWS[id], entries) : null
+  const [rect, setRect] = useState<{ x: number; top: number; bottom: number; vh: number } | null>(null)
+  useEffect(() => {
+    if (slot === null) { setRect(null); return }
+    const read = () => {
+      const el = document.querySelector(`[data-hud="hotbar"] [aria-label="slot ${slot + 1}"]`)
+      const r = el?.getBoundingClientRect()
+      setRect(r && r.width > 0 ? { x: r.left + r.width / 2, top: r.top, bottom: r.bottom, vh: window.innerHeight } : null)
+    }
+    read(); const t = setInterval(read, 300); return () => clearInterval(t)
+  }, [slot])
+  // USED = the player picks that slot (a CHANGE of selection onto it: a slot already lit when the thing landed does not count)
+  const prevSel = useRef(sel)
+  useEffect(() => { if (id && slot !== null && sel === slot && prevSel.current !== slot) retireArrow(id); prevSel.current = sel }, [sel, slot, id])
+  const on = !!id && slot !== null && !!rect && show
+  // probe (scripts/m145-m212-check.mts) reads this; it never writes
+  useEffect(() => { (window as unknown as { __arrow?: unknown }).__arrow = { id, slot, shown: on, rect } }, [id, slot, on, rect])
+  if (!on || !rect) return null
+  const sz = phone ? 54 : 72, down = rect.top > rect.vh / 2
+  const style: React.CSSProperties = { position: 'fixed', zIndex: 36, left: rect.x - sz / 2, width: sz, height: sz * 1.25, cursor: 'pointer', pointerEvents: 'auto',
+    ...(down ? { top: rect.top - sz * 1.25 - 10 } : { top: rect.bottom + 8 }) }
+  return (
+    <button type="button" data-hud="first-arrow" data-arrow={id} aria-label="dismiss" onClick={() => retireArrow(id!)} style={{ ...style, background: 'none', border: 0, padding: 0 }}>
+      <svg viewBox="0 0 40 50" width={sz} height={sz * 1.25} className={down ? 'first-arrow-down' : 'first-arrow-up'} style={{ overflow: 'visible', filter: 'drop-shadow(0 0 8px rgba(255,170,90,.85)) drop-shadow(0 2px 3px rgba(0,0,0,.7))' }}>
+        <g transform={down ? 'rotate(180 20 25)' : undefined}>
+          <path d="M20 2 L38 24 L27 24 L27 48 L13 48 L13 24 L2 24 Z" fill="#ff9a4a" stroke="#3a2214" strokeWidth={2.6} strokeLinejoin="round" />
+          <path d="M20 8 L31 21 L23.5 21 L23.5 44 L20 44 Z" fill="#ffd9a8" opacity={0.55} />
+        </g>
+      </svg>
+      <style>{ARROW_CSS}</style>
+    </button>
+  )
+}
+
+export function GameHud({ size, pose, marks, vitals, mana, tools, skills, entries, sel, onSelect, onEquip, casts, dimmed, input, fight, minimap, status = [] }: {
   size: HudSize
   pose: React.RefObject<CompassPose | null>
   marks?: React.RefObject<readonly CompassMark[]>
@@ -193,6 +238,8 @@ export function GameHud({ size, pose, marks, vitals, mana, tools, skills, entrie
   dimmed: boolean
   /** keys 1-8 and the wheel drive the bar only while true (not in a menu, not at the wheel) */
   input: boolean
+  /** a fight is on (the first-time arrow keeps out of it, M145) */
+  fight?: boolean
   minimap?: React.ReactNode
   status?: readonly Status[]
 }) {
@@ -280,6 +327,7 @@ export function GameHud({ size, pose, marks, vitals, mana, tools, skills, entrie
         <XpBar face={FACE} size="phone" centerX={phoneCompassX} top={8 + XP_BELOW_COMPASS} />
         {minimap}
         <ChordBars vitals={vitals} phone />
+        <FirstArrow entries={entries} sel={sel} show={arrowShows({ input, fight })} phone />
         {/* a phone's right edge belongs to the thumbs below the map: the chips join into one line */}
         <StatusChips items={status.length ? [{ label: status.map(x => x.value !== undefined ? `${x.label} ${x.value}` : x.label).join(' · ') }] : []} top={statusTop} right={box.right} maxW={vw - box.right - 16 - 12} />
         {/* ★ THE LINE CLEARS THE THUMBS (Alex 11-22 playtest): at bottom:118 it grew UP into SLIDE / JUMP / FIRE / the DRAW pill
@@ -308,6 +356,7 @@ export function GameHud({ size, pose, marks, vitals, mana, tools, skills, entrie
       <StatusChips items={status} top={statusTop} right={box.right} />
       <div className="fixed bottom-4 left-4 pointer-events-none" style={{ zIndex: 32 }} data-hud="vitals"><HearthVitals face={FACE} vitals={vitals} /></div>
       <ChordBars vitals={vitals} phone={false} />
+      <FirstArrow entries={entries} sel={sel} show={arrowShows({ input, fight })} phone={false} />
       <div className="contents" style={{ zIndex: 32 }}><CornerFixed size={size} mana={mana} readouts={readouts} onPick={pick} picked={picked} /></div>
       {picked && T.current && <ToolPanelView panel={toolPanel(T.current, picked)} phone={false} onClose={closePanel} />}
       {casts && <CastPlates casts={casts} />}

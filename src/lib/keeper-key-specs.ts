@@ -50,6 +50,7 @@ export const KEEPER_KEY_SPECS: readonly { base: string; worldTied: boolean }[] =
   { base: 'open.chain.v1',           worldTied: false },  // the opening chain, Ather to Nyx (BETA M73, 11-23): the note read, the first death, Morel's ping once
   { base: 'open.morelintro.v1',      worldTied: false },  // M155: the player was told who Morel is, once ever (shared/morel-intro.ts)
   { base: 'open.repair.v1',          worldTied: false },  // Kael's ship repair (BETA M108, 11-23): the cell housing quoted at Hollis, stage 1 paid + fitted
+  { base: 'open.arrows.v1',          worldTied: false },  // M145: the first-time arrows armed + done (shared/first-arrow.ts): a done arrow never comes back
 ]
 
 // ── THE GARDEN: what the account's plot owns, shared by every keeper on it (M12 step 1, 2026-11-17) ───────────
