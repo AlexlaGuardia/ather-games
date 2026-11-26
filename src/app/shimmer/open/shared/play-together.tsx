@@ -154,10 +154,11 @@ const Swatch = ({ c }: { c: string }) => <span aria-hidden className="inline-blo
 export function ChordTab() {
   useSocialGen()
   const { presence, account } = socialBox
-  const { party, start, join, leave } = useParty()
+  const { party, ready, start, join, leave } = useParty()
   const { members: mates } = useChordBox()
   const signedIn = !!account?.session?.username
   const fr = useFriends(true, signedIn)
+  if (!ready) return null   // the code is read a tick after mount: never flash 'Start a chord' at a keeper who is in one
   if (!presence || !account) return <div className="text-[12px] hk-faint italic" data-panel="chord">The chord is not reachable here.</div>
   const invite = async (f: { user_id: string; username: string }): Promise<string> => {
     const code = party ?? start()
