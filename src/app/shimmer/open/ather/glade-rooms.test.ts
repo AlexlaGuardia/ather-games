@@ -104,7 +104,7 @@ ok(problems([s0, { id: 'pq3', k: 'filler:sign', ...at(0, 0.6), q: 0, s: 1 }]).so
   no([s0, pc('goldwood_table', bench, 20)], /^Carpentry room stands in a solid piece$/, 'a table in the bench')
   no([s0, ...floor, pc('goldwood_table', bench, 20)], /^Carpentry room stands in a solid piece$/, 'a table in the bench, on the slabs')
   no([s0, ...floor, pc('goldwood_table', spot, 20)], /^Carpentry room has a bench nobody can stand at$/, 'a table on the use spot, on the slabs')
-  ok(FLOOR_UNDER >= Math.max(...Object.values(FURNITURE).filter(f => f.slab).map(f => f.h)) * SCALE_MAX && FLOOR_UNDER < Math.min(...sceneryBoxes(sceneryPlaced([s0], () => 3)).map(b => b.y1 - b.y0 - 0.5)) / 2, `FLOOR_UNDER ${FLOOR_UNDER}: the thickest floor, well under the bench`)
+  ok(FLOOR_UNDER >= Math.max(...Object.values(FURNITURE).filter(f => f.slab && !f.shape).map(f => f.h)) * SCALE_MAX && FLOOR_UNDER < Math.min(...sceneryBoxes(sceneryPlaced([s0], () => 3)).map(b => b.y1 - b.y0 - 0.5)) / 2, `FLOOR_UNDER ${FLOOR_UNDER}: the thickest floor, well under the bench`)
   // a room turned off the square (Alex's is at 45 degrees): its bench's boxes are a chain, fatter than the bench; it still publishes
   for (const q of [0.5, 1.5, 0.25]) { const t = { ...s0, q }, ta = (u: number, v: number) => fromRect(roomPad(t)!, u, v)
     ok(problems([t]).length === 0, `turned ${q}: publishes (${problems([t])})`)

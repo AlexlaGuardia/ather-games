@@ -78,6 +78,7 @@ export interface PieceDef {
    *  pane 0.9 m at 1.6 m, shutter leaves 0.5 x 1.2 m, half wall = the railing's 1.0 m. Each stands on the 4.8 m wall panel grid. */
   shape?: 'door' | 'window' | 'round' | 'shutters' | 'arch' | 'doorway' | 'half' | 'end' | 'corner' | 'stair' | 'railing' | 'fence' | 'gate' | 'ramp' | 'ladder'
     | 'upper' | 'ceiling' | 'beam' | 'flat' | 'gable' | 'slope' | 'gable_end' | 'chimney'
+    | 'found' | 'steps' | 'deck' | 'porch' | 'balcony' | 'column'
   /** BETA M169 s4: a roof's skin, the keeper's choice (Magii 246c2cc / 9c9e688): fired clay tile or living turf */
   skin?: 'tile' | 'turf'
   /** BETA M169 s3: a stair's railings: on its left ('l'), its right ('r') or both ('lr'), as seen climbing it. Absent = none. */
@@ -149,6 +150,9 @@ export const FURNITURE: Readonly<Record<string, PieceDef>> = {
   half_wall: { name: 'Half wall', blurb: 'A metre of goldwood wall, waist high.', recipe: [{ id: 'goldwood_plank', n: 1 }], w: 1, d: 0.3, h: 1.0, solid: true, wood: 'goldwood', shape: 'half', build: 'Openings + trim' },
   wall_end: { name: 'Wall end', blurb: 'A square goldwood post that finishes the end of a wall.', recipe: [{ id: 'goldwood_plank', n: 1 }], w: 0.4, d: 0.4, h: 4.88, solid: true, wood: 'goldwood', shape: 'end', build: 'Openings + trim' },
   wall_corner: { name: 'Wall corner', blurb: 'Two goldwood wall pieces joined at a right angle.', recipe: [{ id: 'goldwood_plank', n: 4 }], w: 1, d: 1, h: 4.8, solid: true, wood: 'goldwood', shape: 'corner', build: 'Openings + trim' },
+  // BETA M169 s5: columns (plot-cols' 0.6 x 0.6 x 4.88 m: the cap 0.08 m proud of the wall top), here so the plan catalog keeps its order
+  column: { name: 'Column', blurb: 'A square goldwood column, as tall as a wall, to hold up what rests on it.', recipe: [{ id: 'goldwood_plank', n: 3 }], w: 0.6, d: 0.6, h: 4.88, solid: true, wood: 'goldwood', shape: 'column', build: 'Columns' },
+  stone_column: { name: 'Stone column', blurb: 'A square column of cut stone, as tall as a wall.', recipe: [{ id: 'stone_brick', n: 4 }], w: 0.6, d: 0.6, h: 4.88, solid: true, wood: 'stone', shape: 'column', build: 'Columns' },
   // BETA M169 s3 (Alex 11-25: "stairs with optional railings, fences and railings that match the stairs", ramps): a straight stair
   //    climbs the 4.8 m wall top in 12 steps of 0.4 m rise and 0.5 m tread (under the walker's 0.5 m step; NOTES: 0.5 m deep, 2 m
   //    wide, 6 m long), climbing toward its back (local -z). An upper floor (s4) laid on the wall tops is one slab's step above it.
@@ -183,6 +187,20 @@ export const FURNITURE: Readonly<Record<string, PieceDef>> = {
   roof_flat_tile: { name: 'Flat roof, clay tile', blurb: 'Four square metres of flat roof in fired clay tiles.', recipe: [{ id: 'goldwood_plank', n: 1 }, { id: 'stone_brick', n: 3 }], w: 2, d: 2, h: 5.02, solid: true, wood: 'goldwood', shape: 'flat', skin: 'tile', build: 'Roofs + ceilings' },
   roof_flat_turf: { name: 'Flat roof, turf', blurb: 'Four square metres of flat roof under living turf.', recipe: [{ id: 'goldwood_plank', n: 1 }, { id: 'goldwood_bark', n: 3 }], w: 2, d: 2, h: 5.02, solid: true, wood: 'goldwood', shape: 'flat', skin: 'turf', build: 'Roofs + ceilings' },
   gable_end: { name: 'Gable end', blurb: 'The goldwood triangle that closes the end of a pitched roof.', recipe: [{ id: 'goldwood_plank', n: 3 }], w: 4, d: 0.3, h: 6.24, solid: true, wood: 'goldwood', shape: 'gable_end', build: 'Roofs + ceilings' },
+  // BETA M169 s5 (Alex 11-25: foundations, decks, porch, balcony, columns; sizes = Magii 246c2cc's sheets, the build's plot-found /
+  //    plot-decks / plot-cols): a foundation is the build's stone plinth as a 2 x 2 m piece (Low 0.6 m, High 1.2 m) and its door
+  //    steps (each under the walker's 0.5 m step, 0.45 m deep: plot-found doorSteps); a deck = the build's patio (0.12 m, goldwood
+  //    boards); a porch = a patio riding a Low foundation (sheet-house: flush with its floor, 0.6 m); a balcony = an upper floor's
+  //    slab reaching 1 m out, railed on three sides, on the wall tops (UP / RAISED); a column 0.6 x 0.6 x 4.88 m (plot-cols). The
+  //    floor-like ones are SLABS: walls, doors and furniture set on them ride up (rooms.ts slabLift). Costs + colours = Jin's
+  //    placeholders until s6's finishes. 'Trim' is not on Magii's sheets: CANON_GAPS, not built. Names = plain nouns; blurbs = @lark.
+  foundation_low: { name: 'Low foundation', blurb: 'Four square metres of stone plinth, knee high, to lift a floor off the ground.', recipe: [{ id: 'stone_brick', n: 4 }], w: 2, d: 2, h: 0.6, solid: true, wood: 'stone', slab: true, shape: 'found', build: 'Foundations + decks' },
+  foundation_high: { name: 'High foundation', blurb: 'Four square metres of stone plinth, twice as high as a low one.', recipe: [{ id: 'stone_brick', n: 8 }], w: 2, d: 2, h: 1.2, solid: true, wood: 'stone', slab: true, shape: 'found', build: 'Foundations + decks' },
+  found_step: { name: 'Stone step', blurb: 'One stone step, two metres wide, up onto a low foundation.', recipe: [{ id: 'stone_brick', n: 1 }], w: 2, d: 0.45, h: 0.3, solid: true, wood: 'stone', shape: 'steps', build: 'Foundations + decks' },
+  found_steps: { name: 'Stone steps', blurb: 'Two stone steps, two metres wide, up onto a high foundation.', recipe: [{ id: 'stone_brick', n: 2 }], w: 2, d: 0.9, h: 0.8, solid: true, wood: 'stone', shape: 'steps', build: 'Foundations + decks' },
+  deck: { name: 'Deck', blurb: 'Eight square metres of goldwood boards, a step up off the ground.', recipe: [{ id: 'goldwood_plank', n: 6 }], w: 4, d: 2, h: 0.12, solid: true, wood: 'goldwood', slab: true, shape: 'deck', build: 'Foundations + decks' },
+  porch: { name: 'Porch', blurb: 'Goldwood boards on a low stone foundation, level with a raised floor.', recipe: [{ id: 'goldwood_plank', n: 6 }, { id: 'stone_brick', n: 8 }], w: 4, d: 2, h: 0.6, solid: true, wood: 'goldwood', slab: true, shape: 'porch', build: 'Foundations + decks' },
+  balcony: { name: 'Balcony', blurb: 'Two metres of goldwood floor reaching out from the top of a wall, railed round.', recipe: [{ id: 'goldwood_plank', n: 5 }], w: 2, d: 1, h: 6.0, solid: true, wood: 'goldwood', shape: 'balcony', build: 'Foundations + decks' },
   chimney: { name: 'Chimney', blurb: 'A brick stack from the ground up past the roof.', recipe: [{ id: 'stone_brick', n: 8 }], w: 0.9, d: 0.9, h: 7.2, solid: true, wood: 'stone', tint: '#a4573f', shape: 'chimney', build: 'Chimney' },
   lift: { name: 'Lift', blurb: 'A goldwood car on cords, a stone weight hung beside it. Pull the cord for a floor and up or down you go.', recipe: [{ id: 'goldwood_plank', n: 8 }, { id: 'stone_brick', n: 4 }], w: 1.0, d: 1.0, h: 2.0, solid: false, wood: 'goldwood', shaft: true },
   // ── UNIQUE pieces, Nyx-side (Alex 11-17: "unique pieces are SOLD FOR MARKS by the carpenter + other Nyx-side shops";

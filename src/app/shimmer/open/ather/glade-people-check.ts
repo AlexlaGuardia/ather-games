@@ -103,8 +103,9 @@ const roomSolids = (r: RoomPad, layer: GladeLayer, land: Ground): Box[] => scene
 /** M183: or a little further out (to 1.6 m, well inside E's reach): a room turned off the square has its bench drawn as a chain of
  *  axis boxes, fatter than the bench, and at 45 degrees they reached the 1.2 m spot by a centimetre, so a turned room never published */
 const roomSpots = (r: RoomPad): P[] => [1.2, 1.4, 1.6].map(m => fromRect(r, 0, r.d / 2 - BENCH_IN - m))
-/** M183: the thickest floor the catalog lays, at the largest scale: a piece no higher than this over the bench's floor lies UNDER it */
-export const FLOOR_UNDER = Math.max(...Object.values(FURNITURE).filter(f => f.slab).map(f => f.h)) * SCALE_MAX + 0.005
+/** M183: the thickest floor the catalog lays, at the largest scale: a piece no higher than this over the bench's floor lies UNDER it.
+ *  M169 s5: the floor SLABS only (no shape): a foundation / porch is a slab too (things ride up on it) but 0.6-1.2 m is no floor */
+export const FLOOR_UNDER = Math.max(...Object.values(FURNITURE).filter(f => f.slab && !f.shape).map(f => f.h)) * SCALE_MAX + 0.005
 /** bench box b (sceneryBoxes sinks every box 0.5 m: b.y0 + 0.5 is the floor it stands on) */
 const underBench = (b: Box, q: Box) => q.y1 <= b.y0 + 0.5 + FLOOR_UNDER
 /** s1c-2: may the houses stand there? The same shape of answer as peopleProblems. A house nobody moved is only asked whether its door can

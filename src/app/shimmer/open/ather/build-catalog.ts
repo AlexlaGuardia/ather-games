@@ -40,7 +40,17 @@ export const UP = { top: 4.8, floorT: 0.2, ceilT: 0.06, joist: 0.14, beam: 0.3, 
 export const SKIN = { tile: '#5b7ea6', tileEdge: '#3f5a7a', turf: '#6e9b4c', turfEdge: '#6b4f33' } as const
 /** M169 s4: the pieces that stand on the wall tops, not on the floor: they clash only with each other (rooms.ts canPlacePiece) and
  *  never with a wall, a table or a keeper's head under them */
-export const RAISED: ReadonlySet<string> = new Set(['upper', 'ceiling', 'beam', 'gable', 'slope', 'flat', 'gable_end'])
+export const RAISED: ReadonlySet<string> = new Set(['upper', 'ceiling', 'beam', 'gable', 'slope', 'flat', 'gable_end', 'balcony'])
+/** M169 s5: foundations + decks (Magii 246c2cc sheets; the build's plot-found STEP_DEPTH 0.45, plot-decks DECK_T 0.12 / DECK_SLAB_T
+ *  0.2): a plinth's footing band + top edge, a deck's boards (`board` wide, a `gap` between), a step's depth, a column's base + cap */
+export const FOUND = { stepD: 0.45, footH: 0.18, edge: 0.06, board: 0.24, gap: 0.02, rim: 0.06, porchT: 0.12, colBase: 0.2, colCap: 0.16 } as const
+/** M169 s5: the steps of a stone-steps piece: n = its depth / 0.45 m, step k (1 = the front, lowest) tops at k / n of its height
+ *  (low: one step at 0.3 m up a 0.6 m plinth; high: 0.4 + 0.8 up 1.2 m: the build's doorSteps rise, each under the 0.5 m step) */
+export const stepCount = (f: Pick<PieceDef, 'd'>) => Math.max(1, Math.round(f.d / FOUND.stepD))
+/** M169 s5: a balcony's floor top (= an upper floor's) and its rail sides: the front (+z) and both ends; its back (-z) is open to
+ *  the house it reaches out of */
+const balconyRails = (f: Pick<PieceDef, 'w' | 'd'>) => { const t = RAIL.post, y = UP.top + UP.floorT
+  return [{ x: 0, z: f.d / 2 - t / 2, w: f.w, d: t, y }, ...[-1, 1].map(k => ({ x: k * (f.w / 2 - t / 2), z: 0, w: t, d: f.d, y }))] }
 export const raised = (f: PieceDef | undefined) => !!f?.shape && RAISED.has(f.shape)
 /** the courses of a sloped roof: `n` strips of width `run` from the eave (`z0`, local, moving by `dir`) up, each `r` higher */
 export function courses(f: Pick<PieceDef, 'd' | 'shape'>): { z: number; run: number; bottom: number; top: number }[] {
@@ -151,6 +161,31 @@ function cutBoxes(f: PieceDef, open: boolean): PieceBox[] {
     case 'chimney': {   // M169 s4: a brick stack from the ground past a gable's ridge, a wider cap, a dark flue mouth
       out.push(bx(0, h / 2, 0, w, h, d, c), bx(0, 0.09, 0, w + 0.04, 0.18, d + 0.04, tr), bx(0, h - 0.12, 0, w + 0.12, 0.24, d + 0.12, tr), bx(0, h + 0.002, 0, w - 0.3, 0.004, d - 0.3, '#2a2420'))
       return out }
+    case 'found': {   // M169 s5: a stone plinth, a darker footing band, a pale top edge, a course line every 0.3 m
+      const sc = '#8a8274'; out.push(bx(0, h / 2, 0, w, h, d, c), bx(0, FOUND.footH / 2, 0, w + 0.04, FOUND.footH, d + 0.04, sc), bx(0, h - FOUND.edge / 2, 0, w + 0.03, FOUND.edge, d + 0.03, shade(c, 1.08)))
+      for (let y = 0.3; y < h - 0.1; y += 0.3) if (y > FOUND.footH) out.push(bx(0, y, 0, w + 0.008, 0.02, d + 0.008, sc))
+      return out }
+    case 'steps': {   // M169 s5: stone steps climbing toward -z (the plinth behind), a darker nosing on each
+      const n = stepCount(f), sd = d / n
+      for (let k = 1; k <= n; k++) { const z = stepZ(f, k, sd), top = k * h / n; out.push(bx(0, top / 2, z, w, top, sd, c), bx(0, top - 0.02, z + sd / 2 - 0.03, w, 0.04, 0.06, '#8a8274')) }
+      return out }
+    case 'deck': case 'porch': {   // M169 s5: goldwood boards across, a rim round them; a porch rides a stone plinth (a footing under it)
+      const base = f.shape === 'porch' ? h - FOUND.porchT : 0, bt = h - base, n = Math.round(d / FOUND.board)
+      if (base > 0) { const st = WOOD_COLOR.stone; out.push(bx(0, base / 2, 0, w, base, d, st), bx(0, FOUND.footH / 2, 0, w + 0.04, FOUND.footH, d + 0.04, '#8a8274')) }
+      out.push(bx(0, base + bt / 2 - 0.01, 0, w, bt - 0.02, d, tr))   // the joists' shade under the boards
+      for (let k = 0; k < n; k++) out.push(bx(0, h - 0.015, -d / 2 + (k + 0.5) * d / n, w - 2 * FOUND.rim, 0.03, d / n - FOUND.gap, c))
+      ;[-1, 1].forEach(k => out.push(bx(k * (w / 2 - FOUND.rim / 2), h - 0.015, 0, FOUND.rim, 0.03, d, shade(c, 0.85))))
+      return out }
+    case 'balcony': {   // M169 s5: an upper floor's slab on the wall tops, a railing (posts, handrail, balusters) on the front + ends
+      const T = UP.top, top = T + UP.floorT; out.push(bx(0, T + UP.floorT / 2, 0, w, UP.floorT, d, c), bx(0, T + 0.03, 0, w + 0.02, 0.06, d + 0.02, tr))
+      for (const r of balconyRails(f)) { const along = r.w > r.d, L = along ? r.w : r.d, n = Math.max(1, Math.round(L))
+        for (let k = 0; k <= n; k++) { const a = -L / 2 + RAIL.post / 2 + k * (L - RAIL.post) / n; out.push(bx(along ? a : r.x, top + RAIL.h / 2, along ? r.z : a, RAIL.post, RAIL.h, RAIL.post, c)) }
+        out.push(bx(r.x, top + RAIL.h - RAIL.handT / 2, r.z, along ? L : RAIL.hand, RAIL.handT, along ? RAIL.hand : L, tr))
+        for (let b = 1; b < n * 4; b++) { if (b % 4 === 0) continue; const a = -L / 2 + RAIL.post / 2 + b * (L - RAIL.post) / (n * 4); out.push(bx(along ? a : r.x, top + (RAIL.low + RAIL.h) / 2, along ? r.z : a, RAIL.bal, RAIL.h - RAIL.low, RAIL.bal, c)) } }
+      return out }
+    case 'column': {   // M169 s5: a square shaft, a wider base and cap (its cap 0.08 m proud of the wall top, plot-cols)
+      out.push(bx(0, h / 2, 0, w - 0.08, h, d - 0.08, c), bx(0, FOUND.colBase / 2, 0, w, FOUND.colBase, d, tr), bx(0, h - FOUND.colCap / 2, 0, w + 0.04, FOUND.colCap, d + 0.04, tr))
+      return out }
     case 'corner': {   // an L in a 1 x 1 m square: one arm along its back (local -z), one down its left (local -x), meeting in the corner
       const t = 0.3, H = h
       for (const [x, z, aw, ad] of [[0, -w / 2 + t / 2, w, t], [-w / 2 + t / 2, t / 2, t, d - t]] as const)
@@ -183,6 +218,9 @@ export function buildSolids(f: PieceDef, open = false): SolidPart[] | null {
     case 'flat': return [{ x: 0, z: 0, w: f.w, d: f.d, y: UP.top, h: UP.top + UP.flatT }]
     case 'gable': case 'slope': return courses(f).map(t => ({ x: 0, z: t.z, w: f.w, d: t.run, y: t.top - UP.under, h: t.top }))   // each course a step
     case 'gable_end': return gableCols(f).map(g => ({ x: g.x, z: 0, w: g.w, d: f.d, y: UP.top, h: g.top }))
+    case 'steps': { const n = stepCount(f), sd = f.d / n   // M169 s5: each step a column from the floor, under the walker's step
+      return Array.from({ length: n }, (_, i) => ({ x: 0, z: stepZ(f, i + 1, sd), w: f.w, d: sd, h: (i + 1) * f.h / n })) }
+    case 'balcony': return [{ x: 0, z: 0, w: f.w, d: f.d, y: UP.top, h: UP.top + UP.floorT }, ...balconyRails(f).map(r => ({ x: r.x, z: r.z, w: r.w, d: r.d, y: UP.top, h: r.y + RAIL.h }))]
     case 'corner': return [{ x: 0, z: -f.w / 2 + 0.15, w: f.w, d: 0.3, h: f.h }, { x: -f.w / 2 + 0.15, z: 0.15, w: 0.3, d: f.d - 0.3, h: f.h }]
     default: return [{ x: 0, z: 0, w: f.w, d: f.d, h: f.h }]
   }
