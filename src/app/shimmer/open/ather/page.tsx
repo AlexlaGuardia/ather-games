@@ -24,6 +24,9 @@ import { usePartyBrew } from './party-brew-net'   // M57 s3b
 import { BrewingPanel } from './brewing-panel'
 import { FURNITURE } from './furniture'
 import { AnemonyxIfHere, anemonyxPick, anemonyxHere, meetToday } from './anemonyx-view'   // M76 s2
+import { Chordstone } from './chordstone-view'   // M188 s2
+import { ChordstonePanel } from './chordstone-panel'
+import { CHORDSTONE, CHORDSTONE_H, CHORDSTONE_R } from './chordstone'
 import { useBook, getPots } from './spirit-panels'
 import { seenCount } from './grimoire-book'
 import type { AlcStation } from './alchemy-set'
@@ -234,8 +237,8 @@ type Spawn = { x: number; z: number; yaw: number }
 /** the Wilds' safe ground round the arrival: where the Glade's green stood until M67 s1b-2 (30.75 m north of Greg's waymark) */
 const WILDS_SAFE = { x: GREG_WAYMARK.x, z: GREG_WAYMARK.z - 30.75, r: 50 }
 const gregAt = gregSpot()   // at load only (gregLive's first frame); M153 s1c-1: anything later asks gregSpot(). BETA M30 part 2: where Gregory sits (Moonwell Glade); the plot keeps only its old anchor numbers (plot.ts GREG)
-type Panel = null | { kind: 'map'; view: 'ather' | 'athernyx'; travel: boolean } | { kind: 'greg' } | { kind: 'talk'; step: number } | { kind: 'pack'; tab: PackTab } | { kind: 'cluster' } | { kind: 'work'; near: WorkNear } | { kind: 'folk'; s: Settlement } | { kind: 'fennel'; page: number } | { kind: 'brew'; station: AlcStation } | { kind: 'friend'; c: FriendCursor } | { kind: 'gfennel'; c: FennelCursor } | { kind: 'idlemog'; c: { id: string; screen: IdleScreen } } | { kind: 'spirit'; c: SpiritTalkState } | { kind: 'shop'; id: string } | { kind: 'settler'; c: SettlerCursor | AngelicaCursor } | { kind: 'adesk' }
-type Near = null | { kind: 'gate' } | { kind: 'greg' } | { kind: 'friend'; f: GardenFriend } | { kind: 'fennel' } | { kind: 'gfennel' } | { kind: 'idlemog'; id: string; name: string } | { kind: 'anemonyx' } | { kind: 'work'; near: WorkNear } | { kind: 'waymark'; w: Waymark; own: boolean } | { kind: 'folk'; s: Settlement; id?: string } | { kind: 'spirit'; id: string; name: string } | { kind: 'zone'; u: ZoneUse } | { kind: 'settler'; id: SettlerId; name: string } | { kind: 'adesk' }
+type Panel = null | { kind: 'map'; view: 'ather' | 'athernyx'; travel: boolean } | { kind: 'greg' } | { kind: 'talk'; step: number } | { kind: 'pack'; tab: PackTab } | { kind: 'cluster' } | { kind: 'work'; near: WorkNear } | { kind: 'folk'; s: Settlement } | { kind: 'fennel'; page: number } | { kind: 'brew'; station: AlcStation } | { kind: 'friend'; c: FriendCursor } | { kind: 'gfennel'; c: FennelCursor } | { kind: 'idlemog'; c: { id: string; screen: IdleScreen } } | { kind: 'spirit'; c: SpiritTalkState } | { kind: 'shop'; id: string } | { kind: 'settler'; c: SettlerCursor | AngelicaCursor } | { kind: 'adesk' } | { kind: 'chordstone' }
+type Near = null | { kind: 'gate' } | { kind: 'greg' } | { kind: 'friend'; f: GardenFriend } | { kind: 'fennel' } | { kind: 'gfennel' } | { kind: 'idlemog'; id: string; name: string } | { kind: 'anemonyx' } | { kind: 'work'; near: WorkNear } | { kind: 'waymark'; w: Waymark; own: boolean } | { kind: 'folk'; s: Settlement; id?: string } | { kind: 'spirit'; id: string; name: string } | { kind: 'zone'; u: ZoneUse } | { kind: 'settler'; id: SettlerId; name: string } | { kind: 'adesk' } | { kind: 'chordstone' }
 
 // ★ held until the save owner is known (shared/owner-ready.tsx: the 11-18 'rooms vanished on refresh' fix)
 /** M61: a mate's island alone on the Green (the frame nobody is linked into) */
@@ -952,7 +955,7 @@ function AtherSliceGame() {
       n = aimPick(cands, eye, dir, from)
     }
     else if (zone.kind === 'plot') {
-      const cands: Pickable<Near>[] = [cap(GATE.x, GATE.z, 1.4, 3.2, { kind: 'gate' })]
+      const cands: Pickable<Near>[] = [cap(GATE.x, GATE.z, 1.4, 3.2, { kind: 'gate' }), cap(CHORDSTONE.x, CHORDSTONE.z, CHORDSTONE_R, CHORDSTONE_H + 0.3, { kind: 'chordstone' })]   // M188 s2
       if (fennelRef.current) cands.push(cap(fennelRef.current.x, fennelRef.current.z, 0.45, 1.1, { kind: 'fennel' }))   // M22
       if (!visitNow) for (const m of idleDrawn) cands.push(cap(m.x, m.z, 0.4, MOGLIN_HEIGHT.chibi + 0.1, { kind: 'idlemog', id: m.id, name: m.name }))   // P1: E on a recruit waiting for a room
       // M109 s1: a drawn 3D garden spirit (owner + ?spirits=3d only: nothing is live otherwise), a capsule round her as she stands
@@ -993,6 +996,7 @@ function AtherSliceGame() {
       const p = fadeRef.current ? null
         : tourRef.current?.talk ? null   // M32: Greg is talking at a stop; E answers him, nothing else
         : n?.kind === 'gate' ? 'E · the gate (fold map)'
+        : n?.kind === 'chordstone' ? 'E · the Chordstone'   // M188 s2
         : n?.kind === 'greg' ? 'E · Gregory (buy ground)'
         : n?.kind === 'gfennel' ? moglinPrompt('fennel') : n?.kind === 'fennel' ? 'E · Fennel'
         : n?.kind === 'idlemog' || n?.kind === 'spirit' || n?.kind === 'settler' ? `E · ${n.name}`
@@ -1751,6 +1755,7 @@ function AtherSliceGame() {
         else if (n.kind === 'gfennel') gFennel.open()   // M68 s3b
         else if (n.kind === 'settler') openSettler(n.id)   // M70 s1
         else if (n.kind === 'adesk') setPanel({ kind: 'adesk' })   // M70 s3
+        else if (n.kind === 'chordstone') setPanel({ kind: 'chordstone' })   // M188 s2
         else if (n.kind === 'idlemog') setPanel({ kind: 'idlemog', c: { id: n.id, screen: 'hello' } })   // P1: the go-home talk
         else if (n.kind === 'spirit') setPanel({ kind: 'spirit', c: { id: n.id, screen: 'talk' } })   // M109 s1
         else if (n.kind === 'anemonyx') meetToday(clock())   // M76 s2
@@ -1826,6 +1831,7 @@ function AtherSliceGame() {
         {zone.kind === 'plot' && <BuildPointer />}
         <VoxelDayNight gloomAt={zone.kind === 'wilds' && ww ? (x, z) => ww.canopyAt(x, z) * 0.7 : undefined} />
         {zone.kind === 'plot' && <PlotScene owned={owned} pages={pagesNow} linked={cl.frame.linked} />}
+        {zone.kind === 'plot' && <Chordstone />}   {/* M188 s2 */}
         {zone.kind === 'plot' && <AnemonyxIfHere clock={clock} />}
         {zone.kind === 'plot' && <WorkshopScene pose={poseRef} owned={owned} stowed={stowedNow} />}
         {zone.kind === 'plot' && <ClusterScene frame={cl.frame} />}
@@ -1940,6 +1946,7 @@ function AtherSliceGame() {
       {panel?.kind === 'cluster' && <ClusterPanel c={cl} onClose={() => setPanel(null)} />}
       {panel?.kind === 'shop' && <ShopPanel id={panel.id} ledger={ledger} setLedger={setLedger} onClose={() => setPanel(null)} isTouch={isTouch} />}   {/* M114 s2: a Shop zone */}
       {panel?.kind === 'brew' && <BrewingPanel station={panel.station} onClose={() => setPanel(null)} />}
+      {panel?.kind === 'chordstone' && <ChordstonePanel onClose={() => setPanel(null)} />}   {/* M188 s2 */}
       {panel?.kind === 'adesk' && <AngelicaDeskPanel onClose={() => setPanel(null)} say={s => hudSay(s, 'item')} onBrewed={() => { const t = loadTut(), t1 = brewed(t); if (t1 !== t) setTut(t1) }} />}   {/* M70 s3 */}
       {panel?.kind === 'work' && !visitNow && <WorkshopPanel near={panel.near} owned={owned} onClose={() => setPanel(null)} />}
       {zone.kind === 'plot' && <PlacingBar owned={owned} />}

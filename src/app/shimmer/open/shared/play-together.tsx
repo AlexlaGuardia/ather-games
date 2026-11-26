@@ -151,7 +151,7 @@ const Swatch = ({ c }: { c: string }) => <span aria-hidden className="inline-blo
 /** ★ BETA M188 s1: Options › CHORD. Who is in your chord (name + their colour), a chord invite waiting on you (Join / Not now),
  *  start / join by code / copy the link / leave, who is in your world, and your friends (invite one into the chord). Light on
  *  purpose: the Chordstone at the Green's gate (s2) will do the heavy lifting. Reads the page's <OpenSocial/> (one socket). */
-export function ChordTab() {
+export function ChordTab({ stone = false }: { stone?: boolean } = {}) {
   useSocialGen()
   const { presence, account } = socialBox
   const { party, ready, start, join, leave } = useParty()
@@ -166,8 +166,17 @@ export function ChordTab() {
     return r.ok ? 'invited' : r.reason === 'offline' ? 'offline' : r.reason === 'unverified' ? 'sign in again' : 'not connected'
   }
   const inc = presence.incoming
+  // M188 s2: on the Chordstone's centre card the friends come FIRST (the card is 'friends online'); the tab keeps its order
+  const online = fr.friends.filter(f => f.status === 'accepted' && f.online).length
+  const friends = (
+    <>
+      <div className={label} style={{ margin: stone ? '0 0 0' : '14px 0 0' }}>Friends</div>
+      <FriendsTab signedIn={signedIn} friends={fr.friends} loaded={fr.loaded} act={fr.act} onInvite={invite} inParty={!!party} noun="chord" />
+    </>
+  )
   return (
-    <div className="hk-ink" style={{ ...hearthBody }} data-panel="chord">
+    <div className="hk-ink" style={{ ...hearthBody }} data-panel={stone ? 'chordstone-friends' : 'chord'}>
+      {stone && <div className="hk-title text-[16px] hk-ember" data-friends-online={online} style={{ marginBottom: 6 }}>Friends online · {online}</div>}
       {inc && (
         <div data-chord-invite className="rounded-[10px] px-2.5 py-2 mb-2" style={{ background: 'rgba(200,100,42,.12)', boxShadow: 'inset 0 0 0 1.5px #c8642a' }}>
           <div className="text-[13px] font-extrabold">{inc.from_name} asks you into their chord</div>
@@ -179,9 +188,9 @@ export function ChordTab() {
         </div>
       )}
       <Account account={account} />
+      {stone && friends}
       <PartyTab party={party} start={() => { start() }} join={join} leave={leave} mates={mates} />
-      <div className={label} style={{ margin: '14px 0 0' }}>Friends</div>
-      <FriendsTab signedIn={signedIn} friends={fr.friends} loaded={fr.loaded} act={fr.act} onInvite={invite} inParty={!!party} noun="chord" />
+      {!stone && friends}
     </div>
   )
 }

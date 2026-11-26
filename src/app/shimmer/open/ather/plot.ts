@@ -97,6 +97,10 @@ export const THRESHOLD = { ...TH, yaw: Math.atan2(-(GATE.x - TH.x), -(GATE.z - T
 export const PATH_START = { x: -GRID_HALF + 10, z: GRID_HALF - 10 }
 /** The gate's ring turns to face the threshold (rotation.y; the ring's face is +z unturned). */
 export const GATE_FACE = Math.atan2(THRESHOLD.x - GATE.x, THRESHOLD.z - GATE.z)
+/** BETA M188 s2: the Chordstone grows out of the gate's side (chordstone.ts draws + reads it; here for the walker's box,
+ *  without an import loop). The ring faces (sin F, cos F); its side runs (cos F, -sin F). */
+export const CHORDSTONE_OFF = 3.4
+export const CHORDSTONE = { x: GATE.x + Math.cos(GATE_FACE) * CHORDSTONE_OFF, z: GATE.z - Math.sin(GATE_FACE) * CHORDSTONE_OFF }
 /** ★ A PLOT ANCHOR ONLY since BETA M30 part 2 (canon 44bc0c1: Greg is NOT on the plot; he lives at Moonwell Glade, moonwell-glade.ts
  *  gregSpot). The numbers are kept EXACTLY because the planning TABLE, the starting rooms, the ground pad and the collision
  *  box are anchored to them, and a keeper's saved plot must not move. Nothing is drawn or talked to here any more. */
@@ -192,6 +196,8 @@ export function mistWalls(owned: ReadonlySet<string>): Box[] {
 const FIXED: Box[] = [
   (() => { const y0 = plotHeightAt(GATE.x, GATE.z) - 0.4; return { x0: GATE.x - 1.6, x1: GATE.x + 1.6, z0: GATE.z - 1.6, z1: GATE.z + 1.6, y0, y1: y0 + 0.75 } })(),
   (() => { const y0 = plotHeightAt(GREG.x, GREG.z); return { x0: GREG.x - 0.4, x1: GREG.x + 0.4, z0: GREG.z - 0.4, z1: GREG.z + 0.4, y0, y1: y0 + 1.8 } })(),
+  // M188 s2: the Chordstone's pedestal (on the Green's square, GROUND_Y like the gate's drawn plinth)
+  { x0: CHORDSTONE.x - 0.55, x1: CHORDSTONE.x + 0.55, z0: CHORDSTONE.z - 0.55, z1: CHORDSTONE.z + 0.55, y0: GROUND_Y - 0.2, y1: GROUND_Y + 1.3 },
 ]
 
 /** `walls` replaces the mist walls (a linked plot's lane cuts them, ather/cluster.ts); `extra` adds ground beyond the
