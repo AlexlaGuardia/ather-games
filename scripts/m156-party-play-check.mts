@@ -102,7 +102,7 @@ try {
   const idA = await myId(a), idN = await myId(n)
   ok(await zone(n, 'glade'), `setup: N is in the Glade (${await ev(n, '__ather', 'zone')}), tutorial open`)
   if (only.includes('V')) {
-    ok(await panel(a), 'V1 A opened Play together')
+    ok(await panel(a), 'V1 A opened Options › Chord')
     const row = `[data-mate="${idN}"]`
     ok(await poll(async () => !!(await a.$(row)), 60000), 'V1 N is in the party list'); await sleep(2500)
     const said = await a.evaluate((s: string) => document.querySelector(s)?.textContent ?? '', row), btn = !!(await a.$(`${row} [data-act="visit-plot"]`))
@@ -127,7 +127,7 @@ try {
     await n.evaluate(() => (window as any).__ather.travel({ kind: 'home' })); await sleep(6000)
     ok((await ev(n, '__ather', 'zone')) === 'glade', `V3 travel home puts N in the Glade (${await ev(n, '__ather', 'zone')})`)
 
-    ok(await panel(n), 'V4 N opened Play together')
+    ok(await panel(n), 'V4 N opened Options › Chord')
     const rowA = `[data-mate="${idA}"] [data-act="visit-plot"]`
     ok(await poll(async () => !!(await n.$(rowA)), 60000), 'V4 A (folded) has a Visit button'); await n.evaluate((s: string) => document.querySelector<HTMLElement>(s)?.click(), rowA)
     ok(await poll(async () => (await ev(n, '__visit', 'hasSnap')) === true, 45000) && await zone(n, 'plot'), `V4 N is on A's plot, the snapshot landed (${await ev(n, '__visit', 'log')})`)

@@ -99,7 +99,7 @@ try {
   const b = await open('B', CODE, MINE, PHONE); await load(b)
   const idB = await b.evaluate(() => localStorage.getItem('ather:mp:id'))
   ok(JSON.stringify(((await ev(b, '__ather', 'works')) as any).pieces) === '["goldwood_stool"]', '2. B starts on its own plot (its stool)')
-  ok(await panel(b), '2. B opened Play together')
+  ok(await panel(b), '2. B opened Options › Chord')
   const row = `[data-mate="${idA}"]`
   ok(await poll(async () => !!(await b.$(`${row} [data-act="visit-plot"]`)), 60000), `2. A is listed with a Visit button (${await b.evaluate((s: string) => document.querySelector(s)?.textContent ?? 'no row', row)})`)
   ok(await clickSel(b, `${row} [data-act="visit-plot"]`), '2. B clicked Visit (real click)')
