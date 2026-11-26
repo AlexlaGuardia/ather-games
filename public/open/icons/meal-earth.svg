@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><!-- M204 placeholder: a earth meal as a mochi (Alex 11-26: wagashi look), code-drawn -->
+<defs><radialGradient id="g" cx="40%" cy="35%" r="70%"><stop offset="0" stop-color="#fffaf6"/><stop offset=".55" stop-color="#f2e2c8"/><stop offset="1" stop-color="#d8b88a"/></radialGradient></defs>
+<ellipse cx="32" cy="50" rx="22" ry="5" fill="#3a2716" opacity=".18"/>
+<path d="M10 42 C10 22 20 14 32 14 C44 14 54 22 54 42 C54 50 44 52 32 52 C20 52 10 50 10 42 Z" fill="url(#g)" stroke="#d8b88a" stroke-width="1.5"/>
+<ellipse cx="24" cy="26" rx="6" ry="3.5" fill="#fff" opacity=".7" transform="rotate(-25 24 26)"/>
+<circle cx="38" cy="22" r="1.6" fill="#fff" opacity=".6"/>
+</svg>

@@ -148,11 +148,11 @@ for (const id of SEED_IDS) { OPEN_ITEMS[id] = { name: SEED_NAME, blurb: SEED_BLU
 for (const [id, f] of Object.entries(MEATS)) { OPEN_ITEMS[id] = { name: f.name, blurb: f.blurb, icon: `/open/icons/${id.replace(/_/g, '-')}.svg`, stack: 99, kind: 'material' }; ITEM_GROUP[id] = 'cooking' }
 for (const [id, f] of Object.entries(DISHES)) { OPEN_ITEMS[id] = { name: f.name, blurb: f.blurb, icon: `/open/icons/${id.replace(/_/g, '-')}.svg`, stack: 20, kind: 'material' }; ITEM_GROUP[id] = 'cooking' }
 // M204 SPICES + SPICED MEALS (ather/infusions.ts): a spice is ground at the Crusher Table, a meal cooked at the hearth and fed
-//    to a garden spirit. Icons borrow the herb's and the roast's until their own are drawn.
+//    to a garden spirit. Spice icons borrow the herb's; meal icons = code-drawn mochi PLACEHOLDERS (Alex 11-26: wagashi look).
 const EL_WORD = { mana: 'Mana', storm: 'Storm', earth: 'Earth', water: 'Water' } as const
 for (const el of ELEMENTS) {
   OPEN_ITEMS[spiceId(el)] = { name: MEAL_UI.spiceName(EL_WORD[el]), blurb: MEAL_UI.spiceBlurb(EL_WORD[el]), icon: `/open/icons/crop-${HERB_OF[el]}.svg`, stack: 99, kind: 'material' }; ITEM_GROUP[spiceId(el)] = 'cooking'
-  OPEN_ITEMS[mealId(el)] = { name: MEAL_UI.mealName(EL_WORD[el]), blurb: MEAL_UI.mealBlurb(EL_WORD[el]), icon: '/open/icons/roast-rinn.svg', stack: 20, kind: 'material' }; ITEM_GROUP[mealId(el)] = 'cooking'
+  OPEN_ITEMS[mealId(el)] = { name: MEAL_UI.mealName(EL_WORD[el]), blurb: MEAL_UI.mealBlurb(EL_WORD[el]), icon: `/open/icons/meal-${el}.svg`, stack: 20, kind: 'material' }; ITEM_GROUP[mealId(el)] = 'cooking'
 }
 // POTIONS (2026-11-17, ather/alchemy.ts): canon's brews the open world can reach, boiled in the alchemy room's cauldron; held and
 //    clicked to drink (ather/page.tsx). Icons: tools/art/potion_icons.py.
