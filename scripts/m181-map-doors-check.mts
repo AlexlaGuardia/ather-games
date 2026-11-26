@@ -76,7 +76,7 @@ try {
       ok(await pickStop(p, 'Flip map', phone), `${k}: the map flips`); await sleep(1500)
       const doors = (await stopsOf(p)).filter(s => s !== 'Flip map')
       const txt = await p.evaluate(() => (document.querySelector('[data-panel="fold-map"]') as HTMLElement).innerText)
-      ok(doors.includes('Rune Hold') === c.hold && /open from the start/.test(txt) === c.hold && /\bDoors\b/.test(txt) === c.hold, `${k}: Athernyx doors (${doors.join(' | ') || 'none'}) Rune Hold=${c.hold}`)
+      ok(doors.includes('Rune Hold') === c.hold && /open from the start/.test(txt) === c.hold && /\bdoors\b/i.test(txt) === c.hold, `${k}: Athernyx doors (${doors.join(' | ') || 'none'}) Rune Hold=${c.hold}`)
       await shot(p, `${k}-athernyx`)
     }
     await p.browserContext().close()
