@@ -77,6 +77,8 @@ export const EDITOR_BANDS: EditorBand[] = [
     live: ["engine/skills"], legacy: ["engine/harvesting"], orphan: [] },
   { id: "spinner", file: "SpinnerEditor.tsx", band: "tool", deployable: false,
     live: [], legacy: [], orphan: [] },
+  { id: "spirits", file: "SpiritGallery.tsx", band: "live", deployable: false,
+    live: ["spirits/spirit"], legacy: [], orphan: [] },
   { id: "sprites", file: "SpriteEditor.tsx", band: "orphan", deployable: true,
     live: ["engine/spirit-index","spirits/spirit","sprites/palette","sprites/registry","sprites/sprite-data"], legacy: [], orphan: ["spirits/grimoire","sprites/variants"] },
   { id: "structures", file: "StructureBuilder.tsx", band: "orphan", deployable: false,

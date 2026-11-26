@@ -38,8 +38,9 @@ const WeatherEditor = dynamic(() => import('./editors/WeatherEditor'))
 const MeshBench = dynamic(() => import('./editors/MeshBench'))
 const DoctorPanel = dynamic(() => import('./editors/DoctorPanel'))
 const TerrainEditor = dynamic(() => import('./editors/TerrainEditor'))   // BETA M62: sculpt the real Wilds
+const SpiritGallery = dynamic(() => import('./editors/SpiritGallery'), { ssr: false })   // BETA M213: every spirit model on a dial
 
-type EditorMode = 'index' | 'sprites' | 'player' | 'map' | 'battle' | 'items' | 'nodes' | 'banner' | 'furniture' | 'structures' | 'farming' | 'exchange' | 'encounters' | 'alchemy' | 'quests' | 'spinner' | 'evolution' | 'resources' | 'tools' | 'skills' | 'moves' | 'npcs' | 'daycycle' | 'mana' | 'puppet' | 'grimoire' | 'weather' | 'doctor' | 'meshbench' | 'terrain'
+type EditorMode = 'index' | 'sprites' | 'player' | 'map' | 'battle' | 'items' | 'nodes' | 'banner' | 'furniture' | 'structures' | 'farming' | 'exchange' | 'encounters' | 'alchemy' | 'quests' | 'spinner' | 'evolution' | 'resources' | 'tools' | 'skills' | 'moves' | 'npcs' | 'daycycle' | 'mana' | 'puppet' | 'grimoire' | 'weather' | 'doctor' | 'meshbench' | 'terrain' | 'spirits'
 
 // Component map — replaces 25 conditional renders
 const EDITOR_MAP: Record<Exclude<EditorMode, 'index'>, { component: ComponentType<any>; deployable: boolean }> = {
@@ -72,6 +73,7 @@ const EDITOR_MAP: Record<Exclude<EditorMode, 'index'>, { component: ComponentTyp
   doctor:     { component: DoctorPanel,         deployable: false },
   meshbench:  { component: MeshBench,           deployable: false },
   terrain:    { component: TerrainEditor,       deployable: false },
+  spirits:    { component: SpiritGallery,       deployable: false },
 }
 
 const TAB_GROUPS: { label: string; tabs: { id: EditorMode; label: string }[]; links?: { href: string; label: string }[] }[] = [
@@ -86,6 +88,7 @@ const TAB_GROUPS: { label: string; tabs: { id: EditorMode; label: string }[]; li
   {
     label: 'Spirits',
     tabs: [
+      { id: 'spirits', label: 'Gallery' },   // M213: the models on a dial
       { id: 'grimoire', label: 'Grimoire' },
       { id: 'sprites', label: 'Art' },
       { id: 'puppet', label: 'Puppet' },

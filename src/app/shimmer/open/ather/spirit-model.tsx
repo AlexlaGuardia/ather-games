@@ -13,7 +13,7 @@
 import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import * as THREE from 'three'
 import { Canvas, useFrame } from '@react-three/fiber'
-import { useGLTF } from '@react-three/drei'
+import { OrbitControls, useGLTF } from '@react-three/drei'
 import { makeTrot, type SpiritNav, type Trot } from './spirit-trot'
 import { isFollowing, keeperAt, spiritHeld, spiritLive, subscribeFollow } from './spirit-follow'   // M109 s1
 import { spiritCheer } from './spirit-feed'   // M109 s2: fed = her happy beat
@@ -98,7 +98,9 @@ export function useFormPreview(): SpiritElement | null {
 let grad: THREE.DataTexture | null = null
 const gradTex = () => { if (grad) return grad; grad = new THREE.DataTexture(new Uint8Array([110, 110, 110, 255, 185, 185, 185, 255, 255, 255, 255, 255]), 3, 1, THREE.RGBAFormat); grad.minFilter = grad.magFilter = THREE.NearestFilter; grad.needsUpdate = true; return grad }
 
-function SpiritModel({ sp, look, nav, id, avatar, dev, meals }: { sp: Species; look: SpiritLook; nav?: SpiritNav
+function SpiritModel({ sp, look, nav, id, avatar, dev, meals, gallery, clip }: { sp: Species; look: SpiritLook; nav?: SpiritNav
+  /** M213: the /dev spirit gallery's copy: centred like the avatar, but counted by the probe, with her form fx, and playing `clip` in place */ gallery?: boolean
+  /** M213: the clip the gallery plays (walk / run in place at the clip's own speed) */ clip?: RigClip
   /** M204 s2: her bar (the pot's meals): her glow accent */ meals?: readonly unknown[]
   /** M107 ship / M123 s2 (every keeper): she can be talked to, follow, keep with the party, play at training pieces */ dev?: boolean
   /** M109: the planter's id (her follow state + the E pick are keyed on it) */ id?: string
@@ -230,6 +232,13 @@ function SpiritModel({ sp, look, nav, id, avatar, dev, meals }: { sp: Species; l
     if (parts?.glow && look.glow) { const G = look.glow; parts.glow.emissiveIntensity = G.lo + (G.hi - G.lo) * (0.5 + 0.5 * Math.sin(t * Math.PI * 2 * G.hz)) }
     if (glowRef.current && look.glow) { const G = look.glow; glowRef.current.emissiveIntensity = G.lo + (G.hi - G.lo) * (0.5 + 0.5 * Math.sin(t * Math.PI * 2 * G.hz)) }
     if (!g.current) return
+    if (!trot && rig && gallery) {   // M213: the gallery plays the clip it is told, walk / run on the spot at the clip's own pace
+      const c = clip ?? 'idle', bd = bodyRef.current, gait = c === 'walk' || c === 'run' ? c : null
+      step.v = gait ? rig.clipV[gait] * look.h : 0
+      if (bd) { bd.step(dt, c, step.v * dt, look.h, { look: 0, sniff: 0, tilt: 0 })
+        if (id) probe().rigs.set(id, { id, sp, h: look.h, yaw: 0, x: 0, y: 0, z: 0, mode: c, v: step.v, alt: 0, body: bd }) }
+      return
+    }
     if (!trot && rig) bodyRef.current?.step(dt, 'idle', 0, look.h, { look: 0, sniff: 0, tilt: 0 })
     if (trot && g.current.parent) {
       // the pose is in WORLD xz + yaw; the planter piece may be turned, so read through the parent's transform
@@ -301,7 +310,7 @@ function SpiritModel({ sp, look, nav, id, avatar, dev, meals }: { sp: Species; l
   const H = look.h
   if (rig) {
     // the panel's copy turns round her middle (the tail is half of her), the garden's round her feet
-    const pz = avatar ? rig.avatar.z : rig.pivot.z
+    const pz = avatar || gallery ? rig.avatar.z : rig.pivot.z
     return <group ref={g} name={`spirit-model-${look.name}`} userData={{ spiritModel: look.name, rigged: true }}>
       {body && <group scale={H} position={[-rig.pivot.x * H, avatar ? -(rig.avatar.y ?? 0) * H : 0, -pz * H]}><primitive object={body.root} /></group>}
     </group>
@@ -350,5 +359,21 @@ export function SpiritAvatar({ sp, look, size, meals }: { sp: Species; look: Spi
         <Suspense fallback={null}><Turntable><SpiritModel sp={sp} look={L} avatar meals={meals} /></Turntable></Suspense>
       </Canvas>
     </div>
+  )
+}
+
+/** M213 THE /dev SPIRIT GALLERY'S STAGE: the very SpiritModel the game mounts (her glb, rig, materials, form fx, glow accent), centred
+ *  on a plain floor with orbit + zoom, playing the clip it is given. `meals` = the bar that lights her accent (none = no accent). */
+export function SpiritStage({ sp, look, clip, meals }: { sp: Species; look: SpiritLook; clip: RigClip; meals?: readonly unknown[] }) {
+  const L = rigLook(sp, look, useSpiritRig()), h = L.h, far = L.rig?.avatar.far ?? 1
+  return (
+    <Canvas key={L.url} data-spirit-stage={L.name} dpr={[1, 2]} frameloop="always" gl={{ antialias: true, alpha: true }}
+      camera={{ position: [h * 1.3 * far, h * 0.9 * far, h * 2.4 * far], fov: 32, near: 0.01, far: 100 }}>
+      <ambientLight intensity={0.9} />
+      <directionalLight position={[1.5, 3, 2.5]} intensity={1.3} />
+      <mesh rotation-x={-Math.PI / 2} position-y={-0.002}><circleGeometry args={[h * 1.6 * far, 48]} /><meshBasicMaterial color="#3a2a1c" transparent opacity={0.55} /></mesh>
+      <Suspense fallback={null}><SpiritModel sp={sp} look={L} gallery clip={clip} id="gallery" meals={meals} /></Suspense>
+      <OrbitControls makeDefault target={[0, h * 0.45, 0]} enablePan={false} minDistance={h * 0.6} maxDistance={h * 10 * far} />
+    </Canvas>
   )
 }
