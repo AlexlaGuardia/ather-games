@@ -101,6 +101,25 @@ export const GATE_FACE = Math.atan2(THRESHOLD.x - GATE.x, THRESHOLD.z - GATE.z)
  *  without an import loop). The ring faces (sin F, cos F); its side runs (cos F, -sin F). */
 export const CHORDSTONE_OFF = 3.4
 export const CHORDSTONE = { x: GATE.x + Math.cos(GATE_FACE) * CHORDSTONE_OFF, z: GATE.z - Math.sin(GATE_FACE) * CHORDSTONE_OFF }
+/** BETA M208: a point on the Green in the gate's own frame (side = along the ring's side, the Chordstone at +CHORDSTONE_OFF;
+ *  face = out of the ring's face, toward this keeper's garden) -> world. Same turn as the gate's group (rotation.y = GATE_FACE). */
+export const onGreen = (side: number, face: number) => ({
+  x: GATE.x + Math.cos(GATE_FACE) * side + Math.sin(GATE_FACE) * face,
+  z: GATE.z - Math.sin(GATE_FACE) * side + Math.cos(GATE_FACE) * face,
+})
+/** ★ BETA M208 (Alex 11-26): the keeper LANDS on the Green at the gate: on loading in, travelling home, the fold catching
+ *  them after a death or a fall, and a guest arriving on a mate's ground (one Green per cluster: every frame has it at
+ *  (−D, D)). In front of the ring's face, on the pale threshold stone, FACING the gate. Was THRESHOLD (the garden's start
+ *  corner) until M208; THRESHOLD stays as the gate's facing anchor. */
+export const LANDING_OFF = 5
+export const HOME_LANDING = { ...onGreen(0, LANDING_OFF), yaw: GATE_FACE }
+/** M208: the grown arch's two living trunks (gate-LOCKED.png), in the gate frame: either side of the ring, a step behind its
+ *  face so the Chordstone's root runs in front of the near one. Walker boxes below. */
+export const GATE_TRUNK_SIDE = 2.5, GATE_TRUNK_BACK = -0.95, GATE_TRUNK_R = 0.45
+export const GATE_TRUNKS = [onGreen(-GATE_TRUNK_SIDE, GATE_TRUNK_BACK), onGreen(GATE_TRUNK_SIDE, GATE_TRUNK_BACK)]
+/** M208: low lamp posts on the Green's four inner corners (between the four paths, which come in along the gate's axes). */
+export const GREEN_LAMP_R = 8
+export const GREEN_LAMPS = [45, 135, 225, 315].map(a => { const r = (a * Math.PI) / 180; return onGreen(Math.cos(r) * GREEN_LAMP_R, Math.sin(r) * GREEN_LAMP_R) })
 /** ★ A PLOT ANCHOR ONLY since BETA M30 part 2 (canon 44bc0c1: Greg is NOT on the plot; he lives at Moonwell Glade, moonwell-glade.ts
  *  gregSpot). The numbers are kept EXACTLY because the planning TABLE, the starting rooms, the ground pad and the collision
  *  box are anchored to them, and a keeper's saved plot must not move. Nothing is drawn or talked to here any more. */
@@ -198,6 +217,9 @@ const FIXED: Box[] = [
   (() => { const y0 = plotHeightAt(GREG.x, GREG.z); return { x0: GREG.x - 0.4, x1: GREG.x + 0.4, z0: GREG.z - 0.4, z1: GREG.z + 0.4, y0, y1: y0 + 1.8 } })(),
   // M188 s2: the Chordstone's pedestal (on the Green's square, GROUND_Y like the gate's drawn plinth)
   { x0: CHORDSTONE.x - 0.55, x1: CHORDSTONE.x + 0.55, z0: CHORDSTONE.z - 0.55, z1: CHORDSTONE.z + 0.55, y0: GROUND_Y - 0.2, y1: GROUND_Y + 1.3 },
+  // M208: the arch's trunks and the Green's lamp posts
+  ...GATE_TRUNKS.map(t => ({ x0: t.x - GATE_TRUNK_R, x1: t.x + GATE_TRUNK_R, z0: t.z - GATE_TRUNK_R, z1: t.z + GATE_TRUNK_R, y0: GROUND_Y - 0.4, y1: GROUND_Y + 5 })),
+  ...GREEN_LAMPS.map(l => ({ x0: l.x - 0.2, x1: l.x + 0.2, z0: l.z - 0.2, z1: l.z + 0.2, y0: GROUND_Y - 0.4, y1: GROUND_Y + 1.6 })),
 ]
 
 /** `walls` replaces the mist walls (a linked plot's lane cuts them, ather/cluster.ts); `extra` adds ground beyond the

@@ -25,6 +25,7 @@ import { BrewingPanel } from './brewing-panel'
 import { FURNITURE } from './furniture'
 import { AnemonyxIfHere, anemonyxPick, anemonyxHere, meetToday } from './anemonyx-view'   // M76 s2
 import { Chordstone } from './chordstone-view'   // M188 s2
+import { GreenDressing } from './green-view'   // BETA M208: the Centre Green, dressed
 import { ChordstonePanel } from './chordstone-panel'
 import { CHORDSTONE, CHORDSTONE_H, CHORDSTONE_R } from './chordstone'
 import { useBook, getPots } from './spirit-panels'
@@ -51,7 +52,7 @@ import { wildsStructures, setWildsPartBoxes, bodyBlocked } from './obstacles'   
 import { GateRings } from '../shared/gate-rings'
 import { Walker, verbOf, type Loco } from './walker'
 import {
-  plotShape, plotHeightAt, mistWalls, THRESHOLD, GATE, GREG, FALL_Y, REACH, squareAt, sqId, canBuy,
+  plotShape, plotHeightAt, mistWalls, THRESHOLD, HOME_LANDING, GATE, GREG, FALL_Y, REACH, squareAt, sqId, canBuy,
   loadGarden, saveGarden, freshGarden, type Garden,
 } from './plot'
 import { PlotScene } from './plot-scene'
@@ -286,7 +287,7 @@ function AtherSliceGame() {
   const padKind = usePadKind()   // M186: a controller in use hides the click-to-play card (a pad never takes pointer lock)
   const padGlyph = usePadGlyph()   // M186 s2: with a pad in hand the prompts name its button, not 'E'
   const [zone, setZone] = useState<Zone>({ kind: 'plot' })
-  const [spawn, setSpawn] = useState<Spawn>(THRESHOLD)
+  const [spawn, setSpawn] = useState<Spawn>(HOME_LANDING)   // M208: load in on the Green at the gate
   const [epoch, setEpoch] = useState(0)
   // THE WILDS, STREAMED (wilds-world.ts, Alex 11-15): `ww` is the whole continent's Wilds as one ground, its tiles
   // loading round you; `W` is the tile you stand in (the fold map, its borders). One space: first-wilds local = world.
@@ -322,7 +323,7 @@ function AtherSliceGame() {
   }, [])
   const [fade, setFade] = useState(0)
   const [hud, setHud] = useState({ verb: 'idle', where: 'your plot' })
-  const pos = useRef({ x: THRESHOLD.x, z: THRESHOLD.z, grounded: true, swimming: false })
+  const pos = useRef({ x: HOME_LANDING.x, z: HOME_LANDING.z, grounded: true, swimming: false })
   const handsApi = useRef<OpenHandsApi>(null)
   const rodOutRef = useRef(false)   // M82 s2: the rinstick is out in the mitt (set at render, read by the walker tick)
   // THE GUN IN HAND + ITS SIGHTS (Alex 11-18; shared/fp-gun.tsx): drawn whenever R has a gun out (the gloves hold it now), right-click
@@ -336,7 +337,7 @@ function AtherSliceGame() {
   const chudRef = useRef(chud); chudRef.current = chud
   // ── THE HUD (shared/game-hud.tsx): the same hearth HUD as every open-world page ──
   const hudSize = useGameHudSize(isTouch)
-  const poseRef = useRef<CompassPose>({ x: THRESHOLD.x, z: THRESHOLD.z, yaw: THRESHOLD.yaw })
+  const poseRef = useRef<CompassPose>({ x: HOME_LANDING.x, z: HOME_LANDING.z, yaw: HOME_LANDING.yaw })
   const marksRef = useRef<CompassMark[]>([])
   const journal = useJournal()   // re-marks the compass when a journal waymark is toggled
   const vitalsRef = useRef<SkinVitals>({ hp: 100, hpMax: 100, shield: 0, shieldMax: 0, skin: true })   // M59: the shield drawn as the Mana Skin
@@ -497,14 +498,14 @@ function AtherSliceGame() {
   // M153 s1c-1: every arrival on the newborn spot waits for the published one (asked at page load, 4 s at most)
   const arriveGlade = useCallback(() => whenGladePeopleKnown(() => arrive({ kind: 'glade' }, gladeNewbornSpot())), [arrive])
   // M71 s1: a keeper Greg has not folded a garden for has no home yet: 'home' (H, the map, a fall, the Hollows) is the Glade
-  const goHome = useCallback(() => { if (gardenOpen(loadTut())) arrive({ kind: 'plot' }, THRESHOLD); else arriveGlade() }, [arrive])
+  const goHome = useCallback(() => { if (gardenOpen(loadTut())) arrive({ kind: 'plot' }, HOME_LANDING); else arriveGlade() }, [arrive])   // M208: home = the Green, at the gate
   // M61: going visiting (or coming home) = a walk through the veil to the plot's threshold. Play together's Visit button calls the
   // handler; ?visit=<host>&vn=<name> is how the continent page hands a visit over.
   const visitHost = visitNow?.host ?? null, lastHost = useRef<string | null>(null)
   useEffect(() => {
     if (visitHost === lastHost.current) return
     lastHost.current = visitHost
-    if (visitHost) arrive({ kind: 'plot' }, THRESHOLD); else goHome()   // M71 s1: home from a visit = the Glade until the fold
+    if (visitHost) arrive({ kind: 'plot' }, HOME_LANDING); else goHome()   // M208: a guest lands on the host's Green   // M71 s1: home from a visit = the Glade until the fold
   }, [visitHost, arrive, goHome])
   useEffect(() => {
     // only a party mate visits (the party instance is the only door); a visit link without one says so and goes nowhere
@@ -1815,7 +1816,7 @@ function AtherSliceGame() {
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#bcd6e6' }}>
       <Canvas
-        camera={{ fov: 75, near: 0.05, far: 900, position: [THRESHOLD.x, 3, THRESHOLD.z] }}
+        camera={{ fov: 75, near: 0.05, far: 900, position: [HOME_LANDING.x, 3, HOME_LANDING.z] }}
         onClick={(e) => { if (!panel && !isTouch && !isBuilding()) (e.target as HTMLCanvasElement).requestPointerLock?.() }}
         gl={{ antialias: true, powerPreference: 'high-performance' }}
         // M44 (profile dcff05b4): three's checkShaderErrors reads getProgramInfoLog/getShaderInfoLog after EVERY link, a SYNC
@@ -1832,6 +1833,7 @@ function AtherSliceGame() {
         <VoxelDayNight gloomAt={zone.kind === 'wilds' && ww ? (x, z) => ww.canopyAt(x, z) * 0.7 : undefined} />
         {zone.kind === 'plot' && <PlotScene owned={owned} pages={pagesNow} linked={cl.frame.linked} />}
         {zone.kind === 'plot' && <Chordstone />}   {/* M188 s2 */}
+        {zone.kind === 'plot' && <GreenDressing />}   {/* M208 */}
         {zone.kind === 'plot' && <AnemonyxIfHere clock={clock} />}
         {zone.kind === 'plot' && <WorkshopScene pose={poseRef} owned={owned} stowed={stowedNow} />}
         {zone.kind === 'plot' && <ClusterScene frame={cl.frame} />}
