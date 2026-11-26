@@ -75,58 +75,48 @@ if [ "$PORT" = "3200" ]; then
   exit 1
 fi
 
-DIST=".next-$LANE"
-if [ "$DIST" = ".next" ]; then
-  echo "refusing: dist dir resolved to the production .next" >&2
+if [ "$PORT" = "${DEV_SHARED_PORT:-3210}" ]; then
+  echo "refusing port $PORT: that is the shared dev server's own port; give the lane its own." >&2
   exit 1
 fi
 
 cd "$REPO"
 
-# `next dev` appends its build dir's type globs to tsconfig.json on startup. In a shared
-# tree that means every lane leaves a diff another window could sweep into a commit, so
-# put it back on the way out: from HEAD, NOT from a copy taken at start. (11-21: a devwin
-# started while tsconfig was already dirty restored THAT dirty copy on exit and re-dropped
-# the '.coord' exclude the hub had just put back. The committed file is the only clean one.)
-TSCONFIG="$REPO/tsconfig.json"
-restore_tsconfig() {
-  local head
-  head="$(mktemp)"
-  if git -C "$REPO" show HEAD:tsconfig.json > "$head" 2>/dev/null && ! cmp -s "$TSCONFIG" "$head"; then
-    cp "$head" "$TSCONFIG"
-    echo ">> restored tsconfig.json from HEAD (next dev had added $DIST type globs)"
-  fi
-  rm -f "$head"
-}
-trap restore_tsconfig EXIT INT TERM   # replaced below once the dev server is registered
-
-# ── ★ THE DEV SERVER REGISTERS ITSELF ON THE BOARD (2026-09-15) ─────────────────────────────────
-# A window that wrapped and released its lane left `next dev` running on :3205 for two days at
-# ~600MB, and the next hub build OOMed against it. The claim said nobody was here; the process said
-# otherwise, and nothing joined the two. So a devwin writes `$COORD_DIR/devwins/<lane>` (pid, port,
-# session, ts) while it runs and removes it on exit; `coord release` reaps the lane's devwin, `coord
-# status` lists devwins whose lane has no claim, and `coord reap` kills those orphans. The pid is
-# the `npx` wrapper's; the reaper kills the whole tree under it (next-server, postcss workers).
+# ── ★★★ ONE SHARED DEV SERVER, NOT ONE PER LANE (2026-11-26, serb, Alex's call) ─────────────────
+# Everything above about per-lane dist dirs stays true history; what changed is that a lane no
+# longer runs `next dev` at all. The tree is shared, so N servers compiled the same code N times at
+# ~2 GB each, and four lanes OOM-shed the box four times on 11-26. Now this script (1) makes sure the
+# ONE shared server is up (tools/devshared.sh: refcounted, memory-gated, :3210, dist .next-shared)
+# and (2) holds the lane's own port as a ~15 MB forwarder onto it, so `--port 3203` checks and the
+# lane-port habit keep working. Exiting stops the forwarder; the last lane out stops the server.
+# The tsconfig notes above now apply to .next-shared (seeded the same way).
 COORD_DIR="${COORD_DIR:-$REPO/.coord}"
 DEVWINS_DIR="$COORD_DIR/devwins"
 mkdir -p "$DEVWINS_DIR"
 REG="$DEVWINS_DIR/$LANE"
+# shellcheck source=devshared.sh
+. "$REPO/tools/devshared.sh"
 
-echo ">> lane '$LANE'  dist=$DIST  port=$PORT"
-echo ">> preview: http://localhost:$PORT  (production stays on :3200, untouched)"
-env NEXT_DIST_DIR="$DIST" npx next dev -p "$PORT" &
+if [ -f "$REG" ] && kill -0 "$(sed -n 's/^pid=//p' "$REG")" 2>/dev/null; then
+  echo "lane '$LANE' already has a live devwin ($(sed -n 's/^pid=//p' "$REG")): preview http://localhost:$PORT" >&2
+  exit 1
+fi
+if port_listening "$PORT"; then
+  echo "refusing: :$PORT is already in use by something that is not this lane's devwin (ss -ltnp | grep :$PORT)." >&2
+  exit 1
+fi
+
+shared_ensure || { echo "devwin: shared dev server unavailable; rely on tests or try again." >&2; exit 1; }
+
+python3 "$REPO/tools/devfwd.py" "$PORT" "$DEV_SHARED_PORT" &
 DEV_PID=$!
-printf 'lane=%s\npid=%s\nport=%s\nsession=%s\nts=%s\n' "$LANE" "$DEV_PID" "$PORT" "${COORD_SESSION:-}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$REG"
-echo ">> registered on the board: $REG (pid $DEV_PID) — 'coord release $LANE' or 'coord reap' stops it"
+printf 'lane=%s\npid=%s\nport=%s\nsession=%s\nts=%s\nshared=%s\n' "$LANE" "$DEV_PID" "$PORT" "${COORD_SESSION:-}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$DEV_SHARED_PORT" > "$REG"
+echo ">> lane '$LANE': http://localhost:$PORT -> shared dev server :$DEV_SHARED_PORT  (production stays on :3200)"
+echo ">> registered: $REG (forwarder pid $DEV_PID). 'coord release $LANE' or 'coord reap' stops it; the last lane out stops the shared server"
 cleanup_devwin() {
-  # Take the tree down with us on a clean exit or a signal; a SIGKILL of this shell leaves the
-  # record behind, which is exactly what `coord reap` is for.
-  if kill -0 "$DEV_PID" 2>/dev/null; then
-    pkill -TERM -P "$DEV_PID" 2>/dev/null || true
-    kill -TERM "$DEV_PID" 2>/dev/null || true
-  fi
+  kill -TERM "$DEV_PID" 2>/dev/null || true
   rm -f "$REG"
-  restore_tsconfig
+  shared_gc
 }
 trap cleanup_devwin EXIT INT TERM
 wait "$DEV_PID"

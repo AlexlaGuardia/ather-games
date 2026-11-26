@@ -60,6 +60,38 @@ WIN="${COORD_WIN:-$(hostname)-$$}"
 SESSION="${COORD_SESSION:-}"
 
 mkdir -p "$CLAIMS_DIR" "$DEVWINS_DIR"
+# The ONE shared dev server every lane previews through (2026-11-26): see tools/devshared.sh.
+# shellcheck source=devshared.sh
+. "$REPO/tools/devshared.sh"
+
+# ── ★ THE MEMORY GATE (2026-11-26, serb, Alex's call) ─────────────────────────────────────────────
+# Four lanes on the 8 GB box: mem-watcher shed a ~2 GB process four times on 11-26, each time
+# killing a check or build halfway, which wastes the whole run. A heavy step now WAITS for room
+# instead of starting into a shed: build/sweep need 2500 MB available, a browser run 1800 MB, a
+# fresh shared dev server 2500 MB. It holds its lock while it waits, so the queue order stands.
+# Gives up after the wait with the numbers NAMED (exit 1), never silently. MEM_GATE=0 skips it.
+mem_avail_mb() { awk '/^MemAvailable:/{print int($2/1024)}' /proc/meminfo; }
+cmd_memgate() {
+  local need="${1:-2500}" maxw="${2:-900}" what="${3:-heavy step}" waited=0 have said=0
+  [ "${MEM_GATE:-1}" = 0 ] && return 0
+  while :; do
+    have=$(mem_avail_mb)
+    if [ "$have" -ge "$need" ]; then
+      [ "$said" = 1 ] && echo ">> memgate: ${have} MB available, starting '$what' after ${waited}s" >&2
+      return 0
+    fi
+    if [ "$waited" -ge "$maxw" ]; then
+      echo "memgate: gave up on '$what' after ${waited}s: ${have} MB available, needs ${need} MB." >&2
+      echo "  biggest: $(ps -eo rss,args --sort=-rss | awk 'NR>1&&NR<=4{printf "%dMB %s; ", $1/1024, substr($2,1,40)}')" >&2
+      return 1
+    fi
+    if [ "$said" = 0 ]; then
+      echo ">> memgate: '$what' waits: ${have} MB available, needs ${need} MB (up to ${maxw}s; MEM_GATE=0 skips)" >&2
+      said=1
+    fi
+    sleep 15; waited=$((waited+15))
+  done
+}
 
 now_epoch() { date +%s; }
 now_iso()   { date -u +%Y-%m-%dT%H:%M:%SZ; }
@@ -202,6 +234,7 @@ reap_devwin() {
     echo "cleared stale devwin record '$lane' (pid ${p:-?} not running)"
   fi
   rm -f "$DEVWINS_DIR/$lane"
+  shared_gc   # the last lane out stops the shared dev server
 }
 cmd_reap() {
   # Kill every devwin whose lane has no claim. A claimed lane's devwin is someone's live preview.
@@ -214,6 +247,7 @@ cmd_reap() {
     reap_devwin "$lane" "no claim on the lane and none by its session"
   done
   [ "$any" = 1 ] || echo "no orphan devwins"
+  shared_gc   # a shared server no live lane uses is an orphan too
 }
 
 cmd_release() {
@@ -315,6 +349,7 @@ release_lock() { rm -rf "$LOCKDIR"; }
 cmd_sweep() {
   LOCK_KIND=sweep acquire_lock || exit 1
   trap release_lock EXIT
+  cmd_memgate 2500 900 "sweep" || exit 1
   echo ">> build lock acquired by '$WIN' for a SWEEP — deploys will wait on this"
   signal "$WIN sweeping (holds the build lock)"
   cd "$REPO"
@@ -330,6 +365,7 @@ cmd_build() {
   acquire_lock || exit 1
   trap release_lock EXIT
   echo ">> build lock acquired by '$WIN'"
+  cmd_memgate 2500 900 "build: $msg" || exit 1
   # ── ★★ THE BUILD CARRIES ITS OWN OBSERVATION, TAKEN HERE (2026-08-20, second incident) ────────
   # The post-deploy warning below tells you what you just shipped. That is one line too late by
   # design, and the fix for it is NOT "remember to run `git status` first" — the same seat DID run
@@ -614,6 +650,16 @@ cmd_status() {
   else
     echo "  (none registered)"
   fi
+  if [ -f "$SHARED_REC" ]; then
+    local sp; sp=$(shared_pid)
+    if shared_alive; then
+      printf "  %-8s pid %-8s :%-5s %s\n" "SHARED" "$sp" "$DEV_SHARED_PORT" "live, $(shared_users) lane(s) forwarding, $(ps -o rss= -p "$sp" 2>/dev/null | awk '{s+=$1} END{print int(s/1024)}')MB wrapper; 'coord reap' stops it once unused"
+    else
+      printf "  %-8s pid %-8s :%-5s %s\n" "SHARED" "${sp:-?}" "$DEV_SHARED_PORT" "DEAD (shed?): the next devwin.sh restarts it"
+    fi
+  fi
+  echo "--- memory ---"
+  echo "  $(mem_avail_mb) MB available (gates: build/sweep/shared start 2500, browser 1800)"
   echo "--- build lock ---"
   if [ -d "$LOCKDIR" ]; then
     echo "  HELD — $(lock_owner_info | tr '\n' ' ')  age=$(lock_age)s"
@@ -671,6 +717,10 @@ cmd_browser() {
       [ "${1:-}" = "--" ] && shift
       if [ -z "$what" ] || [ $# -eq 0 ]; then echo 'usage: coord browser run "<what>" -- <cmd...>' >&2; return 2; fi
       cmd_browser _take "$what" || return 1
+      if ! cmd_memgate 1800 600 "browser run: $what"; then
+        [ "$(sed -n 's/^pid=//p' "$BROWSER_FILE" 2>/dev/null)" = "$$" ] && rm -f "$BROWSER_FILE"
+        return 1
+      fi
       local child="" rc=0
       # release only if the file still names THIS wrapper (a COORD_FORCE takeover is not ours to delete)
       _browser_release() { [ -f "$BROWSER_FILE" ] && [ "$(sed -n 's/^pid=//p' "$BROWSER_FILE")" = "$$" ] && rm -f "$BROWSER_FILE" && echo "box browser DOWN (run by '$WIN' ended)" >&2; return 0; }
@@ -701,5 +751,6 @@ case "${1:-status}" in
   status)  cmd_status; echo "--- box browser ---"; cmd_browser status ;;
   browser) shift; cmd_browser "$@" ;;
   reap)    cmd_reap ;;
-  *) echo "usage: coord {claim <lane> [note] | status | build [msg] | sweep [args] | release [lane] | reap | lock | unlock | browser run <what> -- <cmd...>|up <what>|down}"; exit 1 ;;
+  memgate) shift; cmd_memgate "$@" ;;
+  *) echo "usage: coord {claim <lane> [note] | status | build [msg] | sweep [args] | release [lane] | reap | lock | unlock | browser run <what> -- <cmd...>|up <what>|down | memgate <mb> [max_s] [what]}"; exit 1 ;;
 esac
