@@ -1,4 +1,4 @@
-// M185 s2b: LOOK SHOTS of the mana seeps (look B 'crystal tent'): each size next to the keeper (third person under ?tune=1, V),
+// M185 s2b: LOOK SHOTS of the mana seeps (look B 'crystal tent'): each size beside the keeper, side-on, stood off by its size (third person under ?tune=1, V),
 // then a worked small seep (its reset seeded into the future). Writes PNGs to --out (default docs/looks/m185-seeps-2026-11-26).
 // Pass = every size aimed + shot, the worked one says 'growing back'. Fresh anonymous contexts only.
 //   npx tsx scripts/m185-seep-shots.mts [--url https://ather.games] [--phone-only] [--desk-only] [--out dir]
@@ -93,12 +93,12 @@ for (const [vp, w, h] of (phoneOnly ? [['phone', 390, 844]] : deskOnly ? [['desk
     const nodes = Object.fromEntries(SIZES.map(([k]) => [k, pickNode(k)])) as Record<string, Pick | null>
     ok(SIZES.every(([k]) => !!nodes[k]), `wilds: a seep of each size in the tiles (${SIZES.map(([k]) => nodes[k]?.id).join(' / ')})`)
     await p.waitForFunction(() => !!(window as any).__ather?.mine, { timeout: 120000 })
-    const unveil = () => p.evaluate(() => { const hits = [...document.querySelectorAll('div')].filter(d => /Click to play|tap to start/i.test(d.textContent ?? '')); for (const d of hits.filter(d => !hits.some(o => o !== d && d.contains(o)))) (d as HTMLElement).style.visibility = 'hidden' })
+    const unveil = () => p.evaluate(() => { const hits = [...document.querySelectorAll('div')].filter(d => /Click to play/.test(d.textContent ?? '') || (/your plot and the wilds/i.test(d.textContent ?? '') && /tap to start/i.test(d.textContent ?? ''))); for (const d of hits.filter(d => !hits.some(o => o !== d && d.contains(o)))) (d as HTMLElement).style.visibility = 'hidden' })
     await unveil()
     const frame = async () => { try { await p.screenshot() } catch { /* slow */ } }
-    const side = async (P: Pick) => {
-      const TM = 1000, k = 3 / Math.hypot(P.sx - P.cx, P.sz - P.cz), wx = P.cx + (P.sx - P.cx) * k + P.tx * TM, wz = P.cz + (P.sz - P.cz) * k + P.ty * TM
-      const yaw = Math.atan2(-(P.cx + P.tx * TM - wx), -(P.cz + P.ty * TM - wz)) + 0.45
+    const side = async (P: Pick, kind: string) => {
+      const back = ({ seep_s: 2.4, seep_m: 3.4, seep_l: 4.8 } as Record<string, number>)[kind] ?? 3, TM = 1000, k = back / Math.hypot(P.sx - P.cx, P.sz - P.cz), wx = P.cx + (P.sx - P.cx) * k + P.tx * TM, wz = P.cz + (P.sz - P.cz) * k + P.ty * TM
+      const yaw = Math.atan2(-(P.cx + P.tx * TM - wx), -(P.cz + P.ty * TM - wz)) + (phone ? 0.22 : 0.45)
       await p.evaluate((a) => { const A = (window as any).__ather; A.tp(a.wx, a.wz, a.yaw); A.look(a.yaw, -0.22) }, { wx, wz, yaw }); await sleep(1500)
       await p.keyboard.press('KeyV'); for (let j = 0; j < 6; j++) await frame()
       await p.evaluate((a) => (window as any).__ather.look(a.yaw, -0.22), { yaw }); for (let j = 0; j < 4; j++) await frame()
@@ -127,7 +127,7 @@ for (const [vp, w, h] of (phoneOnly ? [['phone', 390, 844]] : deskOnly ? [['desk
       ok(new RegExp(`${name} \\(${mana} mana\\)`).test(prompt), `${vp} wilds: the prompt says "${name} (${mana} mana)" (${(prompt.match(/[^\n]*Mana Seep[^\n]*/) ?? [''])[0].slice(0, 90)})`)
       ok(!/mana (spring|well)/i.test(prompt), `${vp} wilds: no 'spring' / 'well' on screen at the ${name}`)
       if (process.env.SHOT_DIR) await p.screenshot({ path: `${process.env.SHOT_DIR}/m185s2-${kind}-${vp}.png` }).catch(() => {})
-      await side(P)
+      await side(P, kind)
       await p.screenshot({ path: `${OUT}/seep-${kind}-${vp}.png` }); console.log(`  shot ${OUT}/seep-${kind}-${vp}.png`)
       await p.keyboard.press('KeyV'); await sleep(500)
     }
@@ -139,7 +139,7 @@ for (const [vp, w, h] of (phoneOnly ? [['phone', 390, 844]] : deskOnly ? [['desk
       const aimed = await goAim(S)
       const prompt = await p.evaluate(() => document.body.innerText)
       ok(aimed?.id === S.id && /Mana Seep, growing back/.test(prompt), `${vp} worked: the Small Mana Seep is growing back (${(prompt.match(/[^\n]*Mana Seep[^\n]*/) ?? [''])[0].slice(0, 80)})`)
-      await side(S)
+      await side(S, 'seep_s')
       await p.screenshot({ path: `${OUT}/seep-worked-${vp}.png` }); console.log(`  shot ${OUT}/seep-worked-${vp}.png`)
     }
   }
