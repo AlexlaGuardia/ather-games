@@ -6,7 +6,9 @@
 // the Driver); this component draws the parts and runs the E points.
 //   · SHOP     -> onShop(id): the page opens that storefront's own ShopPanel (deed `zone:<id>`, not `front:<id>`: MarketView closes
 //                a `front:` panel when you are far from THAT shop's town door, and a zone's shop stands somewhere else).
-//   · OTHER / HOME / SUPPLIER -> the message line only (no continent resident list exists; zone-choices.ts).
+//   · SUPPLIER with a kind (M205: `sells`, the farmers market) -> onSupplier(kind): the page opens that kind's buy panel (deed
+//                `supplier:<kind>`; it closes when you walk WALK_OFF from the E point, like a zone's shop).
+//   · OTHER / HOME / other SUPPLIER -> the message line only (no continent resident list exists; zone-choices.ts).
 import { useEffect, useMemo, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
@@ -24,13 +26,15 @@ const WALK_OFF = 8
 export interface NyxZoneDoor { id: string; x: number; z: number; u: ZoneUse }
 export const nyxZoneDoors = (zones: readonly Zone[]): NyxZoneDoor[] => zones.flatMap(z => { const u = zoneUse(z); return u ? [{ id: z.id, ...zoneDoor(z), u }] : [] })
 
-export function NyxZones({ zones, parts, ground, enabled, open, onShop, onReach, onWalkOff }: {
+export function NyxZones({ zones, parts, ground, enabled, open, onShop, onSupplier, onReach, onWalkOff }: {
   zones: readonly Zone[]; parts: readonly ZonePart[]; ground: (x: number, z: number) => number
   /** on foot and no menu over the world (MarketView's own gate) */
   enabled: boolean
   /** the page's open deed: a `zone:<shop>` panel closes when you walk off its E point */
   open: string | null
   onShop: (shopId: string, doorId: string) => void
+  /** M205: a supplier zone with a kind: open that kind's buy panel */
+  onSupplier?: (kind: string, doorId: string) => void
   onReach?: (u: ZoneUse | null) => void
   onWalkOff?: () => void
 }) {
@@ -43,11 +47,12 @@ export function NyxZones({ zones, parts, ground, enabled, open, onShop, onReach,
     const k = (e: KeyboardEvent) => {
       const d = reach.current
       if (e.code !== 'KeyE' || e.repeat || !enabledRef.current || !d) return
+      if (d.u.kind === 'supplier' && d.u.sells && onSupplier) { opened.current = d; onSupplier(d.u.sells, d.id); return }
       const line = zoneSay(d.u); if (line) hudSay(line, 'info', 4)
       if (d.u.kind === 'shop') { opened.current = d; onShop(d.u.id, d.id) }
     }
     window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k)
-  }, [onShop])
+  }, [onShop, onSupplier])
   // probe for scripted checks (scripts/zone-wilds-nyx-check.mts): the E points and the one in reach
   useEffect(() => {
     const w = window as unknown as { __nyxZones?: unknown }
@@ -56,7 +61,7 @@ export function NyxZones({ zones, parts, ground, enabled, open, onShop, onReach,
   }, [doors])
   useFrame(() => {
     const p = camera.position
-    if (open?.startsWith('zone:') && opened.current && Math.hypot(p.x - opened.current.x, p.z - opened.current.z) > WALK_OFF) { opened.current = null; onWalkOff?.() }
+    if ((open?.startsWith('zone:') || open?.startsWith('supplier:')) && opened.current && Math.hypot(p.x - opened.current.x, p.z - opened.current.z) > WALK_OFF) { opened.current = null; onWalkOff?.() }
     let hit: NyxZoneDoor | null = null
     if (enabledRef.current && doors.length) {
       const cands = doors.flatMap(d => { const y = ground(d.x, d.z); return Number.isFinite(y) && Math.abs(p.y - 1.6 - y) < 2 ? [{ x: d.x, z: d.z, y0: y - 0.2, y1: y + 2.4, r: 0.6, item: d }] : [] })

@@ -6,10 +6,13 @@
 //   SHOP     the canon storefronts (business/doors.ts FRONT_SHOPS): one entry per shop, its own name.
 //   SUPPLIER no 'supplier' list exists anywhere in the game or the canon files (11-23). Stand-in: the trade goods (trade.ts GOODS),
 //            "who supplies what", by the good's own name. FLAGGED for the hub / Magii; swap the source here when one is ruled.
+//            M205: the supplier KINDS (business/suppliers.ts SUPPLIER_KINDS: 'Farmers market') come FIRST; a zone tagged with one
+//            opens that kind's buy panel in the game. The trade-goods stand-ins stay below (message line only).
 import type { BuilderMap } from '../../world/builder'
 import type { ZoneKind } from '../../world/builder-zones'
 import { FRONT_SHOPS } from '../../open/business/doors'
 import { GOODS } from '../../open/trade'
+import { SUPPLIER_KINDS } from '../../open/business/suppliers'
 import { folkOf } from '../../open/ather/settlement-folk'
 import { gladeFolk } from '../../open/ather/moonwell-glade'
 import { gladeKeepers, gladeClusterFolk, gregInGlade } from '../../open/ather/glade-cluster'
@@ -32,7 +35,7 @@ export function homeChoices(map: BuilderMap, net: Network | null): Choice[] {
   return map === 'glade' ? gladeHomes() : map === 'wilds' ? wildsHomes(net) : [...gladeHomes(), ...wildsHomes(net)]
 }
 export const shopChoices = (): Choice[] => Object.entries(FRONT_SHOPS).map(([id, s]) => ({ ref: id, name: s.name }))
-export const supplierChoices = (): Choice[] => Object.values(GOODS).map(g => ({ ref: g.id, name: g.name }))
+export const supplierChoices = (): Choice[] => [...Object.entries(SUPPLIER_KINDS).map(([ref, k]) => ({ ref, name: k.label })), ...Object.values(GOODS).map(g => ({ ref: g.id, name: g.name }))]
 
 export function choicesFor(kind: ZoneKind, map: BuilderMap, net: Network | null): Choice[] {
   return kind === 'home' ? homeChoices(map, net) : kind === 'shop' ? shopChoices() : kind === 'supplier' ? supplierChoices() : []

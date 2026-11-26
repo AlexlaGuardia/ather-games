@@ -7,17 +7,19 @@
 //   · OTHER    -> locked: E says so (a plain placeholder line), nothing to enter.
 //   · SHOP     -> E opens THAT storefront's existing panel (business/shop-panel.tsx ShopPanel, the one its continent door opens).
 //   · HOME     -> E shows "<Resident>'s home" and, when that NPC is in the Glade, opens their existing talk (homeTalk). NPCs do not move.
-//   · SUPPLIER -> no supplier panel exists yet (M115): E shows "Supplier: <stand-in>" and nothing else.
+//   · SUPPLIER -> a supplier KIND (M205: business/suppliers.ts, the farmers market) carries `sells` = that kind: E opens its buy panel
+//                (Nyx continent: nyx-zones.tsx). Any other supplier ref (the trade-goods stand-ins): E shows "Supplier: <name>" only.
 // An untagged zone, or a tag whose shop / name is unknown, gets no E point (nothing true to say).
 import { FRONT_SHOPS } from '../business/doors'
 import { GOODS } from '../trade'
+import { supplierKind } from '../business/suppliers'
 import type { Zone, ZoneTag } from '../../world/builder-zones'
 
 export type ZoneUse =
   | { kind: 'locked' }
   | { kind: 'shop'; id: string; name: string }
   | { kind: 'home'; ref?: string; name: string }
-  | { kind: 'supplier'; name: string }
+  | { kind: 'supplier'; name: string; /** M205: the supplier kind whose buy panel E opens (absent = the message line only) */ sells?: string }
 
 /** how far outside the front edge the E point stands (m) */
 export const ZONE_DOOR_OUT = 0.6
@@ -37,7 +39,8 @@ export function zoneUse(z: Pick<Zone, 'tag'>): ZoneUse | null {
   if (t.kind === 'shop') { const s = t.ref ? FRONT_SHOPS[t.ref] : undefined; return s && t.ref ? { kind: 'shop', id: t.ref, name: s.name } : null }
   if (t.kind === 'home') { const name = t.name?.replace(/\s*\([^)]*\)$/, '').trim();   // M84 s3b: a Wilds pick reads 'Name (Settlement)': the label is the name
     return name ? { kind: 'home', ...(t.ref ? { ref: t.ref } : {}), name } : null }
-  if (t.kind === 'supplier') { const name = t.name?.trim() || (t.ref ? (GOODS as Record<string, { name: string } | undefined>)[t.ref]?.name : undefined); return name ? { kind: 'supplier', name } : null }
+  if (t.kind === 'supplier') { const k = supplierKind(t.ref), name = t.name?.trim() || k?.label || (t.ref ? (GOODS as Record<string, { name: string } | undefined>)[t.ref]?.name : undefined)
+    return name ? { kind: 'supplier', name, ...(k && t.ref ? { sells: t.ref } : {}) } : null }
   return null
 }
 
@@ -46,6 +49,7 @@ export function zonePrompt(u: ZoneUse): string {
   return u.kind === 'locked' ? 'E · the door'
     : u.kind === 'shop' ? `E · ${u.name}`
     : u.kind === 'home' ? `E · ${u.name}'s home`
+    : u.sells ? `E · ${u.name}`
     : `E · Supplier: ${u.name}`
 }
 
@@ -53,7 +57,7 @@ export function zonePrompt(u: ZoneUse): string {
 export function zoneSay(u: ZoneUse): string | null {
   return u.kind === 'locked' ? 'The door is locked.'
     : u.kind === 'home' ? `${u.name}'s home`
-    : u.kind === 'supplier' ? `Supplier: ${u.name}`
+    : u.kind === 'supplier' ? `Supplier: ${u.name}`   // M205: on Nyx a `sells` supplier opens its panel instead (nyx-zones.tsx)
     : null
 }
 

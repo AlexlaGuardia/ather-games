@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Rootbulb: a knobby, pale starchy node (world/cuisine.md). Code-drawn filler. -->
+  <ellipse cx="16" cy="27.5" rx="10" ry="2.2" fill="#000" opacity=".25"/>
+  <path d="M7 17 Q6 10 12 9 Q15 6 19 8.5 Q25 8 26 14 Q28 20 23 24 Q17 27.5 11 25 Q6 23 7 17 Z" fill="#d9c9a0" stroke="#7a6640" stroke-width=".9"/>
+  <circle cx="12" cy="14" r=".9" fill="#9a8458"/><circle cx="19" cy="12.5" r=".8" fill="#9a8458"/><circle cx="21.5" cy="19" r=".9" fill="#9a8458"/><circle cx="14" cy="21" r=".7" fill="#9a8458"/>
+  <path d="M10 11 q2 -1 4 0" fill="none" stroke="#fff6dc" stroke-width=".8" opacity=".7"/>
+</svg>

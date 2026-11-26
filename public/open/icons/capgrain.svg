@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Capgrain: dried, ground shelf-fungi caps, pale tan (world/cuisine.md), in a tied sack. Code-drawn filler. -->
+  <ellipse cx="16" cy="27.5" rx="10" ry="2.2" fill="#000" opacity=".25"/>
+  <path d="M8 26 Q6 18 10 13 L22 13 Q26 18 24 26 Q16 28.5 8 26 Z" fill="#b89a6a" stroke="#6a5030" stroke-width=".9"/>
+  <path d="M11 13 Q13 9 16 10 Q19 9 21 13 Z" fill="#e6d4a8" stroke="#8a7048" stroke-width=".7"/>
+  <path d="M10.5 13.5 h11" stroke="#5a3e20" stroke-width="1.2"/>
+  <circle cx="14" cy="11.4" r=".6" fill="#c8b07a"/><circle cx="17.5" cy="11" r=".6" fill="#c8b07a"/><circle cx="16" cy="12.2" r=".5" fill="#c8b07a"/>
+</svg>

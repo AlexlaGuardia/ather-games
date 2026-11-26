@@ -22,6 +22,13 @@ export const MEATS: Readonly<Record<string, FoodDef>> = {
   tuskroot_cut: { name: 'Tuskroot Cut', blurb: 'A rich, fatty cut from a farmed Tuskroot. It roasts in its own fat.' },
   hearthwing_eggs: { name: 'Hearthwing Eggs', blurb: 'Speckled eggs, packed snug for the road. Set them in the coals.' },
 }
+/** M205: the staples a farmers market supplier sells (canon world/cuisine.md › Grains & Starches: Capgrain line 19, Rootbulb
+ *  line 20; names + looks are canon, blurbs await @lark). Rootbulb is "roasted": it roasts at the hearth. Capgrain is flour for
+ *  bread / porridge / stews: the hearth is open coals, no vessel (09-15), so it has no recipe yet (a later slice). */
+export const STAPLES: Readonly<Record<string, FoodDef>> = {
+  rootbulb: { name: 'Rootbulb', blurb: 'A knobby, starchy node with pale flesh. It roasts at the hearth.' },
+  capgrain: { name: 'Capgrain', blurb: 'Dried, ground shelf-fungi caps, pale tan. Flour for bread and porridge.' },
+}
 /** What the hearth makes, and what each heals when eaten in the Wilds. */
 export const DISHES: Readonly<Record<string, FoodDef & { heal: number }>> = {
   roast_rinn: { name: 'Roast Rinn', blurb: 'A Shimmerscale roasted over the coals. Hold it and click to eat. Heals 40.', heal: 40 },
@@ -32,6 +39,8 @@ export const DISHES: Readonly<Record<string, FoodDef & { heal: number }>> = {
   roast_shimmerscale_fillet: { name: 'Roast Shimmerscale Fillet', blurb: 'A Shimmerscale fillet off the coals. Hold it and click to eat. Heals 40.', heal: 40 },
   roast_ribboneel_fillet: { name: 'Roast Ribboneel Fillet', blurb: 'Ribboneel roasted on the hearth. Hold it and click to eat. Heals 60.', heal: 60 },
   roast_clickclaw_meat: { name: 'Roast Clickclaw', blurb: 'Clickclaw meat done in the coals. Hold it and click to eat. Heals 45.', heal: 45 },
+  // M205: a Rootbulb off a farmers market supplier roasts (Jin's heal; name + blurb await @lark)
+  roast_rootbulb: { name: 'Roast Rootbulb', blurb: 'A rootbulb roasted in the coals. Hold it and click to eat. Heals 30.', heal: 30 },
 }
 
 /** BETA M206 (world, Alex 11-26): THE RINNSHOP'S FILET TAB prepares a caught rinn. Jin's pick of the Ather's own roster
@@ -68,6 +77,7 @@ export const ROAST: readonly Job[] = [
   roast('roast_shimmerscale_fillet', 'shimmerscale_fillet'),
   roast('roast_ribboneel_fillet', 'ribboneel_fillet'),
   roast('roast_clickclaw_meat', 'clickclaw_meat'),
+  roast('roast_rootbulb', 'rootbulb'),
 ]
 
 /** M204 (Alex 11-26): THE ELEMENT MEALS. M207: an INFUSION (infusions.ts INFUSION: Aqual Sauce, Golden Tonic, Storm Broth,

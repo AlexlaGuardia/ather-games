@@ -64,7 +64,7 @@ ok(!sameLayer(L, { ...L, zones: [{ ...tagged, tag: { ...tagged.tag!, front: 'e' 
 const homes = gladeHomes()
 ok(homes.some(c => c.name === 'Gregory') && homes.some(c => c.name === 'Hazel') && homes.length >= 6, `Glade homes: Gregory + the friends + the Glade's Moglins (${homes.map(c => c.name).join(', ')})`)
 ok(shopChoices().length === Object.keys(FRONT_SHOPS).length && shopChoices().every(c => FRONT_SHOPS[c.ref]?.name === c.name), 'shops = the canon storefronts, their own names')
-ok(supplierChoices().every(c => GOODS[c.ref as keyof typeof GOODS]?.name === c.name), 'suppliers = the trade goods, their own names (stand-in, flagged)')
+ok(supplierChoices()[0]?.ref === 'farmers-market' && supplierChoices().slice(1).every(c => GOODS[c.ref as keyof typeof GOODS]?.name === c.name), 'suppliers = M205 kinds first (Farmers market), then the trade goods by their own names (stand-in, flagged)')
 ok(choicesFor('other', 'glade', null).length === 0, 'Other has no list')
 
 console.log(fails ? `\n${fails} FAILED` : '\nall pass')

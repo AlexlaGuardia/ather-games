@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Roast Rootbulb: a rootbulb browned in the coals, split open. Code-drawn filler. -->
+  <ellipse cx="16" cy="27.5" rx="10" ry="2.2" fill="#000" opacity=".25"/>
+  <path d="M7 18 Q6 11 12 10 Q15 7 19 9.5 Q25 9 26 15 Q27.5 21 22.5 24.5 Q16.5 27.5 11 25 Q6.5 23 7 18 Z" fill="#a8743e" stroke="#5a3418" stroke-width=".9"/>
+  <path d="M11 15 Q16 12 21 15 Q19 21 16 21.5 Q12.5 21 11 15 Z" fill="#f2e2b0" stroke="#c8a060" stroke-width=".6"/>
+  <path d="M9 21 l2 1 M22 21 l2 -1 M10 12 l1.5 1" stroke="#3a2010" stroke-width=".8" opacity=".7"/>
+</svg>

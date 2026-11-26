@@ -98,6 +98,7 @@ import { eyeY, WALK_SPEED, SPEED_CAP, type LocoState } from '../shared/locomotio
 import { DarterModel, DriftFx, RoadPosts, SpeedStreaks, chaseShape, speedRumble } from '../darter-view'
 import { applyPublishedNyxLayer } from './nyx-layer'   // M83 s3: the World Builder's published continent edits
 import { NyxZones } from './nyx-zones'   // M84 s3b + M114 s3: published zone builds + tags on the continent
+import { SupplierPanel } from '../business/supplier-panel'   // M205 s1: a supplier zone's buy panel
 import { zoneParts, zonePartBoxes, type ZonePart } from '../ather/zone-parts'
 import type { Zone } from '../../world/builder-zones'
 import type { Box } from '../terrain-world'
@@ -1174,6 +1175,11 @@ function ContinentRideGame() {
   const nyxParts = useMemo<ZonePart[]>(() => R && nyxZones.length ? zoneParts(nyxZones, (x, z) => R.groundAt(x, z)) : [], [R, nyxZones])
   const nyxBoxes = useMemo(() => zonePartBoxes(nyxParts), [nyxParts])
   const openZoneShop = useCallback((id: string) => setDeed(`zone:${id}`), [])
+  // M205 s1: a supplier zone with a kind opens its buy panel, titled with the zone's own tag name
+  const [supplierName, setSupplierName] = useState('')
+  const openZoneSupplier = useCallback((kind: string, doorId: string) => {
+    const z = nyxZones.find(q => q.id === doorId); setSupplierName(z?.tag?.name?.trim() || ''); setDeed(`supplier:${kind}`)
+  }, [nyxZones])
   // M49: the shipyard plot (continent/shipyard-plot.tsx) tells the phone pill what E does there
   const [yardState, setYardState] = useState<DeedYardState>({ inYard: false, atBoard: false, action: null })
   // M49 s3: ?own=all holds every shipyard (the OWNER's dev flag only; a player buys them, business/shipyards.ts)
@@ -1364,7 +1370,7 @@ function ContinentRideGame() {
     ...(!hud.foot && ferryAt && !ferrying ? [{ code: 'KeyE', key: 'E', label: 'ferry', near: true }]
       : []),
     ...(hud.foot && yardState.action && !deed ? [{ code: 'KeyE', key: 'E', label: yardState.action === 'board' && shipAct === 'fit' ? 'fit' : yardState.action === 'board' && shipAct === 'charge' ? 'charge' : yardState.action, near: true }, ...(yardState.action === 'place' ? [{ code: 'DeedTurn', key: 'E', label: 'turn' }] : [])] : []),
-    ...(hud.foot && zoneReach && !deed ? [{ code: 'KeyE', key: 'E', label: zoneReach === 'shop' ? 'go in' : 'door', near: true }] : []),   // M114 s3
+    ...(hud.foot && zoneReach && !deed ? [{ code: 'KeyE', key: 'E', label: zoneReach === 'shop' ? 'go in' : zoneReach === 'buy' ? 'buy' : 'door', near: true }] : []),   // M114 s3 (+ M205 'buy')
     ...(hud.foot && deedReach && !deed ? [{ code: 'KeyE', key: 'E', label: deedReach.startsWith('front:') || deedReach.startsWith('smith:') ? 'go in' : 'deed', near: true }] : []),
     ...(hud.prompt ? [{ code: 'KeyE', key: 'E', label: hud.foot ? 'get in' : 'get out', near: true }] : []),
     { code: 'KeyM', key: 'M', label: 'map' },
@@ -1643,7 +1649,7 @@ function ContinentRideGame() {
           <Towns R={R} focus={focus} />
           <DoorFolk R={R} focus={focus} talking={talk?.key ?? null} />
           <RemoteKeepers peers={mp.peers} me={() => focus.current} />
-          <NyxZones zones={nyxZones} parts={nyxParts} ground={(x, z) => R.groundAt(x, z)} open={deed} onShop={openZoneShop} onReach={u => setZoneReach(u?.kind ?? null)} onWalkOff={() => setDeed(null)}
+          <NyxZones zones={nyxZones} parts={nyxParts} ground={(x, z) => R.groundAt(x, z)} open={deed} onShop={openZoneShop} onSupplier={openZoneSupplier} onReach={u => setZoneReach(u?.kind === 'supplier' && u.sells ? 'buy' : u?.kind ?? null)} onWalkOff={() => setDeed(null)}
             enabled={!!hud.foot && !deed && !talk && !showMap && !garage && !bagOpen && !vesselShop && !optionsOpen && !pack} />   {/* M84 s3b + M114 s3 */}
           <MarketView R={R} focus={focus} owned={tycoon.t?.owned ?? []} enabled={!!hud.foot && !deed && !talk && !showMap && !garage && !bagOpen && !vesselShop && !optionsOpen && !pack} onOpen={openDoor} onReach={setDeedReach} open={deed} onWalkOff={() => setDeed(null)} hide={hideDoor} />
           <ShipyardPlots R={R} focus={focus} track={track} held={hud.foot ? heldOf(stance, inv) : null} onState={setYardState} owned={ledger.shipyards} ownAll={isOwner && ownAllFlag} car={carLink} shipGate={shipOn} onShip={onShip}
@@ -1684,6 +1690,7 @@ function ContinentRideGame() {
       {deed === 'idris' && <IdrisPanel ledger={ledger} setLedger={setLedger} onClose={() => { setDeed(null); setTalk(null) }} onBack={talk ? () => setDeed(null) : undefined} />}
       {deed?.startsWith('front:') && !board && <ShopPanel id={deed.slice(6)} ledger={ledger} setLedger={setLedger} onClose={() => setDeed(null)} isTouch={isTouch} />}
       {deed?.startsWith('zone:') && <ShopPanel id={deed.slice(5)} ledger={ledger} setLedger={setLedger} onClose={() => setDeed(null)} isTouch={isTouch} />}   {/* M114 s3: a Shop zone's storefront panel */}
+      {deed?.startsWith('supplier:') && <SupplierPanel kind={deed.slice(9)} name={supplierName || 'Supplier'} ledger={ledger} setLedger={setLedger} onClose={() => setDeed(null)} />}   {/* M205 s1 */}
       {deed === 'ship:franky' && shipGate && R && <DestinationMapPanel places={R.meta.places} onClose={() => setDeed(null)} />}
       {deed && deed !== 'idony' && deed !== 'idris' && !deed.startsWith('front:') && !deed.startsWith('smith:') && !deed.startsWith('ship:') && R && tycoon.t && (
         <DeedCard R={R} lotId={deed} t={tycoon.t} marks={ledger.marks} onClose={() => setDeed(null)}
