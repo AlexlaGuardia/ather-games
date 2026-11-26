@@ -118,6 +118,7 @@ import { type CastSpec } from '../../play3d/cast'
 import type { CastHit } from './combat-casts'
 import { useLoadout } from '../shared/loadout'
 import { pitstopsUnlocked, type PlaceLike, type Pitstop } from '../continent/pitstops'
+import { mapDoors, runeHoldOpen } from './map-doors'   // M181: Rune Hold's door waits for its unlock
 import { tileCentreWorld, BIOME, BIOME_NAME, type Wilds, type Tree, type Crystal } from './wilds'
 import { loadIndex, makeWorld, stream, releaseTo, tileOf, zonesOf, TILE_M, WILDS_RELEASE_MS, type WildsWorld } from './wilds-world'
 import { makeVoids, FALL_LIP, type VoidField } from './wilds-voids'
@@ -1916,7 +1917,7 @@ function AtherSliceGame() {
       )}
       {panel?.kind === 'map' && (
         <FoldMap view={panel.view} travel={panel.travel} W={W} fog={fog} waymarks={waymarks} infected={infectedSet} here={{ x: pos.current.x - hereOff.x, z: pos.current.z - hereOff.z }}
-          inWilds={zone.kind === 'wilds'} onTravel={gladeTravel} hasPlot={gardenOpen(loadTut())} tile={hereTile} pitstops={pitstops}
+          inWilds={zone.kind === 'wilds'} onTravel={gladeTravel} hasPlot={gardenOpen(loadTut())} tile={hereTile} pitstops={mapDoors(pitstops, runeHoldOpen({ errand: errandStage, chain, cityDoors: pitstops.length - 1 }))}
           nodes={(nodesByTile.get(hereTile) ?? []).filter(n => infectedSet.has(n.id)).map(n => ({ ...n, x: n.x - hereOff.x, z: n.z - hereOff.z }))} regions={regions}
           area={ww ? { world: ww, regionsByTile, cx: hereOff.x, cz: hereOff.z, tileOff, nodes: nodes.filter(n => Math.abs(n.x - hereOff.x) < 1600 && Math.abs(n.z - hereOff.z) < 1600), here: { x: pos.current.x, z: pos.current.z } } : undefined}
           onClose={() => setPanel(null)} quest={fsOn ? mapSpots(loadTut(), fsWorld.current()) : undefined}
