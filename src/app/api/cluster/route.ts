@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { readSessionToken, SESSION_COOKIE } from '@/lib/accounts/session'
 import {
   getCluster, offersFor, foldCluster, offerQuarter, consentOffer, withdrawOffer, answerOffer, reportFold,
-  takeBackCorner, isQuarter, myQuarter, invitesFor, markHere,
+  takeBackCorner, isQuarter, myQuarter, invitesFor, markHere, startCluster, nameCluster,
 } from '@/lib/accounts/clusters'
 
 // Garden clusters — the shared record (lib/accounts/clusters.ts carries canon's four guards).
@@ -39,6 +39,10 @@ export async function POST(req: NextRequest) {
   switch (action) {
     case 'fold': { const e = needQ(); if (e) return e
       r = foldCluster(user_id, quarter as never, b.enchant === true, int(b.seed), int(b.tier)); break }
+    // BETA M188 s3: the Chordstone's cluster card (make one WITH a friend; name it)
+    case 'create': { const username = String(b.username ?? '').trim(); if (!username) return bad('Who?')
+      r = startCluster(user_id, username, b.enchant === true, int(b.seed), int(b.tier), b.name); break }
+    case 'name': r = nameCluster(user_id, b.name); break
     case 'offer': { const e = needQ(); if (e) return e
       const username = String(b.username ?? '').trim(); if (!username) return bad('Who?')
       r = offerQuarter(user_id, username, quarter as never); break }

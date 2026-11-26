@@ -45,6 +45,7 @@ function db(): DatabaseSync {
   const d = new DatabaseSync(DB_PATH)
   d.exec(SCHEMA)
   migrateSaves(d)
+  migrateClusters(d)
   _db = d
   return d
 }
@@ -56,6 +57,13 @@ function migrateSaves(d: DatabaseSync): void {
   if (!have.has('rev')) d.exec('ALTER TABLE saves ADD COLUMN rev INTEGER NOT NULL DEFAULT 0')
   if (!have.has('lease_device')) d.exec('ALTER TABLE saves ADD COLUMN lease_device TEXT')
   if (!have.has('lease_at')) d.exec('ALTER TABLE saves ADD COLUMN lease_at INTEGER')
+}
+
+/** BETA M188 s3 (canon 62a71de: a cluster may carry a name its keepers give it): additive `name` on `clusters`.
+ *  Idempotent, never touches existing rows. NULL = not named yet. */
+function migrateClusters(d: DatabaseSync): void {
+  const have = new Set((d.prepare('PRAGMA table_info(clusters)').all() as Array<{ name: string }>).map(c => c.name))
+  if (!have.has('name')) d.exec('ALTER TABLE clusters ADD COLUMN name TEXT')
 }
 
 const SCHEMA = `
@@ -412,5 +420,6 @@ export function _openAt(path: string): DatabaseSync {
   _db = d
   d.exec(SCHEMA)
   migrateSaves(d)
+  migrateClusters(d)
   return d
 }

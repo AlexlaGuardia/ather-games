@@ -16,8 +16,8 @@ import { clusterFrame, type Frame, type Mate, type Quarter } from './cluster'
 import { STARTING_SQUARES } from './plot'
 import { readGarden, gardenText } from './garden-snapshot'
 
-interface Remote { view: ClusterView | null; quarter: Q | null; invites: Invite[]; friends: Friend[]; gardens: Partial<Record<Q, { name: string | null; data: string }>>; signedIn: boolean }
-const EMPTY: Remote = { view: null, quarter: null, invites: [], friends: [], gardens: {}, signedIn: false }
+interface Remote { view: ClusterView | null; quarter: Q | null; invites: Invite[]; friends: Friend[]; gardens: Partial<Record<Q, { name: string | null; data: string }>>; signedIn: boolean; me: string | null }
+const EMPTY: Remote = { view: null, quarter: null, invites: [], friends: [], gardens: {}, signedIn: false, me: null }
 
 async function getJson<T>(url: string): Promise<T | null> { try { const r = await fetch(url, { cache: 'no-store' }); return r.ok ? await r.json() as T : null } catch { return null } }
 
@@ -33,7 +33,7 @@ export function useCluster(owned: readonly string[]) {
       getJson<{ friends: Friend[] }>('/api/friends'),
       getJson<{ session: { user_id: string } | null }>('/api/auth/session'),
     ])
-    const next: Remote = { view: c?.cluster ?? null, quarter: c?.quarter ?? null, invites: c?.invites ?? [], friends: f?.friends ?? [], gardens: g?.gardens ?? {}, signedIn: !!who?.session }
+    const next: Remote = { view: c?.cluster ?? null, quarter: c?.quarter ?? null, invites: c?.invites ?? [], friends: f?.friends ?? [], gardens: g?.gardens ?? {}, signedIn: !!who?.session, me: who?.session?.user_id ?? null }
     // ★ M44 part 3: an unchanged poll keeps the SAME object. A fresh one re-ran the frame memo below, i.e. clusterFrame ->
     // buildMeadow, every 30 s in every zone (a 0.5 s main-thread task in the Wilds walk profile, mid-stride).
     const j = JSON.stringify(next)
@@ -74,7 +74,8 @@ export function useCluster(owned: readonly string[]) {
     } finally { setBusy(null) }
   }, [refresh])
   const menu = useMemo(() => clusterMenu(rem.view, rem.quarter, rem.invites, rem.friends, true), [rem])
-  return { frame, menu, act, busy, signedIn: rem.signedIn, refresh }
+  // M188 s3: the Chordstone's cluster card reads the record itself (the name, who is in by id for a chord invite, friends)
+  return { frame, menu, act, busy, signedIn: rem.signedIn, refresh, view: rem.view, friends: rem.friends, me: rem.me }
 }
 
 const row: React.CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '7px 10px', borderRadius: 10, background: 'rgba(255,250,235,0.55)', border: `1px solid ${H.rule}` }

@@ -19,6 +19,7 @@
 // That is the offline-first trade, written down: the server cannot see runes yet.
 import { randomBytes } from 'node:crypto'
 import { accountsDb, areFriends, getAccountByUsername } from './db'
+import { cleanClusterName } from './cluster-name'
 
 export type Quarter = 'ne' | 'nw' | 'sw' | 'se'
 export const QUARTERS: readonly Quarter[] = ['ne', 'nw', 'sw', 'se']
@@ -30,6 +31,8 @@ export interface ClusterView {
   cluster_id: string
   /** Who folded it — remembered like who raised the barn. Nothing reads it to decide anything. */
   folded_by: string
+  /** BETA M188 s3: the name its keepers gave it (any member may), or null. Optional only for older literal views. */
+  name?: string | null
   members: ClusterMember[]
   offers: ClusterOffer[]
 }
@@ -52,7 +55,7 @@ export function getCluster(user_id: string): ClusterView | null {
 
 function viewOf(cluster_id: string): ClusterView | null {
   const d = accountsDb()
-  const c = d.prepare('SELECT cluster_id, folded_by FROM clusters WHERE cluster_id = ?').get(cluster_id) as { cluster_id: string; folded_by: string } | undefined
+  const c = d.prepare('SELECT cluster_id, folded_by, name FROM clusters WHERE cluster_id = ?').get(cluster_id) as { cluster_id: string; folded_by: string; name: string | null } | undefined
   if (!c) return null
   const members = d.prepare(`
     SELECT m.user_id, a.username, m.quarter, m.seed, m.tier FROM cluster_members m
@@ -66,7 +69,7 @@ function viewOf(cluster_id: string): ClusterView | null {
     consented: (d.prepare('SELECT member_id FROM cluster_consents WHERE cluster_id = ? AND quarter = ?')
       .all(cluster_id, o.quarter) as { member_id: string }[]).map(r => r.member_id),
   }))
-  return { cluster_id: c.cluster_id, folded_by: c.folded_by, members, offers }
+  return { cluster_id: c.cluster_id, folded_by: c.folded_by, name: c.name ?? null, members, offers }
 }
 
 /** Offers waiting on THIS keeper's answer (they are the invitee). */
@@ -110,6 +113,39 @@ export function foldCluster(user_id: string, quarter: Quarter, hasEnchant: boole
   d.prepare('INSERT INTO cluster_members (cluster_id, quarter, user_id, seed, tier, joined_at) VALUES (?, ?, ?, ?, ?, ?)')
     .run(id, quarter, user_id, seed | 0, tier | 0, now)
   return { ok: true, value: viewOf(id)! }
+}
+
+/**
+ * BETA M188 s3 (Alex 11-26: "the player needs at least one friend to create a cluster no cost.. only four can join"):
+ * the Chordstone's cluster card makes a cluster WITH a friend, in one step: every check on the friend runs BEFORE the
+ * fold, so no cluster is made without a friend asked into it. The asker stands in `ne`, the friend is offered `nw`;
+ * the friend joins with their own yes (the asker's is counted). Nothing is spent. Same guards as fold + offer.
+ */
+export function startCluster(user_id: string, username: string, hasEnchant: boolean, seed: number, tier: number, name?: unknown): Result<ClusterView> {
+  if (memberRow(user_id)) return fail('You already stand in a cluster')
+  const target = getAccountByUsername(String(username ?? '').trim())
+  if (!target) return fail('No player by that name')
+  if (target.user_id === user_id) return fail('A cluster needs a friend')
+  if (!areFriends(user_id, target.user_id)) return fail('Only a friend can be asked into a cluster')
+  if (memberRow(target.user_id)) return fail('They already stand in a cluster')
+  const clean = name === undefined || name === '' ? null : cleanClusterName(name)
+  if (name !== undefined && name !== '' && !clean) return fail('That name will not do')
+  const f = foldCluster(user_id, 'ne', hasEnchant, seed, tier)
+  if (!f.ok) return f
+  if (clean) accountsDb().prepare('UPDATE clusters SET name = ? WHERE cluster_id = ?').run(clean, f.value.cluster_id)
+  const o = offerQuarter(user_id, target.username ?? username, 'nw')
+  if (!o.ok) { takeBackCorner(user_id); return o }
+  return o
+}
+
+/** BETA M188 s3: any CURRENT member names (or renames) their cluster. No title (guard 3): nobody's word outranks. */
+export function nameCluster(user_id: string, name: unknown): Result<ClusterView> {
+  const me = memberRow(user_id)
+  if (!me) return fail('You do not stand in a cluster')
+  const clean = cleanClusterName(name)
+  if (!clean) return fail('That name will not do')
+  accountsDb().prepare('UPDATE clusters SET name = ? WHERE cluster_id = ?').run(clean, me.cluster_id)
+  return { ok: true, value: viewOf(me.cluster_id)! }
 }
 
 /** Offer an open quarter to a friend. Any member may offer; the offerer's own yes is counted. */

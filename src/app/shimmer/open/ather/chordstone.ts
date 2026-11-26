@@ -7,6 +7,7 @@
 import type { LobbyMember } from '@/lib/party-lobby'
 import { CHORDSTONE, CHORDSTONE_OFF } from './plot'
 import { chordColour } from '../shared/chord'
+import type { ClusterView } from '@/lib/accounts/clusters'
 
 /** Where it stands: beside the Green's gate, off its side (Alex 11-26: 'a podium off to the side of the gate'). The gate's
  *  plinth is r 1.8 and the stone's foot r 0.75, so 3.4 m leaves a hand between them for the grown root that joins them.
@@ -38,4 +39,27 @@ export function lightSpot(k: number, n: number): { x: number; z: number } {
   if (n <= 1) return { x: 0, z: 0 }
   const a = (k / n) * Math.PI * 2, r = 0.3
   return { x: Math.cos(a) * r, z: Math.sin(a) * r }
+}
+
+// ── BETA M188 s3: THE CLUSTER CARD'S FOUR SEATS ─────────────────────────────────────────────────────────────────────────
+// Alex 11-26: "only four can join and here the names can be displayed". One seat per quarter of the server record
+// (src/lib/accounts/clusters.ts): a member (name, me?), a friend ASKED into it (name, how many yes still to come, did I say
+// yes), or open. Me first, then the order the others came in, then the asked, then the open ones. No title (canon guard 3).
+export type ClusterSeat =
+  | { kind: 'member'; user_id: string; name: string; me: boolean }
+  | { kind: 'asked'; quarter: string; name: string; waiting: number; youSaidYes: boolean }
+  | { kind: 'open' }
+export const CLUSTER_SEATS = 4
+export function clusterSeats(view: ClusterView | null, me: string | null): ClusterSeat[] {
+  const seats: ClusterSeat[] = []
+  if (view) {
+    const ms = [...view.members].sort((a, b) => Number(b.user_id === me) - Number(a.user_id === me))
+    for (const m of ms) seats.push({ kind: 'member', user_id: m.user_id, name: m.username ?? 'a keeper', me: m.user_id === me })
+    for (const o of view.offers) seats.push({
+      kind: 'asked', quarter: o.quarter, name: o.invitee ?? 'a keeper',
+      waiting: view.members.filter(m => !o.consented.includes(m.user_id)).length, youSaidYes: !!me && o.consented.includes(me),
+    })
+  }
+  while (seats.length < CLUSTER_SEATS) seats.push({ kind: 'open' })
+  return seats.slice(0, CLUSTER_SEATS)
 }

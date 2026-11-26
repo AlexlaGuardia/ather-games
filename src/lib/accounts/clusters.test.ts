@@ -129,6 +129,33 @@ check('★ the garden left with the corner', !Object.values(C.mateGardens(alex))
   check('and with the account', !accountsDb().prepare('SELECT 1 FROM cluster_seen WHERE user_id = ?').get(fay))
 }
 
+// §M188 s3 the Chordstone's cluster card: made WITH a friend in one step, named by any member, four seats.
+{
+  const [ka, kb, kc, kd, ke, kz] = ['kay_a', 'kay_b', 'kay_c', 'kay_d', 'kay_e', 'kay_z'].map(mk)
+  for (const [x, y, yn] of [[ka, kb, 'kay_b'], [ka, kc, 'kay_c'], [ka, kd, 'kay_d'], [ka, ke, 'kay_e'], [kb, kc, 'kay_c'], [kb, kd, 'kay_d'], [kc, kd, 'kay_d']] as const) friends(x, y, yn)
+  check('★ no cluster without a friend: a stranger', !C.startCluster(ka, 'kay_z', true, 1, 0).ok && C.getCluster(ka) === null)
+  check('★ no cluster with yourself', !C.startCluster(ka, 'kay_a', true, 1, 0).ok && C.getCluster(ka) === null)
+  check('a bad name makes nothing', !C.startCluster(ka, 'kay_b', true, 1, 0, '<b>x</b>').ok && C.getCluster(ka) === null)
+  const s0 = C.startCluster(ka, 'kay_b', true, 1, 0, '  Low   Meadow ')
+  check('★ made with a friend: you stand in, the friend is asked', s0.ok && s0.value.members.length === 1 && s0.value.offers.length === 1 && s0.value.offers[0].invitee_id === kb, JSON.stringify(s0))
+  check('and named (whitespace collapsed)', s0.ok && s0.value.name === 'Low Meadow')
+  check('the friend sees the invite', C.invitesFor(kb).length === 1)
+  const cid2 = s0.ok ? s0.value.cluster_id : ''
+  check('★ the friend joins on their own yes', (() => { const r = C.answerOffer(kb, cid2, 'nw', true, 0, 0); return r.ok && r.value?.members.length === 2 })())
+  check('both read the same name', C.getCluster(kb)?.name === 'Low Meadow' && C.getCluster(ka)?.name === 'Low Meadow')
+  check('★ ANY member renames it (no title)', C.nameCluster(kb, 'Brook Side').ok && C.getCluster(ka)?.name === 'Brook Side')
+  check('a stranger cannot', !C.nameCluster(kz, 'Mine').ok && C.getCluster(ka)?.name === 'Brook Side')
+  check('too long will not do', !C.nameCluster(ka, 'x'.repeat(25)).ok)
+  check('in a cluster already: cannot make another', !C.startCluster(ka, 'kay_e', true, 1, 0).ok)
+  // fill to four: c (sw), d (se), everyone saying yes
+  C.offerQuarter(ka, 'kay_c', 'sw'); C.consentOffer(kb, 'sw'); C.answerOffer(kc, cid2, 'sw', true, 0, 0)
+  C.offerQuarter(ka, 'kay_d', 'se'); C.consentOffer(kb, 'se'); C.consentOffer(kc, 'se'); C.answerOffer(kd, cid2, 'se', true, 0, 0)
+  check('four keepers', C.getCluster(ka)?.members.length === 4)
+  check('★★ a fifth cannot be asked: every quarter is somebody\'s', (['ne', 'nw', 'sw', 'se'] as const).every(q => !C.offerQuarter(ka, 'kay_e', q).ok) && C.invitesFor(ke).length === 0)
+  check('the view shape stays title-free with a name', !/leader|owner|founder|head|admin|host/i.test(JSON.stringify(Object.keys(C.getCluster(ka)!))))
+  for (const k of [ka, kb, kc, kd]) C.takeBackCorner(k)
+}
+
 try { unlinkSync(path) } catch { /* */ }
 console.log(failures ? `❌ clusters: ${failures} failed` : '✅ clusters: all passed')
 if (failures) process.exit(1)

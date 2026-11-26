@@ -1,5 +1,5 @@
 // BETA M188 s2: the Chordstone's pure half (chordstone.ts). Run: npx tsx src/app/shimmer/open/ather/chordstone.test.ts
-import { chordLights, lightSpot, CHORDSTONE, CHORDSTONE_OFF, MAX_LIGHTS } from './chordstone'
+import { chordLights, lightSpot, CHORDSTONE, CHORDSTONE_OFF, MAX_LIGHTS, clusterSeats, CLUSTER_SEATS } from './chordstone'
 import { chordColour } from '../shared/chord'
 import { GATE, THRESHOLD } from './plot'
 import type { LobbyMember } from '@/lib/party-lobby'
@@ -29,5 +29,19 @@ ok(lightSpot(0, 1).x === 0 && lightSpot(0, 1).z === 0, 'one light sits in the ce
 const s = Array.from({ length: 6 }, (_, k) => lightSpot(k, 6))
 ok(s.every((p, i) => s.every((q, j) => i === j || Math.hypot(p.x - q.x, p.z - q.z) > 0.2)), 'six lights never overlap')
 ok(s.every(p => Math.hypot(p.x, p.z) < 0.5), 'every light is on the top')
+
+// M188 s3: the cluster card's four seats
+{
+  const v = (members: [string, string][], offers: [string, string, string[]][] = []) => ({ cluster_id: 'c', folded_by: 'x', name: null,
+    members: members.map(([id, n], i) => ({ user_id: id, username: n, quarter: (['ne', 'nw', 'sw', 'se'] as const)[i], seed: 0, tier: 0 })),
+    offers: offers.map(([q, id, c]) => ({ quarter: q as 'nw', invitee_id: id, invitee: id.toUpperCase(), consented: c })) })
+  const none = clusterSeats(null, 'a')
+  ok(none.length === CLUSTER_SEATS && none.every(x => x.kind === 'open'), 'no cluster: four open seats')
+  const s2 = clusterSeats(v([['b', 'Bo'], ['a', 'Ana']], [['sw', 'c', ['b']]]), 'a')
+  ok(s2[0].kind === 'member' && s2[0].me && s2[0].name === 'Ana' && s2[1].kind === 'member' && s2[1].name === 'Bo', 'me first, then the others')
+  ok(s2[2].kind === 'asked' && s2[2].waiting === 1 && !s2[2].youSaidYes && s2[3].kind === 'open', 'an asked friend: one yes still to come (mine), then an open seat')
+  const full = clusterSeats(v([['a', 'A'], ['b', 'B'], ['c', 'C'], ['d', 'D']]), 'a')
+  ok(full.length === 4 && full.every(x => x.kind === 'member'), 'four keepers fill the card: never a fifth seat')
+}
 
 console.log(fails ? `\n${fails} FAILED` : '\nall ok'); process.exit(fails ? 1 : 0)

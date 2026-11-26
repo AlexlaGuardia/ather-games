@@ -1948,7 +1948,7 @@ function AtherSliceGame() {
       {panel?.kind === 'cluster' && <ClusterPanel c={cl} onClose={() => setPanel(null)} />}
       {panel?.kind === 'shop' && <ShopPanel id={panel.id} ledger={ledger} setLedger={setLedger} onClose={() => setPanel(null)} isTouch={isTouch} />}   {/* M114 s2: a Shop zone */}
       {panel?.kind === 'brew' && <BrewingPanel station={panel.station} onClose={() => setPanel(null)} />}
-      {panel?.kind === 'chordstone' && <ChordstonePanel onClose={() => setPanel(null)} />}   {/* M188 s2 */}
+      {panel?.kind === 'chordstone' && <ChordstonePanel cluster={cl} onClose={() => setPanel(null)} />}   {/* M188 s2 */}
       {panel?.kind === 'adesk' && <AngelicaDeskPanel onClose={() => setPanel(null)} say={s => hudSay(s, 'item')} onBrewed={() => { const t = loadTut(), t1 = brewed(t); if (t1 !== t) setTut(t1) }} />}   {/* M70 s3 */}
       {panel?.kind === 'work' && !visitNow && <WorkshopPanel near={panel.near} owned={owned} onClose={() => setPanel(null)} />}
       {zone.kind === 'plot' && <PlacingBar owned={owned} />}

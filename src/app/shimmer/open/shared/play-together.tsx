@@ -148,6 +148,20 @@ function PartyTab({ party, start, join, leave, mates }: { party: string | null; 
 
 const Swatch = ({ c }: { c: string }) => <span aria-hidden className="inline-block w-[9px] h-[9px] rounded-full shrink-0" style={{ background: c, boxShadow: `0 0 4px ${c}` }} />
 
+/** BETA M188 s3: invite one keeper (by account id) into MY chord, starting one if I am in none: the Chordstone's
+ *  cluster card uses it from a member's row. Same socket and answers as the Friends list's Invite. null = no socket here. */
+export function useChordInvite(): ((user_id: string) => Promise<string>) | null {
+  useSocialGen()
+  const { presence } = socialBox
+  const { party, start } = useParty()
+  if (!presence) return null
+  return async (user_id: string) => {
+    const code = party ?? start()
+    const r = await presence.invite(user_id, code)
+    return r.ok ? 'invited' : r.reason === 'offline' ? 'offline' : r.reason === 'unverified' ? 'sign in again' : 'not connected'
+  }
+}
+
 /** ★ BETA M188 s1: Options › CHORD. Who is in your chord (name + their colour), a chord invite waiting on you (Join / Not now),
  *  start / join by code / copy the link / leave, who is in your world, and your friends (invite one into the chord). Light on
  *  purpose: the Chordstone at the Green's gate (s2) will do the heavy lifting. Reads the page's <OpenSocial/> (one socket). */
