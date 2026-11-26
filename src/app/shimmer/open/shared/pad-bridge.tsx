@@ -62,13 +62,20 @@ function navigate(dir: 'up' | 'down' | 'left' | 'right') {
 }
 const ARROW = { up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight' } as const
 
+let fireSeq = 0, firing = () => false
 function apply(e: PadEffect) {
   switch (e.t) {
     case 'keydown': case 'keyup': key(e.t, e.code); return
     case 'tap': key('keydown', e.code); key('keyup', e.code); return
     case 'move': touch.move.x = e.x; touch.move.y = e.y; return
     case 'look': touch.look.dx += e.dx / TOUCH_LOOK_SENS; touch.look.dy += e.dy / TOUCH_LOOK_SENS; return
-    case 'fire': touch.fire = e.on; return
+    case 'fire':
+      // ⚠ a tap shorter than a frame: the timer sees RT go down and up between two of combat's frames, and a trigger
+      // cleared before combat ever read it never fires. So the press is latched until a whole frame has passed
+      // (two rAFs); combat clears it itself after a semi-auto shot, and a new press since then is left alone.
+      if (e.on) { touch.fire = true; fireSeq++ }
+      else { const at = fireSeq; requestAnimationFrame(() => requestAnimationFrame(() => { if (at === fireSeq && !firing()) touch.fire = false })) }
+      return
     case 'aim': touch.aim = e.on; return
     case 'hotbar': window.dispatchEvent(new CustomEvent('pad:hotbar', { detail: e.dir })); return
     case 'nav': {
@@ -93,6 +100,7 @@ export function PadBridge({ menuOpen }: { menuOpen: boolean }) {
   }, [menuOpen])
   useEffect(() => {
     const s: PadState = newPadState()
+    firing = () => s.fire
     let last = performance.now(), map = loadBindings()
     // ⚠ A TIMER, NOT rAF (unlike voxel3d): the open world runs at a few fps on a weak GPU or a swiftshader check, and a
     // button tapped and let go inside one long frame is an edge rAF never sees (and a tap of Y read a frame late is a

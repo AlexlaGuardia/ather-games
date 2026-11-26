@@ -128,6 +128,11 @@ for (const [vp, w, h] of (phoneOnly ? [['phone', 390, 844]] : deskOnly ? [['desk
     await press('X')
     ok(await poll(async () => (await A()).panel === 'talk', 8000), `${vp}: 6. X talks to Greg (${(await A()).panel}, pad menu ${await p.evaluate(() => (window as any).__pad.menu())}, near ${await near()})`)
     if (process.env.SHOT_DIR) await p.screenshot({ path: `${process.env.SHOT_DIR}/m186-greg-${vp}.png` }).catch(() => {})
+    if ((await A()).panel !== 'talk') {   // diagnose: does the keyboard's E talk here?
+      await p.evaluate(() => window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyE', key: 'e', bubbles: true })))
+      await sleep(1500); console.log(`  (synthetic KeyE: panel ${(await A()).panel})`)
+      if (!(await A()).panel) { await p.keyboard.press('KeyE'); await sleep(1500); console.log(`  (trusted KeyE: panel ${(await A()).panel}, near ${await near()}, fade ${await p.evaluate(() => document.querySelector('[data-veil]')?.getAttribute('style')?.match(/opacity: ?[0-9.]+/)?.[0])})`) }
+    }
     for (let i = 0; i < 4 && (await A()).panel; i++) await press('B')
     ok(await poll(async () => (await A()).panel === null, 8000), `${vp}: 6. B closes the talk`)
     // 7 mine (desktop)
