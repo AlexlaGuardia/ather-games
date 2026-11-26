@@ -5,6 +5,8 @@
 // ★ As with land.ts: what you see is what you drive on. `heightAt` interpolates the SAME two triangles per cell the
 // mesh draws, split on the (i,j)→(i+1,j+1) diagonal.
 
+import { loadMeter, meteredFetch, hintFor } from './shared/load-progress'   // M187
+
 export type RoadKind = 'paved' | 'road' | 'trail' | 'pass'
 /** Anything drivable with a centre line: an Atlas route or a network edge. */
 export interface RoadLike { id: string; kind: RoadKind; width: number; pts: [number, number, number][] }
@@ -229,11 +231,16 @@ export function makeRegion(meta: RegionMeta, raw: Int16Array): Region {
 
 /** Browser: fetch the pair from /open/<name>.{json,bin}. */
 export async function loadRegion(name: string): Promise<Region> {
-  const meta = await fetch(`/open/${name}.json`).then(r => r.json() as Promise<RegionMeta>)
-  const res = await fetch(`/open/${name}.bin${meta.binGz ? '.gz' : ''}`)
+  // M187: both files count toward the load screen's percent (shared/load-progress.ts); the bin's size is reserved before
+  // the json is in, so the percent does not reach 100 on the json alone
+  loadMeter.reserve('region', hintFor(`/open/${name}.json`) + hintFor(`/open/${name}.bin.gz`))
+  try {
+  const meta = await meteredFetch(`/open/${name}.json`, 'region').then(r => r.json() as Promise<RegionMeta>)
+  const res = await meteredFetch(`/open/${name}.bin${meta.binGz ? '.gz' : ''}`, 'region')
   // a .gz is served as plain bytes (no Content-Encoding), so inflate it here
   const bin = meta.binGz ? await new Response(res.body!.pipeThrough(new DecompressionStream('gzip'))).arrayBuffer() : await res.arrayBuffer()
   return makeRegion(meta, new Int16Array(bin))
+  } finally { loadMeter.release('region') }
 }
 
 /** What you drive on: the network's edges when the export has one, else the raw routes (older exports). */

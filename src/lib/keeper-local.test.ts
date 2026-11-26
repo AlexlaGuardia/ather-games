@@ -155,6 +155,7 @@ const DEVICE_KEYS = [
   'open:hands-actions.v1',        // first-person hands' action tune (shared/fp-actions.ts): DEVICE, like open:hands-tune.v1
   'open:rod-grip.v1',             // held rod grip tune (shared/held-rod.tsx): DEVICE, tuned against this screen
   'ather:shimmer:loadTipLast',    // the last load-screen tip shown (shared/load-screen.tsx): DEVICE
+  'ather:shimmer:loadFruitLast',  // M187: the last loader fruit shown (shared/load-screen.tsx): DEVICE
 ]
 function walk(dir: string): string[] {
   const out: string[] = []

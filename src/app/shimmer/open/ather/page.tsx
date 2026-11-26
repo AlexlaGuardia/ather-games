@@ -16,6 +16,7 @@
 
 import { OwnerReady } from '../shared/owner-ready'
 import { LoadScreen } from '../shared/load-screen'
+import { loadMeter, hintFor, TILE_BYTES } from '../shared/load-progress'   // M187
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { subscribeVisit, currentVisit, isVisiting, startVisit, endVisit, noteVisit, shownOwned, plotZone, lobbyZoneOf, visitVerdict, VISIT_ASK_MS, guestRefuses, snapMoglins, type PlotSnap } from './plot-visit'   // BETA M61
 import { usePlotVisitNet } from './plot-visit-net'
@@ -767,15 +768,18 @@ function AtherSliceGame() {
     if (gs) { landed.current = true; arrive({ kind: 'glade' }, { x: gs.x, z: gs.z, yaw: gs.yaw }); return }
     if (!resumeFrom(window.location.search, loadSpot(), () => true)) return
     setResuming(true)
-    const cap = setTimeout(() => setResuming(false), 20000)
-    return () => clearTimeout(cap)
+    // M187: the load screen's percent = the Wilds bytes this resume fetches (shared/load-progress.ts): the index, the ring
+    // at Greg's waymark the page always streams, the ring at the spot. Reserved now; what is not fetched is released below.
+    loadMeter.reserve('wilds', hintFor('/open/wilds/tiles.json') + 18 * TILE_BYTES)
+    const cap = setTimeout(() => { loadMeter.release('wilds'); setResuming(false) }, 20000)
+    return () => { clearTimeout(cap); loadMeter.release('wilds') }
   }, [])
   useEffect(() => {
     if (landed.current || !ww) return
     const sp = resumeFrom(window.location.search, loadSpot(), n => !!ww.byName.get(n))
-    if (!sp || sp.tile === GLADE_TILE) { setResuming(false); return }
+    if (!sp || sp.tile === GLADE_TILE) { loadMeter.release('wilds'); setResuming(false); return }
     landed.current = true
-    stream(ww, sp.x, sp.z).then(() => { setWrev(ww.rev); setHereTile(sp.tile); arrive({ kind: 'wilds', tile: sp.tile }, { x: sp.x, z: sp.z, yaw: sp.yaw }); setResuming(false) })
+    stream(ww, sp.x, sp.z).then(() => { loadMeter.release('wilds'); setWrev(ww.rev); setHereTile(sp.tile); arrive({ kind: 'wilds', tile: sp.tile }, { x: sp.x, z: sp.z, yaw: sp.yaw }); setResuming(false) })
   }, [ww, arrive])
   const hereTileRef = useRef(hereTile); hereTileRef.current = hereTile
   const fadeRef = useRef(fade); fadeRef.current = fade

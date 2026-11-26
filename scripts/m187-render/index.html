@@ -1,0 +1,31 @@
+<!doctype html><html><body style="margin:0;background:transparent">
+<script type="importmap">{"imports":{"three":"/three/build/three.module.js","three/addons/":"/three/examples/jsm/"}}</script>
+<script type="module">
+import * as THREE from 'three'
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
+const W = 256, H = 256, N = +(new URLSearchParams(location.search).get('n') ?? 12)
+const r = new THREE.WebGLRenderer({ alpha: true, antialias: true, preserveDrawingBuffer: true })
+r.setSize(W, H); r.setClearColor(0, 0); r.outputColorSpace = THREE.SRGBColorSpace; document.body.appendChild(r.domElement)
+const scene = new THREE.Scene()
+scene.add(new THREE.HemisphereLight(0xffffff, 0x8899aa, 1.6)); const sun = new THREE.DirectionalLight(0xffffff, 1.8); sun.position.set(-2, 3, 2); scene.add(sun)
+const grad = new THREE.DataTexture(new Uint8Array([110,110,110,255,185,185,185,255,255,255,255,255]), 3, 1, THREE.RGBAFormat); grad.minFilter = grad.magFilter = THREE.NearestFilter; grad.needsUpdate = true
+const g = await new GLTFLoader().loadAsync('/dewbear-rigged.glb')
+const lin = (geo) => { const a = geo.getAttribute('color'); if (!a) return; const c = new THREE.Color(); for (let i = 0; i < a.count; i++) { c.setRGB(a.getX(i), a.getY(i), a.getZ(i), THREE.SRGBColorSpace); a.setXYZ(i, c.r, c.g, c.b) } a.needsUpdate = true }
+const skin = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: grad, emissive: '#cdf3ff', emissiveIntensity: 0.10 })
+const eye = new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false })
+const hull = new THREE.MeshBasicMaterial({ color: '#d8f4ff', transparent: true, opacity: 0.38, side: THREE.BackSide, depthWrite: false })
+hull.onBeforeCompile = sh => { sh.vertexShader = sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n transformed += normalize(objectNormal) * 0.024;') }
+const hulls = []
+g.scene.traverse(o => { if (o.isSkinnedMesh || o.isMesh) { lin(o.geometry); o.material = o.name === 'eyes' ? eye : skin; if (o.name === 'body') { const h = o.clone(); h.material = hull; h.bind(o.skeleton, o.bindMatrix); o.parent.add(h) } } })
+scene.add(g.scene)
+const clip = g.animations.find(a => a.name === 'run'); const mix = new THREE.AnimationMixer(g.scene); mix.clipAction(clip).play()
+const bb = new THREE.Box3().setFromObject(g.scene); const c = bb.getCenter(new THREE.Vector3()), s = bb.getSize(new THREE.Vector3())
+const half = Math.max(s.y, s.z) * 0.62
+const cam = new THREE.OrthographicCamera(-half, half, half, -half, 0.01, 50)
+const side = new URLSearchParams(location.search).get('side') ?? '-1'
+cam.position.set(c.x + 10 * +side, c.y, c.z); cam.lookAt(c.x, c.y, c.z)
+cam.position.y += 0; cam.top = half + (s.y/2 - half) * 0 ; cam.updateProjectionMatrix()
+const out = []
+for (let i = 0; i < N; i++) { mix.setTime(clip.duration * i / N); r.render(scene, cam); out.push(r.domElement.toDataURL('image/png')) }
+window.__frames = out; window.__info = { dur: clip.duration, size: s.toArray(), center: c.toArray() }
+</script></body></html>

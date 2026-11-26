@@ -6,6 +6,7 @@
 // ★ What you see is what you stand on: `heightAt` interpolates the SAME two triangles per cell the mesh draws,
 //   split on the (i,j)→(i+1,j+1) diagonal (land.ts / region.ts rule).
 
+import { meteredFetch } from '../shared/load-progress'   // M187
 import { treeFor, TRUNK, type Zone, type TreeKind } from './forestry'
 import { crystalFor, type CrystalKind } from './prospecting'
 import type { Box, Shape } from '../terrain-world'
@@ -256,9 +257,9 @@ function* parseSteps(meta: WildsMeta, dm: Int16Array, biomes: Uint8Array, zoneAt
 /** Browser loader: the three files export_wilds.py writes. */
 export async function loadWilds(name: string, base = '/open/wilds', zoneAt?: (i: number, j: number) => Zone, clear?: (x: number, z: number) => boolean, roads?: RoadField | null, voids?: VoidField | null, edits?: TileEdits | null, water?: WaterMap | null, falls?: FallMap | null): Promise<Wilds> {
   const [meta, bin, bio] = await Promise.all([
-    fetch(`${base}/${name}.json`).then(r => { if (!r.ok) throw new Error(`wilds ${name}.json ${r.status}`); return r.json() as Promise<WildsMeta> }),
-    fetch(`${base}/${name}.bin`).then(r => { if (!r.ok) throw new Error(`wilds ${name}.bin ${r.status}`); return r.arrayBuffer() }),
-    fetch(`${base}/${name}.biome`).then(r => { if (!r.ok) throw new Error(`wilds ${name}.biome ${r.status}`); return r.arrayBuffer() }),
+    meteredFetch(`${base}/${name}.json`, 'wilds').then(r => { if (!r.ok) throw new Error(`wilds ${name}.json ${r.status}`); return r.json() as Promise<WildsMeta> }),
+    meteredFetch(`${base}/${name}.bin`, 'wilds').then(r => { if (!r.ok) throw new Error(`wilds ${name}.bin ${r.status}`); return r.arrayBuffer() }),
+    meteredFetch(`${base}/${name}.biome`, 'wilds').then(r => { if (!r.ok) throw new Error(`wilds ${name}.biome ${r.status}`); return r.arrayBuffer() }),
   ])
   return parseWildsSliced([meta, new Int16Array(bin), new Uint8Array(bio), zoneAt, clear, true, roads, voids, edits, water, falls])
 }

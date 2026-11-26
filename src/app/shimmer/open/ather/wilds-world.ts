@@ -11,6 +11,7 @@
 //
 // ★ PURE apart from `load` (fetch). Tiles are the existing `Wilds` objects, parsed the same way.
 
+import { meteredFetch } from '../shared/load-progress'   // M187
 import type { Box, Shape } from '../terrain-world'
 import { parseWilds, loadWilds, BIOME, type BiomeId, type Wilds, type Tree, type Crystal } from './wilds'
 import type { Zone } from './forestry'
@@ -178,7 +179,7 @@ export function releaseTo(w: WildsWorld, x: number, z: number): boolean {
 export const WILDS_RELEASE_MS = 60_000
 
 export async function loadIndex(base = '/open/wilds'): Promise<TileIndex> {
-  const r = await fetch(`${base}/tiles.json`); if (!r.ok) throw new Error(`wilds index ${r.status}`)
+  const r = await meteredFetch(`${base}/tiles.json`, 'wilds')   // M187: counts toward the load screen's percent; if (!r.ok) throw new Error(`wilds index ${r.status}`)
   return r.json()
 }
 export { parseWilds }
