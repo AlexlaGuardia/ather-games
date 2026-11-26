@@ -125,6 +125,7 @@ for (const [vp, w, h] of (phoneOnly ? [['phone', 390, 844]] : deskOnly ? [['desk
     let faced = false
     for (const d of [2, 1.6, 2.4]) { for (let i = 0; i < 12 && !faced; i++) { const a = i * Math.PI / 6; await at(greg.x + Math.sin(a) * d, greg.z + Math.cos(a) * d, a); faced = await poll(async () => (await near()) === 'greg', 2500) } if (faced) break }
     ok(faced, `${vp}: 6. stood before Greg`)
+    ok(await poll(() => p.evaluate(() => document.body.innerText.includes('Gregory')), 15000), `${vp}: 6. Greg's prompt is up (the teleport's fade is over)`)
     await press('X')
     ok(await poll(async () => (await A()).panel === 'talk', 8000), `${vp}: 6. X talks to Greg (${(await A()).panel}, pad menu ${await p.evaluate(() => (window as any).__pad.menu())}, near ${await near()})`)
     if (process.env.SHOT_DIR) await p.screenshot({ path: `${process.env.SHOT_DIR}/m186-greg-${vp}.png` }).catch(() => {})
