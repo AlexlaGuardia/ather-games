@@ -273,6 +273,7 @@ Steps (one worker each, in order; each keeps `beta-m7-saves` green):
 - **Rules:** only rows on this list. No new systems, no lore, nothing public. Canon gate + tests before every build.
 
 ## Inbox (Alex's brain dump: hub writes here at once, dated, his words; triaged into rows / queue / CANON_GAPS / killed)
+- 11-26 13:4x Alex: 'lets give them a little size increase as well since the awakened forms can get bigger than the player' -> M202 second forms ~1.4x base (was 1.2x), per-form dial; awakened keep room above the keeper
 - 11-26 13:3x Alex on M202 s1: 'Thats what I was afraid of going too fast and watering down each evolution.. this first evolution is its own new creature and should introduce the element that will then fork into four more ..the more alike the 2nd evolutions are the less room we have to work with for the 3rd' -> M202 PAUSED, s2 Manalotl agent stopped (nothing committed)
 - 11-26 13:0x Alex: grimoire records second forms as SEPARATE FORM PAGES (reverses his 11-14 'no evolution pages') -> M203 + CANON_GAPS amend for Magii
 - 11-26 12:5x Alex: 'magii says we have the concept art ready for all of the 2nd form evolutions so now its on us to go one base spirit at a time make sure they have their evolution conditions set and rig them for the game' -> M202 = per base spirit: 4 forms modelled + rigged AND its evolution conditions set (M201 system first)
