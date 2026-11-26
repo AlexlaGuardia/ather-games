@@ -19,7 +19,7 @@ const standable = (p: { x: number; z: number }) => Number.isFinite(ground(p.x, p
 // four gardens, four quarters, the friends' three are the frame's mates
 ok(new Set(GLADE_GARDENS.map(g => g.quarter)).size === 4, 'four gardens in four quarters')
 ok(GLADE_FRAME.mates.length === 3 && GLADE_FRAME.open.length === 0, 'three friends round the Green, no open spot left')
-ok(GLADE_FRAME.mates.every(m => m.owned.length === STARTING_SQUARES.length), 'each friend holds the start ground')
+ok(GLADE_FRAME.mates.every(m => STARTING_SQUARES.every(q => m.owned.includes(q)) && m.owned.length <= STARTING_SQUARES.length + 2), 'each friend holds the start ground (+ at most the two squares M198 opened; m198-glade-friend-ground.test.ts)')
 ok(STARTING_SQUARES.every(q => GLADE_OWNED.has(q)) && GLADE_OWNED.size === new Set([...STARTING_SQUARES, ...Array.from({ length: (GLADE_GREG_BLOCK.i1 - GLADE_GREG_BLOCK.i0 + 1) * (GLADE_GREG_BLOCK.j1 - GLADE_GREG_BLOCK.j0 + 1) }, (_, k) => sqId(GLADE_GREG_BLOCK.i0 + (k % (GLADE_GREG_BLOCK.i1 - GLADE_GREG_BLOCK.i0 + 1)), GLADE_GREG_BLOCK.j0 + Math.floor(k / (GLADE_GREG_BLOCK.i1 - GLADE_GREG_BLOCK.i0 + 1))))]).size, "Greg holds the start corner + the Glade's block (s1b-2)")
 
 // who stands where: on their own garden, on ground, out of the mist

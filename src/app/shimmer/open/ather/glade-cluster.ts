@@ -43,8 +43,14 @@ export const GLADE_OWNED: ReadonlySet<string> = new Set([...STARTING_SQUARES, ..
   for (let j = b.j0; j <= b.j1; j++) for (let i = b.i0; i <= b.i1; i++) out.push(sqId(i, j))
   return out
 })()])
+/** M198 (Alex 11-26 'open those squares'): ground a friend holds from the start beyond the corner, in their garden's OWN
+ *  (unturned) square ids. Otto's 1,11 holds the Stonery pad (world ~-346,125.5; its edge was the wall at x -334) and 0,11
+ *  the pad's far corner + Sax's house, which straddle world z 130. Tess's 2,11 holds Yarrow's house + door (world ~-318,345;
+ *  the wall at z 334) and 1,11 the house's east posts past world x -314. Each touches the corner ground, so the mist moves
+ *  out with it (mateWalls reads `owned`). The least that covers every solid of Alex's placements, whole squares. */
+export const GLADE_FRIEND_GROUND: Readonly<Record<'otto' | 'tess' | 'bonn', readonly string[]>> = { otto: ['0,11', '1,11'], tess: ['1,11', '2,11'], bonn: [] }
 /** The Glade as a cluster frame: Greg's island at the origin, the three friends' islands round the Green. */
-export const GLADE_FRAME: Frame = clusterFrame('ne', GLADE_GARDENS.filter(g => g.id !== 'greg').map(g => ({ quarter: g.quarter, name: g.keeper, owned: [...STARTING_SQUARES] })))
+export const GLADE_FRAME: Frame = clusterFrame('ne', GLADE_GARDENS.filter(g => g.id !== 'greg').map(g => ({ quarter: g.quarter, name: g.keeper, owned: [...STARTING_SQUARES, ...GLADE_FRIEND_GROUND[g.id as 'otto' | 'tess' | 'bonn']] })))
 
 /** a garden's island in world coords (centre + rotation.y); Greg's is the origin, unturned */
 export function gardenAt(id: GladeGarden['id']): { x: number; z: number; rot: number } {
