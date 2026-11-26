@@ -133,7 +133,7 @@ export function SpiritPanel({ sp, id, phone, onClose }: { sp: Parameters<typeof 
           </div>
         )}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
-          {look && <SpiritAvatar sp={sp} look={look} size={phone ? 124 : 132} />}
+          {look && <SpiritAvatar sp={sp} look={look} size={phone ? 124 : 132} meals={meals} />}
           <StatRadar phone={phone} attr="spirit" ink={ink}
             axes={sheet.axes.map(a => ({ key: a.stat, label: a.label, reach: a.reach, mark: String(a.value), tint: H.ink }))} />
         </div>

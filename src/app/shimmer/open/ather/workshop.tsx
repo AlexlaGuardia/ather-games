@@ -1371,7 +1371,7 @@ function PlanterSpirit({ id }: { id: string }) {
   useFrame(({ clock }) => { if (orb.current) orb.current.position.y = 1.0 + Math.sin(clock.elapsedTime * 1.6) * 0.06 })
   const orbMesh = <mesh ref={orb} position-y={1.0}><sphereGeometry args={[0.16, 14, 10]} /><meshBasicMaterial color={f.glow} transparent opacity={0.85} /></mesh>
   if (!sp) return null
-  return look ? <SpiritOnPlanter sp={sp} look={look} y={0.53} fallback={orbMesh} nav={nav ?? undefined} id={id} dev={dev} /> : orbMesh
+  return look ? <SpiritOnPlanter sp={sp} look={look} y={0.53} fallback={orbMesh} nav={nav ?? undefined} id={id} dev={dev} meals={p?.meals} /> : orbMesh   // M204 s2: her bar = her glow accent
 }
 /** One piece, built from boxes in its wood's colour. Blockout look like the rooms. */
 export function PieceBody({ item, id, open }: { item: string; id?: string; /** M169 s2: a door's leaves / shutters stand open */ open?: boolean }) {

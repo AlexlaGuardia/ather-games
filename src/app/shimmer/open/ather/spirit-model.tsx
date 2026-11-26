@@ -33,6 +33,8 @@ import { bodyRadius } from './obstacles'
 import { gardenFollow, gardenGround } from './garden-follow'   // M126
 import { GROUND_Y } from './plot'
 import { GROWN } from '../../sprites/creature-size'
+import { accentOf, accentAt } from './spirit-accent'   // M204 s2: her glow accent from her bar
+import { isFxForm, makeSpiritFx, type SpiritFx } from './spirit-fx'   // M204 s2: the second forms' effects
 
 export const VULNYX_URL = SPIRIT_MODELS.fox!.url
 /** World height of the model (the glb is 1 unit tall). Small and lithe: ~0.55 m, about a third of a keeper. */
@@ -54,12 +56,29 @@ export function useSpiritRig(): boolean {
   return rigOn ??= typeof window === 'undefined' || new URLSearchParams(window.location.search).get('rig') !== '0'
 }
 
+/** M204 s2: `?fx=0` = no form effects (the frame-cost measure's before). Read once per page. */
+let fxOn: boolean | null = null
+const useFx = (): boolean => (fxOn ??= typeof window === 'undefined' || new URLSearchParams(window.location.search).get('fx') !== '0')
+/** M204 s2 HER GLOW ACCENT (spirit-accent.ts): the bar's colour mix as a live fresnel glow + a faint floor, x its strength */
+// The colour FLOWS through her slots' colours (feed order) along her body length (bind-pose z) and slowly in time, so a mixed bar
+// shows every colour fed. Strength: a faint floor + a fresnel rim.
+const ACC_HEAD = 'uniform vec3 uAccC[10]; uniform float uAccN; uniform float uAccS; uniform float uAccT; varying float vAccP;\n'
+const ACC_VERT = 'vAccP = position.z;'
+const ACC_FRAG = `{ float aph = fract(uAccT * 0.08 + vAccP * 0.9) * uAccN; int a0 = int(floor(aph)); int a1 = int(mod(floor(aph) + 1.0, uAccN));
+        vec3 ac = mix(uAccC[a0], uAccC[a1], smoothstep(0.55, 1.0, fract(aph)));
+        gl_FragColor.rgb += ac * uAccS * (0.06 + 0.95 * pow(1.0 - abs(dot(normal, normalize(vViewPosition))), 2.5)); }`
+type AccU = { c: { value: THREE.Color }; s: { value: number }; n: { value: number }; t: { value: number }; slots: { value: THREE.Color[] } }
+const accUniforms = (sh: { uniforms: Record<string, unknown>; vertexShader: string }, a: AccU) => {
+  sh.uniforms.uAccC = a.slots; sh.uniforms.uAccN = a.n; sh.uniforms.uAccS = a.s; sh.uniforms.uAccT = a.t
+  sh.vertexShader = 'varying float vAccP;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>\n ${ACC_VERT}`)
+}
+
 // read-only probe for the check: how many spirit models are mounted right now (all, and by species). `trot` = the Vulnyx's
 // pose (the M107 asserts read it), `trots[species]` = each species' latest pose.
 type TrotProbe = { x: number; y: number; z: number; mode: string; home: { x: number; z: number }; rMin: number; rMax: number; beats: number; homes: number; tilt: number; h: number; hWorld?: number; len?: number; keepMax?: number; cheers: number; yMax: number; calling: boolean; near: boolean; plays: number; playing: string | null; playYMax: number; braceMax: number }
 type RigProbe = { id: string; sp: Species; h: number; yaw: number; x: number; y: number; z: number; mode: string; v: number; /** M173: a flier's metres off the ground (0 walking) */ alt: number; body: RigBody }
-type Probe = { rigs: Map<string, RigProbe>; rigCount: typeof rigCount; mounted: number; url: string; h: number; species: Record<string, number>; urls: Record<string, number>; trot?: TrotProbe; trots: Record<string, TrotProbe> }
-const probe = (): Probe => { const w = window as unknown as { __spiritModel?: Probe }; return (w.__spiritModel ??= { mounted: 0, url: VULNYX_URL, h: VULNYX_H, species: {}, urls: {}, trots: {}, rigs: new Map(), rigCount }) }
+type Probe = { /** M204 s2 */ accents: Record<string, { hex: string; s: number; n: number; locked: boolean } | null>; fxs: Map<string, SpiritFx>; rigs: Map<string, RigProbe>; rigCount: typeof rigCount; mounted: number; url: string; h: number; species: Record<string, number>; urls: Record<string, number>; trot?: TrotProbe; trots: Record<string, TrotProbe> }
+const probe = (): Probe => { const w = window as unknown as { __spiritModel?: Probe }; return (w.__spiritModel ??= { accents: {}, fxs: new Map(), mounted: 0, url: VULNYX_URL, h: VULNYX_H, species: {}, urls: {}, trots: {}, rigs: new Map(), rigCount }) }
 
 /** M202 s1 OWNER PREVIEW of the second forms while no player path evolves a spirit yet (M201): `?form=mana|storm|earth|water`
  *  draws every evolvable garden spirit in that form, for the owner only (/api/owner). Players never see it. */
@@ -79,12 +98,16 @@ export function useFormPreview(): SpiritElement | null {
 let grad: THREE.DataTexture | null = null
 const gradTex = () => { if (grad) return grad; grad = new THREE.DataTexture(new Uint8Array([110, 110, 110, 255, 185, 185, 185, 255, 255, 255, 255, 255]), 3, 1, THREE.RGBAFormat); grad.minFilter = grad.magFilter = THREE.NearestFilter; grad.needsUpdate = true; return grad }
 
-function SpiritModel({ sp, look, nav, id, avatar, dev }: { sp: Species; look: SpiritLook; nav?: SpiritNav
+function SpiritModel({ sp, look, nav, id, avatar, dev, meals }: { sp: Species; look: SpiritLook; nav?: SpiritNav
+  /** M204 s2: her bar (the pot's meals): her glow accent */ meals?: readonly unknown[]
   /** M107 ship / M123 s2 (every keeper): she can be talked to, follow, keep with the party, play at training pieces */ dev?: boolean
   /** M109: the planter's id (her follow state + the E pick are keyed on it) */ id?: string
   /** M109: the spirit panel's turntable copy: not counted by the probe, not pickable */ avatar?: boolean }) {
   const gltf = useGLTF(look.url), scene = gltf.scene, rig = look.rig
   const g = useRef<THREE.Group>(null)
+  const mealKey = (meals ?? []).join(), accent = useMemo(() => accentOf(mealKey ? mealKey.split(',') : []), [mealKey])
+  const acc = useMemo<AccU>(() => ({ c: { value: new THREE.Color(0, 0, 0) }, s: { value: 0 }, n: { value: 1 }, t: { value: 0 }, slots: { value: Array.from({ length: 10 }, () => new THREE.Color(0, 0, 0)) } }), []), haloRef = useRef<THREE.MeshBasicMaterial | null>(null)
+  const fx = useRef<SpiritFx | null>(null), fxOk = useFx()
   const time = useMemo(() => ({ value: 0 }), []), sw = useMemo(() => ({ value: 0 }), []), lift = useMemo(() => ({ value: 0 }), []), tiltU = useMemo(() => ({ value: 0 }), [])
   // M107: the procedural trot (spirit-trot.ts) when a nav is given, with this species' dials; seeded by home so two
   // planters never move in step
@@ -124,35 +147,53 @@ function SpiritModel({ sp, look, nav, id, avatar, dev }: { sp: Species; look: Sp
     // species drawn is given the first one's compiled bends (scripts/m126-shader-check.mts saw it)
     for (const m of [skin, halo, eye, ...(glow ? [glow] : [])]) { m.customProgramCacheKey = () => `spiritBend|${m === skin || m === glow}|${tail}|${ears}|${head}`; m.onBeforeCompile = sh => {
       sh.uniforms.uT = time; sh.uniforms.uSw = sw; sh.uniforms.uLift = lift; sh.uniforms.uTilt = tiltU
+      if (m === skin || m === glow) accUniforms(sh, acc)
       sh.vertexShader = 'uniform float uT; uniform float uSw; uniform float uLift; uniform float uTilt;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
         ${tail}
         ${ears}
         ${head}`)
       // the warm rim light of the picked render: a bright gold fresnel line on the toon parts (not on the hull or eyes)
-      if (m === skin || m === glow) sh.fragmentShader = sh.fragmentShader.replace('#include <opaque_fragment>', `#include <opaque_fragment>
-        gl_FragColor.rgb += vec3(1.0, 0.86, 0.32) * pow(1.0 - abs(dot(normal, normalize(vViewPosition))), 3.0) * 0.45;`)
+      if (m === skin || m === glow) sh.fragmentShader = ACC_HEAD + sh.fragmentShader.replace('#include <opaque_fragment>', `#include <opaque_fragment>
+        gl_FragColor.rgb += vec3(1.0, 0.86, 0.32) * pow(1.0 - abs(dot(normal, normalize(vViewPosition))), 3.0) * 0.45;
+        ${ACC_FRAG}`)
     } }
     // grown-size slice: the low vertices (ground keep)
     const low = lowPoints([body, eyes, ...(glowM ? [glowM] : [])].flatMap(m => Array.from(m.geometry.getAttribute('position').array as ArrayLike<number>)), cx, cz)
     return { body: lin(body.geometry), eyes: eyes.geometry,   // eyes stay raw: their colours read brighter, as in the picked renders
       glowGeo: glowM ? lin(glowM.geometry) : null, skin, glow, halo, eye, cx, cz, low }
-  }, [scene, time, look])
+  }, [scene, time, look, acc])
   // M132 s2: a rigged spirit's body: her own bones + mixer, built and thrown away with her
   const [body, setBody] = useState<RigBody | null>(null), bodyRef = useRef<RigBody | null>(null), glowRef = useRef<THREE.MeshToonMaterial | null>(null)
   const step = useMemo(() => ({ x: NaN, z: 0, yaw: 0, v: 0, turn: 0, clip: 'idle' as RigClip, fly: GROUNDED as FlyState, sizeAt: -1, hWorld: 0, len: 0 }), [trot])
   useEffect(() => {
     if (!rig) return
-    const rim = (m: THREE.Material) => { m.onBeforeCompile = sh => { sh.fragmentShader = sh.fragmentShader.replace('#include <opaque_fragment>', `#include <opaque_fragment>
-        gl_FragColor.rgb += vec3(1.0, 0.86, 0.32) * pow(1.0 - abs(dot(normal, normalize(vViewPosition))), 3.0) * 0.45;`) }; m.customProgramCacheKey = () => 'rigRim' }
+    const rim = (m: THREE.Material) => { m.onBeforeCompile = sh => { accUniforms(sh, acc); sh.fragmentShader = ACC_HEAD + sh.fragmentShader.replace('#include <opaque_fragment>', `#include <opaque_fragment>
+        gl_FragColor.rgb += vec3(1.0, 0.86, 0.32) * pow(1.0 - abs(dot(normal, normalize(vViewPosition))), 3.0) * 0.45;
+        ${ACC_FRAG}`) }; m.customProgramCacheKey = () => 'rigRimAcc' }
     const skin = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: gradTex(), emissive: look.skin.emissive, emissiveIntensity: look.skin.emissiveI })
     const glow = look.glow ? new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: gradTex(), emissive: look.glow.emissive, emissiveIntensity: look.glow.lo }) : null
     const halo = new THREE.MeshBasicMaterial({ color: look.hull.color, transparent: true, opacity: look.hull.opacity, side: THREE.BackSide, depthWrite: false, toneMapped: false })
     const eye = new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false })
     rim(skin); if (glow) rim(glow); hullPush(halo, rig.hull)
     const b = makeRigBody(gltf, rig, { skin, glow, halo, eye }, look.glow?.part)
-    bodyRef.current = b; glowRef.current = glow; setBody(b)
-    return () => { bodyRef.current = null; glowRef.current = null; b.dispose(); for (const m of [skin, glow, halo, eye]) m?.dispose() }
-  }, [gltf, look, rig])
+    bodyRef.current = b; glowRef.current = glow; haloRef.current = halo; setBody(b)
+    return () => { bodyRef.current = null; glowRef.current = null; haloRef.current = null; b.dispose(); for (const m of [skin, glow, halo, eye]) m?.dispose() }
+  }, [gltf, look, rig, acc])
+  // M204 s2: her accent's colour, and her translucent hull leaning to it (up to 0.6 of the way when locked); the probe reads it
+  useEffect(() => {
+    if (accent) { acc.c.value.setRGB(accent.rgb[0], accent.rgb[1], accent.rgb[2], THREE.SRGBColorSpace); acc.n.value = accent.n
+      accent.slots.forEach((c, i) => acc.slots.value[i].setRGB(c[0], c[1], c[2], THREE.SRGBColorSpace)) } else acc.n.value = 1
+    const h = rig ? haloRef.current : parts?.halo
+    if (h) { h.color.set(look.hull.color); if (accent) h.color.lerp(acc.c.value, 0.6 * accent.s) }
+    if (id && !avatar) probe().accents[id] = accent ? { hex: accent.hex, s: accent.s, n: accent.n, locked: accent.locked } : null
+  }, [accent, acc, body, parts, rig, look.hull.color, id, avatar])
+  // M204 s2: her second form's effect (Vulnarc arcs, Vulnix bubbles + splash + shimmer, Vulnara's gold trail), beside her body
+  useEffect(() => {
+    if (!body || !rig || avatar || !fxOk || !isFxForm(look.name) || !g.current?.parent) return
+    const f = makeSpiritFx(look.name, body.bones, look.h); g.current.parent.add(f.points); fx.current = f
+    if (id) probe().fxs.set(id, f)
+    return () => { fx.current = null; if (id) probe().fxs.delete(id); f.dispose() }
+  }, [body, rig, avatar, fxOk, look.name, look.h, id])
   useEffect(() => { if (!id || !rig) return; return () => { probe().rigs.delete(id) } }, [id, rig])
   // M109 s1 FOLLOW: she walks with the keeper while her planter id is in the follow list (kept across reloads)
   useEffect(() => {
@@ -182,8 +223,10 @@ function SpiritModel({ sp, look, nav, id, avatar, dev }: { sp: Species; look: Sp
   }, [trot, id, sp, dev])
   useEffect(() => { if (avatar) return; const p = probe(), u = look.url; p.mounted++; p.species[sp] = (p.species[sp] ?? 0) + 1; p.urls[u] = (p.urls[u] ?? 0) + 1
     return () => { p.mounted--; p.species[sp]--; if (!--p.urls[u]) delete p.urls[u]; if (!p.species[sp]) delete p.trots[sp]; if (!p.species.fox) p.trot = undefined } }, [sp, avatar, look.url])
-  useFrame(({ clock }, dt) => {
+  useFrame(({ clock, gl }, dt) => {
     const t = clock.elapsedTime; time.value = t
+    acc.s.value = accentAt(accent, t); acc.t.value = t
+    if (fx.current) fx.current.update(t, Math.min(1, step.v / Math.max(0.1, look.h * 1.5)), gl.domElement.height)
     if (parts?.glow && look.glow) { const G = look.glow; parts.glow.emissiveIntensity = G.lo + (G.hi - G.lo) * (0.5 + 0.5 * Math.sin(t * Math.PI * 2 * G.hz)) }
     if (glowRef.current && look.glow) { const G = look.glow; glowRef.current.emissiveIntensity = G.lo + (G.hi - G.lo) * (0.5 + 0.5 * Math.sin(t * Math.PI * 2 * G.hz)) }
     if (!g.current) return
@@ -282,9 +325,10 @@ function SpiritModel({ sp, look, nav, id, avatar, dev }: { sp: Species; look: Sp
 /** The species' model stood on a bloomed planter (null look = the caller shows the orb); `fallback` (the gold orb) shows
  *  while the glb loads. With `nav` (M107) it trots its own manner round home: the group sits at the ground and the perch
  *  height comes from `nav.perch`. */
-export function SpiritOnPlanter({ sp, look, y, fallback, nav, id, dev }: { sp: Species; look: SpiritLook; y: number; fallback: ReactNode; nav?: SpiritNav; id?: string; dev?: boolean }) {
+export function SpiritOnPlanter({ sp, look, y, fallback, nav, id, dev, meals }: { sp: Species; look: SpiritLook; y: number; fallback: ReactNode; nav?: SpiritNav; id?: string; dev?: boolean
+  /** M204 s2: her bar (the pot's meals) = her glow accent */ meals?: readonly unknown[] }) {
   const L = rigLook(sp, look, useSpiritRig())
-  return <Suspense fallback={fallback}><group position-y={nav ? 0 : y}><SpiritModel key={L.url} sp={sp} look={L} nav={nav} id={id} dev={dev} /></group></Suspense>
+  return <Suspense fallback={fallback}><group position-y={nav ? 0 : y}><SpiritModel key={L.url} sp={sp} look={L} nav={nav} id={id} dev={dev} meals={meals} /></group></Suspense>
 }
 
 /** M109 s1: the spirit panel's AVATAR: her live model (the same SpiritModel, idle: bob + breath + look round) on a slow
@@ -294,16 +338,16 @@ function Turntable({ children }: { children: ReactNode }) {
   useFrame((_, dt) => { if (g.current) g.current.rotation.y += dt * 0.5 })
   return <group ref={g}>{children}</group>
 }
-export function SpiritAvatar({ sp, look, size }: { sp: Species; look: SpiritLook; size: number }) {
+export function SpiritAvatar({ sp, look, size, meals }: { sp: Species; look: SpiritLook; size: number; /** M204 s2: her bar = her accent */ meals?: readonly unknown[] }) {
   const L = rigLook(sp, look, useSpiritRig()), h = L.h, far = L.rig?.avatar.far ?? 1   // M132 s2: rigged she is long (tail behind), so the camera stands back
   return (
-    <div data-spirit-avatar={sp} style={{ width: size, height: size, borderRadius: 12, overflow: 'hidden', flex: 'none',
+    <div data-spirit-avatar={sp} data-spirit-accent={accentOf(meals)?.hex ?? ''} style={{ width: size, height: size, borderRadius: 12, overflow: 'hidden', flex: 'none',
       background: 'radial-gradient(circle at 50% 42%, rgba(255,236,190,.55), rgba(58,39,22,.18) 72%)' }}>
       <Canvas key={L.url} dpr={[1, 1.5]} frameloop="always" gl={{ antialias: true, alpha: true }} camera={{ position: [0, h * 0.7 * far, h * 2.4 * far], fov: 32 }}
         onCreated={({ camera }) => camera.lookAt(0, h * 0.45, 0)}>
         <ambientLight intensity={0.9} />
         <directionalLight position={[1.5, 3, 2.5]} intensity={1.3} />
-        <Suspense fallback={null}><Turntable><SpiritModel sp={sp} look={L} avatar /></Turntable></Suspense>
+        <Suspense fallback={null}><Turntable><SpiritModel sp={sp} look={L} avatar meals={meals} /></Turntable></Suspense>
       </Canvas>
     </div>
   )
