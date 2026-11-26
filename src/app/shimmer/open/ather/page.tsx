@@ -162,6 +162,7 @@ import { clearAt, hasSpread, loadSpread, saveSpread, loadSkew, saveSkew, type Sp
 import { loadMap, saveMap, freshMap, startRule, rollSections, areaState, uncover, tend, firstLook, changes, growLine, clearLine, firstLine, type SpreadMap, type AreaState } from './spread-map'   // M70 s2
 import { TouchControls, type TouchAction } from '../shared/touch-controls'
 import { isTouchOnly, pressKey, touch } from '../shared/touch'
+import { PadBridge, usePadKind } from '../shared/pad-bridge'
 import { useMenuLock } from '../shared/menu-lock'
 import { BirthGate, useBirthGateUp, BORN_EVENT } from '../birth-gate'
 import { MorelBubble } from '../shared/morel-bubble'   // BETA M33: the glove's gem speaks (ammo)
@@ -278,6 +279,7 @@ function AtherSliceGame() {
   const [introSeen, setIntroSeen] = useState(false)
   const [played, setPlayed] = useState(false)   // locked once: after that an unlocked screen says 'click to resume', not the whole intro
   useEffect(() => setIsTouch(isTouchOnly()), [])
+  const padKind = usePadKind()   // M186: a controller in use hides the click-to-play card (a pad never takes pointer lock)
   const [zone, setZone] = useState<Zone>({ kind: 'plot' })
   const [spawn, setSpawn] = useState<Spawn>(THRESHOLD)
   const [epoch, setEpoch] = useState(0)
@@ -1950,6 +1952,7 @@ function AtherSliceGame() {
       {isTouch && !panel && !building && (
         <TouchControls showFire={zone.kind === 'wilds'} actions={touchActions} holds={SKIN_HOLDS} />
       )}
+      <PadBridge menuOpen={panel !== null || optionsOpen || birthUp || building || !!tour?.talk} />
       {/* M179: the card closes on the CLICK, not on pointerdown: closing on pointerdown let the tap's click land on the pill
           under it (E · use at the waymark opened the fold map, gun-fit-check phone leg, 11-25) */}
       {isTouch && !introSeen && !panel && !building && (
@@ -1964,10 +1967,10 @@ function AtherSliceGame() {
           </div>
         </div>
       )}
-      {!isLocked && !panel && !optionsOpen && !isTouch && played && (
+      {!isLocked && !panel && !optionsOpen && !isTouch && !padKind && played && (
         <div style={{ position: 'absolute', left: '50%', top: '42%', transform: 'translateX(-50%)', padding: '7px 16px', borderRadius: 999, background: 'rgba(12,16,20,0.66)', color: '#f4efe2', font: '600 12px system-ui', letterSpacing: '0.16em', textTransform: 'uppercase', pointerEvents: 'none' }}>Click to resume</div>
       )}
-      {!isLocked && !panel && !isTouch && !played && (
+      {!isLocked && !panel && !isTouch && !padKind && !played && (
         <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', pointerEvents: 'none' }}>
           <div style={{ padding: '18px 24px', borderRadius: 10, background: 'rgba(12,16,20,0.72)', color: '#eef3f6', font: '14px system-ui, sans-serif', lineHeight: 1.6, textAlign: 'center', maxWidth: 540 }}>
             <div style={{ font: '600 13px system-ui', letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 6 }}>Ather · your plot and the Wilds</div>

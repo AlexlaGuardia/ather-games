@@ -255,8 +255,10 @@ export function GameHud({ size, pose, marks, vitals, mana, tools, skills, entrie
       if (idle.current) clearTimeout(idle.current)
       setCursor(null); equipRef.current(c)
     }
-    addEventListener('keydown', key); addEventListener('wheel', wheel, { passive: true }); addEventListener('mousedown', click)
-    return () => { removeEventListener('keydown', key); removeEventListener('wheel', wheel); removeEventListener('mousedown', click); if (idle.current) clearTimeout(idle.current) }
+    // M186: the controller's d-pad left / right steps the hotbar one slot (shared/pad-bridge.tsx; the wheel needs pointer lock)
+    const padStep = (e: Event) => { if (!inputRef.current) return; const d = (e as CustomEvent<number>).detail; setCursor(null); onSelect((Math.max(0, selRef.current) + d + n) % n) }
+    addEventListener('keydown', key); addEventListener('wheel', wheel, { passive: true }); addEventListener('mousedown', click); addEventListener('pad:hotbar', padStep)
+    return () => { removeEventListener('keydown', key); removeEventListener('wheel', wheel); removeEventListener('mousedown', click); removeEventListener('pad:hotbar', padStep); if (idle.current) clearTimeout(idle.current) }
   }, [onSelect, n])
   const shown = cursor ?? sel
   // say the lit slot's name (an empty slot says nothing), never on mount
