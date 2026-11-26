@@ -96,7 +96,7 @@ try {
   const before = () => errs.length
   for (const path of LIVE) {
     const n = before(); const r = await go(path); await sleep(5000)
-    ok(r?.status() === 200 && errs.length === n, `kept ${path}: 200, 0 page errors${errs.length > n ? ' — ' + errs.slice(n).join(' | ') : ''}`)
+    ok(r?.status() === 200 && errs.length === n, `kept ${path}: ${r?.status() ?? "no response"}, 0 page errors${errs.length > n ? ' — ' + errs.slice(n).join(' | ') : ''}`)
   }
   for (const mode of KEPT_MODES) {
     const n = before(); const r = await go(`/shimmer/dev?mode=${mode}`); await sleep(5000)
