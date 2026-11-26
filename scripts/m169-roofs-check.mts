@@ -117,9 +117,11 @@ async function run(PHONE: boolean) {
   // 2: an upper floor laid on a wall's top, the ladder against that wall, a clay-tile gable section and a chimney beside them
   const bag0 = await bagOf('goldwood_plank'), brick0 = await bagOf('stone_brick')
   const put = async (id: string, x: number, z: number) => { await p.evaluate((x: number, z: number) => (window as any).__build.to(x, z, 0), x, z); await sleep(500); await pickCard(id); const r = await setAt(x, z); await stop(); ok(r, `2. ${N}: ${id} planned`) }
-  await put('upper_floor', LX, LZ - 1.25); await put('goldwood_panel_wide', LX, LZ - 0.25); await put('ladder', LX, LZ)
+  await put('goldwood_panel_wide', LX, LZ - 0.25); await put('ladder', LX, LZ); await put('upper_floor', LX, LZ - 1.25)
   await put('roof_gable_tile', LX + 4, LZ - 1.25); await put('chimney', LX + 4, LZ + 2.5)
-  const pl = await planned(); console.log('  planned', JSON.stringify(pl.map((q: any) => [q.item, +(q.x - LX).toFixed(2), +(q.z - LZ).toFixed(2), q.q])))
+  const pl = await planned(); const fl = pl.find((q: any) => q.item === 'upper_floor')
+  ok(!!fl && Math.abs(fl.x - LX) < 0.3 && Math.abs(fl.z - (LZ - 1.25)) < 0.3, `2. ${N}: the upper floor planned where it was set, on the wall's top behind the ladder`)
+  console.log('  planned', JSON.stringify(pl.map((q: any) => [q.item, +(q.x - LX).toFixed(2), +(q.z - LZ).toFixed(2), q.q])))
   ok(pl.length === 5 && pl.every((q: any) => q.q === 0), `2. ${N}: all five planned square (q 0)`)
   await tapEl('[data-act="build-plan"] button'); await sleep(1500)
   const paidP = bag0 - await bagOf('goldwood_plank'), paidB = brick0 - await bagOf('stone_brick')
