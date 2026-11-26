@@ -272,7 +272,7 @@ export const FORM_GROW = 1.2
 // sisters; her floor + hull are deeper than s1's so she keeps the art's teal (Vulnarc read paler than her art).
 // Marlotl (Manalotl's Water form, the first of the Manalotl line; her own body: webbed gill fins, a dorsal crest, a tall paddle
 // tail fin, a long slim trunk on sprawled legs; docs/looks/m202-marlotl-2026-11-26) 1.4 x the Manalotl's 0.90 m nose to tail.
-export const FORM_GROW_BY: Readonly<Record<string, number>> = { vulnore: 1.4, vulnara: 1.4, vulnarc: 1.4, vulnix: 1.4, marlotl: 1.4 }
+export const FORM_GROW_BY: Readonly<Record<string, number>> = { vulnore: 1.4, vulnara: 1.4, vulnarc: 1.4, vulnix: 1.4, marlotl: 1.4, cragbear: 1.4 }
 export const formGrow = (name: string): number => FORM_GROW_BY[name] ?? FORM_GROW
 const secondForm = (sp: Species, form: SpiritElement, name: string, emissive: string, hull: string): SpiritLook => {
   const b = SPIRIT_RIGS[sp]!, g = formGrow(name)
@@ -291,8 +291,23 @@ const marlotl = (): SpiritLook => {
 }
 /** her glb's height standing (the idle clip's mean), glb units (rig metrics) */
 export const MARLOTL_GLB_TALL = 0.735
+// M202 Cragbear (Dewbear's Earth form, the first of the Dewbear line; her own body: one squat ball-barrel with staves and two
+// iron hoops, a moss cap with mushrooms, slate and crystal over the crown and shoulders, stub arms, a frowning brow; docs/looks/
+// m202-cragbear-2026-11-26). Her own skeleton (rig_cragbear.py: the M132 quadruped plan, a heavy waddle, sit + lie); sized by
+// height like her base: 1.4 x the Dewbear's 0.50 m standing.
+export const CRAGBEAR_RIG: RigLook = {
+  glbLen: 0.86, pivot: { x: 0, z: 0 }, clipV: { walk: 0.42 / 0.70, run: 1.15 / 0.70 }, runAt: [1.0, 0.85], hull: 0.024,
+  neck: 'b_neck', head: 'b_head', lie: true, cadence: 12, avatar: { z: 0, far: 1.6 },
+}
+/** her glb's height standing (the idle clip's mean, mushroom tips), glb units (rig metrics) */
+export const CRAGBEAR_GLB_TALL = 1.10
+const cragbear = (): SpiritLook => {
+  const L = secondForm('water-bear', 'earth', 'cragbear', '#ffa04a', '#ffd9a8')
+  return { ...L, rig: CRAGBEAR_RIG }   // h = her base's x 1.4 (her barrel 1.4 x the Dewbear's; the mushrooms stand over it, as ears do)
+}
 export const SECOND_FORMS: Partial<Record<Species, Partial<Record<SpiritElement, SpiritLook>>>> = {
   axolotl: { water: marlotl() },
+  'water-bear': { earth: cragbear() },
   fox: {
     mana: secondForm('fox', 'mana', 'vulnara', '#b49cff', '#e8dcff'),
     storm: secondForm('fox', 'storm', 'vulnarc', '#a8d2ff', '#dcecff'),
