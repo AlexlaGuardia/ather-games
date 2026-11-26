@@ -167,7 +167,7 @@ function crackGeometry() {
   const g = new THREE.OctahedronGeometry(1, 0); g.scale(0.75, 0.012, 0.07); g.translate(0, 0.02, 0)
   return g
 }
-function SeepMesh({ nodes, kind, crack }: { nodes: Crystal[]; kind: SeepKind; crack: THREE.BufferGeometry }) {
+function SeepMesh({ nodes, kind, crack, heightAt }: { nodes: Crystal[]; kind: SeepKind; crack: THREE.BufferGeometry; heightAt?: (x: number, z: number) => number }) {
   const live = useRef<THREE.InstancedMesh>(null), dry = useRef<THREE.InstancedMesh>(null), cracks = useRef<THREE.InstancedMesh>(null)
   const glow = useRef<THREE.PointsMaterial>(null), ribMat = useRef<THREE.MeshLambertMaterial>(null), next = useRef(0), night = useRef(0)
   const rev = useSyncExternalStore(subscribeProspecting, prospectingRev, () => 0)
@@ -177,10 +177,15 @@ function SeepMesh({ nodes, kind, crack }: { nodes: Crystal[]; kind: SeepKind; cr
   useEffect(() => {
     if (!live.current || !dry.current || !cracks.current) return
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), hide = new THREE.Matrix4().makeScale(0, 0, 0), now = Date.now()
-    const lit = new THREE.Color(SEEP_LOOK.leak), dark = new THREE.Color(SEEP_LOOK.dark)
+    const lit = new THREE.Color(SEEP_LOOK.leak), dark = new THREE.Color(SEEP_LOOK.dark), tilt = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), n = new THREE.Vector3()
     nodes.forEach((c, k) => {
       const gone = isMined(c.id, now), p = new THREE.Vector3(c.x, c.y - 0.03, c.z)
+      // the tent lies ON the ground: tilted to the slope under it (a seep on a hillside, legs on the hill, not in the air)
       q.setFromEuler(e.set(0, c.rot, 0))
+      if (heightAt) {
+        const d = Z.foot * c.s, gx = heightAt(c.x - d, c.z) - heightAt(c.x + d, c.z), gz = heightAt(c.x, c.z - d) - heightAt(c.x, c.z + d)
+        if (Number.isFinite(gx) && Number.isFinite(gz)) q.premultiply(tilt.setFromUnitVectors(up, n.set(gx, 2 * d, gz).normalize()))
+      }
       const tentM = m.clone().compose(p, q, new THREE.Vector3(c.s, c.s, c.s))
       live.current!.setMatrixAt(k, gone ? hide : tentM)
       dry.current!.setMatrixAt(k, gone ? tentM : hide)
@@ -189,7 +194,7 @@ function SeepMesh({ nodes, kind, crack }: { nodes: Crystal[]; kind: SeepKind; cr
     })
     for (const r of [live, dry, cracks]) r.current!.instanceMatrix.needsUpdate = true
     if (cracks.current.instanceColor) cracks.current.instanceColor.needsUpdate = true
-  }, [nodes, rev, Z])
+  }, [nodes, rev, Z, heightAt])
   // the leak's light low in the crack, for live seeps only
   const glowGeo = useMemo(() => {
     const now = Date.now(), pts = nodes.filter(c => !isMined(c.id, now))
@@ -241,9 +246,10 @@ function Feet({ nodes }: { nodes: Crystal[] }) {
   )
 }
 
-export function Crystals({ W }: { W: Pick<Wilds, 'crystals'> }) {
+export function Crystals({ W }: { W: Pick<Wilds, 'crystals'> & { heightAt?: (x: number, z: number) => number } }) {
   const cluster = useMemo(clusterGeometry, []), chips = useMemo(chipsGeometry, [])
   useEffect(() => () => { cluster.dispose(); chips.dispose() }, [cluster, chips])
+  const hAt = useMemo(() => W.heightAt ? (x: number, z: number) => W.heightAt!(x, z) : undefined, [W])
   const crack = useMemo(crackGeometry, [])
   useEffect(() => () => crack.dispose(), [crack])
   const byKind = useMemo(() => CRYSTAL_KINDS.filter(k => !isSeep(k)).map(k => [k, W.crystals.filter(c => c.kind === k)] as const), [W])
@@ -253,7 +259,7 @@ export function Crystals({ W }: { W: Pick<Wilds, 'crystals'> }) {
     <>
       <Feet nodes={rocks} />
       {byKind.map(([k, ns]) => <KindMesh key={k} kind={k} nodes={ns} cluster={cluster} chips={chips} />)}
-      {seeps.map(([k, ns]) => <SeepMesh key={k} kind={k} nodes={ns} crack={crack} />)}
+      {seeps.map(([k, ns]) => <SeepMesh key={k} kind={k} nodes={ns} crack={crack} heightAt={hAt} />)}
     </>
   )
 }
