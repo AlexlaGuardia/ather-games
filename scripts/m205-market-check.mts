@@ -95,7 +95,7 @@ try {
     if (touch) {
       ok(await kp.evaluate(() => !!document.querySelector('[data-touch="buy"]')), `${tag}: the E pill reads 'buy'`)
       await kp.screenshot({ path: `${out}/${tag}-a-reach.png` })
-      await clickSel(kp, '[data-touch="buy"]')
+      await kp.tap('[data-touch="buy"]')   // a real touch tap on the pill (a synthetic mouse click did not register under touch emulation)
     } else await kp.keyboard.press('KeyE')
     await sleep(1500)
     const title = await kp.evaluate(() => document.querySelector('[data-panel="supplier-panel"]')?.textContent ?? '') as string
