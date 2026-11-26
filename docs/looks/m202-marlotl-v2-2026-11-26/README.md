@@ -45,3 +45,8 @@ uv run --no-project --with numpy,scipy,trimesh,fast_simplification,networkx pyth
 /opt/blender/blender -b -P tools/rig_marlotl.py -- marlotl.glb marlotl-rigged.glb marlotl-metrics.json
 blender -b -P tools/headshot.py -- <glb> <prefix> .25,.77,.75     (HM=4.0 env: distance; the close head shots)
 ```
+
+## Prod proof (build 78cc8de4)
+Prod `marlotl-rigged.glb` sha1 = the committed v2 file (281decc3). `scripts/m202-forms-check.mts --species axolotl` (owner, this box,
+390x844): ALL PASS, marlotl mounted not base, 0.461 m standing, player `?form=water` sees base Manalotl, 0 page errors.
+`marlotl-390.png` = the prod still; `side-by-side.jpg` = art | prod 390 | base Manalotl and v2 Marlotl at true relative size.
