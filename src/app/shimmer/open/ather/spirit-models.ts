@@ -272,7 +272,7 @@ export const FORM_GROW = 1.2
 // sisters; her floor + hull are deeper than s1's so she keeps the art's teal (Vulnarc read paler than her art).
 // Marlotl (Manalotl's Water form, the first of the Manalotl line; her own body: webbed gill fins, a dorsal crest, a tall paddle
 // tail fin, a long slim trunk on sprawled legs; docs/looks/m202-marlotl-2026-11-26) 1.4 x the Manalotl's 0.90 m nose to tail.
-export const FORM_GROW_BY: Readonly<Record<string, number>> = { vulnore: 1.4, vulnara: 1.4, vulnarc: 1.4, vulnix: 1.4, marlotl: 1.4, cragbear: 1.4 }
+export const FORM_GROW_BY: Readonly<Record<string, number>> = { vulnore: 1.4, vulnara: 1.4, vulnarc: 1.4, vulnix: 1.4, marlotl: 1.4, cragbear: 1.4, aurlotl: 1.4, arclotl: 1.4, craglotl: 1.4 }
 export const formGrow = (name: string): number => FORM_GROW_BY[name] ?? FORM_GROW
 const secondForm = (sp: Species, form: SpiritElement, name: string, emissive: string, hull: string): SpiritLook => {
   const b = SPIRIT_RIGS[sp]!, g = formGrow(name)
@@ -291,6 +291,19 @@ const marlotl = (): SpiritLook => {
 }
 /** her glb's height standing (the idle clip's mean), glb units (rig metrics) */
 export const MARLOTL_GLB_TALL = 0.735
+// M202 the rest of the Manalotl line (docs/looks/m202-manalotl-line-2026-11-26): Aurlotl (Mana: tall pear, chest high, a crown of
+// arcing feather plumes, gold runes, a tail stub), Arclotl (Storm: round barrel, saw-tooth gill spikes with forked tendrils, a flat
+// paddle tail, crackle veins), Craglotl (Earth: the widest and lowest, head and body one dome, stones in her back, moss, short leaf
+// gills). Each her own skeleton (rig_lotl.py, the M132 quadruped plan from her own landmarks). All four forms are sculpted in ONE
+// number space (Marlotl's), so they share Marlotl's world scale (her dial 1.4 over the Manalotl's 0.90 m) and read at true relative
+// size: a short form is short, not blown up to Marlotl's length.
+const LOTL_UNIT = GROWN.axolotl.length! * formGrow('marlotl') / MARLOTL_RIG.glbLen
+const lotlRig = (glbLen: number, avatarZ: number): RigLook => ({ ...MARLOTL_RIG, glbLen, avatar: { z: avatarZ, far: 1.7 } })
+export const AURLOTL_RIG = lotlRig(1.14, -0.1), ARCLOTL_RIG = lotlRig(1.59, -0.2), CRAGLOTL_RIG = lotlRig(1.48, -0.15)
+const lotlForm = (el: SpiritElement, name: string, emissive: string, hull: string, rig: RigLook): SpiritLook =>
+  ({ ...secondForm('axolotl', el, name, emissive, hull), h: LOTL_UNIT * formGrow(name) / formGrow('marlotl'), rig })
+/** each form's glb height standing (the idle clip's mean, gill tips), glb units (rig metrics); the prod check sizes her by it */
+export const LOTL_GLB_TALL: Readonly<Record<string, number>> = { marlotl: MARLOTL_GLB_TALL, aurlotl: 1.028, arclotl: 0.906, craglotl: 0.641 }
 // M202 Cragbear (Dewbear's Earth form, the first of the Dewbear line; her own body: one squat ball-barrel with staves and two
 // iron hoops, a moss cap with mushrooms, slate and crystal over the crown and shoulders, stub arms, a frowning brow; docs/looks/
 // m202-cragbear-2026-11-26). Her own skeleton (rig_cragbear.py: the M132 quadruped plan, a heavy waddle, sit + lie); sized by
@@ -306,7 +319,12 @@ const cragbear = (): SpiritLook => {
   return { ...L, rig: CRAGBEAR_RIG }   // h = her base's x 1.4 (her barrel 1.4 x the Dewbear's; the mushrooms stand over it, as ears do)
 }
 export const SECOND_FORMS: Partial<Record<Species, Partial<Record<SpiritElement, SpiritLook>>>> = {
-  axolotl: { water: marlotl() },
+  axolotl: {
+    water: marlotl(),
+    mana: lotlForm('mana', 'aurlotl', '#b49cff', '#e8dcff', AURLOTL_RIG),
+    storm: lotlForm('storm', 'arclotl', '#a8d2ff', '#dcecff', ARCLOTL_RIG),
+    earth: lotlForm('earth', 'craglotl', '#ffae4a', '#ffe2b4', CRAGLOTL_RIG),
+  },
   'water-bear': { earth: cragbear() },
   fox: {
     mana: secondForm('fox', 'mana', 'vulnara', '#b49cff', '#e8dcff'),

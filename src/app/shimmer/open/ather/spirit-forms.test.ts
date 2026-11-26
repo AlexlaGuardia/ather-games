@@ -3,7 +3,7 @@
 // Reads the shipped glbs: each form is rigged on the Vulnyx's own M132 plan (same bones, every clip), is bigger than her base
 // (every evolution grows the spirit: spirits-species.md, Spirit Scale), and carries the coat of its locked picture.
 import * as fs from 'fs'
-import { CRAGBEAR_GLB_TALL, CRAGBEAR_RIG, MARLOTL_RIG, SECOND_FORMS, formGrow, SPIRIT_ELEMENTS, SPIRIT_MODELS, SPIRIT_RIGS, formLook, rigLook, spiritModelFor } from './spirit-models'
+import { type SpiritElement, AURLOTL_RIG, ARCLOTL_RIG, CRAGLOTL_RIG, LOTL_GLB_TALL, CRAGBEAR_GLB_TALL, CRAGBEAR_RIG, MARLOTL_RIG, SECOND_FORMS, formGrow, SPIRIT_ELEMENTS, SPIRIT_MODELS, SPIRIT_RIGS, formLook, rigLook, spiritModelFor } from './spirit-models'
 
 let pass = 0
 const fails: string[] = []
@@ -62,6 +62,35 @@ for (const el of SPIRIT_ELEMENTS) {
   const pos = j.accessors[j.meshes.find((m: { name: string }) => m.name === 'body').primitives[0].attributes.POSITION]
   ok(Math.abs((pos.max[2] - pos.min[2]) / MARLOTL_RIG.glbLen - 1) < 0.02, `axolotl water: glb length ${(pos.max[2] - pos.min[2]).toFixed(3)} = glbLen ${MARLOTL_RIG.glbLen}`)
   const [r, g, bb] = mean(col, n); ok(g > r + 40 && bb > r + 40, `axolotl water: a teal coat ${[r, g, bb].map(Math.round)}`) }
+// ── M202 the rest of the Manalotl line: Aurlotl / Arclotl / Craglotl, each her OWN creature and her own skeleton, sculpted in
+// Marlotl's number space so all four share Marlotl's world scale (dial 1.4), each with her own coat ──
+{ const W = formLook('axolotl', 'water')!, b = SPIRIT_RIGS.axolotl!
+  const LINE: [SpiritElement, string, typeof MARLOTL_RIG, (c: number[]) => boolean, string][] = [
+    ['mana', 'aurlotl', AURLOTL_RIG, ([r, g, bb]) => bb > g + 40 && r > g + 10, 'a violet coat'],
+    ['storm', 'arclotl', ARCLOTL_RIG, ([r, g, bb]) => bb > r + 40 && bb > g + 15, 'a sky-blue coat'],
+    ['earth', 'craglotl', CRAGLOTL_RIG, ([r, g, bb]) => r > g + 30 && g > bb + 20, 'an orange earth coat']]
+  const sizes: string[] = []
+  for (const [el, name, rig, coat, what] of LINE) {
+    const L = formLook('axolotl', el)!
+    ok(!!L && L.name === name && L.url === `/open/spirits/${name}-rigged.glb` && L.form === el, `axolotl ${el}: ${name} ${L?.url}`)
+    ok(L.rig === rig && rig !== MARLOTL_RIG && rig !== b.rig, `axolotl ${el}: her own rig`)
+    ok(formGrow(name) === 1.4 && Math.abs(L.h - W.h) < 1e-9, `axolotl ${el}: dial 1.4, Marlotl's world scale (h ${L.h.toFixed(3)} vs ${W.h.toFixed(3)})`)
+    ok((L.trot.stride ?? 0) > (b.trot.stride ?? 0), `axolotl ${el}: her stride grows with her`)
+    ok(fs.existsSync('public' + L.url), `axolotl ${el}: ${L.url} shipped`)
+    const { j, col, n } = glb(L.url), names = (j.nodes as { name: string }[]).map(x => x.name), clips = (j.animations as { name: string }[]).map(a => a.name)
+    ok(['body', 'eyes', 'b_root', 'b_neck', 'b_head', 'b_ear_l', 'b_tail4'].every(x => names.includes(x)), `axolotl ${el}: nodes ${names.slice(0, 6)}`)
+    ok(['idle', 'walk', 'run', 'sit', 'lie'].every(c => clips.includes(c)) && L.rig!.lie === true, `axolotl ${el}: clips ${clips}`)
+    ok(j.skins?.[0]?.joints?.length === 24, `axolotl ${el}: 24 bones`)
+    const pos = j.accessors[j.meshes.find((m: { name: string }) => m.name === 'body').primitives[0].attributes.POSITION]
+    const len = pos.max[2] - pos.min[2], wid = pos.max[0] - pos.min[0], tall = pos.max[1]
+    ok(Math.abs(len / rig.glbLen - 1) < 0.02, `axolotl ${el}: glb length ${len.toFixed(3)} = glbLen ${rig.glbLen}`)
+    ok(Math.abs(tall / LOTL_GLB_TALL[name] - 1) < 0.06, `axolotl ${el}: glb height ${tall.toFixed(3)} ~ LOTL_GLB_TALL ${LOTL_GLB_TALL[name]}`)
+    const c = mean(col, n); ok(coat(c), `axolotl ${el}: ${what} ${c.map(Math.round)}`)
+    sizes.push(`${(len / tall).toFixed(1)}:${(wid / tall).toFixed(1)}`)
+  }
+  // her own silhouette: no two forms of the line share a length:height + width:height read (a reskin would)
+  ok(new Set(sizes).size === 3, `axolotl: three distinct silhouettes ${sizes}`)
+  ok(new Set(SPIRIT_ELEMENTS.map(e => formLook('axolotl', e)!.url)).size === 4, 'axolotl: four distinct forms') }
 // ── M202 CRAGBEAR: Dewbear's Earth form, her OWN creature and her own skeleton (not the Dewbear's), dial 1.4 by height ──
 { const L = formLook('water-bear', 'earth')!, b = SPIRIT_RIGS['water-bear']!
   ok(!!L && L.name === 'cragbear' && L.url === '/open/spirits/cragbear-rigged.glb' && L.form === 'earth', `water-bear earth: Cragbear ${L?.url}`)
@@ -86,11 +115,10 @@ for (const el of SPIRIT_ELEMENTS) {
 // ── picking ──
 ok(formLook('fox', null) === null && formLook('fox', undefined) === null, 'no element = no form (her base)')
 ok(formLook(null, 'mana') === null, 'no species = no form')
-// M202 Marlotl (the Manalotl line begins): her Water form is modelled, the other three Manalotl forms are not yet
+// M202: the whole Manalotl line is modelled (Marlotl, Aurlotl, Arclotl, Craglotl); see the line block above
 ok(formLook('owl', 'earth') === null, 'a species whose forms are not modelled yet keeps her base')
 // M202 Cragbear (the Dewbear line begins): her Earth form is modelled, the other three Dewbear forms are not yet
 ok(formLook('water-bear', 'mana') === null && formLook('water-bear', 'storm') === null && formLook('water-bear', 'water') === null, 'a Dewbear form not modelled yet = her base')
-ok(formLook('axolotl', 'mana') === null && formLook('axolotl', 'storm') === null && formLook('axolotl', 'earth') === null, 'a Manalotl form not modelled yet = her base')
 ok(Object.keys(SECOND_FORMS).sort().join() === 'axolotl,fox,water-bear', 'the Vulnyx line + the Manalotl line + the Dewbear line')
 ok(new Set(SPIRIT_ELEMENTS.map(e => formLook('fox', e)!.url)).size === 4, 'four distinct forms')
 // rigLook: a form stays itself when rigs are on; ?rig=0 (the frame measure) gives her species' old model, never a rigged glb unrigged
