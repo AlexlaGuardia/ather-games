@@ -47,12 +47,12 @@ export default function SpiritGallery() {
     return () => window.removeEventListener('keydown', onKey)
   }, [go])
 
-  // the wheel: one row per notch (a trackpad's small deltas add up to a notch)
+  // the wheel: one row per notch (a mouse notch is ~100 px in one event = one row; a trackpad's small deltas add up to one)
   const dial = useRef<HTMLDivElement>(null), wheelAcc = useRef(0)
   useEffect(() => {
     const el = dial.current; if (!el) return
     const onWheel = (e: WheelEvent) => { e.preventDefault(); wheelAcc.current += e.deltaY
-      while (Math.abs(wheelAcc.current) >= 40) { const s = Math.sign(wheelAcc.current); go(s); wheelAcc.current -= s * 40 } }
+      if (Math.abs(wheelAcc.current) >= 50) { go(Math.sign(wheelAcc.current)); wheelAcc.current = 0 } }
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
   }, [go])
