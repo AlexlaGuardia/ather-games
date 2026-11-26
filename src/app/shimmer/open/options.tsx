@@ -14,6 +14,7 @@ import { OptionsPanel, OptionRow, OptionSlider, OptionHead } from '../hud/option
 import { hearthDisplay } from '../ui/hearth'
 import { useSettings, setSettings, resetSettings, FOV_RANGE, RENDER_RANGE, SENS_RANGE } from './shared/settings'
 import { keeperKey } from '@/lib/keeper-local'
+import { saveOwner } from '@/lib/save-slot'
 import { BIRTH_KEY } from '../play3d/rune-inventory'
 import { refreshBirth } from './birth-gate'
 import { getInv, setInv } from './shared/bag'
@@ -106,6 +107,27 @@ function GunGrant() {
   </>)
 }
 
+/** Owner tool (BETA M180, Alex 11-25): reset the Wilds of the keeper NAMED here (an account username) to a newborn's: infection,
+ *  spread and node timers go; fog, waymarks, bag, garden and the rest stay (lib/accounts/reset-wilds.ts). First tap = a dry
+ *  run that says what would go, second tap = the reset. Resetting your own: this page reloads and adopts it (cloud-sync). */
+function ResetWilds() {
+  const [name, setName] = useState(''), [armed, setArmed] = useState<string | null>(null), [said, setSaid] = useState('')
+  const call = async (dry: boolean) => {
+    const r = await fetch('/api/owner/reset-wilds', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: name.trim(), dry }), cache: 'no-store' })
+    const j = await r.json().catch(() => ({})) as { error?: string; removed?: string[]; username?: string; user_id?: string }
+    if (!r.ok) { setArmed(null); setSaid(j.error ?? `failed (${r.status})`); return }
+    if (dry) { if (j.removed?.length) { setArmed(j.username ?? name.trim()); setSaid(`${j.removed.length} parts to reset`) } else { setArmed(null); setSaid('nothing to reset') }; return }
+    setArmed(null); setSaid(`reset ${j.username}: ${j.removed?.length ?? 0} parts`)
+    if (j.user_id && j.user_id === saveOwner()) setTimeout(() => location.reload(), 600)   // own save: reload so this page takes the reset
+  }
+  return (<div data-owner-tool="reset-wilds">
+    <input data-reset-wilds-name value={name} onChange={e => { setName(e.target.value); setArmed(null); setSaid('') }} placeholder="keeper name" onKeyDown={e => e.stopPropagation()} autoComplete="off" spellCheck={false}
+      className="w-full rounded px-2 py-1 text-[13px] hk-ink" style={{ background: 'rgba(0,0,0,0.25)', border: '1px solid rgba(243,230,207,0.25)' }} />
+    <OptionRow onClick={() => { if (!name.trim()) { setSaid('name a keeper'); return } void call(armed === null) }}
+      label={armed ? `⚠ Tap again: reset ${armed}'s Wilds` : '↺ Reset Wilds'} tail={said || 'infection · spread · node timers'} />
+  </div>)
+}
+
 /** The keys this page answers, for the Controls tab. Each page passes its own. */
 export type KeyRow = [keys: string, what: string]
 /** What stays fixed (the rebindable keys are listed by Bindings). */
@@ -166,6 +188,7 @@ export function OpenOptions({ onClose, keys = WALK_KEYS, extraGame, inGarden = f
           <ForgetBirth onDone={onClose} />
           <SeedGrant />
           <GunGrant />
+          <ResetWilds />
         </>}
       />
     </div>

@@ -37,7 +37,10 @@ function classify(path: string): "tool" | "gated-game" | null {
     // A bare `/api/shimmer` prefix ALSO swallows `/api/shimmerfile`, which is the public
     // account/profile endpoint the username picker calls — that 403'd every non-owner player.
     path === "/api/shimmer" ||
-    path.startsWith("/api/shimmer/")
+    path.startsWith("/api/shimmer/") ||
+    // M180: the owner's tools on accounts (reset a keeper's Wilds). Trailing slash: `/api/owner` itself is the PUBLIC
+    // "am I the owner" probe and must keep answering { owner: false } to everyone else.
+    path.startsWith("/api/owner/")
     // `/api/saves` used to sit here from the deferred owner-cloud-save plan. It is a PUBLIC
     // player endpoint now (per-account garden sync, session-authed in the route itself) —
     // gating it owner-only 403'd every player's cloud copy. Same lesson as /api/shimmerfile.
