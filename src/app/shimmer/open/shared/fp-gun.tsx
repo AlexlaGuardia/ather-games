@@ -166,6 +166,7 @@ export const sightOf = (m: Model, o: Optic) => ({ y: m.eye ?? m.top + (o.scoped 
 export const adsPos = (m: Model, o: Optic) => { const s = sightOf(m, o); return [0, -s.y * VM.S, -VM.ADS_DIST * (m.adsK ?? 1) - s.z * VM.S] as const }
 
 // ── the ADS store the page reads (zoom, look slow-down, the cone) and the scope ring renders from ──
+let lastSight = { y: 0, z: 0 }   // the sight line in the gun's frame, as last aimed (the tuner check reads where it lands on screen)
 let adsT = 0, optic: Optic | null = null, look: SightLook | null = null, glow = 0
 const subs = new Set<() => void>()
 let snap = { t: 0, optic: null as Optic | null, look: null as SightLook | null, glow: 0 }
@@ -320,6 +321,7 @@ export const FpGun = forwardRef<FpGunApi>(function FpGun(_, ref) {
       // the etching lights faintly while mana runs through a drawn gun, and flares as a round leaves or a charge builds
       glow = markGlow(true, i.now, i.firedAt, i.charging ?? 0); (mats.dot as THREE.MeshBasicMaterial).opacity = glow
       optic = o; publish()
+      lastSight = { y: sightOf(m, o).y, z: sightOf(m, o).z }
       // recoil: a fresh round kicks, then it springs home
       if (i.firedAt > s.lastFired) { s.lastFired = i.firedAt; s.kick = Math.min(1.5, s.kick + 1); if (i.gun.burst > 1) s.punch = 1 }
       s.kick *= Math.exp(-VM.KICK_DECAY * d)
@@ -348,7 +350,7 @@ export const FpGun = forwardRef<FpGunApi>(function FpGun(_, ref) {
   }), [camera, rig, mats])
   useEffect(() => { loadGunTune() }, [])   // this browser's tune from /shimmer/dev/guns
   useEffect(() => {
-    ;(window as unknown as { __fpGun?: unknown }).__fpGun = { ads: () => adsT, optic: () => optic?.id ?? null, shown: () => rig.root.visible, key: () => rig.key, mark: () => (look ? `${look.mark}:${look.tint}` : null), glow: () => glow, kick: () => st.current.punch, lens: () => lensCost.current, ...(process.env.NODE_ENV !== 'production' ? { preview: previewGunModel, info: () => ({ ...gl.info.render }) } : {}), pos: () => rig.held.position.toArray(), vm: () => ({ S: VM.S, HAND: VM.HAND, HIP_Z: VM.HIP_Z }) }   // M190: the hold in use (read only)
+    ;(window as unknown as { __fpGun?: unknown }).__fpGun = { ads: () => adsT, optic: () => optic?.id ?? null, shown: () => rig.root.visible, key: () => rig.key, mark: () => (look ? `${look.mark}:${look.tint}` : null), glow: () => glow, kick: () => st.current.punch, lens: () => lensCost.current, ...(process.env.NODE_ENV !== 'production' ? { preview: previewGunModel, info: () => ({ ...gl.info.render }) } : {}), pos: () => rig.held.position.toArray(), aim: () => { const v = new THREE.Vector3(0, lastSight.y, lastSight.z); rig.model?.localToWorld(v); v.project(camera); return [v.x, v.y] }, vm: () => ({ S: VM.S, HAND: VM.HAND, HIP_Z: VM.HIP_Z }) }   // M190: the hold in use (read only)
     return () => {
       adsT = 0; optic = null; publish()
       rig.root.traverse(o => { if (o instanceof THREE.Mesh) o.geometry.dispose() })

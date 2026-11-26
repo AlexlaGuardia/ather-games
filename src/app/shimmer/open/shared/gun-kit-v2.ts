@@ -59,14 +59,14 @@ const grip = (z: number, y: number): Part => slab([[0.045 + z, y], [0.1 + z, y],
 const stock = (z: number, butt: PartColor = 'bronze', body: PartColor = 'iron'): Part[] => [slab([[0.15 + z, 0.028], [0.35 + z, 0.037], [0.35 + z, -0.116], [0.33 + z, -0.114], [0.229 + z, -0.046], [0.15 + z, -0.034]], 0.032, body, 0, 0.004), slab([[0.349 + z, 0.041], [0.367 + z, 0.041], [0.367 + z, -0.121], [0.349 + z, -0.121]], 0.038, butt, 0, 0.002)]
 
 export const V2_GUNS: Record<V2GunId, V2Gun> = {
-  backbone: { id: 'backbone', name: 'Backbone', grip: GRIP, fore: FORE, railTop: 0.052, seatZ: -0.04, own: 'holo', sights: ['holo', 'prism'], parts: [
+  backbone: { id: 'backbone', name: 'Backbone', grip: GRIP, fore: FORE, railTop: 0.052, seatZ: -0.04, own: 'iron', sights: ['iron', 'holo', 'prism'], parts: [
     receiver(0, 0), ...channel(-0.035, 0.13, 0.02, 0.026), ...chamber(-0.0965, -0.003, 0.09, 0.026), ...lever(-0.006, -0.018, 0.026), ...gauge(0.106, -0.018, 0.026),
     bar([0, 0.001, -0.259], cut(0.05, 0.08, 0.008), 0.2, 'iron', 0.002), ...slots(-0.333, 8, 0.0215, 0.001, 0.054, 0.027),
     cyl([0, 0, -0.415], 0.028, 0.115, 'iron'), cyl([0, 0, -0.478], 0.044, 0.04, 'bronze', 'z', 16), cyl([0, 0, -0.457], 0.034, 0.006, 'iron'), bore(-0.4985, 0, 0.026),
     ...core(-0.048, -0.064), ...trigger(0.026, -0.078), grip(0, -0.05), ...stock(0),
   ] },
   // the Prototype: mass-stamped plate, seams and rivets showing, a sealed cell strapped where the chamber would be, scorched, nothing lit
-  'charred-rifle': { id: 'charred-rifle', name: 'Charred Rifle', grip: GRIP, fore: FORE, railTop: 0.052, seatZ: -0.02, own: 'ring', sights: ['ring'], hold: HOLD, parts: [
+  'charred-rifle': { id: 'charred-rifle', name: 'Charred Rifle', grip: GRIP, fore: FORE, railTop: 0.052, seatZ: -0.02, own: 'iron', sights: ['iron', 'ring'], hold: HOLD, parts: [
     slab([[-0.158, 0.05], [0.008, 0.05], [0.008, -0.05], [-0.146, -0.05], [-0.158, -0.037]], 0.048, 'stamp', 0, 0.001),
     slab([[0.0095, 0.049], [0.148, 0.049], [0.162, 0.03], [0.166, -0.03], [0.12, -0.048], [0.0095, -0.05]], 0.051, 'stamp', 0, 0.001),
     box([0, 0, 0.009], [0.044, 0.096, 0.006], 'slot'),                        // the seam between them
@@ -80,7 +80,7 @@ export const V2_GUNS: Record<V2GunId, V2Gun> = {
     cyl([0, 0.003, -0.415], 0.026, 0.115, 'soot'), cyl([0, 0.003, -0.475], 0.036, 0.035, 'soot'), bore(-0.493, 0.003, 0.02),
     ...trigger(0.026, -0.074, 'strap'), { ...grip(0, -0.046), c: 'soot' }, ...stock(0, 'stamp', 'soot'),
   ] },
-  lance: { id: 'lance', name: 'Lance', grip: [0, -0.07, 0.12], fore: [0, -0.06, -0.3], railTop: 0.052, seatZ: -0.02, own: 'prism', sights: ['prism', 'holo'], hold: HOLD, parts: [
+  lance: { id: 'lance', name: 'Lance', grip: [0, -0.07, 0.12], fore: [0, -0.06, -0.3], railTop: 0.052, seatZ: -0.02, own: 'iron', sights: ['iron', 'prism', 'holo'], hold: HOLD, parts: [
     receiver(0.02, 0), ...channel(-0.015, 0.15, 0.024, 0.026), ...chamber(-0.0765, -0.002, 0.092, 0.026, true), ...lever(0.012, -0.018, 0.026), ...gauge(0.126, -0.018, 0.026),
     bar([0, 0.001, -0.239], cut(0.046, 0.07, 0.008), 0.2, 'iron', 0.002), ...slots(-0.313, 8, 0.0215, 0.001, 0.048, 0.025),
     cyl([0, 0, -0.5], 0.032, 0.33, 'iron'), ...[-0.43, -0.55].map(z => cyl([0, 0, z], 0.042, 0.02, 'bronze', 'z', 16)), cyl([0, 0, -0.655], 0.04, 0.04, 'iron'), cyl([0, 0, -0.7], 0.054, 0.05, 'bronze', 'z', 16), bore(-0.7255, 0, 0.03),
@@ -89,11 +89,18 @@ export const V2_GUNS: Record<V2GunId, V2Gun> = {
 }
 
 // ── the sights: each its own part set, seat-relative (origin = the flat top at the seat); eye = the sight line above the top ──
-export type V2SightId = 'holo' | 'prism' | 'ring'
+export type V2SightId = 'iron' | 'holo' | 'prism' | 'ring'
 export interface V2Sight { id: V2SightId; name: string; optic: 'reddot' | 'prism3'; eye: number; adsK: number; lens?: [number, number]; cut: 'dot' | 'cross'; parts: Part[] }
-const HOLO = 0.045, PRISM = 0.047
+const HOLO = 0.045, PRISM = 0.047, IRON = 0.03
 const hair = (x: number, y: number, w: number, h: number, z: number): Part => ({ o: [x, y, z], s: [w, h, 0], c: 'etch', shape: 'plate' })
 export const V2_SIGHTS: Record<V2SightId, V2Sight> = {
+  // IRON 1x (M178: every gun has a base iron; the better sights are bought): a rear notch (two cast posts either side of a gap) and a
+  // front post on the rail, their tops level with the sight line, so the post tip sits in the notch at the view's centre
+  iron: { id: 'iron', name: 'Iron', optic: 'reddot', eye: IRON, adsK: 0.7, cut: 'dot', parts: [
+    box([0, 0.004, 0.05], [0.04, 0.008, 0.024], 'iron'), ...SIDES.map(x => box([x * 0.0125, 0.0175, 0.05], [0.005, 0.019, 0.012], 'iron')),
+    box([0, 0.004, -0.13], [0.03, 0.008, 0.03], 'iron'), box([0, 0.017, -0.13], [0.006, 0.026, 0.006], 'iron'), box([0, IRON - 0.0035, -0.13], [0.0046, 0.007, 0.0046], 'bronze'),
+    { o: [0, IRON, -0.1335], s: [0.0075, 0.0075, 0], c: 'dot', shape: 'disc' },
+  ] },
   // HOLO 1x: an open square window in a cast frame on a low base; the keeper's mark floats in the crystal
   holo: { id: 'holo', name: 'Holo (1x)', optic: 'reddot', eye: HOLO, adsK: 0.62, cut: 'dot', parts: [
     box([0, 0.003, 0.004], [0.034, 0.006, 0.05], 'iron'), bar([0, 0.012, 0], [[-0.023, -0.006], [0.023, -0.006], [0.03, 0.005], [-0.03, 0.005]], 0.026, 'bronze', 0.0008), box([0, 0.012, -0.024], [0.03, 0.012, 0.026], 'iron'),
