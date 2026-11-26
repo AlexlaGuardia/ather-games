@@ -14,6 +14,7 @@ import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { DatabaseSync } from 'node:sqlite'
 import { signJwt, SESSION_COOKIE, SESSION_TTL_SEC } from '../src/lib/accounts/session'
+import { newFog } from '../src/app/shimmer/open/ather/explored'
 
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const URL_ = flag('--url', 'https://ather.games'), USER = flag('--user', 'dummy_fern')
@@ -41,7 +42,7 @@ type Doc = { garden: { keys: Record<string, string> }; keepers: { id: string; ke
 const serverDoc = async () => { const j = await (await asKeeper('/api/saves/open')).json() as { doc: Doc | null; rev: number }; return j }
 const others = () => ro ? sha(JSON.stringify([
   ro.prepare("SELECT s.user_id, s.game, s.rev, s.data FROM saves s JOIN accounts a ON a.user_id = s.user_id WHERE s.user_id != ? AND a.username LIKE 'dummy\\_%' ESCAPE '\\' ORDER BY s.user_id, s.game").all(acct.user_id),
-  ro.prepare('SELECT * FROM cluster_members ORDER BY user_id').all(), ro.prepare('SELECT user_id, data FROM cluster_gardens ORDER BY user_id').all()])) : 'no-db'
+  ro.prepare('SELECT * FROM cluster_members ORDER BY user_id').all(), ro.prepare('SELECT user_id, data FROM cluster_gardens WHERE user_id != ? ORDER BY user_id').all(acct.user_id)]))   // the keeper's own snapshot is the game's upload : 'no-db'
 
 const ARGS = ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader']
 const br: Browser = await puppeteer.launch({ protocolTimeout: 300000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ARGS })
@@ -72,8 +73,8 @@ try {
   const p1 = await phone(); await openWorld(p1)
   const c1 = await waitLive(p1, 120000)
   let s = await serverDoc()
-  for (let i = 0; i < 25 && !(s.doc && s.doc.garden.keys['ather.fog.v2']); i++) { await sleep(5000); s = await serverDoc() }
-  ok(!!s.doc && !!s.doc.garden.keys['ather.fog.v2'], `1 the page saved the test keeper (mode ${c1?.mode}, rev ${s.rev}, ${Object.keys(s.doc?.garden.keys ?? {}).length} garden keys)`)
+  for (let i = 0; i < 25 && !s.doc; i++) { await sleep(5000); s = await serverDoc() }
+  ok(!!s.doc && s.rev >= 1, `1 the page saved the test keeper (mode ${c1?.mode}, rev ${s.rev}, ${Object.keys(s.doc?.garden.keys ?? {}).length} garden keys)`)
   await p1.browserContext().close()
   if (!s.doc) throw new Error('no save to work on')
 
@@ -85,9 +86,14 @@ try {
   g['ather.nodes.skew'] = String(3 * 864e5)
   const map = (() => { try { return JSON.parse(g['ather.spreadmap.v1'] ?? 'null') } catch { return null } })() ?? { v: 1, seen: {}, first: true, grey: {} }
   g['ather.spreadmap.v1'] = JSON.stringify({ ...map, seen: { ...map.seen, [MARK]: Date.now() - 864e5 }, grey: { ...map.grey, [MARK]: Date.now() - 864e5 } })
-  g['ather.waymarks.v1'] = g['ather.waymarks.v1'] ?? JSON.stringify([])
+  // the infection (M128) + its tell, with the marker; fog + a waymark the reset must keep (far corner bits: a keeper
+  // standing in the garden never uncovers them)
+  g['ather.infection.v1'] = JSON.stringify({ v: 1, season: 0, next: null, active: null, saved: [], lost: [MARK], told: 1, assigned: 1 })
+  g['ather.infection-told.v1'] = JSON.stringify({ v: 1, season: 0, said: [MARK], clueOf: {}, met: [], heard: [1], open: true })
+  if (!g['ather.fog.v2']) { const f = newFog(); for (let k = f.bits.length - 64; k < f.bits.length; k++) f.bits[k] = 0xa5; let b = ''; for (let k = 0; k < f.bits.length; k += 8192) b += String.fromCharCode(...f.bits.subarray(k, k + 8192)); g['ather.fog.v2'] = Buffer.from(b, 'latin1').toString('base64') }
+  if (!g['ather.waymarks.v1'] || g['ather.waymarks.v1'] === '[]') g['ather.waymarks.v1'] = JSON.stringify([{ id: 'wm-m180-test', tile: 'first-wilds', x: 1, z: 1, biome: 'meadow', made: Date.now() }])
   const planted = await asKeeper('/api/saves/open', { base_rev: lease.rev, device: 'm180-tool', doc: d })
-  ok(planted.ok, `2 old Wilds planted (marker in the ledger + map, skew 3 days): ${planted.status}`)
+  ok(planted.ok, `2 old Wilds planted (marker in the ledger, map, infection, tell; skew 3 days) + fog + a waymark: ${planted.status}`)
 
   // 3 · a phone opens the page: adopts the save, holds the marker, stays OPEN
   const p2 = await phone(); await openWorld(p2)
@@ -107,7 +113,7 @@ try {
     if (res.rev === pre.rev + 1) break
   }
   const post = await serverDoc()
-  ok(res.rev === pre.rev + 1 && post.rev === res.rev, `4 owner reset: rev ${pre.rev} -> ${res.rev}, removed ${JSON.stringify(res.removed)}`)
+  ok(res.rev === pre.rev + 1 && post.rev === res.rev && res.removed?.length === 5, `4 owner reset: rev ${pre.rev} -> ${res.rev}, removed ${JSON.stringify(res.removed)}`)
   // 5 · server: Wilds gone, the rest byte-identical
   const pg = pre.doc!.garden.keys, qg = post.doc!.garden.keys
   ok(WILDS.every(k => !(k in qg)), `5 server: no Wilds key left (${WILDS.filter(k => k in qg).join(',') || 'none'})`)
