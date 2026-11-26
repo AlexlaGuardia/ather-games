@@ -77,7 +77,7 @@ for (const [vp, w, h] of (phoneOnly ? [['phone', 390, 844]] : deskOnly ? [['desk
     // A: pad only
     await press('R3')
     ok(await poll(() => ev(() => (window as any).__pad.kind() === 'playstation')), `${vp}: A. the pad is in use`)
-    const s0 = await steps(); await walk(2500)
+    const s0 = await steps(); await walk(5000)
     const a0 = await ac()
     ok(await steps() > s0, `${vp}: A. the pad walks and a footstep is asked for (${s0} -> ${await steps()})`)
     ok(a0.n >= 1 && a0.st.includes('suspended') && a0.act === false, `${vp}: A. no gesture yet: the context is suspended (${JSON.stringify(a0)})`)
@@ -90,13 +90,13 @@ for (const [vp, w, h] of (phoneOnly ? [['phone', 390, 844]] : deskOnly ? [['desk
     await press('R3')   // back on the pad
     await sleep(400)
     ok(await note() === null, `${vp}: A. the note is gone ("${await note()}")`)
-    const s1 = await steps(), t1 = (await ac()).t; await walk(2500)
+    const s1 = await steps(), t1 = (await ac()).t; await walk(5000)
     const played = await ev(() => (window as any).__sfx?.played?.()['step-grass'] ?? 0)
     ok(await steps() > s1 && (await ac()).t > t1 + 0.5 && played > 0, `${vp}: A. a footstep plays on a running clock (asked ${s1} -> ${await steps()}, played ${played}, clock ${t1.toFixed(1)} -> ${(await ac()).t.toFixed(1)})`)
     if (!phone) {
       // B: cursor hand-over
-      if (await ev(() => !!document.pointerLockElement)) { await p.keyboard.press('Escape'); await sleep(600) }
-      await press('R3'); await sleep(300)
+      await press('R3'); await sleep(500)   // the A click took pointer lock; the pad taking the game lets it go
+      ok(!(await ev(() => !!document.pointerLockElement)), `${vp}: B. the pad took the game: the mouse is not captured`)
       ok(await cursor() === 'none' && await ev(() => (window as any).__pad.kind()) === 'playstation', `${vp}: B. with the pad the cursor is hidden (${await cursor()})`)
       await p.mouse.move(200, 200); await p.mouse.move(260, 240, { steps: 4 }); await sleep(400)
       ok(await cursor() !== 'none', `${vp}: B. the mouse moves -> a cursor (${await cursor()})`)
@@ -133,7 +133,7 @@ if (!phoneOnly) {
     await p.goto(`${url}/shimmer/open/ather?hour=13&waymark=greg`, { waitUntil: 'load', timeout: 240000 })
     ok(await poll(() => ev(() => (window as any).__ather?.zone?.() === 'wilds'), 240000), `keys: in the Wilds`)
     await sleep(5000)
-    await p.keyboard.down('KeyW'); await sleep(3000); await p.keyboard.up('KeyW'); await sleep(500)
+    await p.keyboard.down('KeyW'); await sleep(6000); await p.keyboard.up('KeyW'); await sleep(500)
     const r = await ev(() => ({ st: ((window as any).__acs as AudioContext[]).map(c => c.state).join(','), played: (window as any).__sfx?.played?.()['step-grass'] ?? 0 }))
     ok(r.st.length > 0 && r.st.split(',').every(s => s === 'running') && r.played > 0, `keys: a keyboard-only start has sound (${JSON.stringify(r)})`)
     ok(!(await ev(() => !!document.querySelector('[data-audio-locked]'))), `keys: no 'sound is off' note`)

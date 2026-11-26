@@ -136,6 +136,7 @@ const has = (fx: PadEffect[], e: PadEffect) => fx.some(f => JSON.stringify(f) ==
   const bridge = readFileSync('src/app/shimmer/open/shared/pad-bridge.tsx', 'utf8')
   const ather = readFileSync('src/app/shimmer/open/ather/page.tsx', 'utf8'), cont = readFileSync('src/app/shimmer/open/continent/page.tsx', 'utf8')
   ok(/padPrompt\(!isTouch && stance\.kind === 'weapon'/.test(ather) && /padPrompt\(hud\.prompt, padGlyph\)/.test(cont), 'both pages pass their world prompt through padPrompt')
+  ok(/exitPointerLock/.test(bridge), 'the pad taking the game lets the mouse go (so the mouse next shows a cursor)')
   ok(/addEventListener\('mousemove'/.test(bridge) && /cursor:none !important/.test(bridge), 'the mouse moving hands the game back; the pad hides the cursor')
   ok(/data-audio-locked/.test(bridge) && /isTrusted\) return[\s\S]{0,200}audio\(\)/.test(bridge), 'a real gesture resumes the audio; a locked note shows with a pad')
 }

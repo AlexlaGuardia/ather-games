@@ -139,7 +139,11 @@ export function PadBridge({ menuOpen }: { menuOpen: boolean }) {
       const now = performance.now(), dt = Math.min(0.05, Math.max(0, (now - last) / 1000)); last = now
       const pad = poll()
       if (!pad) padOwns = false
-      else if (padActed(pad)) padOwns = true
+      else if (padActed(pad) && !padOwns) {
+        padOwns = true
+        // a pad never needs the mouse captured: let it go, so the mouse moving next shows a cursor (Alex 11-26), not a spin
+        if (document.pointerLockElement) document.exitPointerLock?.()
+      }
       setActive(pad && padOwns ? pad.kind : null)
       if (++n % 8 === 0) setLocked(readLocked())
       for (const e of padStep(s, pad, map, menu.current, dt)) apply(e)
