@@ -84,7 +84,7 @@ for (const [vp, w, h] of [['desktop', 1280, 800], ['phone', 390, 844]] as const)
       const s = await openPanel(p, 'prospecting', phone)
       // M185 s1 (RULED c73ab4e): the four gems replaced the element crystals, one row each; the worn spike is the weakest
       // (Aqual / Dinloid slow, Fuli / Rhyloid too weak). This replaced M184 s2's one 'Violet / Storm / Earth / Water Crystal' row.
-      ok(s?.name === 'Worn Spike' && s.rows.join() === 'Raw Mana:7:ok,Aqual:90:slow,Dinloid:90:slow,Fuli:900:weak,Rhyloid:900:weak,Pure Mana Core:900:weak,Ather Crystal:1400:weak', `${vp} gifted: spike rows ${s?.rows.join()}`)
+      ok(s?.name === 'Worn Spike' && s.rows.filter((r: string) => !/Mana Seep:/.test(r)).join() === 'Raw Mana:7:ok,Aqual:90:slow,Dinloid:90:slow,Fuli:900:weak,Rhyloid:900:weak,Pure Mana Core:900:weak,Ather Crystal:1400:weak', `${vp} gifted: spike rows ${s?.rows.join()}`)
       await p.keyboard.press('Escape'); await sleep(500)
       ok(!(await readPanel(p)), `${vp} gifted: Escape closes it`)
     }

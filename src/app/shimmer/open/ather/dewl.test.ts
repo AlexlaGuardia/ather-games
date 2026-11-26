@@ -9,12 +9,13 @@ import { roomAccepts, type RoomKind } from './rooms'
 import { pilesOf } from './ground-loot'
 let fails = 0, n = 0
 const ok = (c: boolean, m: string) => { n++; if (!c) { fails++; console.log(`✗ ${m}`) } }
-const WANT: Record<CrystalKind, number> = { raw: 1, violet: 2, storm: 2, earth: 2, water: 2, egg: 2, pure: 3, ather: 5 }   // Alex 11-25
+const WANT: Record<CrystalKind, number> = { raw: 1, violet: 2, storm: 2, earth: 2, water: 2, egg: 2, pure: 3, ather: 5, seep_s: 1, seep_m: 1, seep_l: 1 }   // Alex 11-25; M185 s2 seeps = the lowest grade
 const of = (ds: readonly { id: string; n: number }[]) => ds.filter(d => d.id === DEWL).reduce((a, d) => a + d.n, 0)
 for (const k of CRYSTAL_KINDS) for (const r of [0, 0.3, 0.6, 0.999]) {
   const p = minePlan(k, () => r)
   ok(of(p.drops) === WANT[k] && p.drops.filter(d => d.id === DEWL).length === 1, `${k} (roll ${r}): ${of(p.drops)} dewls, want ${WANT[k]}`)
-  ok(p.drops[0].id === 'blankstone' && p.drops.length >= 3 && p.drops[1].n >= 1, `${k}: beside the usual drop`)
+  if (k.startsWith('seep_')) ok(p.drops[0].id === 'raw_mana_shard' && p.drops[0].n >= 1 && p.drops.length >= 2, `${k}: beside its shards`)   // M185 s2: a seep pays no blankstone
+  else ok(p.drops[0].id === 'blankstone' && p.drops.length >= 3 && p.drops[1].n >= 1, `${k}: beside the usual drop`)
   ok(JSON.stringify(withDewls(p.drops, TIER[k])) === JSON.stringify(p.drops), `${k}: topped up once, never twice`)
   ok(of(withDewls(p.drops.filter(d => d.id !== DEWL), TIER[k])) === WANT[k], `${k}: a node touched before dewls came still gives them`)
   ok(of(pilesOf(p.drops)) === WANT[k], `${k}: its piles add up`)

@@ -23,7 +23,7 @@
 //
 // ★ PURE but for the guarded localStorage load/save and a tiny subscribe store (as forestry.ts).
 
-import { CRYSTAL_DIAL, HIGH_GEM_DIAL, type GatherDial } from './gather-dials'
+import { CRYSTAL_DIAL, HIGH_GEM_DIAL, SEEP_DIAL, type GatherDial } from './gather-dials'
 import { addOpenXp, type Zone } from './forestry'
 import { perkFires, activeCompanion, perkLabel, GEM_DROP_CHANCE, GEM_ITEM } from '../shared/companion'
 import { gardenKey } from '@/lib/keeper-local'
@@ -33,8 +33,23 @@ import { withDewls } from './dewl'
 import { KEEPSTONE_FIND, keepstoneFor } from './furniture'
 
 /** what stands on the rock. `egg` = a Wooded Trails element node: which element is only known when it shatters. */
-export type CrystalKind = 'raw' | 'violet' | 'storm' | 'earth' | 'water' | 'egg' | 'pure' | 'ather'
-export const CRYSTAL_KINDS: CrystalKind[] = ['raw', 'violet', 'storm', 'earth', 'water', 'egg', 'pure', 'ather']
+export type CrystalKind = 'raw' | 'violet' | 'storm' | 'earth' | 'water' | 'egg' | 'pure' | 'ather' | SeepKind
+export const CRYSTAL_KINDS: CrystalKind[] = ['raw', 'violet', 'storm', 'earth', 'water', 'egg', 'pure', 'ather', 'seep_s', 'seep_m', 'seep_l']
+// ★ M185 s2 (RULED athernyx c73ab4e, CANON_GAPS 'The four gems as the Wilds' mining nodes'): MANA SEEPS. Mana seeps out of a gap
+// in the ground, pools in one spot and crystallises into raw mana shards; small / medium / large by the leak, the bigger the
+// more shards and the rarer. On screen it is a 'mana seep', NEVER a spring or a well (mana-well = the Anemonyx fountain), and
+// it is drawn flat on the ground (crystal-nodes.tsx › Seeps), never a fountain. In the Wilds a seep takes the slot a raw node
+// had (crystalFor), so no node id moved; the 'raw' kind stays for old placed scenery and the glade's keeper nodes.
+// Worked with the spike like any node (Prospecting), its own dial (gather-dials.ts › SEEP_DIAL), canon's lowest grade.
+export type SeepKind = 'seep_s' | 'seep_m' | 'seep_l'
+export const SEEPS: readonly SeepKind[] = ['seep_s', 'seep_m', 'seep_l']
+export const isSeep = (k: string): k is SeepKind => (SEEPS as readonly string[]).includes(k)
+/** raw mana shards a seep gives: [min, max] (the companion's perk may add one) */
+export const SEEP_SHARDS: Record<SeepKind, readonly [number, number]> = { seep_s: [1, 2], seep_m: [2, 4], seep_l: [4, 7] }
+/** of the seeps the Wilds place, the share of each size (small common, large rare) */
+export const SEEP_SHARE: Record<SeepKind, number> = { seep_s: 0.6, seep_m: 0.3, seep_l: 0.1 }
+/** a raw-node roll's place inside its band (0..1) → which seep stands there */
+export const seepOf = (u: number): SeepKind => (u < SEEP_SHARE.seep_s ? 'seep_s' : u < SEEP_SHARE.seep_s + SEEP_SHARE.seep_m ? 'seep_m' : 'seep_l')
 export type Element = 'violet' | 'storm' | 'earth' | 'water'
 export const ELEMENTS: Element[] = ['violet', 'storm', 'earth', 'water']
 // ★ M185 s1 (RULED athernyx c73ab4e, Magii + Alex 11-26): THE FOUR GEMS ARE THE ELEMENT CRYSTALS. Each grade IS an element's
@@ -47,14 +62,15 @@ export const GEM = { water: 'Aqual', earth: 'Dinloid', violet: 'Fuli', storm: 'R
 export const CRYSTAL_NAME: Record<CrystalKind, string> = {
   raw: 'Raw Mana', violet: GEM.violet, storm: GEM.storm, earth: GEM.earth, water: GEM.water,
   egg: 'Hidden Crystal', pure: 'Pure Mana Core', ather: 'Ather Crystal',
+  seep_s: 'Small Mana Seep', seep_m: 'Medium Mana Seep', seep_l: 'Large Mana Seep',
 }
 /** canon's grade (XP, reset, dewls): the four gems share one (game/shimmer-skilling.md's element row) */
-export const TIER: Record<CrystalKind, 1 | 2 | 3 | 4> = { raw: 1, violet: 2, storm: 2, earth: 2, water: 2, egg: 2, pure: 3, ather: 4 }
+export const TIER: Record<CrystalKind, 1 | 2 | 3 | 4> = { raw: 1, violet: 2, storm: 2, earth: 2, water: 2, egg: 2, pure: 3, ather: 4, seep_s: 1, seep_m: 1, seep_l: 1 }
 /** M185 s1: low gems first (Alex's pick, 11-26): Aqual + Dinloid take the Goldwood spike, Fuli + Rhyloid the Shimmeroak. The
  *  hidden one may be any of the four, so it asks the higher one (never a Goldwood back door to Fuli). */
 export const HIGH_GEMS: readonly CrystalKind[] = ['violet', 'storm', 'egg']
 /** the gather dial a node is worked by (the page, the tool panel) */
-export const crystalDial = (kind: CrystalKind): GatherDial => (HIGH_GEMS.includes(kind) ? HIGH_GEM_DIAL : CRYSTAL_DIAL[TIER[kind]])
+export const crystalDial = (kind: CrystalKind): GatherDial => (isSeep(kind) ? SEEP_DIAL[kind] : HIGH_GEMS.includes(kind) ? HIGH_GEM_DIAL : CRYSTAL_DIAL[TIER[kind]])
 /** canon's ladder: XP, respawn (game/shimmer-skilling.md › Prospecting) */
 export const XP = [0, 20, 60, 150, 400] as const
 export const RESPAWN_MS = CRYSTAL_DIAL.map(d => d.respawnMs)
@@ -65,6 +81,7 @@ export const BLANKSTONE = 'blankstone'
 export const CRYSTAL_ITEM: Record<Exclude<CrystalKind, 'egg'>, string> = {
   raw: 'raw_mana_shard', violet: 'violet_crystal', storm: 'storm_crystal', earth: 'earth_crystal', water: 'water_crystal',
   pure: 'pure_mana_core', ather: 'ather_crystal',
+  seep_s: 'raw_mana_shard', seep_m: 'raw_mana_shard', seep_l: 'raw_mana_shard',
 }
 
 // biome ids, matched to wilds.ts › BIOME (literal, as forestry.ts)
@@ -72,6 +89,14 @@ const SHORE = 1, ROCK = 4
 
 /** What stands on one 4 m cell: the chance a node is there, and which. `roll` picks within the zone's mix. */
 export function crystalFor(zone: Zone, biome: number, roll: number): { p: number; kind: CrystalKind } | null {
+  const c = crystalForRaw(zone, biome, roll)
+  // M185 s2: where a raw node stood, a mana seep now pools; its size is where the roll fell inside the raw band
+  if (c?.kind === 'raw') return { p: c.p, kind: seepOf((roll - RAW_FROM[zone]) / (1 - RAW_FROM[zone])) }
+  return c
+}
+/** where each zone's raw band starts in crystalForRaw's roll (everything above it was raw) */
+const RAW_FROM: Record<Zone, number> = { meadows: 0.22, springs: 0.42, arid: 0.36, caverns: 0.4, trails: 0.42, thicket: 0 }
+function crystalForRaw(zone: Zone, biome: number, roll: number): { p: number; kind: CrystalKind } | null {
   switch (zone) {
     case 'meadows':
       return biome === ROCK ? { p: 0.03, kind: roll < 0.22 ? 'violet' : 'raw' } : null
@@ -139,12 +164,15 @@ export function mine(kind: CrystalKind, id: string, rand: () => number = Math.ra
 export function minePlan(kind: CrystalKind, rand: () => number = Math.random): { drops: { id: string; n: number }[]; found: Exclude<CrystalKind, 'egg'>; perk?: string } {
   const found: Exclude<CrystalKind, 'egg'> = kind === 'egg' ? ELEMENTS[Math.min(3, Math.floor(rand() * 4))] : kind
   const tier = TIER[kind]
-  const drops = [{ id: BLANKSTONE, n: 1 + (rand() < 0.5 ? 1 : 0) }, { id: CRYSTAL_ITEM[found], n: found === 'raw' ? 1 + Math.floor(rand() * 3) : 1 }]
+  const sh = isSeep(found) ? SEEP_SHARDS[found] : null
+  // a seep is a pool, not rock: shards only, no blankstone (M185 s2)
+  const drops = sh ? [{ id: CRYSTAL_ITEM[found], n: sh[0] + Math.floor(rand() * (sh[1] - sh[0] + 1)) }]
+    : [{ id: BLANKSTONE, n: 1 + (rand() < 0.5 ? 1 : 0) }, { id: CRYSTAL_ITEM[found], n: found === 'raw' ? 1 + Math.floor(rand() * 3) : 1 }]
   // Gemsense (Glowmite @15, Gemdigger @100): a bonus shard of what broke; Gemdigger's pouch now and then a gem too
   let perk: string | undefined
   if (perkFires('prospecting', rand)) {
     const c = activeCompanion()!
-    drops[1].n += 1; perk = perkLabel(c)
+    drops[drops.length - 1].n += 1; perk = perkLabel(c)
     if (c.id === 'gemdigger' && rand() < GEM_DROP_CHANCE) drops.push({ id: GEM_ITEM, n: 1 })
   }
   // now and then a crystal node gives up an old UNIQUE Keepstone with its crystal still set (canon 5a20b8f; furniture.ts)
@@ -152,7 +180,7 @@ export function minePlan(kind: CrystalKind, rand: () => number = Math.random): {
   return { drops: withDewls(drops, tier), found, perk }   // M159: always, beside the usual drop
 }
 /** The node is done: XP lands on Prospecting and it stays spent till `until` (M136: this cycle's reset, counted from the first touch). */
-export function mineCommit(kind: CrystalKind, id: string, now = Date.now(), until = now + RESPAWN_MS[TIER[kind]]): { xp: number; levelUp: number | null } {
+export function mineCommit(kind: CrystalKind, id: string, now = Date.now(), until = now + crystalDial(kind).respawnMs): { xp: number; levelUp: number | null } {
   const tier = TIER[kind]
   const levelUp = addOpenXp('prospecting', XP[tier])
   load()

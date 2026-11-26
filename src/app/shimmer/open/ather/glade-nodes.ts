@@ -8,7 +8,7 @@
 //   wait (a day) to finish it; past that the node is whole again and can be worked afresh at once.
 // Only the Glade's scene reads these: they are never in WildsWorld, so the fold map, spirits, infection and spread cannot see them.
 import { TRUNK, type TreeKind, TREE_KINDS } from './forestry'
-import { CRYSTAL_KINDS, CRYSTAL_NAME, type CrystalKind } from './prospecting'
+import { CRYSTAL_KINDS, CRYSTAL_NAME, isSeep, type CrystalKind } from './prospecting'
 import { TREE_NAME } from './forestry'
 import { KEEPER_NODE } from './keeper-nodes'
 import { NODE_PREFIX, nodeWaitH, type Prop } from '../../world/builder-props'
@@ -16,7 +16,7 @@ import type { Crystal, Tree } from './wilds'
 
 export const NODE_TREES = TREE_KINDS
 /** the hidden crystal is the Trails' egg hunt, not a body of its own: not placeable */
-export const NODE_CRYSTALS = CRYSTAL_KINDS.filter((k): k is Exclude<CrystalKind, 'egg'> => k !== 'egg')
+export const NODE_CRYSTALS = CRYSTAL_KINDS.filter((k): k is Exclude<CrystalKind, 'egg'> => k !== 'egg' && !isSeep(k))   // M185 s2: seeps are the Wilds' only (no placed seep model yet)
 export const nodeName = (kind: string) => TREE_NAME[kind as TreeKind] ?? CRYSTAL_NAME[kind as CrystalKind] ?? kind
 export const nodeKindOf = (k: string): TreeKind | Exclude<CrystalKind, 'egg'> | null => {
   if (!k.startsWith(NODE_PREFIX)) return null

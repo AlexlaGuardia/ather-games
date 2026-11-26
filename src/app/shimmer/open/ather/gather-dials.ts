@@ -31,6 +31,14 @@ export const CRYSTAL_DIAL: readonly GatherDial[] = [
 ]
 /** Fuli + Rhyloid (+ the hidden one, which may be either): the same grade as Aqual / Dinloid (canon's XP + reset), the next spike */
 export const HIGH_GEM_DIAL: GatherDial = { need: 3, drain: 5, mana: 18, low: [300, 900], respawnMs: min(10) }
+/** M185 s2: MANA SEEPS (prospecting.ts › SEEPS), canon's lowest grade. Small + medium take any spike (the worn one too, like raw);
+ *  large wants the Goldwood (one rung low = SLOW, 120 mana: inside one cycle's pool + regen, so a worn spike still finishes it).
+ *  Resets grow with the leak. Placeholder numbers (Jin's, 11-26). */
+export const SEEP_DIAL = {
+  seep_s: { need: 1, drain: 2, mana: 6,  low: [300, 900], respawnMs: min(2) },
+  seep_m: { need: 1, drain: 2, mana: 10, low: [300, 900], respawnMs: min(5) },
+  seep_l: { need: 2, drain: 3, mana: 16, low: [120, 900], respawnMs: min(10) },
+} as const satisfies Record<string, GatherDial>
 export const BETTER = 0.85
 /** stay this close (m) to the node or it lets go: a little past the reach that started it */
 export const HOLD_RANGE = 13

@@ -13,12 +13,12 @@ let seed = 3; const rng = () => { seed = (Math.imul(seed, 1103515245) + 12345) >
 // ── the zone map (Alex 11-16) ─────────────────────────────────────────────────────────────────────────────────
 const kindsIn = (zone: Zone, biome: number) => { const s = new Set<CrystalKind>(); for (let r = 0; r < 1; r += 0.001) { const c = crystalFor(zone, biome, r); if (c) s.add(c.kind) } return s }
 const ROCK = 4, SHORE = 1, MEADOW = 2, WOODS = 3
-ok([...kindsIn('meadows', ROCK)].sort().join() === 'raw,violet', `meadows: ${[...kindsIn('meadows', ROCK)]}`)
-ok([...kindsIn('springs', ROCK)].sort().join() === 'pure,raw,water', `springs: ${[...kindsIn('springs', ROCK)]}`)
+ok([...kindsIn('meadows', ROCK)].sort().join() === 'seep_l,seep_m,seep_s,violet', `meadows: ${[...kindsIn('meadows', ROCK)]}`)
+ok([...kindsIn('springs', ROCK)].sort().join() === 'pure,seep_l,seep_m,seep_s,water', `springs: ${[...kindsIn('springs', ROCK)]}`)
 ok(kindsIn('springs', SHORE).has('water'), 'springs: no water crystals on the shore stones (Alex: yes)')
-ok([...kindsIn('arid', ROCK)].sort().join() === 'pure,raw,storm', `the Scald: ${[...kindsIn('arid', ROCK)]}`)
-ok([...kindsIn('caverns', ROCK)].sort().join() === 'ather,earth,pure,raw', `caverns: ${[...kindsIn('caverns', ROCK)]}`)
-ok([...kindsIn('trails', ROCK)].sort().join() === 'ather,egg,pure,raw', `trails: ${[...kindsIn('trails', ROCK)]}`)
+ok([...kindsIn('arid', ROCK)].sort().join() === 'pure,seep_l,seep_m,seep_s,storm', `the Scald: ${[...kindsIn('arid', ROCK)]}`)
+ok([...kindsIn('caverns', ROCK)].sort().join() === 'ather,earth,pure,seep_l,seep_m,seep_s', `caverns: ${[...kindsIn('caverns', ROCK)]}`)
+ok([...kindsIn('trails', ROCK)].sort().join() === 'ather,egg,pure,seep_l,seep_m,seep_s', `trails: ${[...kindsIn('trails', ROCK)]}`)
 ok(kindsIn('thicket', ROCK).size === 0, 'the Thicket grows stone')
 ok(['meadows', 'arid', 'caverns', 'trails'].every(z => kindsIn(z as Zone, MEADOW).size === 0 && kindsIn(z as Zone, WOODS).size === 0), 'crystals off the crag (meadow or woods ground)')
 ok(crystalFor('trails', ROCK, 0.5)!.p < crystalFor('caverns', ROCK, 0.5)!.p, 'trails: not sparser than the caverns (the egg hunt is sparse)')
@@ -46,6 +46,9 @@ console.log(`  ${total} crystals on ${tiles} tiles (max ${maxTile} on one)`)
 for (const [z, k] of Object.entries(byZone)) console.log(`  ${z.padEnd(8)} ${JSON.stringify(k)}`)
 ok(total > 1500 && maxTile < 400, `density: ${total} crystals, ${maxTile} on the busiest tile (want plenty, never a carpet)`)
 ok(!byZone.thicket, 'the Thicket has crystals on the real map')
+// M185 s2: the raw nodes are mana seeps now (all three sizes on the real map, bigger rarer, no raw node left in the Wilds)
+{ const sum = (k: string) => Object.values(byZone).reduce((a, z) => a + (z[k] ?? 0), 0)
+  ok(sum('raw') === 0 && sum('seep_l') > 0 && sum('seep_s') > sum('seep_m') && sum('seep_m') > sum('seep_l'), `seeps on the real map: s ${sum('seep_s')} m ${sum('seep_m')} l ${sum('seep_l')} raw ${sum('raw')}`) }
 ok((byZone.springs?.water ?? 0) >= 20, `the springs: only ${byZone.springs?.water ?? 0} water crystals on the real map`)
 ok((byZone.caverns?.ather ?? 0) + (byZone.trails?.ather ?? 0) >= 3, 'the Ather Crystal: fewer than 3 on the whole continent')
 ok(Object.entries(byZone).every(([z, k]) => !k.ather || z === 'caverns' || z === 'trails'), 'the Ather Crystal grows outside the caverns and the Trails')
