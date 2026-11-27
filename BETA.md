@@ -294,7 +294,7 @@ Steps (one worker each, in order; each keeps `beta-m7-saves` green):
 ## Night shift queue 11-26 -> 11-27 (hub-drafted 21:3x for Alex; lanes take the top unstruck line, hub strikes on ship; looks ship to 🟨 + Alex's queue, never wait on him)
 - **PLAY:** M204 s3b canon green (in flight) · M221 self-host fonts (build flake) · M222 jump keeps momentum · M218 centre tooltip · M220 first keepstone punch + move · M203 s2 form pages count toward seen tiers (ruled 142d15d) · M194 tutorial points out the tool panel · M182 Greg's eight Dewbears (ruled bcdceeb) · M134 Smithy edges + tips · M144 demolished pieces into the catalog store
 - **WORLD:** ~~M216 s1 body bench sync~~ ✅ bc74f465 · M216 s2 creator pickers (torso x6, scarf x6, belt x5) · M219 stale gate in Alex's garden · M141 s2 spirits fetch ground loot · M85 World Builder p3 scenery + scatter + stamps · M86 World Builder p4 node zones
-- **SPRITES A:** M202 Athowl line redo (in flight) · M174 Lepara snout rework · M174 Shellmere · M174 Croakling (keep the lure) · M174 Luminara (sheets only; wiring waits for Alex's OK on each)
+- **SPRITES A:** ~~M202 Athowl line redo~~ 🟨 bc74f465 · M174 Lepara snout rework · M174 Shellmere · M174 Croakling (keep the lure) · M174 Luminara (sheets only; wiring waits for Alex's OK on each)
 - **SPRITES B (assets):** M202 Hovari wrap (in flight) · Aurlotl glyph panels (infusion pattern, 0d6d577) · M202 HOVARI REDO (Alex: 'still holding onto the hovari baby body.. a bit bigger.. but still juvenile': grown proportions, longer body/tail/wings, not the base chick; still young) · gallery Glow = Steep mix preview · M213 gallery bugs left · M167 worn pruner + worn spike looks · M154 Tess / Bonn / Otto grown (looks locked ebfc2f1)
 - **HUB chores between reviews:** prod check suite rotation; morning checkpoint 09:00 with every sheet for Alex in one batch
 
@@ -504,6 +504,7 @@ Steps (one worker each, in order; each keeps `beta-m7-saves` green):
 - Already on the board, Nyx-side: M49 deeds inside shipyards/shops · M80 E = get in the car · M115 suppliers · M108 Kael's ship gate · M128 settlement infections · M58 Nyx ground layers + ribbons (opt-in)
 
 ## Alex's queue (🔒: look / feel / canon; clear it when you have a minute)
+- **M202 Athowl line REDO (11-27, LIVE owner ?form=mana|storm|earth|water, 🟨):** heft + layered feather rows on all 4, Mystowl's flank = gold glyph panels, Tideowl perches as low as the others. Less dainty / simple now? docs/looks/m202-athowl-redo-2026-11-27/line-sheet.jpg (old vs new). The base Athowl is untouched: it now reads plainer than her forms, say if she gets the same pass.
 - M145+M212 live: judge arrow + '!' look (docs/looks/m145-m212-2026-11-26/; '!' reads big up close) and pick the next 'firsts' for M145 s2 (pack, map, seeds, tools, waymark, training, party).
 - M205: tag a Supplier zone 'Ather Trading Co.' where it stands in the Nyx builder (panel is live, no zone tagged yet).
 - **M181 Rune Hold door on old saves (11-26, LIVE):** the fold map lists Rune Hold once Greg's gems are handed, The Dig starts, or you hold a city door. An old keeper with none of those loses the door from the map until one happens. OK, or should every old save keep it?
