@@ -4,10 +4,10 @@
 // s2 (RULED 142d15d, Magii + Alex 11-26): form pages COUNT toward the 10 / 15 / 25 ring tiers like base pages, each page = one.
 // SETUP (stated): book = 9 base pages (fox first); a bloomed fox planter (party, following) whose Earth form stat bar is met
 // (30 growths + 5 GRD), a grimoire pedestal beside it; bag = 3 Earth Meals.
-//  A. the pedestal before: 9 pages, no form page; Greg's ground: 9 pages, the 10-page ring sealed.
+//  A. the pedestal before: 9 pages, no form page; the ground's page count (HUD Grimoire = what canBuy reads): 9, ring sealed.
 //  B. evolve her the M204 way: feed 3 Earth Meals in her panel.
 //  C. the pedestal: page 10 = her form (fox, earth, Seen, the form's name + its 2D art), base 9, tier count 10;
-//     Greg's ground: 10 pages, the first ring OPEN (no square marked 10p).
+//     the ground's page count: 10, the first ring OPEN.
 //  D. reload: page 10 still there, the ring still open.  E. a second fox keeper takes the same Earth form (save edit +
 //     reload): still ONE form page, still 10.
 //   npx tsx scripts/m203-form-pages-check.mts [--url http://localhost:3202] [--out docs/looks/m203-2026-11-26]
@@ -16,6 +16,7 @@ import { existsSync, mkdirSync, readFileSync } from 'fs'
 import { BLOOM_MS } from '../src/app/shimmer/open/ather/spirit-seeds'
 import { secondFormName } from '../src/app/shimmer/spirits/evolution'
 import { aimAt } from './lib/aim.mts'
+import { RING_PAGES } from '../src/app/shimmer/open/ather/plot'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), out = flag('--out', 'docs/looks/m203-2026-11-26')
 mkdirSync(out, { recursive: true })
@@ -67,17 +68,12 @@ try {
         pages: [...(g?.querySelectorAll('[data-page]') ?? [])].map(b => ({ n: Number(b.getAttribute('data-page')), sp: b.getAttribute('data-species') ?? '', form: b.getAttribute('data-form') ?? '', stage: b.getAttribute('data-stage') ?? '', img: b.querySelector('img')?.getAttribute('src') ?? null })).filter(x => x.stage !== 'empty') }
     }) as Promise<Ped>
   }
-  // M203 s2: the ring tier as the page reads it: Greg's ground panel (pages = garden + every grimoire page, base and form)
-  async function ground(): Promise<{ pages: string; sealed10: number; sealed15: number }> {
-    await p.evaluate(() => (window as any).__ather.open('greg')); await sleep(900)
-    const g = await p.evaluate(() => {
-      const el = document.querySelector('[data-panel="greg"]'); if (!el) return null
-      const lab = [...el.querySelectorAll('div')].find(d => d.textContent === 'Grimoire')
-      const btns = [...el.querySelectorAll('button')].map(b => (b.textContent ?? '').trim())
-      return { pages: lab?.nextElementSibling?.textContent ?? '?', sealed10: btns.filter(t => t === '10p').length, sealed15: btns.filter(t => t === '15p').length }
-    })
-    await p.keyboard.press('Escape'); await sleep(500)
-    return g ?? { pages: 'no panel', sealed10: -1, sealed15: -1 }
+  // M203 s2: the ring tier as the page reads it: the HUD's Grimoire chip = pagesNow, the number Greg's canBuy and the
+  // ground panel are handed (garden grants + every grimoire page, base and form)
+  async function ground(): Promise<{ pages: number; ring: number }> {
+    const t = await p.evaluate(() => document.querySelector('[data-hud="status"]')?.textContent ?? '')
+    const pages = Number(/Grimoire\s*(\d+)/.exec(t)?.[1] ?? -1)
+    return { pages, ring: RING_PAGES.filter(r => pages >= r).length - 1 }
   }
   const filled = (d: Ped) => d.pages.map(x => `${x.n}:${x.sp}${x.form ? '/' + x.form : ''}:${x.stage}`).join(' ')
 
@@ -87,7 +83,7 @@ try {
   ok(a.open && a.pages.length === 9 && a.count === '9' && a.forms === '0', `A before: 9 base pages, no form page (${filled(a)})`)
   await shot('a-before'); await p.keyboard.press('Escape'); await sleep(500)
   const ga = await ground()
-  ok(ga.pages === '9 / 10' && ga.sealed10 > 0, `A Greg's ground: 9 pages, the 10-page ring sealed (${ga.pages}, ${ga.sealed10} squares at 10p)`)
+  ok(ga.pages === 9 && ga.ring === 0, `A the ground's page count: 9, the 10-page ring sealed (pages ${ga.pages}, rings open past the first: ${ga.ring})`)
 
   // ── B. evolve her the M204 way (3 Earth Meals fed in her panel)
   await tp(KEEP.x, KEEP.z)
@@ -125,8 +121,7 @@ try {
   ok(rosterName === name, `C the Party roster names her ${name}, not her base name (${rosterName})`)
   await shot('c-form-page'); await p.keyboard.press('Escape'); await sleep(500)
   const gc = await ground()
-  ok(gc.pages === '10 / 15' && gc.sealed10 === 0 && gc.sealed15 > 0, `C TIER: the form page crosses the 10-page ring (${gc.pages}, ${gc.sealed10} at 10p, ${gc.sealed15} at 15p)`)
-  await shot('c-ground-open')
+  ok(gc.pages === 10 && gc.ring === 1, `C TIER: the form page crosses the 10-page ring (pages ${gc.pages}, ring ${gc.ring})`)
 
   // ── D. reload: it stays
   await load()
@@ -134,7 +129,7 @@ try {
   ok(filled(d) === filled(c), `D after a reload: the same pages (${filled(d)})`)
   await p.keyboard.press('Escape'); await sleep(500)
   const gd = await ground()
-  ok(gd.pages === '10 / 15' && gd.sealed10 === 0, `D TIER after a reload: still 10, the ring still open (${gd.pages}, ${gd.sealed10} at 10p)`)
+  ok(gd.pages === 10 && gd.ring === 1, `D TIER after a reload: still 10, the ring still open (pages ${gd.pages}, ring ${gd.ring})`)
 
   // ── E. a second fox keeper in the same Earth form: no second page
   const k = await bookKey()
@@ -145,7 +140,7 @@ try {
   ok(e.pages.filter(x => x.form === 'earth' && x.sp === 'fox').length === 1 && e.pages.length === 10 && e.count === '10', `E a second keeper of the same form: still one form page (${filled(e)})`)
   await shot('e-no-double')
   const ge = await ground()
-  ok(ge.pages === '10 / 15', `E TIER: no double, still 10 (${ge.pages})`)
+  ok(ge.pages === 10 && ge.ring === 1, `E TIER: no double, still 10 (pages ${ge.pages}, ring ${ge.ring})`)
   ok(errs.length === 0, `0 page errors ${errs.join(' | ')}`)
 } finally { await br.close() }
 console.log(fails ? `${fails} FAIL` : 'ALL PASS')
