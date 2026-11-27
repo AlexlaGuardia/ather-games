@@ -45,7 +45,10 @@ try {
     }
     await click(`[data-pick="${k}-0"]`); await sleep(350)
   }
-  ok(await sig() === base, 'back on Today = today\'s model again')
+  // M216: a torso pick copies its starting numbers ONTO the sliders (one source), so Today alone no longer undoes them;
+  // a reload (nothing saved) is the way back to the saved model
+  await open(); await click('[data-model="medium-curved"]'); await sleep(600)
+  ok(await sig() === base, 'reload without saving = today\'s model again')
   // the turntable itself redraws: stop the spin, T2 vs Today on the canvas
   await p.evaluate(() => [...document.querySelectorAll('button')].find(b => b.textContent === 'Turntable')?.click()); await sleep(800)
   const h0 = await canvasHash(); await click('[data-pick="torso-2"]'); await sleep(1200); const h1 = await canvasHash()

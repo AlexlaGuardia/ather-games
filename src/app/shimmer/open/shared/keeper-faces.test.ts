@@ -1,6 +1,6 @@
 // M116 face sets. Run: npx tsx src/app/shimmer/open/shared/keeper-faces.test.ts
 import * as THREE from 'three'
-import { FACE_SETS, UNIVERSAL_HEAD, BOOST_MAX, BOOST_NEAR, BOOST_FAR, boostAt, faceSet } from './keeper-faces'
+import { FACE_SETS, BOOST_MAX, BOOST_NEAR, BOOST_FAR, boostAt, faceSet } from './keeper-faces'
 import { buildKeeper } from './keeper-figure'
 import { OPT, DEFAULT_LOOK, PACK_KEYS, ROWS, packLook, unpackLook, parseLook, type Look } from './keeper-look'
 import { proportionsFor } from './keeper-proportions'
@@ -21,10 +21,10 @@ ok(meshes(a.group) === meshes(b.group) && a.headY === b.headY && a.height === b.
 const pc = proportionsFor(old), headA = a.group.getObjectByName('head')!
 ok(headA.scale.x === (pc.headW !== 1 || pc.headH !== 1 ? pc.headW : 1), 'Classic: head size is not the model\'s own dial')
 ok(!a.group.getObjectByName('eye-l'), 'Classic: drew a face-set eye')
-// a face set: the universal head on all 6 models, two eye groups, Brows None hides only the brows
+// a face set: the MODEL's own head dials on all 6 models (M216: no universal head of its own), two eye groups, Brows None hides only the brows
 for (const frame of [0, 1, 2]) for (const torso of [0, 1]) for (let face = 1; face <= 4; face++) {
-  const k = buildKeeper({ ...DEFAULT_LOOK, frame, torso, face } as Look), h = k.group.getObjectByName('head')!
-  ok(Math.abs(h.scale.x - UNIVERSAL_HEAD.headW) < 1e-9 && Math.abs(h.scale.y - UNIVERSAL_HEAD.headH) < 1e-9, `universal head: model ${frame}/${torso} face ${face}`)
+  const lk = { ...DEFAULT_LOOK, frame, torso, face } as Look, k = buildKeeper(lk), h = k.group.getObjectByName('head')!, pm = proportionsFor(lk)
+  ok(h.scale.x === (pm.headW !== 1 || pm.headH !== 1 ? pm.headW : 1) && h.scale.y === (pm.headW !== 1 || pm.headH !== 1 ? pm.headH : 1), `head dials: model ${frame}/${torso} face ${face} not the model's own size`)
   ok(!!k.group.getObjectByName('eye-l') && !!k.group.getObjectByName('eye-r'), `face ${face}: eyes missing`)
 }
 const withB = buildKeeper({ ...DEFAULT_LOOK, face: 2 }), noB = buildKeeper({ ...DEFAULT_LOOK, face: 2, brows: 2 })

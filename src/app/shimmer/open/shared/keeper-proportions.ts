@@ -6,6 +6,9 @@
 //   (or a dial never moved) changes nothing. keeper-proportions.test.ts pins it.
 // ★ FLOATING LIMBS (Alex 11-19, re-said 11-23 "floating limbs stay"): there is no neck, upper arm or leg to size, so "arms"
 //   are the hands' size + placement and "legs" are the feet + how high the torso floats above them (legs).
+// ★ ONE SOURCE PER PROPORTION (BETA M216): a dial is the ONLY thing that sets its proportion. No face set, try-on option or
+//   part may carry its own copy (the M116 face sets did: their own head size + chin, a double chin under a 0 taper slider).
+//   keeper-one-source.test.ts is the guard.
 // ⚠ A SAVE IS LIVE IN THE GAME AT THE NEXT DEPLOY (the JSON is imported by the bundle); the bench reads the file live.
 import saved from './keeper-proportions.json'
 import type { Look } from './keeper-look'
@@ -18,7 +21,8 @@ export const DIALS = [
   // ── SIZE ──
   { key: 'headW', label: 'Head width', kind: 'size', min: 0.6, max: 1.4, step: 0.01, def: 1, note: 'the head, hair and face together, side to side' },
   { key: 'headH', label: 'Head height', kind: 'size', min: 0.6, max: 1.4, step: 0.01, def: 1, note: 'the head, hair and face together, top to chin' },
-  { key: 'jaw', label: 'Chin taper', kind: 'size', min: 0, max: 1, step: 0.01, def: 0, note: '0 = round head (today), 1 = a tapered chin' },
+  { key: 'jaw', label: 'Chin taper', kind: 'size', min: 0, max: 1, step: 0.01, def: 0, note: '0 = round head, 1 = a tapered chin (every face)' },
+  { key: 'chin', label: 'Chin length', kind: 'size', min: 0, max: 0.3, step: 0.01, def: 0, note: '0 = round head, more = a longer lower face (every face)' },
   { key: 'eye', label: 'Eye size', kind: 'size', min: 0.5, max: 1.5, step: 0.01, def: 1, note: 'eye whites + pupils' },
   { key: 'ear', label: 'Ear size', kind: 'size', min: 0.4, max: 1.8, step: 0.01, def: 1, note: '' },
   { key: 'torsoL', label: 'Torso length', kind: 'size', min: 0.6, max: 1.6, step: 0.01, def: 1, note: 'the head rides on top of it' },
@@ -33,6 +37,8 @@ export const DIALS = [
   { key: 'handX', label: 'Shoulder width', kind: 'spacing', min: -0.15, max: 0.25, step: 0.005, def: 0, note: 'm, hands out from the torso' },
   { key: 'handY', label: 'Hand height', kind: 'spacing', min: -0.25, max: 0.35, step: 0.005, def: 0, note: 'm, up / down the torso' },
   { key: 'handZ', label: 'Hand forward', kind: 'spacing', min: -0.15, max: 0.2, step: 0.005, def: 0, note: 'm' },
+  { key: 'eyeGap', label: 'Eye spacing', kind: 'spacing', min: -0.03, max: 0.04, step: 0.001, def: 0, note: 'm, each eye out from the middle (every face)' },
+  { key: 'eyeLift', label: 'Eye height', kind: 'spacing', min: -0.04, max: 0.04, step: 0.001, def: 0, note: 'm, eyes + brows up / down (every face)' },
   { key: 'footX', label: 'Stance width', kind: 'spacing', min: -0.1, max: 0.2, step: 0.005, def: 0, note: 'm, feet apart' },
 ] as const satisfies readonly Dial[]
 

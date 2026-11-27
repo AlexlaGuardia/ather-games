@@ -6,14 +6,14 @@
 // The bench's choice per model is saved to data/keeper-bench.json (runtime, gitignored) by /shimmer/save-keeper-bench.
 import * as THREE from 'three'
 import { buildKeeper, type KeeperBody } from '../../open/shared/keeper-figure'
-import { faceSet } from '../../open/shared/keeper-faces'
+import { surf, type HeadShape } from '../../open/shared/keeper-faces'
 import { OPT, type Look } from '../../open/shared/keeper-look'
 import { MODELS, type Proportions } from '../../open/shared/keeper-proportions'
 
 /** index 0 = today (the look's own Mouth row); 1-5 = the sheet's mouths 1-5 */
 export const BENCH_MOUTHS = ['Today', '1 Neutral line', '2 Slight smile', '3 Soft full lips', '4 Smirk', '5 Closed calm'] as const
 type Prof = [number, number][]
-export interface TorsoOpt { label: string; prof: Prof | null; dials: Partial<Proportions>; side?: { chest: number; hip: number; belly: number } }
+export interface TorsoOpt { label: string; prof: Prof | null; /** a STARTING POINT copied onto the sliders when picked (M216: never laid over them) */ dials: Partial<Proportions>; side?: { chest: number; hip: number; belly: number } }
 /** index 0 = today's Curved lathe; 1-3 = the sheet's T1-T3 (numbers copied from torso.ts). Curved models only. */
 export const BENCH_TORSOS: readonly TorsoOpt[] = [
   { label: 'Today', prof: null, dials: {} },
@@ -37,8 +37,9 @@ export function parseBenchFile(raw: unknown): Record<string, BenchLook> {
 }
 export const sameBench = (a: BenchLook, b: BenchLook) => a.face === b.face && a.mouth === b.mouth && a.torso === b.torso
 export const isDefaultBench = (b: BenchLook) => sameBench(b, DEFAULT_BENCH)
-/** the dials the bench builds with: the sliders, with a torso option's own dials laid over them */
-export const benchDials = (p: Proportions, b: BenchLook): Proportions => ({ ...p, ...(BENCH_TORSOS[b.torso]?.dials ?? {}) })
+/** M216 one source: picking a torso option COPIES its starting dials onto the sliders (they stay the only source, and the
+ *  owner moves them freely after); the build itself never lays anything over the sliders. Today (0) leaves them alone. */
+export const pickTorso = (p: Proportions, t: number): Proportions => ({ ...p, ...(BENCH_TORSOS[t]?.dials ?? {}) })
 
 // ── geometry (copied from the protos; cached) ──
 const LATHES = new Map<number, THREE.BufferGeometry>()
@@ -59,14 +60,6 @@ export function torsoGeo(i: number): THREE.BufferGeometry | null {
   }
   return g
 }
-interface Surf { jaw: number; chin: number }
-function surf(H: number, f: Surf, x: number, y: number) {
-  const rx = H * 0.5, ry = H * 0.55
-  let yn = y / ry, fx = 1, fz = 1
-  if (yn < 0) { yn = y / (ry * (1 + f.jaw * 0.1 + f.chin)); const t = -yn; fx = 1 - f.jaw * 0.42 * Math.pow(t, 1.4); fz = 1 - f.jaw * 0.22 * Math.pow(t, 1.4) }
-  const xn = x / (rx * fx), zn = Math.sqrt(Math.max(0.02, 1 - xn * xn - yn * yn))
-  return { z: zn * rx * fz, yaw: Math.atan2(xn, zn) * 0.9, pitch: -Math.atan2(yn, zn) * 0.5 }
-}
 const STRIPS = new Map<string, THREE.BufferGeometry>()
 function strip(w: number, th: number, arch: number) {
   const key = `${w}|${th}|${arch}`, hit = STRIPS.get(key); if (hit) return hit
@@ -85,7 +78,7 @@ const lipOf = (skin: string, k: number) => '#' + new THREE.Color(skin).lerp(new 
 const MOUTH_Y = [-0.17, -0.2, -0.22, -0.21, -0.24]
 
 /** Draw bench mouth `m` (1-5) on a head group centred at (0,0,0), head size H. Every mesh is tagged userData.mouth. */
-export function drawBenchMouth(g: THREE.Object3D, m: number, H: number, f: Surf, skin: string, face: number) {
+export function drawBenchMouth(g: THREE.Object3D, m: number, H: number, f: HeadShape, skin: string, face: number) {
   const my = H * (MOUTH_Y[face] ?? MOUTH_Y[0]), mw = H * 0.1, LINE = '#4a2620'
   const decal = (geo: THREE.BufferGeometry, color: string, x: number, y: number, dz: number, rotZ = 0, sx = 1, sy = 1) => {
     const s = surf(H, f, x, y), me = new THREE.Mesh(geo, mat(color))
@@ -106,14 +99,14 @@ export function drawBenchMouth(g: THREE.Object3D, m: number, H: number, f: Surf,
 
 /** The bench's keeper: buildKeeper with the face set, then the torso option's lathe and the bench mouth swapped in. */
 export function benchKeeper(look: Look, p: Proportions, b: BenchLook): KeeperBody {
-  const o: Look = { ...look, face: b.face }, k = buildKeeper(o, benchDials(p, b))
+  const o: Look = { ...look, face: b.face }, k = buildKeeper(o, p)
   const geo = look.torso === 1 ? torsoGeo(b.torso) : null
   if (geo) { const body = k.group.getObjectByName('body')!; for (const m of body.children.slice(0, 2) as THREE.Mesh[]) m.geometry = geo }
   if (b.mouth > 0) {
     const head = k.group.getObjectByName('head')!
     for (const c of head.children.filter(c => c.userData.mouth)) head.remove(c)
-    const fs = faceSet(b.face), d = benchDials(p, b)
-    drawBenchMouth(head, b.mouth, 0.5 * 1.15, fs ? { jaw: fs.jaw, chin: fs.chin } : { jaw: Math.round(d.jaw * 100) / 100, chin: 0 }, OPT.skin[o.skin], b.face)
+    const r = (v: number) => Math.round(v * 100) / 100   // the head geometry's own rounding, so the mouth sits on it
+    drawBenchMouth(head, b.mouth, 0.5 * 1.15, { jaw: r(p.jaw), chin: r(p.chin) }, OPT.skin[o.skin], b.face)
   }
   return k
 }

@@ -1,7 +1,7 @@
 // M116c body-bench try-on options. Run: npx tsx src/app/shimmer/dev/keeper-body/bench-looks.test.ts
 import * as THREE from 'three'
 import { readFileSync } from 'fs'
-import { BENCH_MOUTHS, BENCH_TORSOS, DEFAULT_BENCH, benchKeeper, benchDials, parseBench, parseBenchFile, isDefaultBench } from './bench-looks'
+import { BENCH_MOUTHS, BENCH_TORSOS, DEFAULT_BENCH, benchKeeper, pickTorso, parseBench, parseBenchFile, isDefaultBench } from './bench-looks'
 import { buildKeeper } from '../../open/shared/keeper-figure'
 import { DEFAULT_LOOK, OPT, type Look } from '../../open/shared/keeper-look'
 import { MODELS, proportionsFor } from '../../open/shared/keeper-proportions'
@@ -60,14 +60,15 @@ for (let m = 1; m <= 5; m++) for (const face of [0, 1, 4]) {
 mSigs.add(mouthSig(DEFAULT_BENCH))
 ok(mSigs.size === 6, `mouths not all distinct (${mSigs.size})`)
 
-// each torso option swaps the lathe (mesh + ink hull) and lays its dials over the sliders; Broad ignores it
+// each torso option swaps the lathe (mesh + ink hull); its dials are copied ONTO the sliders at pick (M216), never laid over; Broad ignores it
 const torsoes = new Set<string>()
 for (let t = 0; t <= 3; t++) {
   const k = benchKeeper(fem, pf, { face: 0, mouth: 0, torso: t })
   ok(torsoGeoOf(k.group) === ink(k.group), `torso ${t}: ink hull not swapped with the mesh`)
   torsoes.add(torsoGeoOf(k.group).uuid)
-  const d = benchDials(pf, { face: 0, mouth: 0, torso: t })
-  for (const [key, v] of Object.entries(BENCH_TORSOS[t].dials)) ok(d[key as keyof typeof d] === v, `torso ${t}: dial ${key} not laid over`)
+  const d = pickTorso(pf, t)
+  for (const [key, v] of Object.entries(BENCH_TORSOS[t].dials)) ok(d[key as keyof typeof d] === v, `torso ${t}: pick did not copy ${key} onto the sliders`)
+  ok(k.height === buildKeeper({ ...fem }, pf).height, `torso ${t}: the build laid its dials over the sliders (height moved)`)
 }
 ok(torsoes.size === 4, 'torso options do not each give a distinct shape')
 const t3 = torsoGeoOf(benchKeeper(fem, pf, { face: 0, mouth: 0, torso: 3 }).group).attributes.position, t1 = torsoGeoOf(benchKeeper(fem, pf, { face: 0, mouth: 0, torso: 1 }).group).attributes.position
@@ -82,7 +83,7 @@ ok(stats(buildKeeper(fem).group).mouth === stats(buildKeeper(fem).group).mouth &
 // nothing in the game imports the bench options
 import { execSync } from 'child_process'
 const users = execSync("grep -rl \"bench-looks\" src --include=*.ts --include=*.tsx || true").toString().trim().split('\n').filter(Boolean).sort()
-ok(JSON.stringify(users) === JSON.stringify(['src/app/shimmer/dev/keeper-body/bench-looks.test.ts', 'src/app/shimmer/dev/keeper-body/page.tsx', 'src/app/shimmer/save-keeper-bench/route.ts']), `bench-looks imported outside the bench: ${users.join(', ')}`)
+ok(JSON.stringify(users) === JSON.stringify(['src/app/shimmer/dev/keeper-body/bench-looks.test.ts', 'src/app/shimmer/dev/keeper-body/page.tsx', 'src/app/shimmer/open/shared/keeper-one-source.test.ts', 'src/app/shimmer/save-keeper-bench/route.ts']), `bench-looks imported outside the bench: ${users.join(', ')}`)
 
 console.log(`bench-looks: ${pass} pass, ${fails.length} fail`)
 for (const f of fails) console.log('  ✗ ' + f)

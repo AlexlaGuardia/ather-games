@@ -6,7 +6,7 @@
 import * as THREE from 'three'
 import { OPT, type Look } from './keeper-look'
 import { proportionsFor, type Proportions } from './keeper-proportions'
-import { faceSet, faceHeadGeo, drawFaceSet, UNIVERSAL_HEAD } from './keeper-faces'
+import { faceSet, headShapeGeo, drawFaceSet, surf, type HeadShape } from './keeper-faces'
 
 const grad = (() => {
   const t = new THREE.DataTexture(new Uint8Array([90, 170, 255]), 3, 1, THREE.RedFormat)
@@ -22,23 +22,8 @@ const EGG = [
   [[0, 0], [0.07, 0.03], [0.13, 0.15], [0.19, 0.42], [0.24, 0.74], [0.22, 0.92], [0.12, 1]],   // Broad
   [[0, 0], [0.16, 0.06], [0.2, 0.25], [0.17, 0.52], [0.19, 0.76], [0.18, 0.92], [0.09, 1]],    // Curved
 ].map(pts => new THREE.LatheGeometry(pts.map(([r, y]) => new THREE.Vector2(r, y)), 24))
-/** M103 chin taper: the head sphere with its lower half drawn in toward a chin (jaw 0 = the plain sphere, SPH itself) */
-const JAWS = new Map<number, THREE.BufferGeometry>()
-function headGeo(jaw: number) {
-  const k = Math.round(jaw * 100) / 100
-  if (k <= 0) return SPH
-  let g = JAWS.get(k)
-  if (!g) {
-    g = new THREE.SphereGeometry(1, 20, 14); const pos = g.attributes.position
-    for (let i = 0; i < pos.count; i++) {
-      const y = pos.getY(i); if (y >= 0) continue
-      const t = -y, f = 1 - k * 0.42 * Math.pow(t, 1.4)
-      pos.setXYZ(i, pos.getX(i) * f, y * (1 + k * 0.1), pos.getZ(i) * (1 - k * 0.22 * Math.pow(t, 1.4)))
-    }
-    g.computeVertexNormals(); JAWS.set(k, g)
-  }
-  return g
-}
+/** M103 chin taper + M216 chin length: ONE head geometry for every face, from the dials only (0 + 0 = the plain sphere SPH) */
+const headGeo = (p: HeadShape) => headShapeGeo(p.jaw, p.chin, SPH)
 const ARCS = new Map<string, THREE.TorusGeometry>()
 const arcGeo = (thick: number, span: number) => { const k = `${thick}|${span.toFixed(4)}`; let g = ARCS.get(k); if (!g) { g = new THREE.TorusGeometry(1, thick, 6, 18, span); ARCS.set(k, g) } return g }
 
@@ -66,8 +51,8 @@ export interface KeeperBody { group: THREE.Group; height: number; headY: number 
 /** Build a keeper. The group's origin is between the feet; `height` is the crown, `headY` the head's centre. */
 export function buildKeeper(o: Look, p0: Proportions = proportionsFor(o)): KeeperBody {
   const g = new THREE.Group()
-  // M116: a face set (Look.face 1-4) wears the ONE universal head size and its own chin; Classic (0) keeps the model's dials
-  const fs = faceSet(o.face), p = fs ? { ...p0, ...UNIVERSAL_HEAD, jaw: fs.jaw } : p0
+  // M216: every face (Classic or a set) is sized and shaped by the model's dials ONLY: a set brings eyes + brows, never a size
+  const p = p0
   const wide = [0.88, 1, 1.16][o.frame] ?? 1, tall = [0.9, 1, 1.1][o.frame] ?? 1
   const H = 0.5, B = 0.62 * tall, L = 0.55 * tall
   const skin = OPT.skin[o.skin], hair = OPT.hair[o.hair], top = OPT.topColor[o.topColor], acc = OPT.accent[o.accent], sc = OPT.scarf[o.scarf]
@@ -83,8 +68,8 @@ export function buildKeeper(o: Look, p0: Proportions = proportionsFor(o)): Keepe
   }
   put(body, SCARF_RING, sc, [0, topY - 0.03, 0], [0.17 * tw * sf, 0.17 * tw * sf, 0.16 * sf], [Math.PI / 2, 0, 0])
   put(body, BOX, sc, [0.15 * tw, topY - 0.24 * sf, 0.15 * tw], [0.09 * sf, 0.38 * sf, 0.035 * sf], [0.12, 0, 0.42])
-  // a face set's longer chin is absorbed by lifting the head, so the neck gap stays the model's
-  const hy = topY + Hf * 0.5 * p.headH + 0.07 + p.neck + (fs ? Hf * 0.55 * fs.chin * p.headH * 0.6 : 0)
+  // a longer chin (the Chin length dial) is absorbed by lifting the head, so the neck gap stays the model's
+  const hy = topY + Hf * 0.5 * p.headH + 0.07 + p.neck + Hf * 0.55 * p.chin * p.headH * 0.6
   const head = new THREE.Group(); head.name = 'head'; head.position.set(0, hy, 0); g.add(head)
   // head width / height scale the head group, so hair + face + ears keep their places on it
   if (p.headW !== 1 || p.headH !== 1) head.scale.set(p.headW, p.headH, p.headW)
@@ -96,7 +81,10 @@ export function buildKeeper(o: Look, p0: Proportions = proportionsFor(o)): Keepe
 function headAndFace(g: THREE.Group, o: Look, H: number, hair: string, skin: string, p: Proportions) {
   const hy = 0, ea = p.ear, ei = p.eye
   const fs = faceSet(o.face)
-  put(g, fs ? faceHeadGeo(fs.jaw, fs.chin) : headGeo(p.jaw), skin, [0, hy, 0], [H * 0.5, H * 0.55, H * 0.5])
+  const r2 = (v: number) => Math.round(v * 100) / 100, shape: HeadShape = { jaw: r2(p.jaw), chin: r2(p.chin) }   // the geometry's rounding
+  put(g, headGeo(shape), skin, [0, hy, 0], [H * 0.5, H * 0.55, H * 0.5])
+  // the nose + Mouth row sit on the round head's front; dz = how far the tapered / longer head's front moved there (0 at 0 + 0)
+  const dz = (y: number) => surf(H, shape, 0, y).z - surf(H, { jaw: 0, chin: 0 }, 0, y).z
   // the ears: Round = the mock's small round ones; Pointed (canon's default, Magii 11-19) = a small leaf tipped up and back
   if (OPT.ears[o.ears] === 'Pointed') for (const s of [-1, 1]) put(g, EAR, skin, [s * H * 0.49, hy + H * 0.02, -H * 0.02], [H * 0.09 * ea, H * 0.2 * ea, H * 0.05 * ea], [-0.35, 0, s * -0.55])
   else for (const s of [-1, 1]) put(g, SPH, skin, [s * H * 0.5, hy, 0], [H * 0.08 * ea, H * 0.12 * ea, H * 0.06 * ea])
@@ -135,12 +123,12 @@ function headAndFace(g: THREE.Group, o: Look, H: number, hair: string, skin: str
   if (hs === 'Tail')    { ring(10, 0.8, H * 0.28, H * 0.22, 0.06, 0, 0.7, 2 * Math.PI - 0.7, 0, 0.6); fringe(3, H * 0.24, 0, 0.8, 0.45); for (const d of [-0.2, 0, 0.2]) lock(back + d, 1.05, H * 0.8, H * 0.17, 0.15, 0, 0.9) }
 
   // ── FACE ──
-  const INKC = '#1c1712', ey = hy + H * 0.02, ez = H * 0.47, eyes = OPT.eyes[o.eyes]
+  const INKC = '#1c1712', ey = hy + H * 0.02 + p.eyeLift, ez = H * 0.47, eyes = OPT.eyes[o.eyes]
   const arc = (x: number, y: number, r: number, thick: number, span: number, rotZ: number, color = INKC) => flat(g, arcGeo(thick, span), color, [x, y, ez + H * 0.03], [r, r, r], [0, 0, rotZ])
   const ball = (x: number, y: number, sx: number, sy: number, color = INKC, dz = 0.03) => flat(g, SPH, color, [x, y, ez + H * dz], [sx, sy, H * 0.03])
-  if (fs) drawFaceSet(g, o.face, H, hair, OPT.brows[o.brows] !== 'None')
+  if (fs) drawFaceSet(g, o.face, H, hair, OPT.brows[o.brows] !== 'None', shape, { eye: ei, gap: p.eyeGap, y: p.eyeLift })
   else for (const s of [-1, 1]) {
-    const ex = s * H * 0.17
+    const ex = s * (H * 0.17 + p.eyeGap)
     const kind = eyes === 'Wink' ? (s < 0 ? 'Round' : 'Happy') : eyes
     if (kind === 'Lines') flat(g, BOX, INKC, [ex * 0.8, ey + H * 0.03, ez + H * 0.02], [H * 0.035 * ei, H * 0.16 * ei, H * 0.02])
     else if (kind === 'Dots') ball(ex * 0.85, ey + H * 0.02, H * 0.045 * ei, H * 0.05 * ei)
@@ -155,7 +143,7 @@ function headAndFace(g: THREE.Group, o: Look, H: number, hair: string, skin: str
     const brows = OPT.brows[o.brows]
     if (brows !== 'None') flat(g, BOX, hair, [ex, ey + H * 0.18, ez + H * 0.02], [H * 0.16, H * (brows === 'Bold' ? 0.045 : 0.025), H * 0.02], [0, 0, s * 0.08])
   }
-  put(g, SPH, '#d9a47c', [0, hy - H * 0.08, H * 0.5], [H * 0.05, H * 0.05, H * 0.05], null, false)
+  put(g, SPH, '#d9a47c', [0, hy - H * 0.08, H * 0.5 + dz(hy - H * 0.08)], [H * 0.05, H * 0.05, H * 0.05], null, false)
   const m0 = g.children.length   // M116c: the Mouth row's meshes are tagged userData.mouth (the body bench swaps them)
   const my = hy - H * 0.17, mouth = OPT.mouth[o.mouth]
   if (mouth === 'Smile') arc(H * 0.06, my + H * 0.01, H * 0.09, 0.18, Math.PI * 0.7, Math.PI * 1.15)
@@ -164,7 +152,8 @@ function headAndFace(g: THREE.Group, o: Look, H: number, hair: string, skin: str
   if (mouth === 'Flat') flat(g, BOX, INKC, [0, my, ez + H * 0.03], [H * 0.12, H * 0.022, H * 0.02])
   if (mouth === 'Open') ball(0, my - H * 0.01, H * 0.045, H * 0.06, '#5a2a22')
   if (mouth === 'Cat') for (const s of [-1, 1]) arc(s * H * 0.04, my + H * 0.015, H * 0.04, 0.22, Math.PI, Math.PI)
-  for (const c of g.children.slice(m0)) c.userData.mouth = true
+  const mz = dz(my)
+  for (const c of g.children.slice(m0)) { c.userData.mouth = true; if (mz) c.position.z += mz }
 }
 
 /** Idle float for the limbs: the hands bob and drift, the head bobs a touch; `walk` 0..1 swings the hands and lifts the feet.
