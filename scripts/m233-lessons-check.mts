@@ -5,7 +5,7 @@
 //      pot holds exactly the lesson(s) the engine predicts (clash-lessons.ts learnFrom on the same seeded bout).
 //   P1 reload the garden: her panel lists the lesson (data-spirit-lesson) = it survived the reload.
 //   C2 a second run (?clashseed=S2): her bout's log shows the learned TACTIC at work (data-clash-tactics), as predicted.
-// 0 page errors. ⚠ writes the LIVE accounts db for the test keeper only: her fair_clash rows are wiped start + end.
+// 0 page errors. ⚠ writes the LIVE accounts db for the test keeper only: her fair_clash + saves rows are wiped start + end.
 //   npx tsx scripts/m233-lessons-check.mts [--url https://ather.games] [--out docs/looks/m233-v2c-2026-11-27] [--only desk|390]
 import puppeteer, { type Page } from 'puppeteer-core'
 import { mkdirSync, readFileSync } from 'fs'
@@ -37,7 +37,8 @@ const br = await puppeteer.launch({ protocolTimeout: 600000, executablePath: pro
 const a0 = upsertGoogleAccount('dummy-m233-dummy_m233_v2c', null, null)
 if (!a0.username) { const c = claimUsername(a0.user_id, 'dummy_m233_v2c'); if (!c.ok) throw new Error(`claim: ${JSON.stringify(c)}`) }
 const KA = { id: a0.user_id, name: 'dummy_m233_v2c' }
-const wipe = () => { accountsDb().prepare('DELETE FROM fair_clash WHERE user_id = ?').run(KA.id) }
+// play-clash-fix: her cloud save too (test keeper only): a kept save was pulled over the seeded pot (run 4: P0 found last run's lessons)
+const wipe = () => { accountsDb().prepare('DELETE FROM fair_clash WHERE user_id = ?').run(KA.id); accountsDb().prepare('DELETE FROM saves WHERE user_id = ?').run(KA.id) }
 
 // ── the prediction: the ring's run replayed headless (same entrants, bracket, seeds; she learns between her bouts)
 const POT0 = { seed: 'mana_seed_fox', at: 1, bloomed: true, bond: 40 }
@@ -96,7 +97,8 @@ async function main(p: Page, desk: boolean, out: string, errs: string[]): Promis
     const ids = ['', `u:${s.id}:`]
     if (!sessionStorage.getItem('m233v2c')) {
       sessionStorage.setItem('m233v2c', '1')
-      localStorage.setItem('ather:shimmer:birthRune', 'star')
+      // the birth rune is a PER-KEEPER key: anonymous-only left a fresh test keeper under 'Choose your Rune' (c1 shot 11-27)
+      for (const pre of ids) localStorage.setItem(`${pre}ather:shimmer:birthRune`, 'star')
       localStorage.setItem('open.tutorial.v1', JSON.stringify(s.TUT))
       localStorage.setItem('open.rinquest.v1', JSON.stringify({ v: 1, state: 'done', step: 0 }))
       for (const pre of ids) {
@@ -179,8 +181,13 @@ async function main(p: Page, desk: boolean, out: string, errs: string[]): Promis
       if (/E · the Thistledown Fair/.test(await p.evaluate(() => document.body.innerText))) break
       await sleep(500)
     }
-    await p.keyboard.press('KeyE'); await sleep(1500)
-    for (let i = 0; i < 20 && !(await p.$('[data-signup-enter] button')); i++) await sleep(500)
+    // desk: a page key press does not reach the game without pointer lock (m238 ran its Clash at 390 only): dispatch it, as aimHer
+    for (let k = 0; k < 4 && !(await p.$('[data-signup-enter] button')); k++) {
+      if (desk) await p.evaluate(() => window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyE', key: 'e' })))
+      else await p.keyboard.press('KeyE')
+      await sleep(1500)
+      for (let i = 0; i < 10 && !(await p.$('[data-signup-enter] button')); i++) await sleep(500)
+    }
   }
   const run = async (tag: string) => {
     await openTent()
@@ -190,15 +197,29 @@ async function main(p: Page, desk: boolean, out: string, errs: string[]): Promis
       const dbg = await p.evaluate(() => ({ zone: (window as any).__ather?.zone?.(), panel: !!document.querySelector('[data-panel="clash"]'), spirits: [...document.querySelectorAll('[data-signup-spirit]')].map(e => (e as HTMLElement).dataset.signupSpirit) }))
       ok(false, `${tag}: her fox at the sign-up (${JSON.stringify(dbg)})`); return null
     }
-    await s.click(); await sleep(300); await (await p.$('[data-signup-enter] button'))!.click()
-    await p.waitForSelector('[data-clash-ring="ring"]', { timeout: 60000 })
-    const tac: Record<string, string> = {}
+    // DOM clicks (m242: a mouse click at desk can land on the locked canvas instead of the panel), Enter retried once
+    await s.evaluate(e => (e as HTMLElement).click()); await sleep(400)
+    let ring = false
+    for (let k = 0; k < 2 && !ring; k++) {
+      await p.evaluate(() => (document.querySelector('[data-signup-enter] button') as HTMLElement | null)?.click())
+      ring = await p.waitForSelector('[data-clash-ring="ring"]', { timeout: 90000 }).then(() => true, () => false)
+    }
+    if (!ring) { await shot(`${tag}-x-no-ring`); ok(false, `${tag}: the ring mounted after Enter`); return null }
+    console.log(`   ${tag}: ring up; her pot lessons as she entered ${JSON.stringify((await pot())?.lessons ?? [])}`)
+    // an in-page observer keeps the LAST tactics value of each of her bouts (polling missed a bout's end at 20x: desk run 5)
+    await p.evaluate(() => {
+      const w = window as any; w.__m233tac = {}
+      const grab = () => { const e = document.querySelector('[data-clash-keeper-bout="1"]') as HTMLElement | null; if (e?.dataset.clashBout != null && e.dataset.clashTactics != null) w.__m233tac[e.dataset.clashBout] = e.dataset.clashTactics }
+      w.__m233obs?.disconnect(); w.__m233obs = new MutationObserver(grab); w.__m233obs.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['data-clash-tactics', 'data-clash-bout'] }); grab()
+    })
+    const seen = new Set<string>()
     for (let i = 0; i < 1500; i++) {
-      const st = await p.evaluate(() => { const e = document.querySelector('[data-clash-keeper-bout="1"]') as HTMLElement | null; return { t: e?.dataset.clashTactics ?? null, i: e?.dataset.clashBout ?? null, res: (document.querySelector('[data-clash-ring-result]') as HTMLElement | null)?.dataset.clashRingResult } })
-      if (st.i !== null && st.t !== null) { if (!tac[st.i]) await shot(`${tag}-bout${st.i}`); tac[st.i] = st.t }
+      const st = await p.evaluate(() => ({ b: (document.querySelector('[data-clash-keeper-bout="1"]') as HTMLElement | null)?.dataset.clashBout ?? null, res: (document.querySelector('[data-clash-ring-result]') as HTMLElement | null)?.dataset.clashRingResult }))
+      if (st.b !== null && !seen.has(st.b)) { seen.add(st.b); await shot(`${tag}-bout${st.b}`) }
       if (st.res) break
       await sleep(250)
     }
+    const tac = await p.evaluate(() => (window as any).__m233tac as Record<string, string>)
     await shot(`${tag}-result`)
     const ex = await p.$('[data-clash-exit]'); if (ex) { await ex.click(); await sleep(800) }
     return tac
@@ -217,13 +238,9 @@ async function main(p: Page, desk: boolean, out: string, errs: string[]): Promis
   const e1 = await panel()
   ok(e1 && !e1.empty && e1.list === p1!.have.join(','), `P1 reload: her panel lists ${e1?.list} (want ${p1!.have.join(',')})`)
   await shot('p1-panel-lessons'); await p.keyboard.press('Escape'); await sleep(500)
-  // C2: a new session carrying her pot as saved (lessons and all), a second run: her bout's log shows the learned tactic
-  const p0 = p
-  p = await page(desk); p.on('pageerror', e => errs.push(String(e).slice(0, 200)))
-  await seed(p, { ...POT0, ...(pot1 ?? {}) })
-  await p0.close().catch(() => {})
+  // C2: the same keeper, reloaded again (no new session: a fresh context pulled her cloud save over the seeded pot)
   await load(`&clashx=20&clashseed=${S2}`)
-  ok(JSON.stringify((await pot())?.lessons ?? []) === JSON.stringify(l1), 'C2 the new session reads her saved lessons')
+  ok(JSON.stringify((await pot())?.lessons ?? []) === JSON.stringify(l1), `C2 after the reload her pot still holds ${JSON.stringify(l1)}`)
   const t2 = await run('c2') ?? {}
   const want = p1!.have.map(tacOf)
   const shown = Object.values(t2).join(',')
