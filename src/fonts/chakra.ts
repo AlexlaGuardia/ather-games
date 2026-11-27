@@ -11,7 +11,6 @@ export const chakra = localFont({
     { path: './chakra-petch/chakra-petch-latin-700-normal.woff2', weight: '700', style: 'normal' },
   ],
   variable: '--font-game',
-  declarations: [{ prop: 'font-family', value: "'Chakra Petch'" }],   // keep the family name Google gave it
   display: 'swap',
   fallback: ['system-ui', 'sans-serif'],
 })
