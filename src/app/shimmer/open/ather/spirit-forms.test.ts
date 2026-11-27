@@ -3,7 +3,7 @@
 // Reads the shipped glbs: each form is rigged on the Vulnyx's own M132 plan (same bones, every clip), is bigger than her base
 // (every evolution grows the spirit: spirits-species.md, Spirit Scale), and carries the coat of its locked picture.
 import * as fs from 'fs'
-import { type SpiritElement, AURLOTL_RIG, ARCLOTL_RIG, CRAGLOTL_RIG, LOTL_GLB_TALL, BEAR_GLB_TALL, LUMEBEAR_RIG, VOLTBEAR_RIG, TIDEBEAR_RIG, NOCT_GLB_TALL, NOCTARC_RIG, NOCTARA_RIG, NOCTORE_RIG, NOCTIX_RIG, NOCTYX_RIG, OWL_GLB_TALL, MYSTOWL_RIG, VOLTOWL_RIG, CRAGOWL_RIG, TIDEOWL_RIG, ATHOWL_RIG, CRAGBEAR_GLB_TALL, CRAGBEAR_RIG, MARLOTL_RIG, SECOND_FORMS, formGrow, SPIRIT_ELEMENTS, SPIRIT_MODELS, SPIRIT_RIGS, formLook, rigLook, spiritModelFor } from './spirit-models'
+import { type SpiritElement, AURLOTL_RIG, ARCLOTL_RIG, CRAGLOTL_RIG, LOTL_GLB_TALL, BEAR_GLB_TALL, LUMEBEAR_RIG, VOLTBEAR_RIG, TIDEBEAR_RIG, NOCT_GLB_TALL, NOCTARC_RIG, NOCTARA_RIG, NOCTORE_RIG, NOCTIX_RIG, NOCTYX_RIG, OWL_GLB_TALL, MYSTOWL_RIG, VOLTOWL_RIG, CRAGOWL_RIG, TIDEOWL_RIG, ATHOWL_RIG, HOV_GLB_TALL, VOLTARI_RIG, LUMARI_RIG, OBSIDARI_RIG, TIDARI_RIG, HOVARI_RIG, CRAGBEAR_GLB_TALL, CRAGBEAR_RIG, MARLOTL_RIG, SECOND_FORMS, formGrow, SPIRIT_ELEMENTS, SPIRIT_MODELS, SPIRIT_RIGS, formLook, rigLook, spiritModelFor } from './spirit-models'
 
 let pass = 0
 const fails: string[] = []
@@ -200,15 +200,48 @@ for (const [el, name, rig] of OWLS) {
   ok(others(crag).every(x => crag.max[1] > x.max[1] + 0.08), `Cragowl: her antlers the tallest (${crag.max[1].toFixed(3)})`)
   ok(others(tide).every(x => tide.min[2] < x.min[2] - 0.1), `Tideowl: her long tail the longest back (${tide.min[2].toFixed(3)})`) }
 ok(new Set(SPIRIT_ELEMENTS.map(e => formLook('owl', e)!.url)).size === 4, 'the Athowl line: four distinct forms')
+// M202 the Hovari line: each form her own creature on the base Hovari's hover plan (24 bones, b_hover unkeyed, the shimmer petals)
+const HOVS: [SpiritElement, string, typeof HOVARI_RIG][] = [['storm', 'voltari', VOLTARI_RIG], ['mana', 'lumari', LUMARI_RIG], ['earth', 'obsidari', OBSIDARI_RIG], ['water', 'tidari', TIDARI_RIG]]
+for (const [el, name, rig] of HOVS) {
+  const L = formLook('hummingbird', el)!, b = SPIRIT_RIGS.hummingbird!
+  ok(!!L && L.name === name && L.url === `/open/spirits/${name}-rigged.glb` && L.form === el, `hummingbird ${el}: ${name} ${L?.url}`)
+  ok(L.rig === rig && rig !== b.rig && !!rig.hover && rig.hover === HOVARI_RIG.hover && rig.neck === HOVARI_RIG.neck, `hummingbird ${el}: her own rig, still a hoverer`)
+  ok(formGrow(name) === 1.4 && Math.abs(L.h / b.h - 1.4) < 1e-9, `hummingbird ${el}: size dial ${formGrow(name)}`)
+  ok(L.glow?.part === 'shimmer' && L.glow.emissive !== b.glow?.emissive, `hummingbird ${el}: her own shimmer glow ${L.glow?.emissive}`)
+  ok(fs.existsSync('public' + L.url), `hummingbird ${el}: ${L.url} shipped`)
+  const { j, col, n } = glb(L.url), names = (j.nodes as { name: string }[]).map(x => x.name), clips = (j.animations as { name: string }[]).map(a => a.name)
+  const pos = j.accessors[j.meshes.find((m: { name: string }) => m.name === 'body').primitives[0].attributes.POSITION]
+  ok(['body', 'eyes', 'shimmer', 'b_root', 'b_hover', 'b_neck', 'b_head', 'b_lids', 'b_arm_l'].every(x => names.includes(x)) && j.skins?.[0]?.joints?.length === 24, `hummingbird ${el}: nodes + 24 bones`)
+  ok(['idle', 'walk', 'run', 'sit', 'lie'].every(c => clips.includes(c)), `hummingbird ${el}: clips ${clips}`)
+  // a hoverer's bind pose hangs over the ground, so her body height is max - min (the hover not counted)
+  ok(Math.abs((pos.max[1] - pos.min[1]) / HOV_GLB_TALL[name] - 1) < 0.04 && pos.min[1] > 3, `hummingbird ${el}: body ${(pos.max[1] - pos.min[1]).toFixed(3)} = HOV_GLB_TALL ${HOV_GLB_TALL[name]}, hung at ${pos.min[1].toFixed(2)}`)
+  // her element's coat (magii.md: Mana violet, Storm blue, Earth brown, Water teal), never the base Hovari's mint-teal
+  const [r, g, bb] = mean(col, n)
+  ok(el === 'mana' ? bb > g + 25 && r > g + 10 : el === 'storm' ? bb > r + 40 && bb > g + 15 : el === 'earth' ? r > g + 20 && g > bb : g > r + 40 && bb > r + 40, `hummingbird ${el}: her ${el} coat ${[r, g, bb].map(Math.round)}`)
+}
+// siblings told apart: width + front depth + back depth in eight bands of her BODY height (a hoverer's hover is empty air), base included
+{ const prof = (u: string) => { const { j } = glb(u), b = fs.readFileSync('public' + u), bin = b.subarray(20 + b.readUInt32LE(12) + 8)
+    const a = j.accessors[j.meshes.find((m: { name: string }) => m.name === 'body').primitives[0].attributes.POSITION], v = j.bufferViews[a.bufferView], o = (v.byteOffset ?? 0) + (a.byteOffset ?? 0)
+    const w = new Array(24).fill(-9), lo = a.min[1], top = a.max[1] - lo
+    for (let i = 0; i < a.count; i++) { const x = Math.abs(bin.readFloatLE(o + i * 12)), y = bin.readFloatLE(o + i * 12 + 4) - lo, z = bin.readFloatLE(o + i * 12 + 8), k = Math.min(7, Math.floor(y / top * 8)); w[k] = Math.max(w[k], x); w[8 + k] = Math.max(w[8 + k], z); w[16 + k] = Math.max(w[16 + k], -z) }
+    return { w, max: a.max as number[], min: a.min as number[] } }
+  const P = [SPIRIT_RIGS.hummingbird!.url, ...HOVS.map(x => formLook('hummingbird', x[0])!.url)].map(prof); let same = 0, least = 9
+  for (let a = 0; a < P.length; a++) for (let c = a + 1; c < P.length; c++) { const d = Math.max(...P[a].w.map((x, i) => Math.abs(x - P[c].w[i]))); least = Math.min(least, d); if (d < 0.06) same++ }
+  ok(same === 0, `the Hovari line: five distinct silhouettes, base included (least profile difference ${least.toFixed(3)} glb units)`)
+  const [, volt, lum, obs, tide] = P, others = (k: object) => P.filter(x => x !== k)
+  ok(others(volt).every(x => volt.max[0] >= x.max[0]) && [obs, tide].every(x => volt.max[0] > x.max[0] + 0.08), `Voltari: her long wings the widest span (${volt.max[0].toFixed(3)})`)
+  ok(others(tide).every(x => tide.min[2] < x.min[2] - 0.03), `Tidari: her long tail the longest back (${tide.min[2].toFixed(3)})`)
+  ok(others(obs).every(x => obs.max[1] > x.max[1] + 0.03), `Obsidari: her chip crest the highest crown (${obs.max[1].toFixed(3)})`) }
+ok(new Set(SPIRIT_ELEMENTS.map(e => formLook('hummingbird', e)!.url)).size === 4, 'the Hovari line: four distinct forms')
 
 // ── picking ──
 ok(formLook('fox', null) === null && formLook('fox', undefined) === null, 'no element = no form (her base)')
 ok(formLook(null, 'mana') === null, 'no species = no form')
 // M202: the whole Manalotl line is modelled (Marlotl, Aurlotl, Arclotl, Craglotl); see the line block above
-ok(formLook('hummingbird', 'earth') === null, 'a species whose forms are not modelled yet keeps her base')
+ok(formLook('rabbit', 'earth') === null, 'a species whose forms are not modelled yet keeps her base')   // M202: was the Hovari, now modelled
 // M202 Cragbear (the Dewbear line begins): her Earth form is modelled, the other three Dewbear forms are not yet
 ok(new Set(SPIRIT_ELEMENTS.map(e => formLook('water-bear', e)!.url)).size === 4, 'the Dewbear line: four distinct forms')
-ok(Object.keys(SECOND_FORMS).sort().join() === 'axolotl,bat,fox,owl,water-bear', 'the Vulnyx line + the Manalotl line + the Dewbear line + the Noctyx line + the Athowl line')
+ok(Object.keys(SECOND_FORMS).sort().join() === 'axolotl,bat,fox,hummingbird,owl,water-bear', 'the Vulnyx line + the Manalotl line + the Dewbear line + the Noctyx line + the Athowl line + the Hovari line')
 ok(new Set(SPIRIT_ELEMENTS.map(e => formLook('fox', e)!.url)).size === 4, 'four distinct forms')
 // rigLook: a form stays itself when rigs are on; ?rig=0 (the frame measure) gives her species' old model, never a rigged glb unrigged
 const v = formLook('fox', 'storm')!
