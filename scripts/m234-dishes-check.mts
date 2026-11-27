@@ -1,7 +1,7 @@
 // ── BETA M234 s2 FOOD FEEDS SPIRITS, POTIONS HEAL KEEPERS: OWNER + ?spirits=3d (2026-11-27, play-M234s2) ─────────────────
 // Canon: athernyx game/alchemy.md › THE RECIPES SIT-DOWN (+ Magii 30d19fd Moonberry). A fresh keeper (seeded save) with an
 // OLD-SAVE bag (2 Roast Rinn + 1 Roast Tuskroot already in it):
-//  A. the Wilds: hurt to 30, hold a Roast Rinn, eat -> NOT healed, the roast stays in the bag (the HUD says it is spirit food).
+//  A. (run LAST) the Wilds: hurt to 30, hold a Roast Rinn, eat -> NOT healed, the roast stays in the bag (the HUD says it is spirit food).
 //  B. the Crusher Table lists the spice mix (Fuli Powder + Firewort) beside its infusions; Make -> +1 Fiery Fuli Powder.
 //     The Farm takes Firewort: a Firewort seed is plantable (bag row + icon) [asserted through the item def on the page].
 //  C. the hearth grills: Spicy Grilled Rinn (with the made spice), Grilled Rinn with Moonberry, Grilled Rinn with Aqual Sauce.
@@ -37,7 +37,7 @@ try {
   await p.goto(`${new URL(url).origin}/owner?key=${encodeURIComponent(KEY)}`, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {})
   await p.goto(`${new URL(url).origin}/api/owner`, { waitUntil: 'load', timeout: 60000 })
   if (!await p.evaluate(() => fetch('/api/owner', { cache: 'no-store' }).then(r => r.json()).then(d => !!d.owner))) { ok(false, 'owner cookie took'); process.exit(1) }
-  await p.evaluateOnNewDocument((at: number) => {
+  await p.evaluateOnNewDocument((at: number, crusher: unknown) => {
     if (sessionStorage.getItem('m234s2')) return; sessionStorage.setItem('m234s2', '1')
     localStorage.setItem('ather:shimmer:birthRune', 'star')
     const slots: unknown[] = Array(32).fill(null)
@@ -46,11 +46,11 @@ try {
       [11, 'fuli_powder', 1], [12, 'crop:firewort:D', 1], [13, 'moonberry', 1], [14, 'seed:firewort:D', 1]]
     for (const [k, id, n] of put) slots[k] = { id, n }
     localStorage.setItem('open.inv.v1', JSON.stringify({ v: 1, slots, gifts: ['bait1'] }))
-    localStorage.setItem('open.works.v1', JSON.stringify({ v: 1, rooms: [], chests: [], pieces: [] }))
+    localStorage.setItem('open.works.v1', JSON.stringify({ v: 1, rooms: [], chests: [], pieces: [crusher] }))   // the seed runs on the first game load: B's crusher rides it
     localStorage.setItem('ather.grimoire.v1', JSON.stringify({ v: 1, pages: [{ species: 'fox', stage: 'seen', at: 1 }], pots: { 'vx-m234': { seed: 'mana_seed_fox', at, bloomed: true } }, met: [] }))
     localStorage.setItem('ather.spiritParty.v1', JSON.stringify(['vx-m234']))
     localStorage.setItem('ather.spiritFollow.v1', JSON.stringify(['vx-m234']))
-  }, Date.now() - BLOOM_MS - 60000)
+  }, Date.now() - BLOOM_MS - 60000, CRUSHER)
   const read = (k: string) => p.evaluate(key => JSON.parse(localStorage.getItem(key) ?? 'null'), k)
   const bag = async () => { const r: Record<string, number> = {}; for (const s of ((await read('open.inv.v1'))?.slots ?? []) as ({ id: string; n: number } | null)[]) if (s) r[s.id] = (r[s.id] ?? 0) + s.n; return r }
   const shot = async (n: string) => { try { await p.screenshot({ path: `${out}/${n}.png` }) } catch { /* slow frame */ } }
@@ -63,24 +63,8 @@ try {
     try { await dismissStartCard(p) } catch { /* best effort (desktop card refuses pointer lock headless) */ }
   }
 
-  // ── A. the Wilds: a held roast no longer heals the keeper
-  await load('&waymark=greg')
-  await p.waitForFunction(() => (window as any).__ather?.zone?.() === 'wilds' && !!(window as any).__ather?.combat, { timeout: 240000 }); await sleep(4000)
-  await p.keyboard.press('1'); await sleep(500)
-  await p.evaluate(() => { const c = (window as any).__ather.combat(); c.hollows.length = 0; c.keeper.hp = 30; c.keeper.sinceHurt = 0 })
-  await poll(async () => await p.evaluate(() => (window as any).__ather.hp()) <= 31, 30000)
-  const hurt = await p.evaluate(() => (window as any).__ather.hp()) as number
-  await p.evaluate(() => { (window as any).__ather.combat().keeper.sinceHurt = 0; (window as any).__ather.eat() })
-  await sleep(1500)
-  const after = await p.evaluate(() => { const k = (window as any).__ather.combat().keeper; k.sinceHurt = 0; return k.hp }) as number
-  const ab = await bag()
-  ok(hurt <= 31 && after <= hurt + 3, `A eating a roast no longer heals the keeper (hp ${hurt} -> ${after}; was +40)`)
-  ok(ab.roast_rinn === 2, `A the roast stays in the bag (${ab.roast_rinn})`)
-  ok(await p.evaluate(() => /Food is for spirits/.test(document.body.innerText)), 'A the HUD says food is for spirits')
-  await shot('a-wilds-no-heal')
-
   // ── B. the Crusher Table: Fuli Powder + Firewort -> the spice mix
-  await setWorks({ v: 1, rooms: [], chests: [], pieces: [CRUSHER] }); await load()
+  await load()
   await p.evaluate((x, z) => (window as any).__ather.tp(x, z, 0), CRUSHER.x, CRUSHER.z + 1.3); await sleep(2000)
   await aimAt(p, CRUSHER.x, CRUSHER.z, 0.5); await p.keyboard.press('e'); await sleep(1200)
   const listed = await p.evaluate(() => [...document.querySelectorAll('[data-panel="alchemy"] [data-infusion]')].map(e => `${e.getAttribute('data-infusion')}:${e.getAttribute('data-can')}`).join())
@@ -173,6 +157,22 @@ try {
   for (let i = 0; i < 60; i++) { await sleep(500); if (await p.evaluate(() => !!(window as any).__spiritModel?.trots?.fox)) break }
   const d6 = await openPanel()
   ok(!!d6 && d6.bond === 12 && d6.bar.length === 10, `D after a reload: bond 12 + the full Steep kept (${d6?.bond}, ${d6?.bar.length})`)
+  // ── A. (run last: the Wilds keeps the keeper there) the Wilds: a held roast no longer heals the keeper
+  await load('&waymark=greg')
+  await p.waitForFunction(() => (window as any).__ather?.zone?.() === 'wilds' && !!(window as any).__ather?.combat, { timeout: 240000 }); await sleep(4000)
+  { const k = ((await read('open.inv.v1'))?.slots ?? []).findIndex((x: { id: string } | null) => x?.id === 'roast_rinn'); await p.keyboard.press(String(k + 1)); await sleep(500) }
+  await p.evaluate(() => { const c = (window as any).__ather.combat(); c.hollows.length = 0; c.keeper.hp = 30; c.keeper.sinceHurt = 0 })
+  await poll(async () => await p.evaluate(() => (window as any).__ather.hp()) <= 31, 30000)
+  const hurt = await p.evaluate(() => (window as any).__ather.hp()) as number
+  await p.evaluate(() => { (window as any).__ather.combat().keeper.sinceHurt = 0; (window as any).__ather.eat() })
+  await sleep(1500)
+  const after = await p.evaluate(() => { const k = (window as any).__ather.combat().keeper; k.sinceHurt = 0; return k.hp }) as number
+  const ab = await bag()
+  ok(hurt <= 31 && after <= hurt + 3, `A eating a roast no longer heals the keeper (hp ${hurt} -> ${after}; was +40)`)
+  ok(ab.roast_rinn === 1, `A the roast stays in the bag (${ab.roast_rinn}; 1 left after D fed one)`)
+  ok(await p.evaluate(() => /Food is for spirits/.test(document.body.innerText)), 'A the HUD says food is for spirits')
+  await shot('a-wilds-no-heal')
+
   ok(errs.length === 0, `0 page errors ${errs.join(' | ')}`)
 } finally { await br.close() }
 console.log(fails ? `${fails} FAIL` : 'ALL PASS')

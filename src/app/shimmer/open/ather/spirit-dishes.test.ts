@@ -13,6 +13,7 @@ import { existsSync } from 'node:fs'
 import type { Pot } from './spirit-seeds'
 import type { Species } from '../../spirits/spirit'
 import { seedOf } from './seed-items'
+import { parseBook } from './grimoire-book'
 
 let pass = 0
 const fails: string[] = []
@@ -95,6 +96,13 @@ const part = feedDish({ ...base, meals: Array(BAR_SLOTS - 1).fill('earth') }, sp
 ok(part.ok && mealsOf(part.pot).length === BAR_SLOTS && part.steep.length === 1, 'a dish past a nearly-full bar takes only the slots left')
 const evolvedLocked = feedDish({ ...base, element: 'earth', meals: Array(BAR_SLOTS).fill('earth') }, sp, 'water_meal', low, D)
 ok(evolvedLocked.ok && evolvedLocked.steep.length === 0 && evolvedLocked.bond === MEAL_BOND && evolvedLocked.pot.element === 'earth', 'a full bar: a meal still gives bond, her element never moves')
+
+// ── 5b. her bond survives a save + load (grimoire-book.ts parseBook); junk drops
+{
+  const back = parseBook(JSON.parse(JSON.stringify({ pots: { a: tomorrow.ok ? tomorrow.pot : base, b: { ...base, bond: 'x', bondDay: -1 } } }))).pots
+  ok(tomorrow.ok && back.a.bond === tomorrow.pot.bond && back.a.bondDay === D + 1 && back.a.bondToday === DISHES.roast_tuskroot.bond, `bond + today's tally load back (${JSON.stringify(back.a)})`)
+  ok(back.b.bond === undefined && back.b.bondDay === undefined, 'a junk bond is dropped')
+}
 
 // ── 6. old saves: a roast already in a bag still loads (now a dish) ────────────────────────────────────────────────
 {

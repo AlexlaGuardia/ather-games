@@ -72,7 +72,10 @@ export function parseBook(v: unknown): Book {
     const el = p.bloomed && EL.includes(p.element as string) ? { element: p.element } : {}
     const ml = p.bloomed && Array.isArray(p.meals) ? p.meals.filter((m: unknown): m is NonNullable<Pot['element']> => EL.includes(m as string)).slice(0, 10) : []
     const meals = ml.length ? { meals: ml } : {}
-    pots[id] = p.bloomed ? { seed: p.seed, at: p.at, ...day, bloomed: true, ...el, ...meals } : { seed: p.seed, at: p.at, ...day }
+    // M234 s2: her bond from dishes + today's tally (spirit-dishes.ts); whole numbers only, a junk value drops
+    const int = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.floor(v) : undefined)
+    const bd = p.bloomed && int(p.bond) ? { bond: int(p.bond), ...(int(p.bondDay) !== undefined && int(p.bondToday) !== undefined ? { bondDay: int(p.bondDay), bondToday: int(p.bondToday) } : {}) } : {}
+    pots[id] = p.bloomed ? { seed: p.seed, at: p.at, ...day, bloomed: true, ...el, ...meals, ...bd } : { seed: p.seed, at: p.at, ...day }
   }
   const met = Array.isArray(o.met) ? o.met.filter((k): k is number => Number.isInteger(k)) : []
   const since = Number.isInteger(o.since) ? o.since : undefined
