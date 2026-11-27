@@ -12,7 +12,7 @@
 // vertex shader (weight = how far along the tail axis a vertex sits). No rig: the glb has no skin or vertex groups.
 import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import * as THREE from 'three'
-import { Canvas, useFrame } from '@react-three/fiber'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls, useGLTF } from '@react-three/drei'
 import { makeTrot, type SpiritNav, type Trot } from './spirit-trot'
 import { isFollowing, keeperAt, spiritHeld, spiritLive, subscribeFollow } from './spirit-follow'   // M109 s1
@@ -179,8 +179,11 @@ function SpiritModel({ sp, look, nav, id, avatar, dev, meals, gallery, clip }: {
     rim(skin); if (glow) rim(glow); hullPush(halo, rig.hull)
     const b = makeRigBody(gltf, rig, { skin, glow, halo, eye }, look.glow?.part)
     bodyRef.current = b; glowRef.current = glow; haloRef.current = halo; setBody(b)
-    return () => { bodyRef.current = null; glowRef.current = null; haloRef.current = null; b.dispose(); for (const m of [skin, glow, halo, eye]) m?.dispose() }
-  }, [gltf, look, rig, acc])
+    return () => { bodyRef.current = null; glowRef.current = null; haloRef.current = null; b.dispose(); for (const m of [skin, glow, halo, eye]) m?.dispose()
+      // M213 fix: the gallery's one canvas outlives each spirit shown in it: free her GPU buffers as she goes (the geometry stays
+      // cached and is uploaded again if she comes back)
+      if (gallery) for (const m of Object.values(b.meshes)) m.geometry.dispose() }
+  }, [gltf, look, rig, acc, gallery])
   // M204 s2: her accent's colour, and her translucent hull leaning to it (up to 0.6 of the way when locked); the probe reads it
   useEffect(() => {
     if (accent) { acc.c.value.setRGB(accent.rgb[0], accent.rgb[1], accent.rgb[2], THREE.SRGBColorSpace); acc.n.value = accent.n
@@ -363,17 +366,27 @@ export function SpiritAvatar({ sp, look, size, meals }: { sp: Species; look: Spi
 }
 
 /** M213 THE /dev SPIRIT GALLERY'S STAGE: the very SpiritModel the game mounts (her glb, rig, materials, form fx, glow accent), centred
- *  on a plain floor with orbit + zoom, playing the clip it is given. `meals` = the bar that lights her accent (none = no accent). */
-export function SpiritStage({ sp, look, clip, meals }: { sp: Species; look: SpiritLook; clip: RigClip; meals?: readonly unknown[] }) {
-  const L = rigLook(sp, look, useSpiritRig()), h = L.h, far = L.rig?.avatar.far ?? 1
+ *  on a plain floor with orbit + zoom, playing the clip it is given. `meals` = the bar that lights her accent (none = no accent).
+ *  M213 fix: ONE canvas (one WebGL context) for the whole gallery: a new spirit swaps the model inside it and re-frames the camera.
+ *  A canvas per spirit lost each old context only 500 ms after unmount, so quick switches stacked contexts up (Alex's tab died).
+ *  `look` null = an unbuilt form: the canvas stays, empty, under the gallery's locked art. */
+export function SpiritStage({ sp, look, clip, meals }: { sp: Species; look: SpiritLook | null; clip: RigClip; meals?: readonly unknown[] }) {
+  const on = useSpiritRig(), L = look ? rigLook(sp, look, on) : null, h = L?.h ?? 0.5, far = L?.rig?.avatar.far ?? 1
   return (
-    <Canvas key={L.url} data-spirit-stage={L.name} dpr={[1, 2]} frameloop="always" gl={{ antialias: true, alpha: true }}
+    <Canvas data-spirit-stage={L?.name ?? ''} dpr={[1, 2]} frameloop="always" gl={{ antialias: true, alpha: true }}
       camera={{ position: [h * 1.3 * far, h * 0.9 * far, h * 2.4 * far], fov: 32, near: 0.01, far: 100 }}>
+      <StageFrame h={h} far={far} />
       <ambientLight intensity={0.9} />
       <directionalLight position={[1.5, 3, 2.5]} intensity={1.3} />
-      <mesh rotation-x={-Math.PI / 2} position-y={-0.002}><circleGeometry args={[h * 1.6 * far, 48]} /><meshBasicMaterial color="#3a2a1c" transparent opacity={0.55} /></mesh>
-      <Suspense fallback={null}><SpiritModel sp={sp} look={L} gallery clip={clip} id="gallery" meals={meals} /></Suspense>
+      {L && <mesh rotation-x={-Math.PI / 2} position-y={-0.002}><circleGeometry args={[h * 1.6 * far, 48]} /><meshBasicMaterial color="#3a2a1c" transparent opacity={0.55} /></mesh>}
+      {L && <Suspense fallback={null}><SpiritModel key={L.url} sp={sp} look={L} gallery clip={clip} id="gallery" meals={meals} /></Suspense>}
       <OrbitControls makeDefault target={[0, h * 0.45, 0]} enablePan={false} minDistance={h * 0.6} maxDistance={h * 10 * far} />
     </Canvas>
   )
+}
+/** the gallery camera framed on a new spirit (her height, her rig's step back), as a fresh canvas used to be */
+function StageFrame({ h, far }: { h: number; far: number }) {
+  const camera = useThree(s => s.camera), controls = useThree(s => s.controls) as { target: THREE.Vector3; update: () => void } | null
+  useEffect(() => { camera.position.set(h * 1.3 * far, h * 0.9 * far, h * 2.4 * far); controls?.target.set(0, h * 0.45, 0); controls?.update() }, [camera, controls, h, far])
+  return null
 }

@@ -13,7 +13,7 @@ import { formLook, spiritModelFor, type SpiritLook } from '../../open/ather/spir
 import { RIG_CLIPS, type RigClip } from '../../open/ather/spirit-rig'
 import { ELEMENT_COLORS } from '../../spirits/spirit'
 
-const ROW = 52, SHOWN = 11
+const ROW = 52, SHOWN = 11, half = Math.floor(SHOWN / 2)
 const GAME = 'var(--font-game), system-ui, sans-serif'
 const ELS: GalleryElement[] = ['mana', 'storm', 'earth', 'water']
 
@@ -61,17 +61,22 @@ export default function SpiritGallery() {
   const onDown = (e: RPointerEvent) => { drag.current = { y: e.clientY, moved: false }; (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId) }
   const onMove = (e: RPointerEvent) => { const d = drag.current; if (!d) return
     const rows = Math.trunc((d.y - e.clientY) / ROW); if (rows) { go(rows); d.y -= rows * ROW; d.moved = true } }
-  const onUp = () => { setTimeout(() => { drag.current = null }, 0) }
+  // M213 fix: a tap (no drag) selects the row under the pointer. The row's own onClick never fired: the dial holds pointer capture
+  // from the press, so the click lands on the dial, not the row. Read the row off the pointer's height instead.
+  const onUp = (e: RPointerEvent) => { const d = drag.current; drag.current = null
+    if (!d || d.moved || !dial.current) return
+    const k = i + Math.floor((e.clientY - dial.current.getBoundingClientRect().top) / ROW) - half
+    if (k >= 0 && k < GALLERY.length) setI(k) }
+  const onCancel = () => { drag.current = null }
 
   const meals = glow ? Array.from({ length: 10 }, () => glow) : undefined
-  const half = Math.floor(SHOWN / 2)
 
   return (
     <div data-spirit-gallery style={{ display: 'flex', gap: 16, minHeight: 640, color: '#f3e6cc' }}>
       {/* the dial */}
       <div style={{ width: 300, flex: 'none', display: 'flex', flexDirection: 'column', gap: 8 }}>
         <div style={{ fontFamily: GAME, fontSize: 11, letterSpacing: '0.18em', textTransform: 'uppercase', opacity: 0.55 }}>Spirits · {GALLERY.length}</div>
-        <div ref={dial} data-gallery-dial tabIndex={0} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}
+        <div ref={dial} data-gallery-dial tabIndex={0} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onCancel}
           style={{ position: 'relative', height: ROW * SHOWN, overflow: 'hidden', borderRadius: 10, background: 'rgba(24,16,10,.82)', border: '1px solid rgba(245,197,66,.22)',
             touchAction: 'none', userSelect: 'none', cursor: 'ns-resize', outline: 'none' }}>
           <div style={{ position: 'absolute', left: 0, right: 0, top: half * ROW, height: ROW, background: 'rgba(245,197,66,.10)', borderTop: '1px solid rgba(245,197,66,.45)', borderBottom: '1px solid rgba(245,197,66,.45)', pointerEvents: 'none' }} />
@@ -82,7 +87,6 @@ export default function SpiritGallery() {
               const c = r.el ? ELEMENT_COLORS[r.el] : ELEMENT_COLORS.base
               return (
                 <div key={r.num} data-gallery-row={r.num} data-gallery-name={r.name} data-selected={on ? '1' : '0'}
-                  onClick={() => { if (!drag.current?.moved) setI(k) }}
                   style={{ height: ROW, display: 'flex', alignItems: 'center', gap: 10, padding: '0 12px', cursor: 'pointer',
                     opacity: on ? 1 : Math.max(0.22, 0.62 - d * 0.08), transform: `scale(${on ? 1 : Math.max(0.9, 1 - d * 0.02)})`, transformOrigin: 'left center' }}>
                   <span style={{ fontFamily: GAME, fontVariantNumeric: 'tabular-nums', fontSize: 12, letterSpacing: '0.06em', width: 40, opacity: on ? 0.9 : 0.6 }}>{galleryNo(r.num)}</span>
@@ -107,7 +111,8 @@ export default function SpiritGallery() {
         </div>
         <div data-gallery-state={look ? 'model' : 'art'} style={{ position: 'relative', height: 520, borderRadius: 12, overflow: 'hidden',
           background: 'radial-gradient(circle at 50% 40%, rgba(255,236,190,.30), rgba(36,24,14,.92) 75%)', border: '1px solid rgba(245,197,66,.18)' }}>
-          {look ? <SpiritStage key={`${row.num}`} sp={row.sp} look={look} clip={clip} meals={meals} /> : (
+          <SpiritStage sp={row.sp} look={look} clip={clip} meals={meals} />
+          {!look && (
             <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14 }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img data-gallery-art src={row.icon} alt={row.name} style={{ maxWidth: '62%', maxHeight: 400, objectFit: 'contain', filter: 'saturate(.85)' }} />
