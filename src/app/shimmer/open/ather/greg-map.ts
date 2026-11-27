@@ -71,9 +71,17 @@ export function buildGregArea(tiles: readonly IndexTile[], tileM: number): GregA
 /** The display-only regions a stage shows, in the shape the Ather Wilds map takes (Map<tile, Region[]>): `turned` zones Hollow
  *  ground (by rank), the rest Clear; the dark stage = every zone Unseen (the plain map under the fold-mist). Never the keeper's. */
 export function stageRegions(area: GregArea, stage: GregMapStage, turned: number): Map<string, Region[]> {
+  // a tile whose zones read the same keeps the SAME array, so the map recomposes only the tiles the ripple just reached (AreaView)
+  let memo = memos.get(area); if (!memo) memos.set(area, memo = new Map())
   const out = new Map<string, Region[]>()
-  for (const [name, rs] of area.byTile) out.set(name, rs.map(r => ({ id: r.id, poly: r.poly, state: stage === 'dark' ? 'unseen' : r.rank < turned ? 'hollow' : 'clear' })))
+  for (const [name, rs] of area.byTile) {
+    const dark = stage === 'dark', k = `${name}|${dark ? 'd' : rs.filter(r => r.rank < turned).length}`
+    let v = memo.get(k)
+    if (!v) memo.set(k, v = rs.map(r => ({ id: r.id, poly: r.poly, state: dark ? 'unseen' : r.rank < turned ? 'hollow' : 'clear' })))
+    out.set(name, v)
+  }
   return out
 }
+const memos = new WeakMap<GregArea, Map<string, Region[]>>()
 /** how many zones a stage shows turned when it is not rippling (clear: none, hollow + dark: all) */
 export const turnedAt = (stage: GregMapStage, n: number) => (stage === 'clear' ? 0 : stage === 'ripple' ? 0 : n)

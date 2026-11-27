@@ -16,6 +16,7 @@ import type { WildsWorld } from './wilds-world'
 import type { Region } from './tile-picture'
 
 const cache = new WeakMap<object, GregArea>()
+const NO_WAYMARKS: never[] = []   // one array, so the map's per-tile cache holds across the ripple
 let blank: Fog | null = null   // the newborn's fog: nothing walked (display only, never the keeper's)
 
 export function GregWildsMap({ stage, world, tileOff }: { stage: GregMapStage; world: WildsWorld; tileOff: { x: number; z: number } }) {
@@ -37,7 +38,7 @@ export function GregWildsMap({ stage, world, tileOff }: { stage: GregMapStage; w
   const fog = useMemo(() => (dark ? (blank ??= newFog()) : null), [dark])
   const hollow = dark ? 0 : Math.min(turned, area.n)
   const view = (regionsByTile: Map<string, Region[]>, f: Fog | null) => (
-    <AreaView world={world} regionsByTile={regionsByTile} cx={area.cx} cz={area.cz} fog={f} tileOff={tileOff} waymarks={[]} />
+    <AreaView world={world} regionsByTile={regionsByTile} cx={area.cx} cz={area.cz} fog={f} tileOff={tileOff} waymarks={NO_WAYMARKS} />
   )
   return (
     <div data-greg-map={stage} data-greg-turned={turned} data-greg-zones={area.n} data-greg-hollow={hollow} data-greg-clear={dark ? 0 : area.n - hollow}

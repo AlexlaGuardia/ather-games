@@ -99,9 +99,12 @@ try {
   await pick(L('greg.b1.choice.c')); await poll(async () => !!(await map()), 15000)
   ok((await map())?.stage === 'clear' && (await line()) === L('greg.b1.wilds.1'), 'The Wilds? replays from the clear map')
   // ── line 2 -> ripple ──
+  // s2: every value the map commits is recorded IN the page (a MutationObserver), so a slow page's poll cannot miss the middle
+  await p.evaluate(() => { const w = window as any; w.__gregSeq = []; const rec = () => { const m = document.querySelector<HTMLElement>('[data-greg-map]'); if (m?.dataset.gregMap === 'ripple') { const v = +m.dataset.gregTurned!; if (w.__gregSeq[w.__gregSeq.length - 1] !== v) w.__gregSeq.push(v) } }
+    new MutationObserver(rec).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['data-greg-turned', 'data-greg-map'] }) })
   await p.evaluate((l: string) => [...document.querySelectorAll<HTMLButtonElement>('[data-talk-option]')].find(e => (e.textContent ?? '').includes(l))?.click(), ANSWERS.more)
-  const seq: number[] = []
-  for (let t = 0; t < 6000; t += 150) { const q = await map(); if (q) seq.push(q.turned); if (q && q.turned >= q.n && seq.length > 3) break; await sleep(150) }
+  for (let t = 0; t < 8000; t += 300) { const q = await map(); if (q && q.stage === 'ripple' && q.turned >= q.n) break; await sleep(300) }
+  const seq: number[] = await p.evaluate(() => (window as any).__gregSeq)
   m = await map()
   const mids = seq.filter(v => v > 0 && v < (m?.n ?? 0))
   ok(m?.stage === 'ripple' && (await line()) === L('greg.b1.wilds.2'), `line 2 "${await line()}" -> map [${m?.stage}]`)

@@ -7,7 +7,7 @@ import { gregSendOff, gregRepeat } from '../business/errand-lines'
 import { useEffect, useRef } from 'react'
 import { tileCentreWorld, type Wilds } from './wilds'
 import { atherPlate } from './plate'
-import { composeTilePicture, type Region } from './tile-picture'
+import { composeTilePicture, mapSettlementsRev, type Region } from './tile-picture'
 import { AREA_STATES, STATE_LOOK, STATE_WORD } from './spread-map'   // M70 s2, M121 s2
 import { TILE_M, type WildsWorld } from './wilds-world'
 import { GREG_WAYMARK, MAX_WAYMARKS, isLit, UNLIT_LABEL, PLANT_HINT, type Waymark } from './waymarks'
@@ -45,18 +45,28 @@ export function AreaView({ world, regionsByTile, cx, cz, fog, tileOff, waymarks 
   world: WildsWorld; regionsByTile: Map<string, Region[]>; cx: number; cz: number; fog: Fog | null; tileOff: { x: number; z: number }; waymarks: Waymark[]
 }) {
   const ref = useRef<HTMLCanvasElement>(null)
+  // M236 s2: each tile's picture is kept while its inputs are the same (same regions array, fog + rev, waymarks, plate), so a
+  // change on one tile (Greg's ripple, a zone turning) recomposes that tile only
+  const tiles = useRef(new Map<string, { c: HTMLCanvasElement; key: unknown[] }>())
   useEffect(() => {
     const c = ref.current; if (!c) return
     const PER = 500; c.width = PER * 3; c.height = PER * 3
     const ctx = c.getContext('2d')!
     ctx.fillStyle = '#5c70b2'; ctx.fillRect(0, 0, c.width, c.height)   // sea where no tile stands (the Atlas Ather water)
-    const tmp = document.createElement('canvas'), tx0 = Math.round(cx / TILE_M), ty0 = Math.round(cz / TILE_M)
+    const tx0 = Math.round(cx / TILE_M), ty0 = Math.round(cz / TILE_M), keep = new Set<string>()
     for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
       const t = world.at(tx0 + dx, ty0 + dy), W = t && world.loaded.get(t.name)
       if (!t || !W) continue
-      composeTilePicture(tmp, W, { px: PER, regions: regionsByTile.get(t.name) ?? [], fog, tileOff, ox: t.tx * TILE_M, oz: t.ty * TILE_M, waymarks })
-      ctx.drawImage(tmp, (dx + 1) * PER, (dy + 1) * PER)
+      const regions = regionsByTile.get(t.name) ?? [], key = [W, regions, fog, fog?.rev, tileOff.x, tileOff.z, waymarks, mapSettlementsRev()]
+      let e = tiles.current.get(t.name)
+      if (!e || e.key.length !== key.length || e.key.some((v, i) => v !== key[i])) {
+        const tmp = e?.c ?? document.createElement('canvas')
+        composeTilePicture(tmp, W, { px: PER, regions, fog, tileOff, ox: t.tx * TILE_M, oz: t.ty * TILE_M, waymarks })
+        tiles.current.set(t.name, e = { c: tmp, key })
+      }
+      keep.add(t.name); ctx.drawImage(e.c, (dx + 1) * PER, (dy + 1) * PER)
     }
+    for (const k of [...tiles.current.keys()]) if (!keep.has(k)) tiles.current.delete(k)
   }, [world, regionsByTile, cx, cz, fog, fog?.rev, tileOff, waymarks])
   // M235 s2: over the picture, the zones lost (void, outlined) and the one under threat (pulses), in world metres
   const tx0 = Math.round(cx / TILE_M), ty0 = Math.round(cz / TILE_M)
