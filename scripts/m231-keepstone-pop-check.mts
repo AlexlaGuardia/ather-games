@@ -10,6 +10,7 @@ import puppeteer from 'puppeteer-core'
 import { mkdirSync } from 'fs'
 import { STARTER_CHEST } from '../src/app/shimmer/open/ather/rooms'
 import { CHEST_SLOTS } from '../src/app/shimmer/open/ather/garden-bank'
+import { MELEE_HITS } from '../src/app/shimmer/open/ather/melee'
 import { aimAt } from './lib/aim.mts'
 import { dismissStartCard } from './lib/start-card.mts'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
@@ -60,8 +61,11 @@ await p.keyboard.press('Escape'); await sleep(700)
 await tp(S.x, S.z + 1.6, 0); await aimAt(p, S.x, S.z, 0.6)
 ok(await pollUntil(async () => (await target()) === 'starter', 10000), `punch: aimed at the first Keepstone (${await target()})`)
 if (!desk) ok(await pollUntil(() => p.evaluate(() => !!document.querySelector('[data-touch="hit"]')), 6000), 'punch: the phone hit button shows')
-const ns: number[] = []
-for (let i = 0; i < 6 && (await keepInBag()) === 0; i++) { const was = await hits(); await punch(); await pollUntil(async () => (await hits()) !== was || (await keepInBag()) > 0, 2500); await sleep(500); ns.push(await hits()) }
+const ns: number[] = []   // the three blows go inside MELEE_RESET_MS (4 s): a slow software GPU stretches every probe, so no reads between taps
+for (let round = 0; round < 2 && (await keepInBag()) === 0; round++) {
+  for (let i = 0; i < MELEE_HITS; i++) { await punch(); await sleep(600) }
+  await pollUntil(async () => (await keepInBag()) > 0, 5000); ns.push(await hits())
+}
 const w1 = await works()
 ok((await keepInBag()) === 1, `punch: the Keepstone is in the bag (counts ${ns.join(',')})`)
 ok(w1?.starterOut === true, `punch: the save marks it out (${JSON.stringify(w1?.starterOut)})`)
