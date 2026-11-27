@@ -68,7 +68,12 @@ const num = (v: unknown): v is number => typeof v === 'number' && Number.isFinit
 const round = (v: number, d: number) => { const m = 10 ** d, r = Math.round(v * m) / m; return r === 0 ? 0 : r }
 /** one turn = 4; kept in [0, 4) */
 const wrapQ = (q: number) => { const r = round(((q % 4) + 4) % 4, 4); return r >= 4 ? 0 : r }
-export const clampScale = (s: number) => round(Math.min(SCALE_MAX, Math.max(SCALE_MIN, s)), 2)
+export const clampScale = (s: number, k?: string) => round(Math.min(scaleMaxOf(k), Math.max(SCALE_MIN, s)), 2)
+// ── BETA M85 s1: OUTCROPS. Alex 11-22: "scenery pieces on top of the terrain like mountains.. hand place them". The two big rocks scale
+//    far past 2 (to OUTCROP_SCALE_MAX), so one piece can stand as a crag or a rock formation; every other kind keeps SCALE_MAX.
+export const OUTCROP_KINDS: readonly string[] = ['filler:rock-medium', 'filler:rock-large']
+export const OUTCROP_SCALE_MAX = 10
+export function scaleMaxOf(k?: string) { return k && OUTCROP_KINDS.includes(k) ? OUTCROP_SCALE_MAX : SCALE_MAX }
 
 export function cleanProp(v: unknown): Prop | null {
   const o = v as Partial<Prop> | null
@@ -87,7 +92,7 @@ export function cleanProp(v: unknown): Prop | null {
     return { id: o.id, k: o.k, x: round(o.x, 3), z: round(o.z, 3), q: num(o.q) ? wrapQ(o.q) : 0, s: 1, ...(w === NODE_WAIT_H ? {} : { w }) }
   }
   if (isRoom({ k: o.k })) return roomOf(o.k) ? { id: o.id, k: o.k, x: round(o.x, 3), z: round(o.z, 3), q: num(o.q) ? wrapQ(o.q) : 0, s: 1 } : null
-  return { id: o.id, k: o.k, x: round(o.x, 3), z: round(o.z, 3), q: num(o.q) ? wrapQ(o.q) : 0, s: num(o.s) ? clampScale(o.s) : 1, ...(typeof o.solid === 'boolean' ? { solid: o.solid } : {}) }
+  return { id: o.id, k: o.k, x: round(o.x, 3), z: round(o.z, 3), q: num(o.q) ? wrapQ(o.q) : 0, s: num(o.s) ? clampScale(o.s, o.k) : 1, ...(typeof o.solid === 'boolean' ? { solid: o.solid } : {}) }
 }
 /** a layer JSON's props: junk dropped, one per id (the first), PROPS_MAX at most */
 export function cleanProps(j: unknown): Prop[] {
@@ -116,7 +121,8 @@ export function newNodeId(ps: readonly Pick<Prop, 'id'>[], now = Date.now()): st
 export const snapXZ = (v: number, snap: number) => (snap > 0 ? round(Math.round(v / snap) * snap, 3) : round(v, 3))
 export const turnBy = (q: number, deg: number) => wrapQ(q + deg / 90)
 /** one wheel notch: rolling away grows it */
-export const scaleBy = (s: number, deltaY: number) => clampScale(s + (deltaY < 0 ? SCALE_STEP : -SCALE_STEP))
+export const scaleBy = (s: number, deltaY: number, k?: string) => { const st = s > SCALE_MAX || (s === SCALE_MAX && deltaY < 0) ? SCALE_STEP * 5 : SCALE_STEP   // M85: above 2 an outcrop grows by 0.25 a notch
+  return clampScale(s + (deltaY < 0 ? st : -st), k) }
 export const nextOf = <T,>(list: readonly T[], cur: T): T => list[(list.indexOf(cur) + 1) % list.length]
 
 /** the list with one more piece, or null when full / not a prop. A node picked up and put down keeps its id (`p.id`). */

@@ -577,10 +577,12 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
     hist.current.begin(edits.current, [PROPS_KEY]); edits.current[PROPS_KEY] = propsToStore(ps); hist.current.commit()
     markDirty([PROPS_KEY]); setRev(r => r + 1)
   }, [])   // eslint-disable-line react-hooks/exhaustive-deps
-  const placing = glade && view === 'fly' && brush === 'place'
+  const canPlace = glade || map === 'wilds'   // M85 s1: Scenery mode on the Wilds too (Nyx: later)
+  const placing = canPlace && view === 'fly' && brush === 'place'
+  const canPlaceRef = useRef(canPlace); canPlaceRef.current = canPlace
   // M168 s2: the draft's water as drawn (a lily's level); worked out only when asked
   const water = useMemo(() => gladeWaterAt({ edits: edits.current[GLADE_LAYER_TILE] ?? null, water: edits.current[WATER_PREFIX + GLADE_LAYER_TILE] ?? null }), [rev])   // eslint-disable-line react-hooks/exhaustive-deps
-  const place = usePlace(placing, propList, setPropList, setStatus, water)
+  const place = usePlace(placing, propList, setPropList, setStatus, water, glade ? 'glade' : 'wilds')
   useEffect(() => { if (view !== 'fly' && brush === 'place') setBrush('raise') }, [view, brush])
   useEffect(() => { if (view !== 'fly') setFull(false) }, [view])
   // keys: 1-8 brush, V void erase/paint, [ ] radius, F fullscreen fly, Esc leave it, ctrl+z / ctrl+shift+z / ctrl+y, ctrl+s
@@ -591,7 +593,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
       if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); if (e.shiftKey) redo(); else undo() }
       else if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); redo() }
       else if (mod && e.key.toLowerCase() === 's') { e.preventDefault(); save() }
-      else if (!mod && e.code === 'KeyP' && !e.repeat && glade && viewRef.current === 'fly') setBrush(b => (b === 'place' ? 'raise' : 'place'))   // M153
+      else if (!mod && e.code === 'KeyP' && !e.repeat && canPlaceRef.current && viewRef.current === 'fly') setBrush(b => (b === 'place' ? 'raise' : 'place'))   // M153
       else if (!mod && e.key >= '1' && e.key <= '9' && opts.current.brush === 'place') { /* the hotbar's */ }
       else if (!mod && e.key >= '1' && e.key <= '9') setBrush(TOOLS[+e.key - 1])
       else if (!mod && e.code === 'KeyV' && !e.repeat) setVoidMode(m => (m === -1 ? 1 : -1))   // M104: void brush erase / paint
@@ -700,7 +702,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
         <span className="w-3" />
         {(['2d', 'fly'] as const).map(v => <button key={v} className={`${btn} ${view === v ? on : off}`} onClick={() => setView(v)} data-testid={`view-${v}`}>{v === '2d' ? 'Map (top-down)' : 'Fly (3D)'}</button>)}
         <button className={`${btn} ${showOv ? on : off}`} onClick={() => setShowOv(v => !v)} data-testid="overlay-toggle" title="POIs + roads, where the game puts them (read-only)">POIs + roads (O)</button>
-        {view === 'fly' && glade && <button className={`${btn} ${placing ? on : off}`} onClick={() => setBrush(b => (b === 'place' ? 'raise' : 'place'))} data-testid="place-toggle">Place (P)</button>}
+        {view === 'fly' && canPlace && <button className={`${btn} ${placing ? on : off}`} onClick={() => setBrush(b => (b === 'place' ? 'raise' : 'place'))} data-testid="place-toggle">{glade ? 'Place (P)' : 'Scenery (P)'}</button>}
         {view === 'fly' && <button className={`${btn} ${off}`} onClick={() => setFull(true)} data-testid="fly-full">Fullscreen (F)</button>}
         {view === 'fly' && <button className={`${btn} ${lockLook ? on : off}`} onClick={() => setLockLook(v => !v)} data-testid="fly-lock" title="on: click the view to lock the mouse (look + crosshair brush, Esc frees it). off: left-drag sculpts at the pointer, right-drag looks">Mouse-look {lockLook ? 'on' : 'off'}</button>}
         {view === 'fly' && <span className="basis-full text-[11px] font-mono text-white/40">{placing ? 'Place: click the view, right places, left picks up · E inventory · 1-9 hotbar · wheel size · R turn · T turn step · G snap · M move · X delete · B blocks or not · Ctrl+Z undo · P back to the brushes · WASD move' : <>{lockLook ? 'click the view: mouse looks, crosshair = brush, left = sculpt, Esc frees' : 'right-drag look · left-drag sculpt'} · WASD move · Space/C up/down · Shift fast · wheel zoom · T top-down · - = strength · [ ] radius</>}</span>}
@@ -712,7 +714,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
               <div className="flex gap-1 items-center rounded bg-black/70 border border-white/10 px-2 py-1.5">
                 {TOOLS.map((t, i) => <button key={t} className={`${btn} ${brush === t ? on : off}`} disabled={t === 'void' && (glade || nyx)} onClick={() => setBrush(t)}>{i + 1} {t[0].toUpperCase() + t.slice(1)}</button>)}
                 {brush === 'void' && <button className={`${btn} ${on}`} onClick={() => setVoidMode(m => (m === -1 ? 1 : -1))}>{voidMode === -1 ? 'Erase' : 'Paint'} (V)</button>}
-                {glade && <button className={`${btn} ${placing ? on : off}`} onClick={() => setBrush(b => (b === 'place' ? 'raise' : 'place'))}>Place (P)</button>}
+                {canPlace && <button className={`${btn} ${placing ? on : off}`} onClick={() => setBrush(b => (b === 'place' ? 'raise' : 'place'))}>{glade ? 'Place (P)' : 'Scenery (P)'}</button>}
                 <span className="text-[11px] font-mono text-white/70 tabular-nums pl-2">radius {radius} m [ ] · strength {strength.toFixed(2)} - =</span>
                 <button className={`${btn} ${off}`} onClick={undo}>Undo</button>
                 <button className={`${btn} ${showOv ? on : off}`} onClick={() => setShowOv(v => !v)}>POIs (O)</button>
@@ -727,7 +729,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
           <BuilderFly tiles={[...bases.current.entries()].filter(([, b]) => Math.abs(b.tx - B.tx) <= 1 && Math.abs(b.ty - B.ty) <= 1).map(([name, b]): FlyTile => ({ name, ox: b.ox, oz: b.oz, nx: b.meta.nx, nz: b.meta.nz, cell: b.meta.cell, sizeX: b.meta.sizeX, sizeZ: b.meta.sizeZ, h: b.h, waterY: b.meta.waterY, voidV: b.voidV, noSea: glade, full: glade }))}
             deltas={n => edits.current[n]} rev={rev} heightAt={heightAt} radius={radius} focus={glade ? GLADE_FOCUS : { x: B.ox, z: B.oz }}
             onBegin={beginAt} onMove={moveAt} onEnd={endStroke} lockLook={lockLook} onLock={setLocked} overlay={flyOv} parts={flyParts} pool={glade}
-            place={glade ? place.api : undefined} placing={placing} fixed={glade} />
+            place={canPlace ? place.api : undefined} placing={placing} fixed={glade} />
           {placing && <PlaceHud place={place} locked={locked} count={pieceCount(propList)} status={status} />}
           {!full && !placing && <div className="absolute left-2 bottom-2 rounded bg-black/60 px-2 py-1 text-[11px] font-mono text-white/75 tabular-nums pointer-events-none" data-testid="fly-hud">
             {TOOL_KEY[brush]} · strength {strength.toFixed(2)} m/tick (- =) · radius {radius} m ([ ]){lockLook ? (locked ? ' · Esc frees the mouse' : ' · click to lock the mouse') : ''}

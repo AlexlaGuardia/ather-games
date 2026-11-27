@@ -17,7 +17,7 @@ import * as THREE from 'three'
 import { PLACE_PREFIX, isRoom, isStanding, placeOf, putPlace, WHO_PREFIX, isWho, whoId, pieceCount, putWho, qOfYaw, whoOf, yawOfQ, NODE_WAITS, PROP_SNAPS, PROP_TURNS, PROPS_MAX, addProp, isNode, nodeWaitH, removeProp, changeProp, nextOf, scaleBy, snapXZ, turnBy, type Prop } from '../../world/builder-props'
 import { BUILD_SUBS } from '../../open/ather/furniture'
 import { BuildIcon } from '../../open/ather/build-icon'   // M169
-import { SCENERY, SCENERY_BY, SCENERY_GROUPS, endSnap, floats, floatSpot, type Water, fenceTilt, isSolid, sceneryBoxes, sceneryPlaced, type PlacedProp } from '../../open/ather/scenery'
+import { SCENERY, SCENERY_BY, SCENERY_GROUPS, paletteOf, placeableOn, type SceneryMap, endSnap, floats, floatSpot, type Water, fenceTilt, isSolid, sceneryBoxes, sceneryPlaced, type PlacedProp } from '../../open/ather/scenery'
 import { SceneryView } from '../../open/ather/scenery-view'
 import { tiltMatrix } from '../../open/ather/scenery-filler'
 import { GladeLots, useGladeStanding } from '../../open/ather/glade-lots-view'
@@ -65,7 +65,8 @@ const personPiece = (id: string, props: readonly Prop[] = []): Prop | null => {
   return p ? props.find(q => q.id === id) ?? { id, k: WHO_PREFIX + p.who, x: p.x, z: p.z, q: qOfYaw(p.yaw), s: 1 } : null
 }
 /** the mode's own state (the list itself lives in the editor's store: `props` in, `setProps` out) */
-export function usePlace(on: boolean, props: readonly Prop[], setProps: (ps: Prop[]) => void, say: (s: string) => void, water: Water) {
+/** M85 s1: `map` = which map's palette (the Wilds take the plain scenery only: scenery.ts placeableOn) */
+export function usePlace(on: boolean, props: readonly Prop[], setProps: (ps: Prop[]) => void, say: (s: string) => void, water: Water, map: SceneryMap = 'glade') {
   const [slots, setSlotsS] = useState<(string | null)[]>(FIRST)
   useEffect(() => { setSlotsS(loadSlots()) }, [])
   const setSlots = useCallback((f: (s: (string | null)[]) => (string | null)[]) => setSlotsS(s => { const n = f(s); try { localStorage.setItem(SLOTS_KEY, JSON.stringify(n)) } catch { /* */ } return n }), [])
@@ -73,7 +74,7 @@ export function usePlace(on: boolean, props: readonly Prop[], setProps: (ps: Pro
   const [inv, setInv] = useState(false), [moving, setMoving] = useState<string | null>(null), [target, setTarget] = useState<string | null>(null)
   const [held, setHeld] = useState<Omit<Hand, 'k'>>({ q: 0, s: 1 })
   const mp = moving ? props.find(p => p.id === moving) ?? personPiece(moving) : null
-  const k = mp ? mp.k : slots[slot]
+  const sk = slots[slot], k = mp ? mp.k : sk && placeableOn(map, sk) ? sk : null   // M85: a Glade-only kind in a slot is an empty slot on the Wilds
   const hand = useMemo<Hand | null>(() => (k ? { k, ...held, ...(isNode({ k }) || isRoom({ k }) || isStanding({ k }) ? { s: 1, solid: undefined } : {}) } : null), [k, held])
   const S = useRef({ props, slots, slot, snap, turn, moving, target, held, hand, inv }); S.current = { props, slots, slot, snap, turn, moving, target, held, hand, inv }
   const go = useRef({ setProps, say, water }); go.current = { setProps, say, water }
@@ -95,7 +96,7 @@ export function usePlace(on: boolean, props: readonly Prop[], setProps: (ps: Pro
     const p = c.props.find(q => q.id === id); if (!p || c.moving) return
     go.current.setProps(removeProp(c.props, id)); setSlots(s => s.map((v, i) => (i === c.slot ? p.k : v))); setHeld(handOf(p))
   }, [setSlots])
-  const wheel = useCallback((dy: number) => setHeld(h => ({ ...h, s: scaleBy(h.s, dy) })), [])
+  const wheel = useCallback((dy: number) => { const kk = S.current.hand?.k; setHeld(h => ({ ...h, s: scaleBy(h.s, dy, kk) })) }, [])   // M85: the outcrops scale to 10
   const choose = useCallback((kk: string) => { setSlots(s => s.map((v, i) => (i === S.current.slot ? kk : v))); setHeld(h => ({ q: h.q, s: 1 })); setMoving(null) }, [setSlots])
   // a piece undone / rolled back away while it is being moved: let go of it
   useEffect(() => { if (moving && !mp) { setMoving(null); setHeld({ q: 0, s: 1 }) } }, [moving, mp])
@@ -128,7 +129,7 @@ export function usePlace(on: boolean, props: readonly Prop[], setProps: (ps: Pro
     window.addEventListener('keydown', key); return () => window.removeEventListener('keydown', key)
   }, [on])
   const api = useMemo<PlaceApi>(() => ({ props, hand, moving, snap, put, pick, wheel, setTarget, water }), [props, hand, moving, snap, put, pick, wheel, water])
-  return { api, slots, slot, setSlot, snap, turn, inv, setInv, choose, target, held, hand }
+  return { api, slots, slot, setSlot, snap, turn, inv, setInv, choose, target, held, hand, map }
 }
 
 // ── in the Canvas ──
@@ -284,14 +285,15 @@ export function GladeFixed({ heightAt, rev = 0, place, trees = GLADE_FRAME.meado
 // ── the screen: hotbar, status line, inventory ──
 const COLOR: Record<string, string> = { Nodes: '#8ef0c0', Rooms: '#d8a85c', Trees: '#4f9a5f', Bushes: '#8fb35a', Plants: '#a9c763', 'Rocks and logs': '#8b857b', 'Fences and signs': '#a5834f', Crystals: '#9a8ae0', Props: '#b98a4e', Build: '#c9a36a', Furniture: '#7fa6c4' }
 export function PlaceHud({ place, locked, count, status }: { place: ReturnType<typeof usePlace>; locked: boolean; count: number; status?: string }) {
-  const { slots, slot, setSlot, snap, turn, inv, setInv, choose, held, hand, api, target } = place
+  const { slots, slot, setSlot, snap, turn, inv, setInv, choose, held, hand, api, target, map } = place
+  const PAL = paletteOf(map)   // M85 s1
   const dry = useMemo(() => api.props.filter(p => floats(p) && api.water(p.x, p.z) === null).length, [api.props, api.water])
   const tp = target ? api.props.find(p => p.id === target) ?? personPiece(target) : null, name = (k: string | null | undefined) => (k && isStanding({ k }) ? personName(k) : k ? SCENERY_BY.get(k)?.label ?? k : 'empty')
   return <>
     {inv && <div className="absolute inset-0 z-10 bg-black/60 flex items-center justify-center p-3" data-testid="place-inv" onPointerDown={e => { if (e.target === e.currentTarget) setInv(false) }}>
       <div className="max-h-full w-full max-w-[860px] overflow-y-auto rounded border border-white/15 bg-[#14181c]/95 p-3 select-none">
-        <div className="text-[11px] font-mono text-white/50 mb-2">slot {slot + 1} takes what you click · E closes · {SCENERY.length} pieces</div>
-        {SCENERY_GROUPS.map(g => { const item = (s: typeof SCENERY[number]) =>
+        <div className="text-[11px] font-mono text-white/50 mb-2">slot {slot + 1} takes what you click · E closes · {PAL.length} pieces</div>
+        {SCENERY_GROUPS.filter(g => PAL.some(s => s.group === g)).map(g => { const item = (s: typeof SCENERY[number]) =>
             <button key={s.k} onClick={() => choose(s.k)} data-testid={`place-item-${s.k}`} className={`text-left rounded border px-2 py-1.5 text-[11px] leading-tight ${s.sub ? 'flex items-center gap-1.5' : ''} ${slots[slot] === s.k ? 'border-amber-400 bg-amber-500/20' : 'border-white/10 bg-white/5 hover:bg-white/10'}`}>
               {s.sub ? <BuildIcon id={s.k.slice(6)} size={30} /> : <span className="inline-block w-2 h-2 rounded-sm mr-1.5" style={{ background: COLOR[g] }} />}<span className="min-w-0">{s.label}
               <span className="block text-[9px] font-mono text-white/40">{s.w.toFixed(1)} x {s.d.toFixed(1)} x {s.h.toFixed(1)} m{s.solid ? ' · blocks' : ''}{isNode(s) ? ' · gathered' : s.floats ? ' · on water' : ''}</span></span>
@@ -299,8 +301,8 @@ export function PlaceHud({ place, locked, count, status }: { place: ReturnType<t
           const grid = (list: typeof SCENERY) => <div className="grid grid-cols-[repeat(auto-fill,minmax(118px,1fr))] gap-1">{list.map(item)}</div>
           return <div key={g} className="mb-3" data-testid={`place-group-${g}`}>
           <div className="text-[10px] uppercase tracking-[0.18em] text-white/40 mb-1">{g}</div>
-          {g === 'Build' ? BUILD_SUBS.map(sub => { const list = SCENERY.filter(s => s.group === g && s.sub === sub)   // M169: an empty sub-category is not shown
-            return list.length > 0 && <div key={sub} className="mb-1.5" data-testid={`place-sub-${sub}`}><div className="text-[10px] text-white/55 mb-0.5">{sub}</div>{grid(list)}</div> }) : grid(SCENERY.filter(s => s.group === g))}
+          {g === 'Build' ? BUILD_SUBS.map(sub => { const list = PAL.filter(s => s.group === g && s.sub === sub)   // M169: an empty sub-category is not shown
+            return list.length > 0 && <div key={sub} className="mb-1.5" data-testid={`place-sub-${sub}`}><div className="text-[10px] text-white/55 mb-0.5">{sub}</div>{grid(list)}</div> }) : grid(PAL.filter(s => s.group === g))}
         </div> })}
       </div>
     </div>}

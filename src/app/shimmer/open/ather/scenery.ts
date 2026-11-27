@@ -13,7 +13,7 @@ import { buildSolids, CREATIVE_OPEN } from './build-catalog'
 import { panelChain, ROOMS } from './rooms'
 import { BENCH_IN, ROOM_SIZE, padLevel, plinthBoxes, roomPad } from './glade-pads'
 import { isWholeQ, quadBounds } from './build-prefs'
-import { GLADE_ROOMS, NODE_PREFIX, ROOM_PREFIX, isRoom, type GladeRoom, type Prop } from '../../world/builder-props'
+import { GLADE_ROOMS, NODE_PREFIX, ROOM_PREFIX, cleanProps, isRoom, type GladeRoom, type Prop } from '../../world/builder-props'
 import { NODE_CRYSTALS, NODE_CRYSTAL_S, NODE_TREES, nodeName, nodeTree, nodeTrunk } from './glade-nodes'
 import { crownOf } from './forestry'
 import type { Box } from '../terrain-world'
@@ -92,6 +92,19 @@ export const SCENERY: readonly SceneryKind[] = [
     return { k: `piece:${id}`, group: f.build ? 'Build' : 'Furniture', ...(f.build ? { sub: f.build } : {}), label: f.name, w: f.w, d: f.d, h: f.h, solid: f.solid, panel: f.panel, ...(parts ? { arms: parts } : {}), model: { piece: id } } }),
 ]
 export const SCENERY_BY: ReadonlyMap<string, SceneryKind> = new Map(SCENERY.map(s => [s.k, s]))
+// ── BETA M85 s1: SCENERY MODE ON THE WILDS. The Wilds take the plain scenery only: no tutorial nodes, no garden rooms (both are the
+//    Glade's own, read by the Glade's tutorial), and nothing that floats (lilies read the Glade's water). Every other kind, the same
+//    palette, the same sizes, the same blocking. The Glade keeps every kind.
+export type SceneryMap = 'glade' | 'wilds'
+export const SCENERY_MAPS: readonly SceneryMap[] = ['glade', 'wilds']
+export function placeableOn(map: SceneryMap, k: string): boolean {
+  const K = SCENERY_BY.get(k); if (!K) return false
+  return map === 'glade' || (K.group !== 'Nodes' && K.group !== 'Rooms' && !K.floats)
+}
+export const paletteOf = (map: SceneryMap): readonly SceneryKind[] => SCENERY.filter(s => placeableOn(map, s.k))
+/** the PUBLISHED Wilds layer's raw `props` (the live wilds-edits.json, passed through untouched by its route): cleaned the builder's
+ *  way, and only what the Wilds take (a Glade-only kind in a hand-edited file is simply not drawn) */
+export function wildsPublishedProps(raw: unknown): Prop[] { return cleanProps({ props: raw }).filter(p => placeableOn('wilds', p.k)) }
 export const isSolid = (p: Pick<Prop, 'k' | 'solid'>) => { const K = SCENERY_BY.get(p.k); return K?.floats ? false : p.solid ?? K?.solid ?? false }
 
 /** M168 s2: the water over a spot (its surface's y), null = none (glade-layer gladeWaterAt) */

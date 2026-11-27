@@ -100,7 +100,7 @@ import { gladeLayerGround, gladeLift, gladeFrame, gladeWaterAt } from './glade-l
 import { useGladeLayer, GladeWater } from './glade-layer-view'   // M83 s2b: the Glade's published builder layer
 import { zoneParts, zonePartBoxes, withZoneParts, publishedZones } from './zone-parts'   // M84 s3: published zone builds (drawn + solid)
 import { ZonePartsView } from './zone-parts-view'
-import { sceneryPlaced, sceneryBoxes } from './scenery'   // M153 s1a: the Glade's published scenery (drawn + solid)
+import { sceneryPlaced, sceneryBoxes, wildsPublishedProps } from './scenery'   // M153 s1a: the Glade's published scenery (drawn + solid); M85 s1 the Wilds'
 import { SceneryView } from './scenery-view'
 import { isNode } from '../../world/builder-props'
 import { gladeNodes } from './glade-nodes'   // M153 s1b: the Glade's tutorial nodes
@@ -130,7 +130,7 @@ import { mapDoors, runeHoldOpen } from './map-doors'   // M181: Rune Hold's door
 import { tileCentreWorld, BIOME, BIOME_NAME, type Wilds, type Tree, type Crystal } from './wilds'
 import { loadIndex, makeWorld, stream, releaseTo, tileOf, zonesOf, wanted, TILE_M, WILDS_RELEASE_MS, type WildsWorld } from './wilds-world'
 import { makeVoids, FALL_LIP, type VoidField } from './wilds-voids'
-import { ensureEdits, voidEditsLive, zonesJsonLive } from './wilds-edits'   // M104: the void brush layer
+import { ensureEdits, voidEditsLive, zonesJsonLive, propsJsonLive } from './wilds-edits'   // M104: the void brush layer
 import { startFall, stepFall, type FallState } from './void-fall'
 import { loadNetwork, clearing, roadField, settlementAt, nearFair, fairDoor, FAIR_NAME, FAIR_DOOR_R, type Network, type Settlement } from './network'
 import { useFolkTalk } from './use-folk-talk'
@@ -879,10 +879,16 @@ function AtherSliceGame() {
   const wildsPartsNow = useMemo(() => ww && wildsZones.length ? zoneParts(wildsZones, ww.heightAt) : [], [ww, wrev, wildsZones])   // eslint-disable-line react-hooks/exhaustive-deps
   const wildsPartsSig = wildsPartsNow.map(p => `${p.key}@${p.y.toFixed(2)}`).join()
   const wildsParts = useMemo(() => wildsPartsNow, [wildsPartsSig])   // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { setWildsPartBoxes(zonePartBoxes(wildsParts)); return () => setWildsPartBoxes([]) }, [wildsParts])   // M117 s3
+  // M85 s1: the Wilds' published scenery (World Builder Scenery mode): stands on the ground, drawn, solid where it blocks
+  const wildsSceneryNow = useMemo(() => ww ? sceneryPlaced(wildsPublishedProps(propsJsonLive()), ww.heightAt) : [], [ww, wrev])   // eslint-disable-line react-hooks/exhaustive-deps
+  const wildsScenerySig = wildsSceneryNow.map(p => `${p.id}:${p.k}@${p.x},${p.z},${p.q},${p.s},${p.y.toFixed(2)},${p.solid ?? ''}`).join()
+  const wildsScenery = useMemo(() => wildsSceneryNow, [wildsScenerySig])   // eslint-disable-line react-hooks/exhaustive-deps
+  const wildsSceneryBoxes = useMemo(() => sceneryBoxes(wildsScenery), [wildsScenery])
+  useEffect(() => { setWildsPartBoxes([...zonePartBoxes(wildsParts), ...wildsSceneryBoxes]); return () => setWildsPartBoxes([]) }, [wildsParts, wildsSceneryBoxes])   // M117 s3
+  useEffect(() => { (window as unknown as { __wildsScenery?: unknown }).__wildsScenery = () => ({ items: wildsScenery.map(p => ({ id: p.id, k: p.k, x: p.x, z: p.z, y: p.y, q: p.q, s: p.s })), boxes: wildsSceneryBoxes }) }, [wildsScenery, wildsSceneryBoxes])   // read-only probe (m85-scenery-check)
   const wildsDoors = useMemo(() => wildsZones.flatMap(z => { const u = zoneUse(z); return u ? [{ id: z.id, ...zoneDoor(z), u }] : [] }), [wildsZones])
   const wildsDoorsRef = useRef(wildsDoors); wildsDoorsRef.current = wildsDoors
-  const world = useMemo(() => zone.kind === 'plot' ? plotWorld : zone.kind === 'glade' ? gladeWorld : ww ? terrainWorld(withZoneParts(withPieces(ww.shape), zonePartBoxes(wildsParts))) : null, [zone, ww, plotWorld, gladeWorld, wildsParts])   // ww.shape reads the live tiles
+  const world = useMemo(() => zone.kind === 'plot' ? plotWorld : zone.kind === 'glade' ? gladeWorld : ww ? terrainWorld(withZoneParts(withPieces(ww.shape), [...zonePartBoxes(wildsParts), ...wildsSceneryBoxes])) : null, [zone, ww, plotWorld, gladeWorld, wildsParts, wildsSceneryBoxes])   // ww.shape reads the live tiles
   // ground cover preview (ground-cover.tsx, ?cover=): nothing on a path, the gate's pad or at Greg's feet
   const [cover, setCover] = useState<'none' | 'tufts' | 'meadow' | 'lush'>('meadow')
   useEffect(() => setCover(coverFromUrl()), [])
@@ -1855,6 +1861,7 @@ function AtherSliceGame() {
         <ProgramKeeper />
         {zone.kind === 'wilds' && <WarmProxies key={epoch} />}   {/* M44: late-mounting shader variants, compiled behind the arrival veil */}
         {zone.kind === 'wilds' && <ZonePartsView parts={wildsParts} />}   {/* M84 s3b */}
+        {zone.kind === 'wilds' && wildsScenery.length > 0 && <SceneryView items={wildsScenery} />}   {/* M85 s1 */}
         <OpenHands ref={handsApi} held={rodOut ? <HeldRod /> : <HeldItem id={stance.kind === 'item' ? held : null} />} />
         <FpGun ref={gunApi} />
         <ThirdPersonBody drive={dollDrive} camRef={camRef} />
