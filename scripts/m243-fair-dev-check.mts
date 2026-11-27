@@ -47,6 +47,8 @@ try {
   p.on('pageerror', e => errs.push(String(e).slice(0, 240)))
   p.on('request', q => { const u = q.url(); if (u.startsWith(url) && new URL(u).pathname.startsWith('/api/') && !['GET', 'HEAD'].includes(q.method())) writes.push(`${q.method()} ${u}`) })
   await p.evaluateOnNewDocument('window.__name = (f) => f')
+  // at phone width the hub's INSPECTOR sidebar lies over the right of every dev mode and takes the taps: fold it, as the owner's » does
+  if (W < 700) await p.evaluateOnNewDocument(() => { try { localStorage.setItem('shimmer-inspector-collapsed', 'true') } catch { /* */ } })
   await p.goto(`${url}/owner?key=${encodeURIComponent(KEY)}`, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {})
   await p.goto(`${url}/shimmer/dev?mode=fair`, { waitUntil: 'load', timeout: 240000 })
   await dismissStartCard(p, 3000).catch(() => false)
