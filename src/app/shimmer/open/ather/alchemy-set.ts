@@ -7,8 +7,8 @@
 // ★ STATIONS RULED 2026-11-21 (Q1, athernyx 2cbbaca, game/alchemy.md › THE ALCHEMY SET): Alchemy Desk (a recipe starts and
 //   ends there) · Still (mixture -> extract) · Cauldron Nook (makes the mixture) · Crusher Table (WORKING name: items -> fine
 //   powders or gels). The chain: crush -> mix -> distil -> combine, each potion its own step list.
-// ★ NAMES RULED 2026-11-21 (Q2-Q3, athernyx 61911e7): the naming GRAMMAR (Crusher -> a Dust or a Gel, Nook -> a Steep, Still
-//   -> an Extract, Desk -> the potion by its class word), the first recipe (Rinnscale Dust + Goldleaf Steep -> Golden Dew
+// ★ NAMES RULED 2026-11-21 (Q2-Q3, athernyx 61911e7): the naming GRAMMAR (Crusher -> a Dust or a Gel, Nook -> a Simmer (a Steep until 11-27, athernyx 1d9035f; Steep is only the spirit's meal bar now), Still
+//   -> an Extract, Desk -> the potion by its class word), the first recipe (Rinnscale Dust + Goldleaf Simmer -> Golden Dew
 //   Extract -> Health Salve) and the three starters (Health Salve, Mana Elixir, Starlight Tonic). The other
 //   intermediates are named BY that grammar (what went in + its word). The Rinnscale Dust is ground from the build's
 //   Shimmerscale catch (the dust is canon's name, the input is Jin's). Every name lives in this file only.
@@ -42,13 +42,13 @@ export interface Potion {
 
 /** The things a chain makes on the way (each is graded like a crop: `alc:<id>:<grade>`). */
 export const INTERMEDIATES: Readonly<Record<string, string>> = {
-  rinnscale_dust: 'Rinnscale Dust', goldleaf_steep: 'Goldleaf Steep', golden_dew_extract: 'Golden Dew Extract',
-  shard_dust: 'Shard Dust', dewdrop_gel: 'Dewdrop Gel', shard_steep: 'Shard Steep', starwillow_extract: 'Starwillow Extract', core_dust: 'Core Dust',
+  rinnscale_dust: 'Rinnscale Dust', goldleaf_steep: 'Goldleaf Simmer', golden_dew_extract: 'Golden Dew Extract',
+  shard_dust: 'Shard Dust', dewdrop_gel: 'Dewdrop Gel', shard_steep: 'Shard Simmer', starwillow_extract: 'Starwillow Extract', core_dust: 'Core Dust',
 }
 
 const S = 1000
 export const ALC_POTIONS: Readonly<Record<string, Potion>> = {
-  // THE FIRST RECIPE, as ruled (Alex's chain): Rinnscale Dust + Goldleaf Steep (Goldleaf + Dewdrop Vine) -> Still -> Golden
+  // THE FIRST RECIPE, as ruled (Alex's chain): Rinnscale Dust + Goldleaf Simmer (Goldleaf + Dewdrop Vine) -> Still -> Golden
   // Dew Extract -> Desk -> Health Salve.
   health: {
     name: 'Health Salve', blurb: 'Golden dew and rinnscale dust. Drink it to heal.', makes: 2, effect: { heal: 40 },
@@ -62,7 +62,7 @@ export const ALC_POTIONS: Readonly<Record<string, Potion>> = {
   mana: {
     // a starter (the canon first recipe; its page comes with the Desk). The vine is crushed to a GEL first (the Crusher's
     // other product, ruled with the Dust).
-    name: 'Mana Elixir', blurb: 'Shard dust steeped with dewdrop gel. Drink it for mana.', makes: 2, effect: { mana: 65 },
+    name: 'Mana Elixir', blurb: 'Shard dust simmered with dewdrop gel. Drink it for mana.', makes: 2, effect: { mana: 65 },
     steps: [
       { at: 'crusher', in: [{ id: 'raw_mana_shard', n: 3 }], out: 'shard_dust', ms: 6 * S },
       { at: 'crusher', in: [{ id: 'crop:dewdrop_vine', n: 2 }], out: 'dewdrop_gel', ms: 6 * S },

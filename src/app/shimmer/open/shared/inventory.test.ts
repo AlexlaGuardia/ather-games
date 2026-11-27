@@ -89,6 +89,8 @@ ok(!!itemDef('mast').icon && !OPEN_ITEMS.forage, 'mast: no icon, or the placehol
   const kept: [string, number, string][] = [
     ['potion:health:D', 3, 'Health Salve · D'], ['potion:mana:S', 2, 'Mana Elixir · S'], ['potion:wisdom:A', 1, 'Starlight Tonic · A'],
     ['starlight_tincture', 4, 'Starlight Tonic'], ['golden_tonic', 5, 'Golden Glaze'],
+    // athernyx 1d9035f: the Cauldron Nook makes a SIMMER (Steep = the spirit's bar only); the saved id keeps its old word
+    ['alc:goldleaf_steep:B', 1, 'Goldleaf Simmer · B'], ['alc:shard_steep:C', 2, 'Shard Simmer · C'],
   ]
   kept.forEach(([id, n], i) => { old.slots[10 + i] = { id, n } })
   store['open.inv.v1'] = JSON.stringify(old)

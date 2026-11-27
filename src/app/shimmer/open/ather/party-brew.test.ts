@@ -4,7 +4,7 @@ import { ALC_POTIONS, potionId } from './alchemy-set'
 let pass = 0, fail = 0
 const ok = (c: boolean, m: string) => { if (c) pass++; else { fail++; console.log('  FAIL', m) } }
 
-const H = ALC_POTIONS.health   // crush(0) ‖ steep(1) -> still(2, needs steep) -> desk(3, needs dust + extract)
+const H = ALC_POTIONS.health   // crush(0) ‖ simmer(1) -> still(2, needs simmer) -> desk(3, needs dust + extract)
 const T = (k: number) => H.steps[k].ms
 const bag = { shimmerscale: 4, 'crop:goldleaf:A': 2, 'crop:dewdrop_vine:A': 2 }
 const scale = { shimmerscale: 2 }, crops = { 'crop:goldleaf:A': 2, 'crop:dewdrop_vine:A': 2 }
@@ -21,9 +21,9 @@ for (let n = 1; n <= MAX_HANDS; n++) ok(totalBottles(H.makes, n) >= n, `every ha
   ok(openBrewing('host', 'nope') === null, 'an unknown potion does not open')
   b = join(join(b, 'g1'), 'g1')
   ok(b.hands.join() === 'host,g1', 'join once')
-  ok(openSteps(b, 0).join() === '0,1', `open at start: crush and steep side by side (${openSteps(b, 0)})`)
+  ok(openSteps(b, 0).join() === '0,1', `open at start: crush and simmer side by side (${openSteps(b, 0)})`)
   ok(claim(b, 'stranger', 0, bag, 0) === null, 'a hand not in the brewing cannot claim')
-  ok(claim(b, 'host', 2, bag, 0) === null, 'the still is not open before the steep is made')
+  ok(claim(b, 'host', 2, bag, 0) === null, 'the still is not open before the simmer is made')
   const c0 = claim(b, 'g1', 0, scale, 0)!
   ok(!!c0 && c0.spend.length === 1 && c0.spend[0].id === 'shimmerscale' && c0.spend[0].n === 2, 'the guest crushes from ITS bag')
   b = c0.b
@@ -31,14 +31,14 @@ for (let n = 1; n <= MAX_HANDS; n++) ok(totalBottles(H.makes, n) >= n, `every ha
   ok(claim(b, 'host', 0, bag, 1) === null, 'a claimed step cannot be claimed twice')
   ok(claim(b, 'host', 1, { 'crop:goldleaf:A': 1 }, 1) === null, 'a short bag cannot claim')
   b = claim(b, 'host', 1, crops, 0)!.b
-  ok(openSteps(b, T(1) - 1).length === 0, 'nothing new opens before the steep is done')
-  ok(openSteps(b, T(1)).join() === '2', `the still opens when the steep is made (${openSteps(b, T(1))})`)
-  ok(Object.keys(pool(b, T(1))).some(id => id.startsWith('alc:goldleaf_steep')), 'the steep sits in the shared pool')
+  ok(openSteps(b, T(1) - 1).length === 0, 'nothing new opens before the simmer is done')
+  ok(openSteps(b, T(1)).join() === '2', `the still opens when the simmer is made (${openSteps(b, T(1))})`)
+  ok(Object.keys(pool(b, T(1))).some(id => id.startsWith('alc:goldleaf_steep')), 'the simmer sits in the shared pool')
   // the guest (free again) runs the still from the POOL, spending nothing of its own
   const c2 = claim(b, 'g1', 2, {}, T(1))!
   ok(!!c2 && c2.spend.length === 0, 'an intermediate step spends from the pool, not the bag')
   b = c2.b
-  ok(!Object.keys(pool(b, T(1))).some(id => id.startsWith('alc:goldleaf_steep') && pool(b, T(1))[id] > 0), 'the pool steep was used up')
+  ok(!Object.keys(pool(b, T(1))).some(id => id.startsWith('alc:goldleaf_steep') && pool(b, T(1))[id] > 0), 'the pool simmer was used up')
   const t3 = T(1) + T(2)
   ok(openSteps(b, t3).join() === '3', 'the Desk opens once dust and extract are made')
   ok(!pourReady(b, t3), 'no pour before the Desk step')

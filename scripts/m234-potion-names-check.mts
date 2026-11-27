@@ -1,6 +1,6 @@
 // M234 s1 (canon game/alchemy.md › THE RECIPES SIT-DOWN, 11-27): the potions + the earth infusion were RENAMED and the saved
 // ids kept. A test keeper's bag SAVED WITH THE OLD IDS (potion:health/mana/wisdom, starlight_tincture, golden_tonic) is opened
-// in the open-world Glade: every stack is there, its slot title reads the NEW name, and no old name shows anywhere on the page.
+// (+ athernyx 1d9035f: alc:goldleaf_steep, the Nook's product, now a SIMMER) in the open-world Glade: every stack is there, its slot title reads the NEW name, and no old name shows anywhere on the page.
 // Fresh profile, never a real save. Desktop opens the bag with I; --phone (390x844 touch) taps the "pack" button.
 //   npx tsx scripts/m234-potion-names-check.mts [--url https://ather.games] [--out dir] [--phone]
 import puppeteer from 'puppeteer-core'
@@ -12,10 +12,10 @@ mkdirSync(out, { recursive: true })
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 let fails = 0
 const ok = (c: boolean, m: string) => { console.log(`${c ? '✓' : '✗'} ${m}`); if (!c) fails++ }
-const OLD = /Health Draught|Mana Draught|Starlight Tincture|Lull Draught|Golden Tonic/i
+const OLD = /Health Draught|Mana Draught|Starlight Tincture|Lull Draught|Golden Tonic|Goldleaf Steep|Shard Steep/i
 const KEPT: [string, number, string][] = [
   ['potion:health:D', 3, 'Health Salve · D'], ['potion:mana:S', 2, 'Mana Elixir · S'], ['potion:wisdom:A', 1, 'Starlight Tonic · A'],
-  ['starlight_tincture', 4, 'Starlight Tonic'], ['golden_tonic', 5, 'Golden Glaze'],
+  ['starlight_tincture', 4, 'Starlight Tonic'], ['golden_tonic', 5, 'Golden Glaze'], ['alc:goldleaf_steep:B', 1, 'Goldleaf Simmer · B'],
 ]
 const br = await puppeteer.launch({ protocolTimeout: 300000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
 try {

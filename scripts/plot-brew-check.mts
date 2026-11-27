@@ -4,7 +4,7 @@
 //   Goldleaf + 2 Dewdrop Vine, B's bag = 2 Shimmerscale. Nobody holds an alchemist (no boon). Seeded in localStorage.
 //   1. A at its Desk (E, aimed) clicks "Brew with your party: Health Salve" (real click).  2. B visits (the visit link), at the
 //   Crusher E opens the BREWING panel (a guest's E at a mate's piece used to be refused) and takes the crush: B's scale leaves
-//   B's bag.  3. A takes the steep at the Nook: A's crops leave A's bag.  4. once the steep is made, B takes the Still (from the
+//   B's bag.  3. A takes the simmer at the Nook: A's crops leave A's bag.  4. once the simmer is made, B takes the Still (from the
 //   pool, nothing out of its bag).  5. A takes the Desk.  6. the pour lands on its own: total = totalBottles(2, 2 hands) = 4,
 //   every hand >= 1, split by contribution (A 3, B 1 by the pure rule), each in its OWN bag.  7. 0 page errors.
 //   Hooks: __ather.tp|state|look|ground (movement + aim), __brew / __visit / __mp READ; real clicks + keys.
@@ -118,14 +118,14 @@ try {
   ok(await take(b, 0), '2. B clicked Crush')
   ok(await poll(async () => (await runBy(a, 0)) === idB, 15000), "2. the host records B's crush")
   ok(await poll(async () => !(await bag(b)).shimmerscale, 10000), `2. B's Shimmerscale left B's bag (${JSON.stringify(await bag(b))})`)
-  // 3 · A takes the steep at the Nook
+  // 3 · A takes the simmer at the Nook
   ok(await useAt(a, PIECES.nook, 'brewing'), "3. A's E at its Nook opens the brewing panel")
-  ok(await take(a, 1), '3. A clicked the steep')
+  ok(await take(a, 1), '3. A clicked the simmer')
   ok(await poll(async () => (await runBy(a, 1)) === idA && !(await bag(a))['crop:goldleaf:D'], 10000), `3. A's crops left A's bag (${JSON.stringify(await bag(a))})`)
-  // 4 · B takes the Still once the steep is made
+  // 4 · B takes the Still once the simmer is made
   ok(await useAt(b, PIECES.still, 'brewing'), "4. B's E at A's Still opens the brewing panel")
   const bBefore = JSON.stringify(await bag(b))
-  ok(await take(b, 2), '4. B clicked Distil (when the steep was made)')
+  ok(await take(b, 2), '4. B clicked Distil (when the simmer was made)')
   ok(await poll(async () => (await runBy(a, 2)) === idB, 15000) && JSON.stringify(await bag(b)) === bBefore, '4. B runs the Still from the pool, nothing out of its bag')
   // 5 · A takes the Desk
   ok(await useAt(a, PIECES.desk, 'brewing'), "5. A's E at its Desk now opens the brewing panel")

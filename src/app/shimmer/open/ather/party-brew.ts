@@ -7,7 +7,7 @@
 // BUILD (Jin): the claim rule, the curve, the split, the boon roll. Everything here is data in, data out, so the relay
 // (slice 3b) only ships a Brewing and the actions; every client runs the same functions on the same state.
 //   · steps run in DEPENDENCY order, not index order: a step is OPEN once every intermediate it takes has been made (the
-//     Health Salve's crush and its steep can run side by side on two stations).
+//     Health Salve's crush and its simmer can run side by side on two stations).
 //   · a hand claims an open step and spends that step's RAW inputs from ITS OWN bag; intermediates come from the brewing's
 //     shared pool (made by whoever ran the step before). One step per hand at a time.
 //   · the pour: total bottles = max(hands, round(makes × yieldMult(hands))), yieldMult flattens near four; every hand gets 1,

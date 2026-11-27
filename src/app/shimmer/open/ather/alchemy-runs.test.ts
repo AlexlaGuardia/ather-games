@@ -6,7 +6,7 @@ let pass = 0
 const fails: string[] = []
 const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
 
-const NOOK = ALC_POTIONS.health.steps.findIndex(x => x.at === 'nook')   // goldleaf + dewdrop vine -> the Goldleaf Steep
+const NOOK = ALC_POTIONS.health.steps.findIndex(x => x.at === 'nook')   // goldleaf + dewdrop vine -> the Goldleaf Simmer
 const T = 1_000_000, ms = ALC_POTIONS.health.steps[NOOK].ms
 const have = { 'crop:goldleaf:B': 3, 'crop:dewdrop_vine:B': 2 }
 const s = startRun({}, 'p1', 'health', NOOK, have, T)

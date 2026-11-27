@@ -26,11 +26,11 @@ ok(ALC_ORDER.every(a => stepsAt(a).length > 0), 'every station has work to do')
 ok(['health', 'mana', 'wisdom'].every(p => p in ALC_POTIONS), 'the starter set: health, mana, an XP boost')
 // Alex's chain, word for word
 const h = ALC_POTIONS.health.steps.map(s => s.at).join()
-ok(h === 'crusher,nook,still,desk', 'health = the ruled first recipe: Rinnscale Dust, Goldleaf Steep, Golden Dew Extract, Desk')
-ok(ALC_POTIONS.health.steps.slice(0, -1).map(s => INTERMEDIATES[s.out]).join() === 'Rinnscale Dust,Goldleaf Steep,Golden Dew Extract', 'the first recipe, word for word (61911e7)')
+ok(h === 'crusher,nook,still,desk', 'health = the ruled first recipe: Rinnscale Dust, Goldleaf Simmer, Golden Dew Extract, Desk')
+ok(ALC_POTIONS.health.steps.slice(0, -1).map(s => INTERMEDIATES[s.out]).join() === 'Rinnscale Dust,Goldleaf Simmer,Golden Dew Extract', 'the first recipe, word for word (61911e7)')
 ok(['health', 'mana', 'wisdom'].map(p => ALC_POTIONS[p].name).join() === 'Health Salve,Mana Elixir,Starlight Tonic', 'the three ruled starters')
 // the naming grammar: every intermediate ends in its station's word
-const WORD = { crusher: /( Dust| Gel)$/, nook: / Steep$/, still: / Extract$/ } as const
+const WORD = { crusher: /( Dust| Gel)$/, nook: / Simmer$/, still: / Extract$/ } as const
 ok(ALC_POTION_ORDER.every(p => ALC_POTIONS[p].steps.slice(0, -1).every(s => s.at !== 'desk' && WORD[s.at as keyof typeof WORD].test(INTERMEDIATES[s.out]))), 'every intermediate is named by its station (Dust/Gel, Steep, Extract)')
 // the ruled chain order (2cbbaca): crush -> mix -> distil -> combine; no potion walks it backwards, every one ends at the Desk
 const RANK = { crusher: 0, nook: 1, still: 2, desk: 3 } as const

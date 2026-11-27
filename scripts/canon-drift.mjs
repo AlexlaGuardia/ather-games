@@ -681,6 +681,39 @@ function canonRetiredVocabulary() {
     if (!vocabDrift) add('CLEAN', 'retired-vocab', `no fully-retired noun ships; ${retired.length} retirement(s) read from canon`)
   }
 }
+
+// ── GATE 11b: THE SPREAD MAP'S RETIRED STATE WORD (BETA M235, athernyx 4b5b5d1) ─────────────────────────
+// Canon retired a map-legend word in the legend's OWN line (game/shimmer-quest-glade-tutorial.md › `spread.map.legend`:
+// "*(<Word> added .., RETIRED <date> by Alex ..)*"), not in the RETIRED VOCABULARY table, so gate 11 cannot see it. This reads
+// the retirement off that line and fails on ANY occurrence in open/ather (the spread map's code: a state, a type, a comment,
+// a line), and checks the build's generated legend line is canon's word for word. The English verb elsewhere (the continent
+// map's prose) is out of scope on purpose: only open/ather owns the legend.
+{
+  const p = join(CANON, 'game', 'shimmer-quest-glade-tutorial.md')
+  const row = existsSync(p) ? read(p).split('\n').find((l) => l.startsWith('- `spread.map.legend`')) : null
+  const legend = row && /\] (.+?) \*\(/.exec(row)?.[1]
+  const gone = row ? [...row.matchAll(/\b([A-Z][a-z]+) added [^,)]*, RETIRED (\d{4}-\d{2}-\d{2})/g)].map((m) => ({ term: m[1], on: m[2] })) : []
+  if (!row || !legend) {
+    add('BLIND', 'map-legend', 'could not read `spread.map.legend` in game/shimmer-quest-glade-tutorial.md — THE LEGEND CHECK DID NOT RUN',
+      'Point this reader at the legend line if canon moved it. Do not delete this gate to make the run green.')
+  } else {
+    let bad = 0
+    const gen = '/root/ather-games/src/app/shimmer/open/ather/glade-tutorial-lines.ts'
+    const shipped = existsSync(gen) ? /"spread\.map\.legend": \{"who": null, "text": "([^"]+)"\}/.exec(read(gen))?.[1] : null
+    if (shipped !== legend) { bad++; add('COLLISION', 'map-legend', `the map legend ships "${shipped}" and canon says "${legend}"`, 'Re-run tools/gen/glade-tutorial-lines.py (never hand-edit the generated file).') }
+    for (const g of gone) {
+      let hits = []
+      try { hits = execSync(`grep -rni "${g.term.toLowerCase()}" --include=*.ts --include=*.tsx /root/ather-games/src/app/shimmer/open/ather || true`, { encoding: 'utf8' }).trim().split('\n').filter(Boolean) } catch { hits = [] }
+      if (hits.length) {
+        bad++
+        const where = hits.slice(0, 4).map((h) => h.split('/shimmer/')[1]?.split(':').slice(0, 2).join(':')).join(' · ')
+        add('COLLISION', 'map-legend', `'${g.term}' was retired from the map legend (${g.on}) and still sits in ${hits.length} place(s) in open/ather`,
+          `The legend is ${legend}. Drop the state, its word, its look and any prose naming it. First hits: ${where}.`)
+      }
+    }
+    if (!bad) add('CLEAN', 'map-legend', `the map legend is canon's (${legend}); ${gone.length} retired legend word(s) absent from open/ather`)
+  }
+}
   }
 }
 
@@ -1077,6 +1110,28 @@ function toMarkdown(counts) {
         `Say '${now}'. Keep the saved id (it has an underscore and is not matched) so old saves load. First hits: ${where}.`)
     }
     if (!bad) add('CLEAN', 'renamed-potions', `no renamed potion name ships; ${pairs.length} rename(s) read from canon`)
+  }
+  // ── STEEP → SIMMER (athernyx 1d9035f, Alex 11-27): the Cauldron Nook makes a SIMMER; *Steep* is ONLY a spirit's 10-meal bar.
+  // The shape of a retired use is "<Name> Steep" (Goldleaf Steep, Shard Steep): a product. The bar's own uses read "Her Steep",
+  // "the Steep", "Steep 6/10", so a capitalised word before Steep fails unless it is one of those small words. Ids
+  // (`goldleaf_steep`, `shard_steep`) stay so saved bags keep loading, and are never matched (lower case, underscore).
+  const alc = lines.join('\n')
+  if (!/Cauldron Nook → a \*\*Simmer\*\*/.test(alc)) {
+    add('BLIND', 'renamed-potions', 'could not read "Cauldron Nook → a **Simmer**" in game/alchemy.md — THE STEEP CHECK DID NOT RUN',
+      'The ruling is athernyx 1d9035f (the naming grammar under THE ALCHEMY SET). If canon reworded it, point this reader at it.')
+  } else {
+    const SMALL = new Set(['Her', 'His', 'Its', 'The', 'Your', 'A', 'Full', 'Each'])
+    let hits = []
+    try {
+      hits = execSync(`grep -rnE "\\b[A-Z][a-z]+ Steep\\b" --include=*.ts --include=*.tsx /root/ather-games/src/app/shimmer || true`, { encoding: 'utf8' })
+        .trim().split('\n').filter(Boolean)
+        .filter((h) => [...h.matchAll(/\b([A-Z][a-z]+) Steep\b/g)].some((m) => !SMALL.has(m[1])))
+    } catch { hits = [] }
+    if (hits.length) {
+      const where = hits.slice(0, 4).map((h) => h.split('/shimmer/')[1]?.split(':').slice(0, 2).join(':')).join(' · ')
+      add('COLLISION', 'renamed-potions', `a Cauldron Nook product is still called a Steep in ${hits.length} place(s) — it is a Simmer (alchemy.md, 11-27)`,
+        `Steep means only a spirit's meal bar now. Rename the product '<Name> Simmer'; keep its saved id. First hits: ${where}.`)
+    } else add('CLEAN', 'renamed-potions', 'no Cauldron Nook product is called a Steep (Steep = the spirit bar only)')
   }
 }
 
