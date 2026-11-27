@@ -1,8 +1,10 @@
-// BETA M208 s2b: ONE HOST, THREE GUESTS. Four FRESH anonymous keepers (never anyone's save), all folded, one chord. A hosts;
-// B, C, D visit A one after another (?visit=<A>) and each must get A's plot (the snapshot) and stand on its free spot, while
-// the guests before it stay. Isolates "the 3rd guest's visit times out" (m208-four-check, 11-26) from signed-in keepers + the db.
-// PASS = 1. A hosts its plot · 2-4. each guest: on A's ground, snapshot in (no end:timeout), on freeLanding(its id) < 1.2 m
-//   5. A lists all three guests · 6. 0 page errors. Prints each guest's visit log + the host's net probe.
+// BETA M208 s2b: A FULL CHORD ON ONE PLOT. Four FRESH anonymous keepers (never anyone's save), all folded, one chord code. A hosts;
+// B and C visit A one after another (?visit=<A>): each gets A's plot (the snapshot) on the first try and stands on its free spot,
+// while the guest before it stays. D is a FOURTH keeper on the chord code: a chord is three (canon glossary › Chord, 'three to
+// a door'; shimmer-server lobby.py SEATS = 3), so the lobby is full and D's visit is refused. Built to isolate 11-26's
+// "the 4th keeper's visit fails" (m208-four-check) from signed-in keepers, the db and the box's load: that was this cap.
+// PASS = 1. A hosts its plot · B, C: on A's ground, snapshot in, no end:*, on freeLanding(its id) < 1.2 m
+//   D: refused:not-home, never on A's ground · 5. A lists both guests · 6. 0 page errors. Prints each visit log + the net probes.
 //   npx tsx scripts/m208-guests-check.mts [--url https://ather.games] [--phone]
 import puppeteer, { type Page } from 'puppeteer-core'
 import { freeLanding } from '../src/app/shimmer/open/ather/green-landing'
@@ -38,7 +40,7 @@ try {
   ok(await poll(async () => /^open:plot:p_/.test((await mpZone(A)) ?? ''), 90000), `1. A hosts its plot (${await mpZone(A)})`)
   const idA = ((await mpZone(A)) ?? '').replace('open:plot:', '')
   const guests: Page[] = []
-  for (const name of ['B', 'C', 'D']) {
+  for (const name of ['B', 'C']) {
     const P = await ctx(name); guests.push(P)
     const t0 = Date.now(); await load(P, `&visit=${idA}&vn=A`)
     const there = await poll(async () => (await mpZone(P)) === `open:plot:${idA}` && (await vis(P)).snap === true, 90000)
@@ -49,7 +51,10 @@ try {
     ok(await poll(async () => { const s = await at(P); return s.zone === 'plot' && Math.hypot(s.x - want.x, s.z - want.z) < 1.2 }, 30000), `${name}. on its free spot`)
     for (const [i, G] of guests.entries()) { const g = await vis(G); if ((g.log ?? []).some((e: string) => e.startsWith('end:'))) ok(false, `guest ${i} left: ${JSON.stringify(g.log)}`) }
   }
-  ok(await poll(async () => (await A.evaluate(() => (window as any).__visit.guests().length)) >= 3, 20000), `5. A lists 3 guests (${await A.evaluate(() => (window as any).__visit.guests().length)})`)
+  const D = await ctx('D'); await load(D, `&visit=${idA}&vn=A`)
+  ok(await poll(async () => ((await vis(D)).log ?? []).includes('refused:not-home'), 90000), `D. a 4th on the chord code is refused: the chord is three (${JSON.stringify((await vis(D)).log)})`)
+  ok((await mpZone(D)) !== `open:plot:${idA}` && (await vis(D)).snap !== true, `D. ...never on A's ground (${await mpZone(D)})`)
+  ok(await poll(async () => (await A.evaluate(() => (window as any).__visit.guests().length)) >= 2, 20000), `5. A lists both guests (${await A.evaluate(() => (window as any).__visit.guests().length)})`)
 } catch (e) { ok(false, `threw: ${String(e).slice(0, 300)}`) }
 ok(errs.length === 0, `6. 0 page errors (${errs.slice(0, 3).join(' | ')})`)
 await br.close()

@@ -7,9 +7,12 @@
 //   1. fir (solo) loads in at plot.ts HOME_LANDING (< 1.5 m), as slice 1 put it; ash (in the cluster) loads in there too
 //   2. birch + cedar visit ash (?visit=): each lands on the side of the gate facing ITS OWN plot in ash's frame
 //      (green-landing.ts quarterLanding(relQuarter(sw, q)), < 1.2 m; the plot's direction from the gate within ~25 deg)
-//   3. the stranger (chordmate, no cluster) visits ash: lands on a FREE spot between the paths (freeLanding(its id), < 1.2 m)
-//   4. everyone on ash's Green (ash + 3 guests): every pair >= 2 m apart, read from each keeper's own walker AND from ash's
-//      view of its guests (__mp.peers)
+//   3. ★ MOVED (M208 s2b, 11-27): a CHORD IS THREE (canon glossary › Chord, 'three to a door'; shimmer-server lobby.py SEATS = 3),
+//      so a fourth keeper in the chord is told the lobby is full and its visit link is refused (refused:not-home): it never
+//      reaches ash's ground and stays home. The old assert (a 4th chordmate lands on a free spot) could never pass; a non-cluster
+//      chordmate on a free spot is m208-green-check step 4 (+ m208-guests-check)
+//   4. everyone on ash's Green (ash + 2 guests = the whole chord): every pair >= 2 m apart, read from each keeper's own walker
+//      AND from ash's view of its guests (__mp.peers)
 //   5. 0 page errors. Cleanup: every test keeper takes back its corner. Shots: <out>/<390|desk>-*.png
 //   npx tsx scripts/m208-four-check.mts [--url https://ather.games] [--phone] [--out dir]
 // ⚠ Writes the LIVE accounts db (data/accounts.db) for the test keepers only: run from the repo root, on the box.
@@ -24,7 +27,7 @@ const { upsertGoogleAccount, claimUsername, addFriend, acceptFriend } = await im
 const C = await import('../src/lib/accounts/clusters')
 import { HOME_LANDING, GATE } from '../src/app/shimmer/open/ather/plot'
 import { relQuarter, clusterFrame, type Quarter } from '../src/app/shimmer/open/ather/cluster'
-import { quarterLanding, freeLanding } from '../src/app/shimmer/open/ather/green-landing'
+import { quarterLanding } from '../src/app/shimmer/open/ather/green-landing'
 
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), out = flag('--out', '/tmp/m208s2'), PHONE = process.argv.includes('--phone')
@@ -120,22 +123,21 @@ try {
     ok(off < 25, `2. ${k.name} stands on the side of the gate facing its plot (${off.toFixed(0)} deg off)`)
     here.push({ who: k.name, page: P, want })
   }
-  // 3 · the stranger (chord, no cluster)
+  // 3 · a fourth chordmate (no cluster): the chord is three, so the lobby is full and the visit is refused
   const S = await open(null, 'stranger'); await load(S, `&visit=${idA}&vn=ash`)
-  ok(await reach(S, idA, 'stranger'), `3. the stranger is on ash's ground (${await mpZone(S)})`)
-  const idS = await S.evaluate(() => { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i)!; if (k.endsWith('ather:mp:id')) return localStorage.getItem(k) } return null })
-  const wantS = freeLanding(idS ?? '')
-  ok(await settle(S, wantS, 45000), `3. ★ the stranger (${idS}) lands on a free spot between the paths (${dist(await at(S), wantS).toFixed(2)} m off it)`)
-  here.push({ who: 'stranger', page: S, want: wantS })
+  const vlog = () => S.evaluate(() => ((window as any).__visit?.log?.() ?? []) as string[])
+  ok(await poll(async () => (await vlog()).includes('refused:not-home'), 90000), `3. ★ a 4th chordmate's visit is refused: the chord is three (log ${JSON.stringify(await vlog())})`)
+  { const z = await mpZone(S); ok(z !== `open:plot:${idA}` && !(await vlog()).some(e => e.startsWith('start:')), `3. ...it never reaches ash's ground (${z})`) }
+  await S.close()
   await sleep(3000)
   // 4 · nobody on anybody
   const pos = await Promise.all(here.map(async h => ({ who: h.who, ...(await at(h.page)) })))
   for (let i = 0; i < pos.length; i++) for (let j = i + 1; j < pos.length; j++) ok(dist(pos[i], pos[j]) >= 2, `4. ${pos[i].who} / ${pos[j].who}: ${dist(pos[i], pos[j]).toFixed(2)} m apart (own walkers)`)
   const peers = await A.evaluate(() => (window as any).__mp.peers() as { id: string; x: number; z: number }[])
   const seen = [{ x: (await at(A)).x, z: (await at(A)).z }, ...peers]
-  ok(peers.length >= 3, `4. ash sees its three guests (${peers.length})`)
+  ok(peers.length >= 2, `4. ash sees its two guests (${peers.length})`)
   let minD = Infinity; for (let i = 0; i < seen.length; i++) for (let j = i + 1; j < seen.length; j++) minD = Math.min(minD, dist(seen[i], seen[j]))
-  ok(peers.length >= 3 && minD >= 2, `4. ★ in ash's view all four stand >= 2 m apart (closest pair ${minD.toFixed(2)} m)`)
+  ok(peers.length >= 2 && minD >= 2, `4. ★ in ash's view all three stand >= 2 m apart (closest pair ${minD.toFixed(2)} m)`)
   // a wide look from behind ash's spot
   for (const h of here) await shot(h.page, `a-${h.who}`)
   await A.evaluate((g: { x: number; z: number }, hl: { x: number; z: number }) => { const x = g.x + (hl.x - g.x) * 3, z = g.z + (hl.z - g.z) * 3; (window as any).__ather.tp(x, z, Math.atan2(-(g.x - x), -(g.z - z))) }, GATE, HOME_LANDING)
