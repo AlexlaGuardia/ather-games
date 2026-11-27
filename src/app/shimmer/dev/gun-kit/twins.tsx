@@ -54,31 +54,31 @@ export function Twins({ view }: { view: string }) {
   useEffect(() => { (window as unknown as { __twins?: unknown }).__twins = { view, tris: { left: trisOf(twinsModel('left')), right: trisOf(twinsModel('right')) }, calls: modelGeometry(twinsModel('left')).size, parts: TWINS.left.parts.length } }, [view])
   const G = TWINS.gap / 2
   if (view === 'side') return (   // the left gun muzzle-left (its outer face, rune 1), the right muzzle-right (rune 2), the Roar below
-    <Canvas orthographic camera={{ position: [0, 0, 5], zoom: 900, near: 0.1, far: 50 }}>
+    <Canvas orthographic camera={{ position: [0, 0, 5], zoom: 620, near: 0.1, far: 50 }}>
       <color attach="background" args={[BG]} /><Lights />
-      <group position={[-0.2, 0.11, 0]} rotation={[0, Math.PI / 2, 0]}><Twin side="left" /></group>
-      <group position={[0.2, 0.11, 0]} rotation={[0, -Math.PI / 2, 0]}><Twin side="right" /></group>
-      <group position={[0.02, -0.12, 0]} rotation={[0, Math.PI / 2, 0]}><Roar /></group>
+      <group position={[-0.25, 0.17, 0]} rotation={[0, Math.PI / 2, 0]}><Twin side="left" /></group>
+      <group position={[0.25, 0.17, 0]} rotation={[0, -Math.PI / 2, 0]}><Twin side="right" /></group>
+      <group position={[0.12, -0.17, 0]} rotation={[0, Math.PI / 2, 0]}><Roar /></group>
     </Canvas>)
   if (view === 'top') return (   // from above, as held side by side, muzzles up; the Roar beside
-    <Canvas orthographic camera={{ position: [0, 5, 0], up: [0, 0, -1], zoom: 900, near: 0.1, far: 50 }} onCreated={({ camera }) => camera.lookAt(0, 0, 0)}>
+    <Canvas orthographic camera={{ position: [0, 5, 0], up: [0, 0, -1], zoom: 560, near: 0.1, far: 50 }} onCreated={({ camera }) => camera.lookAt(0, 0, 0)}>
       <color attach="background" args={[BG]} /><Lights />
       <group position={[-0.12, 0, 0.05]}><group position={[-G, 0, 0]}><Twin side="left" /></group><group position={[G, 0, 0]}><Twin side="right" /></group></group>
-      <group position={[0.16, 0, 0.12]}><Roar /></group>
+      <group position={[0.2, 0, 0.18]}><Roar /></group>
     </Canvas>)
   if (view === '34' || view === 'core') return (   // three-quarter from the front left; 'core' = from below, the split core and its two faces
     <Canvas camera={{ position: view === 'core' ? [-0.34, -0.3, -0.12] : [-0.42, 0.24, -0.46], fov: 30 }} onCreated={({ camera }) => camera.lookAt(0, view === 'core' ? -0.06 : -0.02, -0.04)}>
       <color attach="background" args={[BG]} /><Lights /><directionalLight position={[-2, -3, -1]} intensity={0.9} />
       <group position={[-G, 0, 0]}><Twin side="left" /></group><group position={[G, 0, 0]}><Twin side="right" /></group>
-      {view === '34' && <group position={[0.24, 0, 0.1]}><Roar /></group>}
+      {view === '34' && <group position={[0.3, 0, 0.25]}><Roar /></group>}
     </Canvas>)
   // first person: the eye at the origin looking down -z (the game's view), the pair at the hip or in the PROPOSED aim pose
   const ads = view === 'ads'
   const pose = (side: TwinSide) => {
     const s = side === 'left' ? -1 : 1
     return ads
-      ? { p: [s * 0.058, -0.112, -0.36] as const, r: [0.02, s * 0.012, s * 0.32] as const }     // up, side by side, forward, canted in, barrels under the mark
-      : { p: [s * 0.17, -0.16, -0.33] as const, r: [0.04, s * 0.09, s * 0.06] as const }        // at the hip, each hand out to its side, muzzles toeing in
+      ? { p: [s * 0.068, -0.125, -0.47] as const, r: [0.03, s * 0.01, s * 0.3] as const }     // up, side by side, forward, canted in, barrels under the mark
+      : { p: [s * 0.2, -0.18, -0.42] as const, r: [0.05, s * 0.035, s * 0.05] as const }        // at the hip, each hand out to its side, muzzles toeing in
   }
   return (
     <div style={{ position: 'relative', height: '100%' }}>
