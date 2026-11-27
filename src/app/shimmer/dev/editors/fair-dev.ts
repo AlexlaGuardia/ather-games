@@ -14,7 +14,7 @@ import { startState, step as dashStep, seeded, fillIn, type Racer, type RunState
 import { RACE_STATS, type RaceStats } from '../../open/ather/fair-dash-rules'
 import { statValue, type StatRec } from '../../open/ather/spirit-stats'
 import { MAX_GROWN } from '../../open/ather/spirit-growth'
-import { smashHit } from '../../open/ather/fair-smash'
+import { smashSwing } from '../../open/ather/smash-score'   // M246: the bell's score
 
 export const FAIR_SPECIES: readonly Species[] = CLASH_SPECIES
 export const FAIR_FORMS: readonly Element[] = ['base', 'mana', 'storm', 'earth', 'water']
@@ -133,8 +133,8 @@ export function runHeat(racers: Racer[], seed: number, maxS = 600): { ms: (numbe
 }
 
 // ── SMASH ──
-/** one swing at the bell (fair-smash.ts smashHit) at her level, the battle's crit / spread roll seeded */
-export const devSmash = (p: Pick, seed: number) => smashHit(p.species, recAt(p.level), p.element, seeded(seed))
+/** one swing at the bell (M246 smash-score.ts smashSwing: her strongest known move) at her level, the roll seeded */
+export const devSmash = (p: Pick, seed: number) => smashSwing(p.species, recAt(p.level), p.element, {}, seeded(seed))
 
 // ── NO WRITES ──
 /** a request that would write server rows: any non-GET (or a beacon) to this site's /api */

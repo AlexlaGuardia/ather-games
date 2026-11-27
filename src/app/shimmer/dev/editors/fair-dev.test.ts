@@ -73,10 +73,10 @@ ok(/const SUB = 0\.05\b/.test(readFileSync(join(__dirname, '../../open/ather/das
 
 // ── Smash ──
 const s1 = devSmash({ species: 'water-bear', element: 'earth', level: 40 }, 77), s2 = devSmash({ species: 'water-bear', element: 'earth', level: 40 }, 77)
-ok(s1.hit > 0 && s1.hit === s2.hit && s1.crit === s2.crit, `same seed = same Smash hit (${s1.hit})`)
-const hits = new Set(Array.from({ length: 20 }, (_, i) => devSmash(fox, i).hit))
+ok(s1.score > 0 && s1.score === s2.score && s1.move === s2.move, `same seed = same Smash score (${s1.score})`)
+const hits = new Set(Array.from({ length: 20 }, (_, i) => devSmash(fox, i).score))
 ok(hits.size > 1, `the seed drives the swing's spread (${hits.size} distinct)`)
-ok(devSmash({ ...fox, level: 40 }, 3).hit > devSmash(fox, 3).hit, 'a higher level swings harder')
+ok(devSmash({ ...fox, level: 40 }, 3).score > devSmash(fox, 3).score, 'a higher level swings harder')
 
 // ── no writes ──
 ok(isWrite('/api/fair/dash', 'POST') && isWrite('https://ather.games/api/fair/smash', 'post') && isWrite('/api/save', 'PUT'), 'a POST/PUT to /api is a write')

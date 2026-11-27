@@ -1,36 +1,40 @@
 'use client'
-// ── SMASH at the Thistledown Fair (BETA M233 s1). E at the Smash tent opens its SIGN-UP panel (fair-signup.tsx): pick ONE of
-// your party spirits and Enter; she swings
-// at the special bell (one hit, the battle system's damage: fair-smash.ts), the striker climbs the pole and the bell rings
-// at the top, the hit is read out and goes to the SEASON BOARD (/api/fair/smash, shared by every keeper). SMASH_TRIES a
-// day. Labels: plain functional words (fair-smash-rules.ts SMASH_UI), for @lark to rewrite.
+// ── SMASH at the Thistledown Fair (BETA M233 s1; ★ M246 REDO 2026-11-27, Alex: "smash needs to get deleted"). E at the Smash
+// tent opens its SIGN-UP panel (fair-signup.tsx): pick ONE of your party spirits and Enter. M246: she swings in the BELL SHOW
+// (smash-bell-view.tsx, in the Clash ring): an intro card with a shout-out to you, she walks out with her back to the camera,
+// unleashes her strongest move at the BIG BELL (smash-score.ts: her favourite, else her strongest known damaging move, from
+// the Clash engine's move data + her stats), the bell gauges it and gives the SCORE; over 9000 it cracks. The score goes to
+// the SEASON BOARD (/api/fair/smash, s1's rules: SMASH_TRIES a day, shared by every keeper). The old pole is retired.
+// Labels: plain functional words (fair-smash-rules.ts SMASH_UI, smash-bell.ts BELL_UI), for @lark to rewrite.
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { H } from '../../ui/hearth'
 import { FairSignup } from './fair-signup'
 import { spiritFormName } from '../../spirits/spirit'
-import { speciesOf } from './spirit-seeds'
+import { speciesOf, gameDay } from './spirit-seeds'
 import { useBook } from './spirit-panels'
 import { partyIds, subscribeParty } from './spirit-party'
 import { loadStats } from './spirit-stats'
-import { smashHit } from './fair-smash'
-import { SMASH_UI as L, strikerRise, rings, type SmashBoard } from './fair-smash-rules'
+import { bondedOf, knownOf } from './spirit-bond-move'
+import { smashSwing } from './smash-score'
+import { lobbyShow, type BellContestant } from './smash-bell'
+import { SmashBellView } from './smash-bell-view'
+import { SMASH_UI as L, type SmashBoard } from './fair-smash-rules'
 import { useFairLobby, useAutoStart } from './fair-lobby-net'   // M233 s4 EVENT LOBBY
 import { isLobby, takers, smashField, smashWinner, smashDone, LOBBY_UI, type LobbySpirit } from './fair-lobby'
 
 const NONE: readonly string[] = []
-export const SWING_MS = 450, RISE_MS = 900
 
 export function SmashPanel({ onClose }: { onClose: () => void }) {
   const book = useBook()
   const party = useSyncExternalStore(subscribeParty, partyIds, () => NONE)
   const spirits = useMemo(() => party.flatMap(id => {
     const pot = book.pots[id], sp = pot?.bloomed ? speciesOf(pot.seed) : null
-    return sp ? [{ id, sp, element: pot.element, name: spiritFormName(sp, pot.element) }] : []
+    return sp ? [{ id, sp, element: pot.element, name: spiritFormName(sp, pot.element), bonded: bondedOf(pot, gameDay(Date.now())), known: knownOf(pot, sp) }] : []
   }), [party, book])
   const [pick, setPick] = useState<string | null>(null)
   const [board, setBoard] = useState<SmashBoard | null>(null)
-  const [phase, setPhase] = useState<'idle' | 'swing' | 'rise' | 'done'>('idle')
   const [hit, setHit] = useState<{ hit: number; move: string; by: string } | null>(null)
+  const [show, setShow] = useState<BellContestant[] | null>(null)   // M246: the bell show (solo: her one swing)
   const [msg, setMsg] = useState<string | null>(null)
   const load = useCallback(async () => {
     try { const r = await fetch('/api/fair/smash', { cache: 'no-store' }); if (r.ok) setBoard(await r.json()) } catch { /* offline: the board stays blank */ }
@@ -39,19 +43,20 @@ export function SmashPanel({ onClose }: { onClose: () => void }) {
   useEffect(() => { if (!pick && spirits.length) setPick(spirits[0].id) }, [pick, spirits])
 
   const chosen = spirits.find(s => s.id === pick) ?? null
-  const canSwing = !!chosen && !!board?.signedIn && (board?.triesLeft ?? 0) > 0 && (phase === 'idle' || phase === 'done')
-  const swing = async (): Promise<{ hit: number; by: string } | null> => {
+  const canSwing = !!chosen && !!board?.signedIn && (board?.triesLeft ?? 0) > 0 && !show
+  /** her swing: the score (smash-score.ts), posted to the board at once (a try spent); the show plays it */
+  const swing = (): { hit: number; by: string; move: string } | null => {
     if (!chosen || !canSwing) return null
-    const r = smashHit(chosen.sp, loadStats()[chosen.id], chosen.element)
-    setMsg(null); setHit(null); setPhase('swing')
-    await new Promise(res => setTimeout(res, SWING_MS))
-    setHit({ ...r, by: chosen.name }); setPhase('rise')
-    const post = fetch('/api/fair/smash', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ hit: r.hit, spirit: chosen.name }) })
+    const r = smashSwing(chosen.sp, loadStats()[chosen.id], chosen.element, { bonded: chosen.bonded, known: chosen.known })
+    setMsg(null); setHit({ hit: r.score, move: r.move, by: chosen.name })
+    fetch('/api/fair/smash', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ hit: r.score, spirit: chosen.name }) })
       .then(async x => { const j = await x.json().catch(() => ({})); if (x.ok) setBoard(j as SmashBoard); else setMsg(String((j as { error?: string }).error ?? 'Could not reach the board.')) })
       .catch(() => setMsg('Could not reach the board.'))
-    await new Promise(res => setTimeout(res, RISE_MS)); await post
-    setPhase('done')
-    return { hit: r.hit, by: chosen.name }
+    return { hit: r.score, by: chosen.name, move: r.move }
+  }
+  const soloSwing = () => {
+    const r = swing(); if (!r || !chosen) return
+    setShow([{ key: 'you', keeper: 'you', you: true, name: r.by, species: chosen.sp, element: chosen.element ?? 'base', score: r.hit, move: r.move }])
   }
 
   // ── M233 s4: THE EVENT LOBBY. Chordmates at the bell ready up; at the start each keeper's own spirit swings ONCE (her own try,
@@ -59,7 +64,7 @@ export function SmashPanel({ onClose }: { onClose: () => void }) {
   const [ready, setReady] = useState(false)
   const swingRef = useRef(swing); swingRef.current = swing
   const mine = useMemo<LobbySpirit | null>(() => chosen ? { name: chosen.name, species: chosen.sp, element: chosen.element ?? 'base' } : null, [chosen])
-  const lobby = useFairLobby('smash', mine, ready, () => { setReady(false); void swingRef.current().then(r => { if (r) lobby.sendHit(r.hit, r.by) }) })
+  const lobby = useFairLobby('smash', mine, ready, () => { setReady(false); const r = swingRef.current(); if (r) lobby.sendHit(r.hit, r.by) })
   const inLobby = isLobby(lobby.list) || !!lobby.run
   useAutoStart(lobby, smashField)
   const [, setNowTick] = useState(0)
@@ -67,24 +72,26 @@ export function SmashPanel({ onClose }: { onClose: () => void }) {
   const contestOver = !!lobby.run && smashDone(lobby.hits, lobby.run.seats, lobby.startedAt, Date.now())
   const champId = contestOver && lobby.run ? smashWinner(lobby.hits, lobby.run.seats) : null
   const champ = champId ? lobby.hits.find(h => h.id === champId) ?? null : null
+  // M246: the lobby's bell show = the run's seats in seat order (the same for every keeper), each score as it is heard
+  const [watchRun, setWatchRun] = useState<string | null>(null)
+  useEffect(() => { if (lobby.run && watchRun !== lobby.run.run) setWatchRun(lobby.run.run) }, [lobby.run])   // eslint-disable-line react-hooks/exhaustive-deps
+  const lobbyBell = lobby.run && watchRun === lobby.run.run ? lobbyShow(lobby.run, lobby.hits, lobby.me).map(c => (c.you && hit ? { ...c, move: hit.move } : c)) : null
+  const [bellSeen, setBellSeen] = useState<string | null>(null)
 
-  const rise = phase === 'rise' || phase === 'done' ? strikerRise(hit?.hit ?? 0) : 0
-  const rang = phase === 'done' && !!hit && rings(hit.hit)
+  if (show) return <SmashBellView title={L.title} contestants={show} onExit={() => setShow(null)} />
+  if (lobbyBell && lobby.run && bellSeen !== lobby.run.run) return <SmashBellView title={`${L.title} · ${LOBBY_UI.contest}`} contestants={lobbyBell} over={contestOver} onExit={() => setBellSeen(lobby.run!.run)} />
   return (
     <FairSignup title={L.title} dataPanel="smash" onClose={onClose} spirits={spirits} pick={pick} onPick={setPick}
-      entrants={[{ who: 'you', you: true, spirit: chosen?.name ?? null }]} canEnter={canSwing} onEnter={() => { void swing() }}
+      entrants={[{ who: 'you', you: true, spirit: chosen?.name ?? null }]} canEnter={canSwing} onEnter={soloSwing}
       lobby={inLobby ? { list: lobby.list, ready, onReady: () => setReady(r => !r), isHost: lobby.isHost, hostName: lobby.list.find(p => p.id === lobby.host)?.who ?? '',
         canStart: lobby.isHost && !lobby.run && takers(lobby.list).length >= 2, onStart: () => lobby.start(smashField), busy: !!lobby.run && !contestOver } : null}
       note={board?.signedIn ? <span data-smash-tries={board.triesLeft} style={{ fontSize: 12, color: H.inkFaint }}>{board.triesLeft > 0 ? L.tries(board.triesLeft) : L.noTries}</span> : null}>
       <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'stretch' }}>
-        <SmashPole phase={phase} rise={rise} rang={rang} />
-
         <div style={{ flex: '1 1 220px', minWidth: 0, display: 'grid', gap: 8, alignContent: 'start' }}>
           {board && !board.signedIn && <div style={{ fontSize: 12, color: H.inkFaint }}>{L.signIn}</div>}
-          {hit && phase !== 'swing' && (
+          {hit && (
             <div data-smash-hit={hit.hit} style={{ fontSize: 20, fontWeight: 800, color: H.ink, fontVariantNumeric: 'tabular-nums' }}>
               {L.hit(hit.hit)} <span style={{ fontSize: 12, fontWeight: 600, color: H.inkSoft }}>{hit.by} · {hit.move}</span>
-              {rang && <div style={{ fontSize: 13, color: H.ember }}>{L.rang}</div>}
             </div>
           )}
           {msg && <div data-smash-msg style={{ fontSize: 12, color: H.rust }}>{msg}</div>}
@@ -120,23 +127,5 @@ export function SmashPanel({ onClose }: { onClose: () => void }) {
         </div>
       </div>
     </FairSignup>
-  )
-}
-
-// the strength tester: a pole, a striker that climbs it, the bell at the top, the spirit's swing at the base
-/** the strength tester (M243: its own component so /shimmer/dev?mode=fair mounts the same one; the speeds are its dial) */
-export function SmashPole({ phase, rise, rang, swingMs = SWING_MS, riseMs = RISE_MS }: { phase: 'idle' | 'swing' | 'rise' | 'done'; rise: number; rang: boolean; swingMs?: number; riseMs?: number }) {
-  return (
-    <div data-smash-pole data-rise={rise.toFixed(2)} data-rang={rang ? '1' : '0'} style={{ position: 'relative', width: 96, height: 230, flex: '0 0 auto', margin: '0 auto' }}>
-      <div style={{ position: 'absolute', left: 44, top: 26, width: 8, bottom: 30, borderRadius: 4, background: 'linear-gradient(90deg,#8d4119,#c8642a,#8d4119)' }} />
-      {Array.from({ length: 6 }, (_, i) => <div key={i} style={{ position: 'absolute', left: 36, width: 24, height: 1, top: 26 + ((230 - 56) * i) / 5, background: H.rule }} />)}
-      <div data-smash-bell style={{ position: 'absolute', left: 30, top: 0, width: 36, height: 30, borderRadius: '18px 18px 6px 6px', background: rang ? 'radial-gradient(circle at 50% 40%,#fff3b0,#e0b23f)' : 'linear-gradient(180deg,#d9b25a,#9a7426)', boxShadow: rang ? '0 0 22px 8px rgba(255,214,90,.75)' : 'inset 0 -3px 0 rgba(0,0,0,.2)', transform: rang ? 'rotate(-8deg)' : 'none', transition: 'transform 120ms, box-shadow 200ms' }} />
-      <div data-smash-striker style={{ position: 'absolute', left: 36, width: 24, height: 14, borderRadius: 5, background: H.rust, boxShadow: '0 2px 0 rgba(0,0,0,.25)', bottom: 30 + rise * (230 - 30 - 30 - 14), transition: phase === 'rise' ? `bottom ${riseMs}ms cubic-bezier(.2,.9,.3,1)` : 'none' }} />
-      <div style={{ position: 'absolute', left: 18, right: 18, bottom: 18, height: 12, borderRadius: 3, background: H.inkSoft }} />
-      <div data-smash-mallet style={{ position: 'absolute', left: 4, bottom: 26, width: 40, height: 10, transformOrigin: '0% 50%', transform: phase === 'swing' ? 'rotate(-70deg)' : 'rotate(0deg)', transition: `transform ${swingMs}ms cubic-bezier(.5,-0.4,.6,1.4)` }}>
-        <div style={{ position: 'absolute', left: 0, top: 3, width: 30, height: 4, background: H.inkSoft }} />
-        <div style={{ position: 'absolute', left: 26, top: -4, width: 14, height: 18, borderRadius: 3, background: H.emberLo }} />
-      </div>
-    </div>
   )
 }

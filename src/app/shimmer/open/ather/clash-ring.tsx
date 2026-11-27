@@ -314,7 +314,7 @@ function useNarrow() {
 
 // ── the arena: sand, a low stone wall, stands on the far side, banners. Plain shapes, our own colours. ──
 const WALL_R = RING_R + 0.5
-function Arena() {
+export function Arena() {
   const poles = useMemo(() => Array.from({ length: 10 }, (_, i) => { const a = (i / 10) * Math.PI * 2 + Math.PI / 10; return { x: Math.sin(a) * (WALL_R + 0.35), z: Math.cos(a) * (WALL_R + 0.35), a, c: ['#b8442e', '#e0a23a', '#3f7f86', '#7a4d8c'][i % 4] } }), [])
   const tiers = [{ r0: WALL_R + 1.0, r1: WALL_R + 2.4, h: 1.1 }, { r0: WALL_R + 2.4, r1: WALL_R + 3.8, h: 1.9 }, { r0: WALL_R + 3.8, r1: WALL_R + 5.2, h: 2.7 }]
   const far = { s: Math.PI / 2 + 0.25, l: Math.PI - 0.5 }   // the stands ring the far half (the camera's side stays open)

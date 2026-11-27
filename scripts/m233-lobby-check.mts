@@ -163,6 +163,10 @@ try {
   for (let i = 0; i < 20 && !(await pa.$('[data-smash-tries]')); i++) await sleep(500)
   await clickIn(pb, '[data-lobby-ready]'); await sleep(1200); await clickIn(pa, '[data-lobby-ready]')
   const contest = (p: Page) => p.evaluate(() => { const c = document.querySelector('[data-smash-contest]') as HTMLElement | null; return c ? { over: c.dataset.smashOver, champ: c.dataset.smashChampion, hits: [...c.querySelectorAll('[data-contest-seat]')].map(e => `${(e as HTMLElement).dataset.contestSeat}=${(e as HTMLElement).dataset.contestHit}`).join(' ') } : null })
+  // M246: each keeper first watches the bell show (smash-bell-view.tsx); its Back returns to the panel's contest
+  for (let i = 0; i < 360 && !((await pa.$('[data-bell-end]')) && (await pb.$('[data-bell-end]'))); i++) await sleep(500)
+  for (const p of [pa, pb]) await p.evaluate(() => (document.querySelector('[data-smash-exit]') as HTMLButtonElement | null)?.click())
+  await sleep(1000)
   let ca = await contest(pa), cb = await contest(pb)
   for (let i = 0; i < 60 && (ca?.over !== '1' || cb?.over !== '1'); i++) { await sleep(500); ca = await contest(pa); cb = await contest(pb) }
   await pa.screenshot({ path: `${out}/4-smash-a.png` }); await pb.screenshot({ path: `${out}/4-smash-b.png` })

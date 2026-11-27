@@ -4,7 +4,7 @@
 //  3 CLASH: chosen spirits (you = owl, foes picked), seed, 4x, Run -> the REAL ring (data-clash-ring) plays the line to a result,
 //    the engine log scrolls (lines, hits, ends); Replay (same seed) -> the same bout winners
 //  4 DASH: picked heat, seed, 4x -> the real race (data-dash-race) to a result = the headless prediction for that seed; Replay = same
-//  5 SMASH: water-bear earth Lv40, seed -> the real pole rises, a hit; Replay = the same hit
+//  5 SMASH: water-bear earth Lv40, seed -> the bell show (M246), a score; Replay = the same score
 //  6 NO WRITES: 0 non-GET /api requests left the page, the bench refused 0, the fair_* + exchange_claims rows are unchanged
 //  7 0 page errors
 //   OWNER_KEY=... npx tsx scripts/m243-fair-dev-check.mts [--w 1440 --h 900] [--shots dir] [--url https://ather.games]
@@ -133,11 +133,13 @@ try {
   await setNum('[data-fair-seed]', 99); await p.click('[data-fair-speed="2"]')
   await p.click('[data-fair-run]')
   const s1 = await result('smash', null, 30000)
-  const rise = await p.$eval('[data-smash-pole]', e => Number(e.getAttribute('data-rise'))).catch(() => 0)
-  ok(!!s1 && Number.parseInt(s1.sig) > 0 && rise > 0, `5a the real pole: a hit ${s1?.sig}, striker rise ${rise}`)
+  const bell = !!(await p.$('[data-smash-bell-view]'))   // M246: the pole is retired; the bench plays the bell show
+  ok(!!s1 && Number.parseInt(s1.sig) > 0 && bell, `5a the bell show: a score ${s1?.sig}, bell view ${bell}`)
   await shot('e-smash')
+  await p.click('[data-bell-skip]').catch(() => {}); await sleep(500); await p.click('[data-smash-exit]').catch(() => {}); await sleep(500)
   await p.click('[data-fair-replay]'); await sleep(300)
   const s2 = await result('smash', null, 30000)
+  await p.click('[data-bell-skip]').catch(() => {}); await sleep(500); await p.click('[data-smash-exit]').catch(() => {}); await sleep(500)
   const hist = await p.$$eval('[data-fair-history] div', es => es.map(e => e.textContent))
   ok(!!s2 && s2.sig === s1?.sig && hist.length >= 2, `5b Replay seed 99 = the same hit (${s2?.sig}; history ${hist.join(' | ')})`)
 

@@ -2,7 +2,7 @@
 // BETA M243 (sprites, 2026-11-27): THE FAIR BENCH, /shimmer/dev?mode=fair (owner only: the /shimmer/dev gate, src/proxy.ts).
 // Alex 11-27 13:37: the three Fair events in one place, no tent walk, no prize. Tabs CLASH / DASH / SMASH, each mounts the REAL
 // scene: Clash = clash-ring.tsx's ClashRing (line-up tree + the live engine, clash-fight.ts), Dash = dash-view.tsx's DashRace,
-// Smash = smash-panel.tsx's SmashPole. Controls: her spirit (species, form, level dial; tent levels 12 / 40 by default), the
+// Smash = (M246) smash-bell-view.tsx's SmashBellView, the bell show in the Clash ring. Controls: her spirit (species, form, level dial; tent levels 12 / 40 by default), the
 // opponents (random or picked), seed, speed 1x/2x/4x, Replay (same seed = same result). Clash adds the engine's per-tick event
 // log and the sim's win odds for her against each opponent. NO SERVER WRITES: only the pure engines run here, and while the bench
 // is open fair-dev.ts installNoWrites() refuses any write to /api (the count shows in the header). Labels are plain UI words (@lark).
@@ -10,8 +10,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ClashRing, type RingEntrant } from '../../open/ather/clash-ring'
 import { CLASH_CAM, CAM_RANGE, camLine, type ClashCam } from '../../open/ather/clash-ceremony'   // M233 v2d camera tuner
 import { DashRace, type RaceResult } from '../../open/ather/dash-view'
-import { SmashPole, SWING_MS, RISE_MS } from '../../open/ather/smash-panel'
-import { strikerRise, rings } from '../../open/ather/fair-smash-rules'
+import { SmashBellView } from '../../open/ather/smash-bell-view'   // M246 the bell show
+import { cracks, cleanCraftedScore } from '../../open/ather/smash-score'
 import { fmtTime } from '../../open/ather/fair-dash-rules'
 import type { TickLog } from '../../open/ather/clash-fight'
 import type { Species, Element } from '../../spirits/spirit'
@@ -55,6 +55,7 @@ export default function FairDev() {
   const [dashFoes, setDashFoes] = useState<Pick[]>(() => randomFoes('easy', 2, 4).concat([{ species: 'turtle', element: 'base', level: 12 }]).slice(0, 4))
   const [seed, setSeed] = useState(1)
   const [speed, setSpeed] = useState<number>(1)
+  const [crafted, setCrafted] = useState<number | null>(() => { try { return cleanCraftedScore(new URLSearchParams(window.location.search).get('smashscore')) } catch { return null } })   // M246 test hook: a crafted score (the bench never writes)
   const [cam, setCam] = useState<ClashCam>(CLASH_CAM)   // M233 v2d: the ring's camera, tuned live over a running ring
   const [run, setRun] = useState<{ id: number; tab: Tab; seed: number } | null>(null)
   const [result, setResult] = useState<{ tab: Tab; seed: number; sig: string; text: string } | null>(null)
@@ -132,10 +133,11 @@ export default function FairDev() {
             <DashPredict me={me} others={dashPicked ? dashFoes : null} seed={seed} />
           </div>
         )}
-        {tab === 'smash' && <div style={box}><div style={{ fontWeight: 800 }}>The bell</div><div style={{ fontSize: 13, color: DIM }}>One swing: her hardest move at her level, the roll seeded. Smash has no cheer.</div></div>}
+        {tab === 'smash' && <div style={box}><div style={{ fontWeight: 800 }}>The bell</div><div style={{ fontSize: 13, color: DIM }}>One swing in the ring: her strongest known move at her level, the roll seeded. Smash has no cheer.</div>
+          <label style={{ fontSize: 12, color: DIM, display: 'flex', gap: 6, alignItems: 'center' }}>Score override (test)<input data-fair-smash-score type="number" min={0} max={99999} value={crafted ?? ''} placeholder="off" onChange={e => setCrafted(cleanCraftedScore(e.target.value))} style={{ ...sel, width: 80 }} /></label></div>}
       </div>
 
-      {tab === 'smash' && <SmashBench me={me} run={run?.tab === 'smash' ? run : null} speed={speed} onDone={finish} />}
+      {run?.tab === 'smash' && <SmashRun key={run.id} me={me} seed={run.seed} speed={speed} crafted={crafted} onDone={finish} onExit={stop} />}
       {run?.tab === 'clash' && <ClashRun key={run.id} me={me} foes={foes} tier={tier} seed={run.seed} speed={speed} onDone={finish} onExit={stop} cam={cam} setCam={setCam} />}
       {run?.tab === 'dash' && <DashRun key={run.id} me={me} others={dashPicked ? dashFoes : null} seed={run.seed} speed={speed} onDone={finish} onExit={stop} />}
     </div>
@@ -290,24 +292,15 @@ function ExitBar({ onExit, label }: { onExit: () => void; label: string }) {
   return <button data-fair-stop onClick={onExit} style={{ position: 'fixed', zIndex: 61, right: 10, bottom: 10, ...btn(true) }}>{label}</button>
 }
 
-// ── SMASH ──
-function SmashBench({ me, run, speed, onDone }: { me: Pick; run: { id: number; seed: number } | null; speed: number; onDone: (t: Tab, s: number, sig: string, text: string) => void }) {
-  const [phase, setPhase] = useState<'idle' | 'swing' | 'rise' | 'done'>('idle')
-  const [hit, setHit] = useState<{ hit: number; move: string; crit: boolean } | null>(null)
-  const swingMs = SWING_MS / speed, riseMs = RISE_MS / speed
-  useEffect(() => {
-    if (!run) return
-    const r = devSmash(me, run.seed)
-    setHit(null); setPhase('swing')
-    const t1 = setTimeout(() => { setHit(r); setPhase('rise') }, swingMs)
-    const t2 = setTimeout(() => { setPhase('done'); onDone('smash', run.seed, `${r.hit}${r.crit ? 'c' : ''}`, `${pickName(me)} Lv${me.level}: ${r.hit}${r.crit ? ' (crit)' : ''} · ${r.move}${rings(r.hit) ? ' · the bell rang' : ''}`) }, swingMs + riseMs)
-    return () => { clearTimeout(t1); clearTimeout(t2) }
-  }, [run?.id])   // eslint-disable-line react-hooks/exhaustive-deps
-  const rise = phase === 'rise' || phase === 'done' ? strikerRise(hit?.hit ?? 0) : 0
+// ── SMASH (M246: the bell show) ──
+function SmashRun({ me, seed, speed, crafted, onDone, onExit }: { me: Pick; seed: number; speed: number; crafted: number | null; onDone: (t: Tab, s: number, sig: string, text: string) => void; onExit: () => void }) {
+  const r = useMemo(() => devSmash(me, seed), [me, seed])
+  const score = crafted ?? r.score
+  useEffect(() => { onDone('smash', seed, `${score}`, `${pickName(me)} Lv${me.level}: ${score}${crafted !== null ? ' (crafted)' : ''} · ${r.move}${cracks(score) ? ' · the bell cracked' : ''}`) }, [])   // eslint-disable-line react-hooks/exhaustive-deps
   return (
-    <div data-fair-smash={phase} style={{ ...box, justifyItems: 'center', background: '#f4ead6', color: '#3a2716' }}>
-      <SmashPole phase={phase} rise={rise} rang={phase === 'done' && !!hit && rings(hit.hit)} swingMs={swingMs} riseMs={riseMs} />
-      {hit && phase !== 'swing' && <div data-fair-smash-hit={hit.hit} style={{ fontWeight: 800, fontSize: 18 }}>{hit.hit} <span style={{ fontSize: 12, fontWeight: 600 }}>{hit.move}</span></div>}
+    <div data-fair-smash={score}>
+      <SmashBellView title="Smash bench" speed={speed} onExit={onExit}
+        contestants={[{ key: 'you', keeper: 'you', you: true, name: pickName(me), species: me.species, element: me.element, score, move: r.move }]} />
     </div>
   )
 }

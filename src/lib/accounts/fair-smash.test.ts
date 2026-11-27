@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { _openAt, upsertGoogleAccount, claimUsername, deleteAccount } from './db'
 import { smashBoard, recordSmash } from './fair-smash'
-import { SMASH_TRIES, SMASH_SEASON, BELL_RING, MAX_HIT, cleanHit, strikerRise, rings, smashDay } from '@/app/shimmer/open/ather/fair-smash-rules'
+import { SMASH_TRIES, SMASH_SEASON, MAX_HIT, cleanHit, smashDay } from '@/app/shimmer/open/ather/fair-smash-rules'
 import { pickTents, tentsOf, tentAtDoor, tentLabel, fairDoor, TENT_PLAN, TENT_SPACING, SEASON, type Network } from '@/app/shimmer/open/ather/network'
 import { smashHit, smashMove } from '@/app/shimmer/open/ather/fair-smash'
 
@@ -34,7 +34,6 @@ ok(SMASH_SEASON === SEASON, 'the board season is the network season')
 const canon = readFileSync('/root/athernyx/CANON/game/thistledown-fair-script.md', 'utf8')
 ok(/"Three tries each\. Nobody counts the misses\."/.test(canon) && SMASH_TRIES === 3, 'three tries a day: the signed bark B3')
 ok(cleanHit(5) === 5 && cleanHit(0) === null && cleanHit(1.5) === null && cleanHit(MAX_HIT + 1) === null && cleanHit('x') === null, 'a hit is a whole number 1..MAX_HIT')
-ok(strikerRise(0) === 0 && strikerRise(BELL_RING) === 1 && strikerRise(BELL_RING * 4) === 1 && strikerRise(BELL_RING / 4) === 0.5 && rings(BELL_RING) && !rings(BELL_RING - 1), 'the striker climbs on a sqrt scale; the bell rings at BELL_RING')
 
 // ── the hit: the battle system's damage ──
 const fixed = () => 0.5   // no crit (0.5 > 0.0625), mid spread

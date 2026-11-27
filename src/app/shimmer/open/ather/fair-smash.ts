@@ -1,3 +1,5 @@
+// ⚠ RETIRED by BETA M246 (2026-11-27): Smash's score is smash-score.ts now (the bell show, smash-bell-view.tsx). Nothing
+// imports this file; kept for history until the next sweep.
 // BETA M233 s1: SMASH's HIT. One swing at the bell with the battle system's own damage (engine/party-stats.ts
 // calcPartyDamage): her stats as the spirit sheet reads them (spirit-stats.ts statValue: species base x growth x training),
 // her element (her form), and her hardest move (born + learnset, spirit-sheet.ts). The bell is a fixed neutral target.
