@@ -43,7 +43,7 @@ try {
   if (Object.keys(parts).length) for (const id of Object.keys(WANT)) ok(['head', 'body', 'hand-l', 'foot-r'].every(n => parts[id]?.includes(n)), `${id}: the scene holds a keeper body (head / body / hands / feet)`)
   else console.log('· scene not exposed: the part walk skipped (the record above is the proof)')
   const ks = (await p.evaluate(() => (window as any).__glade.keepers)) as { id: string; x: number; z: number; yaw: number }[]
-  const hide = () => p.evaluate(() => { const h = [...document.querySelectorAll('div')].filter(d => d.textContent?.includes('Click to play')); for (const d of h.filter(x => !h.some(o => o !== x && x.contains(o)))) (d as HTMLElement).style.visibility = 'hidden' })
+  const hide = () => p.evaluate(() => { const h = [...document.querySelectorAll('div')].filter(d => /Click to play|Tap to start/i.test(d.textContent ?? '')); for (const d of h.filter(x => !h.some(o => o !== x && x.contains(o)))) (d as HTMLElement).style.visibility = 'hidden' })
   for (const k of ks) {
     await p.evaluate((x, z, y) => (window as any).__ather.gladeAt(x, z, y), k.x + Math.sin(k.yaw) * 3, k.z + Math.cos(k.yaw) * 3, Math.atan2(Math.sin(k.yaw), Math.cos(k.yaw)))
     for (let t = 0, calm = 0; t < 40 && calm < 3; t++) { await sleep(500); calm = await p.evaluate(() => document.querySelector<HTMLElement>('[data-veil]')?.style.opacity === '0') ? calm + 1 : 0 }
