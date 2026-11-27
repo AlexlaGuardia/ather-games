@@ -59,7 +59,6 @@ try {
     ok(items.includes('node:tensacia'), `1. the Wilds kit has the Tensacia node (${items.length} kinds; "${label.replace(/\s+/g, ' ').trim()}")`)
     ok(items.filter(k => k.startsWith('node:')).join() === 'node:tensacia', `1. ...and no other node (${items.filter(k => k.startsWith('node:')).join()})`)
     await o.screenshot({ path: `${out}/a-kit.png` }).catch(() => {})
-    await o.setRequestInterception(false)
     ok(JSON.stringify(hs(await store())) === JSON.stringify(h0), `1. the REAL builder store is untouched (${JSON.stringify(h0)})`)
     await owner.close()
   }
@@ -98,11 +97,13 @@ try {
   const text = () => kp.evaluate(() => document.body.innerText)
   const saw = async (re: RegExp, n = 24) => { for (let i = 0; i < n; i++) { const m = (await text()).match(re); if (m) return m[0]; await frame(); await sleep(250) } return '' }
   const idOf = (n: { id: string }) => `glade:${n.id}:tensacia`
+  let last: unknown = null
   const aimed = async (n: { x: number; z: number; id: string }) => {
     for (let i = 0; i < 6; i++) {
       await A('tp', n.x, n.z + 6, 0); await sleep(1200); await frame()
-      for (let j = 0; j < 4; j++) { await aimAt(kp, n.x, n.z, 1.2); await frame(); if (await A('aim') === idOf(n)) return true; await sleep(400) }
+      for (let j = 0; j < 4; j++) { await aimAt(kp, n.x, n.z, 1.2); await frame(); last = await A('aim'); if (last === idOf(n)) return true; await sleep(400) }
     }
+    console.log(`   aim at ${n.id} read ${JSON.stringify(last)} (state ${JSON.stringify(await A('state'))?.slice(0, 120)})`)
     return false
   }
   const prompt = (await (async () => { await aimed(nodes[0]); return saw(/prune the Tensacia \(\d+ mana\)/i) })())
