@@ -1,0 +1,119 @@
+{
+ "bones": 19,
+ "glb_bytes": 661608,
+ "tris": {
+  "body": 17612,
+  "eyes": 2408
+ },
+ "height_m": 0.40196306968418205,
+ "idle": {
+  "dur_s": 8.0,
+  "lowest_m": -0.0,
+  "edge_stretch_p99": 1.72,
+  "edge_stretch_max": 4.89,
+  "worst_edge_at": [
+   "hips",
+   -0.33000001311302185,
+   0.41999998688697815,
+   0.20000000298023224
+  ],
+  "leg_reach_ratio_max": 1.02,
+  "mean_top": 0.999,
+  "span_m": 0.516,
+  "length_m": 0.309,
+  "top_m": 0.433
+ },
+ "walk": {
+  "dur_s": 0.26,
+  "lowest_m": -0.0001,
+  "edge_stretch_p99": 2.54,
+  "edge_stretch_max": 7.05,
+  "worst_edge_at": [
+   "paw_l",
+   0.28999999165534973,
+   0.029999999329447746,
+   0.27000001072883606
+  ],
+  "leg_reach_ratio_max": 1.32,
+  "mean_top": 1.043,
+  "planted_foot_drift_max_m": 0.0029,
+  "stride_m": 0.143,
+  "plays_1to1_at_mps": 0.55,
+  "cadence_at_mps": {
+   "0.55": 3.85,
+   "1.15": 8.05,
+   "1.92": 13.43,
+   "2.8": 19.59,
+   "4.2": 29.39,
+   "6.5": 45.48,
+   "9": 62.97
+  },
+  "span_m": 0.519,
+  "length_m": 0.374,
+  "top_m": 0.46
+ },
+ "run": {
+  "dur_s": 0.209,
+  "lowest_m": -0.0004,
+  "edge_stretch_p99": 4.33,
+  "edge_stretch_max": 11.55,
+  "worst_edge_at": [
+   "paw_l",
+   0.28999999165534973,
+   0.029999999329447746,
+   0.27000001072883606
+  ],
+  "leg_reach_ratio_max": 1.58,
+  "mean_top": 1.117,
+  "planted_foot_drift_max_m": 0.0029,
+  "stride_m": 0.502,
+  "plays_1to1_at_mps": 2.4,
+  "cadence_at_mps": {
+   "0.55": 1.09,
+   "1.15": 2.29,
+   "1.92": 3.82,
+   "2.8": 5.57,
+   "4.2": 8.36,
+   "6.5": 12.94,
+   "9": 17.91
+  },
+  "span_m": 0.519,
+  "length_m": 0.409,
+  "top_m": 0.498
+ },
+ "sit": {
+  "dur_s": 6.0,
+  "lowest_m": -0.0,
+  "edge_stretch_p99": 1.63,
+  "edge_stretch_max": 4.42,
+  "worst_edge_at": [
+   "hips",
+   -0.33000001311302185,
+   0.41999998688697815,
+   0.20000000298023224
+  ],
+  "leg_reach_ratio_max": 0.99,
+  "mean_top": 0.97,
+  "span_m": 0.532,
+  "length_m": 0.311,
+  "top_m": 0.422
+ },
+ "lie": {
+  "dur_s": 4.4,
+  "lowest_m": -0.0,
+  "edge_stretch_p99": 1.64,
+  "edge_stretch_max": 4.65,
+  "worst_edge_at": [
+   "hips",
+   -0.25,
+   0.11999999731779099,
+   0.2199999988079071
+  ],
+  "leg_reach_ratio_max": 1.09,
+  "mean_top": 0.777,
+  "span_m": 0.556,
+  "length_m": 0.329,
+  "top_m": 0.313
+ },
+ "body_mean_top": 0.794
+}

@@ -3,7 +3,8 @@
 // Reads the shipped glbs: each form is rigged on the Vulnyx's own M132 plan (same bones, every clip), is bigger than her base
 // (every evolution grows the spirit: spirits-species.md, Spirit Scale), and carries the coat of its locked picture.
 import * as fs from 'fs'
-import { type SpiritElement, AURLOTL_RIG, ARCLOTL_RIG, CRAGLOTL_RIG, LOTL_GLB_TALL, BEAR_GLB_TALL, LUMEBEAR_RIG, VOLTBEAR_RIG, TIDEBEAR_RIG, NOCT_GLB_TALL, NOCTARC_RIG, NOCTARA_RIG, NOCTORE_RIG, NOCTIX_RIG, NOCTYX_RIG, OWL_GLB_TALL, MYSTOWL_RIG, VOLTOWL_RIG, CRAGOWL_RIG, TIDEOWL_RIG, ATHOWL_RIG, HOV_GLB_TALL, VOLTARI_RIG, LUMARI_RIG, OBSIDARI_RIG, TIDARI_RIG, HOVARI_RIG, CRAGBEAR_GLB_TALL, CRAGBEAR_RIG, MARLOTL_RIG, SECOND_FORMS, formGrow, SPIRIT_ELEMENTS, SPIRIT_MODELS, SPIRIT_RIGS, formLook, rigLook, spiritModelFor } from './spirit-models'
+import { BASE_PREVIEW } from './spirit-base-preview'
+import { type SpiritElement, CROAK_GLB_TALL, AURLOTL_RIG, ARCLOTL_RIG, CRAGLOTL_RIG, LOTL_GLB_TALL, BEAR_GLB_TALL, LUMEBEAR_RIG, VOLTBEAR_RIG, TIDEBEAR_RIG, NOCT_GLB_TALL, NOCTARC_RIG, NOCTARA_RIG, NOCTORE_RIG, NOCTIX_RIG, NOCTYX_RIG, OWL_GLB_TALL, MYSTOWL_RIG, VOLTOWL_RIG, CRAGOWL_RIG, TIDEOWL_RIG, ATHOWL_RIG, HOV_GLB_TALL, VOLTARI_RIG, LUMARI_RIG, OBSIDARI_RIG, TIDARI_RIG, HOVARI_RIG, CRAGBEAR_GLB_TALL, CRAGBEAR_RIG, MARLOTL_RIG, SECOND_FORMS, formGrow, SPIRIT_ELEMENTS, SPIRIT_MODELS, SPIRIT_RIGS, formLook, rigLook, spiritModelFor } from './spirit-models'
 
 let pass = 0
 const fails: string[] = []
@@ -249,6 +250,31 @@ for (const [el, name, rig] of HOVS) {
   ok(others(tide).every(x => tide.min[2] < x.min[2] - 0.03), `Tidari: her long tail the longest back (${tide.min[2].toFixed(3)})`)
   ok(others(obs).every(x => obs.max[1] > x.max[1] + 0.03), `Obsidari: her chip crest the highest crown (${obs.max[1].toFixed(3)})`) }
 ok(new Set(SPIRIT_ELEMENTS.map(e => formLook('hummingbird', e)!.url)).size === 4, 'the Hovari line: four distinct forms')
+// M202 the Croakling line: each form the base Croakling's sculpt + rig re-shaped (19 bones, the lure chain; Croakarc's tail rides it)
+{ const b = BASE_PREVIEW.frog!, FROGS: [SpiritElement, string][] = [['water', 'croakrill'], ['mana', 'croakara'], ['earth', 'croakore'], ['storm', 'croakarc']]
+  const prof = (u: string) => { const { j } = glb(u), a = j.accessors[j.meshes.find((m: { name: string }) => m.name === 'body').primitives[0].attributes.POSITION]
+    const e = j.accessors[j.meshes.find((m: { name: string }) => m.name === 'eyes').primitives[0].attributes.POSITION]; return { max: a.max as number[], min: a.min as number[], emax: e.max as number[] } }
+  for (const [el, name] of FROGS) {
+    const L = formLook('frog', el)!
+    ok(!!L && L.name === name && L.url === `/open/spirits/${name}-rigged.glb` && L.form === el, `frog ${el}: ${name} ${L?.url}`)
+    ok(!!L.rig && L.rig !== b.rig && L.rig.neck === b.rig!.neck && L.rig.lie === b.rig!.lie && L.rig.glbLen > 0.6, `frog ${el}: her own RigLook on the base's plan (glbLen ${L.rig?.glbLen})`)
+    ok(Math.abs(L.h / b.h - formGrow(name)) < 1e-9 && formGrow(name) >= 1.4, `frog ${el}: grows past the base (dial ${formGrow(name)})`)
+    ok(L.skin.emissive !== b.skin.emissive && L.hull.color !== b.hull.color, `frog ${el}: her element's tints`)
+    ok(fs.existsSync('public' + L.url), `frog ${el}: ${L.url} shipped`)
+    const { j, col, n } = glb(L.url), names = (j.nodes as { name: string }[]).map(x => x.name), clips = (j.animations as { name: string }[]).map(a => a.name)
+    ok(['body', 'eyes', 'b_root', 'b_neck', 'b_head', 'b_lids', 'b_lids_r', 'b_throat', 'b_lure', 'b_lure2', 'b_lure3', 'b_arm_l', 'b_foot_r'].every(x => names.includes(x)) && j.skins?.[0]?.joints?.length === 19, `frog ${el}: nodes + 19 bones`)
+    ok(['idle', 'walk', 'run', 'sit', 'lie'].every(c => clips.includes(c)), `frog ${el}: clips ${clips}`)
+    const p = prof(L.url); ok(Math.abs((p.max[1] - p.min[1]) / CROAK_GLB_TALL[name] - 1) < 0.08, `frog ${el}: body ${(p.max[1] - p.min[1]).toFixed(3)} ~ CROAK_GLB_TALL ${CROAK_GLB_TALL[name]}`)
+    const [r, g, bb] = mean(col, n)
+    ok(el === 'mana' ? bb > g + 15 && r > g + 15 : el === 'storm' ? bb > r + 25 && bb > g : el === 'earth' ? r > g + 15 && g > bb + 40 : g > r + 50 && bb > r + 20, `frog ${el}: her ${el} coat ${[r, g, bb].map(Math.round)}`)
+  }
+  const [base, rill, ara, ore, arc] = [b.url, ...FROGS.map(x => formLook('frog', x[0])!.url)].map(prof)
+  ok(arc.min[2] < Math.min(base.min[2], rill.min[2], ara.min[2], ore.min[2]) - 0.3, `Croakarc: a skink's tail, the longest back by far (${arc.min[2].toFixed(3)})`)
+  ok(arc.emax[1] < arc.max[1] + 0.05 && [base, rill, ara, ore].every(x => x.emax[1] > x.max[1] + 0.1), `Croakarc: no lure (the others' lure arches over the body)`)
+  ok([base, rill, arc].every(x => ara.max[0] > x.max[0] + 0.05), `Croakara: the widest squat (${ara.max[0].toFixed(3)})`)
+  ok([base, ara, ore].every(x => rill.max[1] - rill.min[1] > x.max[1] - x.min[1]), `Croakrill: the tallest frog body (${(rill.max[1] - rill.min[1]).toFixed(3)})`)
+  ok(formGrow('croakore') > Math.max(...['croakrill', 'croakara', 'croakarc'].map(formGrow)) && ore.max[0] > base.max[0] + 0.05, 'Croakore: the heaviest (the biggest dial, wider than the base)')
+  ok(new Set(SPIRIT_ELEMENTS.map(e => formLook('frog', e)!.url)).size === 4, 'the Croakling line: four distinct forms') }
 
 // ── picking ──
 ok(formLook('fox', null) === null && formLook('fox', undefined) === null, 'no element = no form (her base)')
@@ -257,7 +283,7 @@ ok(formLook(null, 'mana') === null, 'no species = no form')
 ok(formLook('rabbit', 'earth') === null, 'a species whose forms are not modelled yet keeps her base')   // M202: was the Hovari, now modelled
 // M202 Cragbear (the Dewbear line begins): her Earth form is modelled, the other three Dewbear forms are not yet
 ok(new Set(SPIRIT_ELEMENTS.map(e => formLook('water-bear', e)!.url)).size === 4, 'the Dewbear line: four distinct forms')
-ok(Object.keys(SECOND_FORMS).sort().join() === 'axolotl,bat,fox,hummingbird,owl,water-bear', 'the Vulnyx line + the Manalotl line + the Dewbear line + the Noctyx line + the Athowl line + the Hovari line')
+ok(Object.keys(SECOND_FORMS).sort().join() === 'axolotl,bat,fox,frog,hummingbird,owl,water-bear', 'the Vulnyx line + the Manalotl line + the Dewbear line + the Noctyx line + the Athowl line + the Hovari line + the Croakling line')
 ok(new Set(SPIRIT_ELEMENTS.map(e => formLook('fox', e)!.url)).size === 4, 'four distinct forms')
 // rigLook: a form stays itself when rigs are on; ?rig=0 (the frame measure) gives her species' old model, never a rigged glb unrigged
 const v = formLook('fox', 'storm')!

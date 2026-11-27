@@ -278,7 +278,7 @@ export const FORM_GROW = 1.2
 // sisters; her floor + hull are deeper than s1's so she keeps the art's teal (Vulnarc read paler than her art).
 // Marlotl (Manalotl's Water form, the first of the Manalotl line; her own body: webbed gill fins, a dorsal crest, a tall paddle
 // tail fin, a long slim trunk on sprawled legs; docs/looks/m202-marlotl-2026-11-26) 1.4 x the Manalotl's 0.90 m nose to tail.
-export const FORM_GROW_BY: Readonly<Record<string, number>> = { vulnore: 1.4, vulnara: 1.4, vulnarc: 1.4, vulnix: 1.4, marlotl: 1.4, cragbear: 1.4, aurlotl: 1.4, arclotl: 1.4, craglotl: 1.4, lumebear: 1.4, voltbear: 1.4, tidebear: 1.4, noctarc: 1.4, noctara: 1.4, noctore: 1.4, noctix: 1.4, mystowl: 1.4, voltowl: 1.4, cragowl: 1.4, tideowl: 1.4, voltari: 1.5, lumari: 1.5, obsidari: 1.5, tidari: 1.5 }
+export const FORM_GROW_BY: Readonly<Record<string, number>> = { vulnore: 1.4, vulnara: 1.4, vulnarc: 1.4, vulnix: 1.4, marlotl: 1.4, cragbear: 1.4, aurlotl: 1.4, arclotl: 1.4, craglotl: 1.4, lumebear: 1.4, voltbear: 1.4, tidebear: 1.4, noctarc: 1.4, noctara: 1.4, noctore: 1.4, noctix: 1.4, mystowl: 1.4, voltowl: 1.4, cragowl: 1.4, tideowl: 1.4, croakrill: 1.4, croakara: 1.4, croakore: 1.5, croakarc: 1.4, voltari: 1.5, lumari: 1.5, obsidari: 1.5, tidari: 1.5 }
 export const formGrow = (name: string): number => FORM_GROW_BY[name] ?? FORM_GROW
 const secondForm = (sp: Species, form: SpiritElement, name: string, emissive: string, hull: string): SpiritLook => {
   const b = SPIRIT_RIGS[sp]!, g = formGrow(name)
@@ -379,7 +379,29 @@ const hovForm = (el: SpiritElement, name: string, emissive: string, hull: string
 /** each form's body height hanging in her hover (the idle clip's mean, wing tip to tail tip, the hover not counted; redo tools/idle-tall.mts),
  *  glb units; the prod check sizes her by it once she hangs still, the unit test holds her bind height within 4% of it */
 export const HOV_GLB_TALL: Readonly<Record<string, number>> = { voltari: 1.328, lumari: 1.323, obsidari: 1.273, tidari: 1.42 }
+// M202 the Croakling line (docs/looks/m202-croakling-line-2026-11-27): Croakrill (Water: taller and upright, gill fronds, long webbed toes,
+// dark spots, a cyan orb), Croakara (Mana: wide and squat on splayed legs, huge lilac-ringed eyes, gold flowing infusion markings, a violet
+// bud orb), Croakore (Earth: a warty toad, the heaviest, moss on crown and shoulders, slit-pupilled orange eyes, an amber orb; dial 1.5),
+// Croakarc (Storm: a SKINK, no lure (grimoire-ledger divergence note), a long curling tail, a pointed crest, dorsal spines, lightning veins,
+// a violet brow gem). Each is the BASE Croakling's sculpt + rig modules re-shaped by name (tools/croak_common.py, rig_croak.py), so the
+// base (M174, still owner-preview: spirit-base-preview.ts) flows into all four on a rebuild. The base is not in SPIRIT_RIGS yet, so the
+// line builds off BASE_PREVIEW.frog; formLook is only ever asked for an owner (the ?form= preview / an owner's evolved pot). Croakarc's
+// tail rides the base's three lure bones (re-seated along it). CROAK_GLB_TALL = each body's idle mean height (lure not counted).
+export const CROAK_GLB_TALL: Readonly<Record<string, number>> = { croakrill: 0.854, croakara: 0.794, croakore: 0.776, croakarc: 0.908 }
+// glbLen = her nose to haunch (tail tip) and hRig = the metres per glb unit her clips were timed at (rig metrics height_m), so her clips
+// play 1:1 at the base's 0.55 / 2.4 m/s in her own glb units
+const croakForm = (el: SpiritElement, name: string, emissive: string, hull: string, glbLen: number, hRig: number): SpiritLook => {
+  const b = BASE_PREVIEW.frog!, g = formGrow(name)
+  return { ...b, name, form: el, url: `/open/spirits/${name}-rigged.glb`, h: b.h * g, skin: { emissive, emissiveI: 0.14 }, hull: { color: hull, opacity: 0.38 },
+    trot: grownTrot(b.trot, b.h, b.h * g), rig: { ...b.rig!, glbLen, clipV: { walk: 0.55 / hRig, run: 2.4 / hRig } } }
+}
 export const SECOND_FORMS: Partial<Record<Species, Partial<Record<SpiritElement, SpiritLook>>>> = {
+  frog: {
+    water: croakForm('water', 'croakrill', '#3fc4c0', '#b4f0ea', 0.896, 0.3793),
+    mana: croakForm('mana', 'croakara', '#b49cff', '#e8dcff', 0.769, 0.4020),
+    earth: croakForm('earth', 'croakore', '#ffae4a', '#ffe2b4', 0.846, 0.4160),
+    storm: croakForm('storm', 'croakarc', '#a8d2ff', '#dcecff', 1.351, 0.4398),
+  },
   axolotl: {
     water: marlotl(),
     mana: lotlForm('mana', 'aurlotl', '#b49cff', '#e8dcff', AURLOTL_RIG),
