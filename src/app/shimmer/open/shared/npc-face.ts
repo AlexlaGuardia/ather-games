@@ -22,6 +22,8 @@ export const HEAD_RATE = 7, BODY_RATE = 2.4
 /** the most either part turns in one second (rad/s): ease, never snap, even on a long frame */
 export const HEAD_SPEED = 4.5, BODY_SPEED = 2.6
 
+/** under this (rad, ~1 deg) a part settles onto its target */
+export const SETTLE = 0.018
 export const wrapAngle = (a: number) => Math.atan2(Math.sin(a), Math.cos(a))
 
 export interface FaceState { body: number; head: number }
@@ -29,6 +31,7 @@ export const FACE_REST: FaceState = { body: 0, head: 0 }
 
 const ease = (from: number, to: number, rate: number, speed: number, dt: number) => {
   const d = wrapAngle(to - from), step = d * Math.min(1, rate * dt), cap = speed * dt
+  if (Math.abs(d) < SETTLE && Math.abs(d) <= cap) return to   // the last degree lands (an ease never quite arrives)
   return from + Math.max(-cap, Math.min(cap, step))
 }
 

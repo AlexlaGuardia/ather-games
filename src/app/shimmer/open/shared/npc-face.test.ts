@@ -27,7 +27,7 @@ const run = (s: FaceState, want: number | null, secs: number, seated = false, dt
   ok(Math.abs(deg(wrapAngle(mid.body + mid.head - want))) < 15, `within 15 deg by 1.5 s (${deg(wrapAngle(mid.body + mid.head - want)).toFixed(1)})`)
   // 2. the talk ends: back to rest, smoothly
   const back = run(done.s, null, 4)
-  ok(atRest(back.s) || (Math.abs(back.s.body) < 0.01 && Math.abs(back.s.head) < 0.01), `back to rest facing (body ${deg(back.s.body).toFixed(2)} head ${deg(back.s.head).toFixed(2)})`)
+  ok(atRest(back.s), `back to rest facing, exactly (it settles) (body ${deg(back.s.body).toFixed(2)} head ${deg(back.s.head).toFixed(2)})`)
   ok(back.maxStep <= (HEAD_SPEED + BODY_SPEED) / 60 + 1e-9, 'no snap on the way back')
   // a long frame (a hitch) is still an ease, not a jump
   const hitch = faceStep(FACE_REST, want, 0.5)

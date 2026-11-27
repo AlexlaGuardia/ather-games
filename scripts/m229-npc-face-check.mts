@@ -73,7 +73,9 @@ try {
     // the keeper leaves the talk and walks off a few metres
     for (let i = 0; i < 4 && await p.evaluate(() => !!document.querySelector('[data-talk-bubble]')); i++) { await p.keyboard.press('Escape'); await sleep(500) }
     const bx = t.x + Math.sin(ang) * 9, bz = t.z + Math.cos(ang) * 9
-    await stand(bx, bz, Math.atan2(-(t.x - bx), -(t.z - bz))); await sleep(4500)
+    await stand(bx, bz, Math.atan2(-(t.x - bx), -(t.z - bz)))
+    // swiftshader runs a few frames a second and a frame is capped at 0.1 s of turn: give the ease up to 12 s of wall time
+    await poll(async () => { const r = await probe(kind); return !!r && Math.abs(r.body) < 0.01 && Math.abs(r.head) < 0.01 }, 12000)
     const b = await probe(kind)
     ok(!!b && Math.abs(b.body) < 3 * Math.PI / 180 && Math.abs(b.head) < 3 * Math.PI / 180, `1. ${name} eases back to rest (body ${b ? deg(b.body) : '?'} head ${b ? deg(b.head) : '?'})`)
     await aimAt(p, t.x, t.z, aimY); await sleep(500); await p.screenshot({ path: `${out}/after-${name.toLowerCase().replace(/\W+/g, '-')}.png` })
@@ -103,7 +105,8 @@ try {
   await p.screenshot({ path: `${out}/talk-attendant.png` })
   for (let i = 0; i < 4 && await p.evaluate(() => !!document.querySelector('[data-talk-bubble], [data-panel="exchange"]')); i++) { await p.keyboard.press('Escape'); await sleep(500) }
   const bx = t.x + Math.sin(ang) * 9, bz = t.z + Math.cos(ang) * 9
-  await tpAt(bx, bz, Math.atan2(-(t.x - bx), -(t.z - bz))); await sleep(4500)
+  await tpAt(bx, bz, Math.atan2(-(t.x - bx), -(t.z - bz)))
+  await poll(async () => { const r = await probe('moglin'); return !!r && Math.abs(r.body) < 0.01 && Math.abs(r.head) < 0.01 }, 12000)
   const b = await probe('moglin')
   ok(!!b && Math.abs(b.body) < 3 * Math.PI / 180 && Math.abs(b.head) < 3 * Math.PI / 180, `1. attendant eases back to rest (body ${b ? deg(b.body) : '?'} head ${b ? deg(b.head) : '?'})`)
 } catch (e) { ok(false, `crashed: ${String(e).slice(0, 300)}`) }
