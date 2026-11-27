@@ -119,6 +119,9 @@ try {
   const m0 = await marks()
   // M233 v2a: Enter = the Clash LOAD screen, then THE RING (a WebGL canvas, both spirits' models) + the TOURNAMENT PANEL (the
   // line-up tree); the troupe's bout runs first, the tree advances as each bout ends, then hers; a result card, Back to the Fair.
+  // M233 v2d: the CEREMONY (corner intros + Begin, the winner banner, the tree with the loser crossed / next two lit), the
+  // engine's held gap between actions (4-5 m) and both fighters inside the camera frame, read off the ring's own log
+  let cerLog = '', shot = new Set<string>(), treeSeen: string[] = [], champName = ''
   let result: string | undefined, tries = 0, sawLoad = false, ringInfo: any = null, order: string[] = [], keeperModels = '', advanced = false, oldScene = false, exited = false, cheer = ''
   while (!result && tries < 4) {
     tries++
@@ -133,8 +136,17 @@ try {
         return { res: q('[data-clash-ring-result]')?.dataset.clashRingResult, bout: q('[data-clash-bout]')?.dataset.clashBout, kb: q('[data-clash-bout]')?.dataset.clashKeeperBout,
           models: (document.querySelector('[data-ring-models]') as HTMLElement | null)?.dataset.ringModels ?? '', canvas: !!document.querySelector('[data-clash-ring] canvas'),
           tree: [...document.querySelectorAll('[data-bracket-bout]')].map(e => `${(e as HTMLElement).dataset.bracketBout}:${(e as HTMLElement).dataset.boutState}:${(e as HTMLElement).dataset.boutWinner}:${(e as HTMLElement).dataset.boutYou}`),
-          old: !!document.querySelector('[data-stance]') }
+          old: !!document.querySelector('[data-stance]'),
+          cer: q('[data-clash-ring]')?.dataset.clashCer ?? '', log: q('[data-clash-ring]')?.dataset.clashCeremony ?? '',
+          intro: document.querySelectorAll('[data-clash-intro]').length, begin: !!q('[data-clash-begin]'), winner: q('[data-clash-winner]')?.dataset.clashWinner,
+          tree: q('[data-clash-tree]') ? [...document.querySelectorAll('[data-tree-bout]')].map(e => { const d = (e as HTMLElement).dataset; return `${d.treeBout}:x${d.treeCrossed}:m${d.treeMoved}:n${d.treeNext}` }).join(' ') + ((q('[data-tree-champion]') ? ' champ' : '')) : '',
+          champ: q('[data-clash-champion-name]')?.innerText ?? '' }
       })
+      cerLog = st.log || cerLog
+      if (st.champ) champName = st.champ
+      if (st.tree && treeSeen[treeSeen.length - 1] !== st.tree) treeSeen.push(st.tree)
+      for (const [k, seen] of [['intro', st.intro === 2], ['begin', st.begin], ['winner', st.winner != null], ['tree', !!st.tree]] as const)
+        if (seen && !shot.has(k)) { shot.add(k); await p.screenshot({ path: `${out}/v2d-${k}.png` }) }
       if (st.old) oldScene = true
       if (!ringInfo && st.canvas && st.models.split(',').filter(Boolean).length >= 2) { ringInfo = st; await sleep(800); await p.screenshot({ path: `${out}/2b-ring-troupe-bout.png` }) }
       if (st.kb === '1' && !cheer) { const c = await p.$('[data-clash-cheer]'); if (c) { await c.click().catch(() => {}); await sleep(400); cheer = await p.evaluate(() => (document.querySelector('[data-clash-cheer]') as HTMLElement | null)?.dataset.cheerUsed ?? 'gone') } }
@@ -185,6 +197,20 @@ try {
   const later = await p.evaluate(() => ({ flag: (document.querySelector('[data-clash-already]') as HTMLElement | null)?.dataset.clashAlready, txt: (document.querySelector('[data-panel="clash"]') as HTMLElement | null)?.innerText ?? '' }))
   ok(e2.info?.won === '1' && later.flag === '1' && /already won/i.test(later.txt), `13. a later visit to the won tent says it is already won (flag ${later.flag})`)
   await p.screenshot({ path: `${out}/6-clash-later-visit.png` })
+
+  // ── M233 v2d ──
+  const ev = cerLog.split(',').filter(Boolean), at = (k: string, i: string) => ev.indexOf(`${k}:${i}`)
+  const fights = ev.filter(e => e.startsWith('fight:')).map(e => e.split(':')[1])
+  ok(fights.length >= 2 && fights.every(i => at('intro', i) >= 0 && at('intro', i) < at('begin', i) && at('begin', i) < at('fight', i)), `14a. before every bout: corner INTROS then 'Begin' then the fight (${ev.filter(e => /^(intro|begin|fight)/.test(e)).join(' ')})`)
+  ok(shot.has('intro') && shot.has('begin'), `14b. the two corner cards and 'Begin' were on screen (${[...shot].join(',')})`)
+  const dones = ev.filter(e => e.startsWith('done:'))
+  ok(dones.length === fights.length && dones.every(d => { const i = d.split(':')[1]; return at('winner', i) >= 0 && at('winner', i) < ev.indexOf(d) && at('tree', i) > ev.indexOf(d) }), `14c. after every bout: the WINNER banner, then the TREE (${ev.filter(e => /^(winner|tree)/.test(e)).join(' ')})`)
+  const t0 = treeSeen.find(t => /^0:x\d/.test(t))
+  ok(!!t0 && /0:x\d+:m0:n0/.test(t0) && / 2:x:m1:n0/.test(t0) && / 1:x:m0:n1/.test(t0), `14d. the tree after bout 1: its loser crossed, the winner moved up into the final, the next two (bout 2) lit (${t0})`)
+  ok(treeSeen.some(t => / champ$/.test(t)) && /\S/.test(champName), `14e. the champion moment: the tree crowns her, the card names the champion (${champName})`)
+  const gaps = dones.map(d => d.match(/gap([\d.]+|-):n(\d+):out(\d+)/)).filter(Boolean).map(m => ({ g: m![1] === '-' ? null : Number(m![1]), n: Number(m![2]), out: Number(m![3]) }))
+  ok(gaps.length > 0 && gaps.every(g => g.n === 0 || (g.g! >= 4 && g.g! <= 5)) && gaps.some(g => g.n > 0), `14f. between actions the spirits hold 4-5 m (engine log, median per bout: ${gaps.map(g => `${g.g ?? '-'}m/${g.n}`).join(' ')})`)
+  ok(gaps.every(g => g.out === 0), `14g. both fighters inside the camera frame all bout (frames out: ${gaps.map(g => g.out).join(',')})`)
 
   ok(errs.length === 0, `10. no page errors (${errs.slice(0, 2).join(' | ')})`)
 } finally {

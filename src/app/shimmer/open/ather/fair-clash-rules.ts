@@ -75,5 +75,11 @@ export const CLASH_UI = {
   exit: 'Back to the Fair',
   cheer: 'Cheer!',
   cheered: 'Cheered',
+  // M233 v2d ceremony (placeholders, @lark)
+  begin: 'Begin!',
+  winner: (name: string) => `${name} wins!`,
+  skip: 'Skip',
+  troupe: 'The troupe',
+  champ: 'Champion',
   cue: { hit: 'Hit!', evaded: 'Dodged', guarded: 'Blocked', miss: 'Missed', cheer: 'Cheered on' } as Record<'hit' | 'evaded' | 'guarded' | 'miss' | 'cheer', string>,
 } as const

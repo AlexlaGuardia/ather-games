@@ -8,6 +8,7 @@
 // is open fair-dev.ts installNoWrites() refuses any write to /api (the count shows in the header). Labels are plain UI words (@lark).
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ClashRing, type RingEntrant } from '../../open/ather/clash-ring'
+import { CLASH_CAM, CAM_RANGE, camLine, type ClashCam } from '../../open/ather/clash-ceremony'   // M233 v2d camera tuner
 import { DashRace, type RaceResult } from '../../open/ather/dash-view'
 import { SmashPole, SWING_MS, RISE_MS } from '../../open/ather/smash-panel'
 import { strikerRise, rings } from '../../open/ather/fair-smash-rules'
@@ -54,6 +55,7 @@ export default function FairDev() {
   const [dashFoes, setDashFoes] = useState<Pick[]>(() => randomFoes('easy', 2, 4).concat([{ species: 'turtle', element: 'base', level: 12 }]).slice(0, 4))
   const [seed, setSeed] = useState(1)
   const [speed, setSpeed] = useState<number>(1)
+  const [cam, setCam] = useState<ClashCam>(CLASH_CAM)   // M233 v2d: the ring's camera, tuned live over a running ring
   const [run, setRun] = useState<{ id: number; tab: Tab; seed: number } | null>(null)
   const [result, setResult] = useState<{ tab: Tab; seed: number; sig: string; text: string } | null>(null)
   const [history, setHistory] = useState<{ tab: Tab; seed: number; sig: string }[]>([])
@@ -134,7 +136,7 @@ export default function FairDev() {
       </div>
 
       {tab === 'smash' && <SmashBench me={me} run={run?.tab === 'smash' ? run : null} speed={speed} onDone={finish} />}
-      {run?.tab === 'clash' && <ClashRun key={run.id} me={me} foes={foes} tier={tier} seed={run.seed} speed={speed} onDone={finish} onExit={stop} />}
+      {run?.tab === 'clash' && <ClashRun key={run.id} me={me} foes={foes} tier={tier} seed={run.seed} speed={speed} onDone={finish} onExit={stop} cam={cam} setCam={setCam} />}
       {run?.tab === 'dash' && <DashRun key={run.id} me={me} others={dashPicked ? dashFoes : null} seed={run.seed} speed={speed} onDone={finish} onExit={stop} />}
     </div>
   )
@@ -188,7 +190,35 @@ function ClashOdds({ me, foes, paused }: { me: Pick; foes: Pick[]; paused: boole
   )
 }
 
-function ClashRun({ me, foes, tier, seed, speed, onDone, onExit }: { me: Pick; foes: Pick[]; tier: BenchTier; seed: number; speed: number; onDone: (t: Tab, s: number, sig: string, text: string) => void; onExit: () => void }) {
+/** M233 v2d: Alex's CAMERA TUNER, floating over the running ring (live preview): height, distance, angle, FOV (+ fit, follow);
+ *  'Copy values' copies the line that drops straight into clash-ceremony.ts CLASH_CAM. */
+function CamTuner({ cam, setCam }: { cam: ClashCam; setCam: (c: ClashCam) => void }) {
+  const [open, setOpen] = useState(true), [copied, setCopied] = useState(false)
+  const keys = Object.keys(CAM_RANGE) as (keyof ClashCam)[]
+  return (
+    <div data-fair-cam style={{ position: 'fixed', zIndex: 62, top: 8, right: 8, width: open ? 236 : 'auto', background: 'rgba(20,15,11,.86)', borderRadius: 8, color: INK, padding: '6px 8px', fontSize: 12 }}>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        <b>Camera</b>
+        <button data-fair-cam-toggle onClick={() => setOpen(o => !o)} style={{ ...btn(), marginLeft: 'auto', padding: '2px 8px', fontSize: 11 }}>{open ? 'Hide' : 'Show'}</button>
+      </div>
+      {open && <>
+        {keys.map(k => { const [lo, hi, st] = CAM_RANGE[k]; return (
+          <label key={k} style={{ display: 'grid', gridTemplateColumns: '58px 1fr 38px', gap: 6, alignItems: 'center', marginTop: 4 }}>
+            <span>{k}</span>
+            <input data-fair-cam-dial={k} type="range" min={lo} max={hi} step={st} value={cam[k]} onChange={e => { setCopied(false); setCam({ ...cam, [k]: Number(e.target.value) }) }} />
+            <span style={{ fontFamily: 'ui-monospace, monospace', textAlign: 'right' }}>{cam[k]}</span>
+          </label>) })}
+        <div data-fair-cam-line style={{ marginTop: 6, fontFamily: 'ui-monospace, monospace', fontSize: 10, wordBreak: 'break-all', color: DIM }}>{camLine(cam)}</div>
+        <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+          <button data-fair-cam-copy onClick={() => { try { void navigator.clipboard?.writeText(camLine(cam)) } catch { /* no clipboard */ } setCopied(true) }} style={{ ...btn(), padding: '3px 8px', fontSize: 11 }}>{copied ? 'Copied' : 'Copy values'}</button>
+          <button data-fair-cam-reset onClick={() => setCam(CLASH_CAM)} style={{ ...btn(), padding: '3px 8px', fontSize: 11 }}>Reset</button>
+        </div>
+      </>}
+    </div>
+  )
+}
+
+function ClashRun({ me, foes, tier, seed, speed, onDone, onExit, cam, setCam }: { me: Pick; foes: Pick[]; tier: BenchTier; seed: number; speed: number; onDone: (t: Tab, s: number, sig: string, text: string) => void; onExit: () => void; cam: ClashCam; setCam: (c: ClashCam) => void }) {
   const [lines, setLines] = useState<string[]>([])
   const winners = useRef<Record<number, string>>({})
   const buf = useRef<string[]>([])
@@ -214,7 +244,8 @@ function ClashRun({ me, foes, tier, seed, speed, onDone, onExit }: { me: Pick; f
   const phone = narrow()
   return (
     <>
-      <ClashRing tier={tier} title={`Bench · seed ${seed}`} entrants={entrants} runner={runner} speed={speed} seed={seed} result={null} onDone={done} onExit={onExit} />
+      <ClashRing tier={tier} title={`Bench · seed ${seed}`} entrants={entrants} runner={runner} speed={speed} seed={seed} result={null} onDone={done} onExit={onExit} cam={cam} />
+      <CamTuner cam={cam} setCam={setCam} />
       <div data-fair-log-box style={{ position: 'fixed', zIndex: 61, left: 8, bottom: phone ? 'calc(38% + 8px)' : 8, width: phone ? 'calc(100% - 16px)' : 'min(440px, 45vw)', background: 'rgba(20,15,11,.82)', borderRadius: 8, color: INK }}>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', padding: '4px 8px', fontSize: 12 }}>
           <b>Engine log</b><span style={{ color: DIM }}>seed {seed} · {speed}x · {lines.length} lines</span>

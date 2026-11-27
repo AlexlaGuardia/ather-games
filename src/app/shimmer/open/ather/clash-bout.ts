@@ -11,7 +11,7 @@ import type { Spirit } from '../../spirits/spirit'
 import { createPartyBattle, currentActor, chooseAction, takeAction } from '../../engine/party-battle'
 import { CLASH_AI, CLASH_TROUPE_MANA, type ClashTier } from './fair-clash-rules'
 import { tacticsOf } from './clash-lessons'   // M233 v2c
-import { createFight, step, tentEntrant, resolveBonded, bondSeed, type Bonded, DT, RING, type FightState, type FighterSnap, type FightEvent, type TickLog } from './clash-fight'
+import { createFight, step, holdMeter, tentEntrant, resolveBonded, bondSeed, type Bonded, DT, RING, type FightState, type FighterSnap, type FightEvent, type TickLog } from './clash-fight'
 
 export type BoutAct = 'idle' | 'walk' | 'windup' | 'strike' | 'evade' | 'guard' | 'hit' | 'down' | 'win'
 /** a short word the ring floats over her for a moment (a landed blow, a dodge, a block, a miss, her cheer) */
@@ -35,6 +35,8 @@ export interface BoutPlay {
   bonded?: { a: Bonded; b: Bonded }
   /** M233 v2c: every engine event so far (side 0 = 'a'), the fight's seed and state (clash-lessons.ts reads a finished bout) */
   log?: FightEvent[]; seed?: number; state?: FightState
+  /** M233 v2d: the engine's held gaps so far (clash-fight.ts holdMeter: both spirits between actions, settled), metres */
+  holdGaps?: number[]
 }
 export interface BoutSide { spirit: Spirit; /** her spirit (the keeper's side) */ keeper?: boolean
   /** M238: her favourite + twist and her known move ids (spirit-bond-move.ts); unset = a seeded random known move */
@@ -136,6 +138,7 @@ export function liveBout(s: FightState, hold = 1.2, onTick?: (l: TickLog) => voi
   onTick?.(prev)
   const press: [boolean, boolean] = [false, false], cues: { t: number; side: 0 | 1; c: BoutCue }[] = []
   const log: FightEvent[] = [...prev.ev]   // M233 v2c: the bout's whole event log (the lessons read it)
+  const meter = holdMeter()   // M233 v2d: the spacing between actions
   const pose = (i: 0 | 1, t: number): BoutPose => {
     const a = prev.f[i], b = last.f[i], k = Math.max(0, Math.min(1, (t - last.t) / DT + 1))
     const x = (a.x + (b.x - a.x) * k) * VIEW, z = (a.z + (b.z - a.z) * k) * VIEW
@@ -147,7 +150,7 @@ export function liveBout(s: FightState, hold = 1.2, onTick?: (l: TickLog) => voi
   return {
     at(t) {
       while (!s.over && last.t + DT <= t) {
-        prev = last; last = step(s, { cheer: [press[0], press[1]] }); press[0] = press[1] = false; onTick?.(last); log.push(...last.ev)
+        prev = last; last = step(s, { cheer: [press[0], press[1]] }); press[0] = press[1] = false; onTick?.(last); log.push(...last.ev); meter.tick(s)
         for (const e of last.ev) { const c = cueOf(e.kind); if (c) cues.push({ t: last.t, side: cueSide(e), c }) }
         if (cues.length > 40) cues.splice(0, cues.length - 40)
       }
@@ -156,7 +159,7 @@ export function liveBout(s: FightState, hold = 1.2, onTick?: (l: TickLog) => voi
     over: t => s.over && t >= s.t + hold,
     winner: () => (s.winner === null ? null : s.winner === 0 ? 'a' : 'b'),
     cheer(side) { const i = side === 'a' ? 0 : 1; if (s.over || s.f[i].cheered || press[i]) return false; press[i] = true; return true },
-    log, seed: s.seed, state: s,
+    log, seed: s.seed, state: s, holdGaps: meter.gaps,
   }
 }
 /** the live runner: both spirits as the tent's evened entrants (clash-fight.ts tentEntrant), a fresh seed per bout */

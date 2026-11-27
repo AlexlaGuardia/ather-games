@@ -67,7 +67,7 @@ export function ClashPanel({ tier, tent, ledger, setLedger, onClose }: { tier: C
   useAutoStart(lobby, list => clashField(list, lineupSpirits))
   const field = useMemo<RingEntrant[] | null>(() => fieldRun ? fieldRun.spirits.map((sp, i) => {
     const x = sp ?? lineupSpirits[0]
-    return { name: fieldRun.names[i] ? `${x.name} · ${fieldRun.names[i]}` : x.name, species: x.species, element: x.element, spirit: () => evenSpirit(x.species, x.element, tier, x.name),
+    return { name: fieldRun.names[i] ? `${x.name} · ${fieldRun.names[i]}` : x.name, keeper: fieldRun.names[i] ?? undefined, species: x.species, element: x.element, spirit: () => evenSpirit(x.species, x.element, tier, x.name),
       bonded: x.bonded ?? undefined, known: x.known, lessons: x.lessons }
   }) : null, [fieldRun, lineupSpirits, tier])
   const mySeat = fieldRun ? fieldRun.seats.indexOf(lobby.me) : -1

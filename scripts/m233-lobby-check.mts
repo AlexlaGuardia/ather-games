@@ -107,7 +107,8 @@ async function ringOut(p: Page) {
     const r = document.querySelector('[data-clash-ring-result]') as HTMLElement | null
     return { first: f, res: r?.dataset.clashRingResult ?? null, champ: r?.dataset.clashChampion ?? null, name: (document.querySelector('[data-clash-champion-name]') as HTMLElement | null)?.innerText ?? '',
       tree: [...document.querySelectorAll('[data-bracket-bout]')].map(e => `${(e as HTMLElement).dataset.bracketBout}:${(e as HTMLElement).dataset.boutWinner}`).join(' '),
-      cheer: !!document.querySelector('[data-clash-cheer]') }
+      cheer: !!document.querySelector('[data-clash-cheer]'),
+      cer: (document.querySelector('[data-clash-ring]') as HTMLElement | null)?.dataset.clashCeremony ?? '' }   // M233 v2d
   }, first)
 }
 
@@ -138,6 +139,11 @@ try {
   ok(ra.first.includes(KA.name) && ra.first.includes(KB.name) && rb.first.includes(KA.name) && rb.first.includes(KB.name), `2b. the field seats BOTH keepers' spirits, facing each other in round one (A "${ra.first.replace(/\n/g, ' / ')}")`)
   ok(!!ra.res && !!rb.res && ra.champ !== null && ra.champ !== '' && ra.champ === rb.champ && ra.tree === rb.tree, `2c. both rings run to the SAME tree + champion (A ${ra.tree} champ ${ra.champ} · B ${rb.tree} champ ${rb.champ})`)
   ok(!!ra.name && ra.name === rb.name, `2d. both read the champion by name ("${ra.name}" / "${rb.name}")`)
+  // M233 v2d: the CEREMONY on every keeper's ring: intros + Begin before each bout, the winner + the tree after; same winners
+  const cerOk = (log: string) => { const ev = log.split(',').filter(Boolean), at = (k: string, i: string) => ev.indexOf(`${k}:${i}`), fs = ev.filter(e => e.startsWith('fight:')).map(e => e.split(':')[1])
+    return fs.length === 3 && fs.every(i => at('intro', i) >= 0 && at('intro', i) < at('begin', i) && at('begin', i) < at('fight', i) && at('fight', i) < at('winner', i) && at('tree', i) > at('winner', i)) }
+  const winners = (log: string) => log.split(',').filter(e => e.startsWith('done:')).map(e => e.split(':').slice(0, 3).join(':')).join(' ')
+  ok(cerOk(ra.cer) && cerOk(rb.cer) && winners(ra.cer) === winners(rb.cer), `2g. both rings: corner intros + Begin before each bout, the winner + the tree after, the same winners (A ${winners(ra.cer)} · B ${winners(rb.cer)})`)
   ok(!ra.cheer && !rb.cheer, '2e. no cheer in a field (every ring plays the same fights)')
   ok((ra.res === 'won') !== (rb.res === 'won') || (ra.res === 'lost' && rb.res === 'lost'), `2f. at most one keeper reads a win (A ${ra.res}, B ${rb.res})`)
   for (const p of [pa, pb]) { const ex = await p.$('[data-clash-exit]'); if (ex) await p.evaluate(e => (e as HTMLButtonElement).click(), ex) }
