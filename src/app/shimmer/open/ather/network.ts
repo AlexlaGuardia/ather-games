@@ -7,6 +7,7 @@
 //
 // ★ PURE apart from `loadNetwork` (fetch).
 
+import { LINGSTON, LINGSTON_CLEAR } from './lingston'
 import { GLADE } from './moonwell-glade'
 export const SEASON = 1   // until the season clock exists, the network is season 1's
 export type SettlementBiome = 'shore' | 'meadow' | 'woods' | 'rock'
@@ -144,6 +145,7 @@ export function clearing(n: Network): (x: number, z: number) => boolean {
   }
   for (const s of n.settlements) disc(s.x, s.z, SETTLEMENT_CLEAR)
   if (n.fair) disc(n.fair.x, n.fair.z, FAIR_CLEAR)
+  disc(LINGSTON.x, LINGSTON.z, LINGSTON_CLEAR)   // M228: Lingston's square (stand-in spot, lingston.ts)
   return (x, z) => mask.has(key(Math.floor(x / C), Math.floor(z / C)))
 }
 

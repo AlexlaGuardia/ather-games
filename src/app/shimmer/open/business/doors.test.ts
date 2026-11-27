@@ -26,7 +26,8 @@ ok(new Set(all.map(d => d.b)).size === all.length, 'no building carries two door
 // THE CO.'S CITADEL OFFICE (Alex 11-18; Magii 49d8a0f): one door, in the Citadel only, the free building nearest the GE
 const co = all.filter(d => d.key === 'front:trade-co')
 ok(co.length === 1, `exactly one Ather Trading Co. door on the continent (${co.length})`)
-const cit = doorsCached(R, 'citadel'), ge = cit.find(d => d.key === 'front:grand-exchange')
+const cit = doorsCached(R, 'citadel'), geB = cachedPlan(R, meta.places.findIndex(p => p.id === 'citadel')).buildings.find(b => b.front === 'citadel-hall'), ge = geB ? { b: geB } : undefined   // M228: no GE door; the Co. still sits by the old hall
+ok(!cit.some(d => d.key === 'front:grand-exchange'), 'M228: the Citadel has no Grand Exchange door (the Exchange is at Lingston)')
 ok(!!co[0] && cit.includes(co[0]), 'the Co. door stands in the Citadel')
 if (co[0] && ge) {
   const dGe = (d: { b: { x: number; z: number } }) => Math.hypot(d.b.x - ge.b.x, d.b.z - ge.b.z)

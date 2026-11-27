@@ -20,7 +20,7 @@ export const FRONT_SHOPS: Record<string, { name: string; kind: ShopKind; line?: 
   bookstore: { name: "Eyuun's Bookstore", kind: 'books', line: "The house of tales. The world's stories, read and heard." },
   station: { name: 'Travelers Station', kind: 'station' },
   'enchant-temple': { name: 'Enchant Temple', kind: 'temple', line: 'Permanent imbuing, by twin hands.' },
-  'grand-exchange': { name: 'The Grand Exchange', kind: 'exchange', line: 'The trade at the centre of the capital.' },
+  // M228 (canon world/gates.md 11-27): the Grand Exchange is at LINGSTON in the Wilds, never the Citadel: no Citadel door.
   // THE SMOKEHOUSE (RULED 11-17, world/cuisine.md): farmed meat by the bundle, one name across the continent's towns. It has
   // no facade in the town kit: like a runesmith it takes a plain building near the town's heart (doorsOf). Stock: ather/cooking.ts.
   smokehouse: { name: 'The Smokehouse', kind: 'smokehouse', line: 'Farmed meat by the bundle, smoked and wrapped for the road.' },
@@ -125,7 +125,7 @@ function doorsOf(R: Region, townId: string): Door[] {
   // placement; Alex can pick another.
   if (i >= 0 && townId === 'citadel') {
     const plan = cachedPlan(R, i), taken = new Set(out.map(d => d.b))
-    const ge = plan.buildings.find(x => x.front === 'grand-exchange')
+    const ge = plan.buildings.find(x => x.front === 'citadel-hall')   // M228: the square's civic hall (the old GE building)
     const free = plan.buildings.filter(x => !x.front && !taken.has(x))
     if (ge && free.length) {
       const b = free.sort((p, q) => Math.hypot(p.x - ge.x, p.z - ge.z) - Math.hypot(q.x - ge.x, q.z - ge.z))[0]

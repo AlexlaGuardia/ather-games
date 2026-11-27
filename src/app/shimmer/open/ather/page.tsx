@@ -76,6 +76,10 @@ import { OpenSocial } from '../shared/play-together'
 import { ClusterPanel, useCluster } from './cluster-panel'
 import { clusterGround, mateWalls, mateAt, inMiddle, onPath, onMeadow } from './cluster'
 import { WildsScene } from './wilds-scene'
+import { LingstonHall } from './lingston-hall'   // M228 s1: the Grand Exchange's trade hall (stand-in spot)
+import { LINGSTON, LINGSTON_NAME, EXCHANGE_NAME, attendantAt, attendantSpots, onLingston } from './lingston'
+import { ExchangeHallPanel } from './exchange-hall-panel'
+import { HALL_TALK } from './exchange-hall-lines'
 import { FoldMap, GregPanel, LANDING, type Dest } from './panels'
 import { gregTalk } from './greg-talk'
 import { tutStart, tutNode, grimoireGift, pedestalOwed, type TutCursor } from './glade-greg-talk'   // M68 s2 (+ M123 s1 pedestalOwed)
@@ -242,7 +246,7 @@ type Spawn = { x: number; z: number; yaw: number }
 /** the Wilds' safe ground round the arrival: where the Glade's green stood until M67 s1b-2 (30.75 m north of Greg's waymark) */
 const WILDS_SAFE = { x: GREG_WAYMARK.x, z: GREG_WAYMARK.z - 30.75, r: 50 }
 const gregAt = gregSpot()   // at load only (gregLive's first frame); M153 s1c-1: anything later asks gregSpot(). BETA M30 part 2: where Gregory sits (Moonwell Glade); the plot keeps only its old anchor numbers (plot.ts GREG)
-type Panel = null | { kind: 'map'; view: 'ather' | 'athernyx'; travel: boolean } | { kind: 'greg' } | { kind: 'talk'; step: number } | { kind: 'pack'; tab: PackTab } | { kind: 'cluster' } | { kind: 'work'; near: WorkNear } | { kind: 'folk'; s: Settlement } | { kind: 'fennel'; page: number } | { kind: 'brew'; station: AlcStation } | { kind: 'friend'; c: FriendCursor } | { kind: 'gfennel'; c: FennelCursor } | { kind: 'idlemog'; c: { id: string; screen: IdleScreen } } | { kind: 'spirit'; c: SpiritTalkState } | { kind: 'shop'; id: string } | { kind: 'settler'; c: SettlerCursor | AngelicaCursor } | { kind: 'adesk' } | { kind: 'chordstone' }
+type Panel = null | { kind: 'map'; view: 'ather' | 'athernyx'; travel: boolean } | { kind: 'greg' } | { kind: 'talk'; step: number } | { kind: 'pack'; tab: PackTab } | { kind: 'cluster' } | { kind: 'work'; near: WorkNear } | { kind: 'folk'; s: Settlement } | { kind: 'fennel'; page: number } | { kind: 'brew'; station: AlcStation } | { kind: 'friend'; c: FriendCursor } | { kind: 'gfennel'; c: FennelCursor } | { kind: 'idlemog'; c: { id: string; screen: IdleScreen } } | { kind: 'spirit'; c: SpiritTalkState } | { kind: 'shop'; id: string } | { kind: 'settler'; c: SettlerCursor | AngelicaCursor } | { kind: 'adesk' } | { kind: 'chordstone' } | { kind: 'hall'; i: number } | { kind: 'exchange'; tab: 'offers' | 'search' | 'mine' }
 type Near = null | { kind: 'gate' } | { kind: 'greg' } | { kind: 'friend'; f: GardenFriend } | { kind: 'fennel' } | { kind: 'gfennel' } | { kind: 'idlemog'; id: string; name: string } | { kind: 'anemonyx' } | { kind: 'work'; near: WorkNear } | { kind: 'waymark'; w: Waymark; own: boolean } | { kind: 'folk'; s: Settlement; id?: string } | { kind: 'spirit'; id: string; name: string } | { kind: 'zone'; u: ZoneUse } | { kind: 'settler'; id: SettlerId; name: string } | { kind: 'adesk' } | { kind: 'chordstone' }
 
 // ★ held until the save owner is known (shared/owner-ready.tsx: the 11-18 'rooms vanished on refresh' fix)
@@ -1049,6 +1053,7 @@ function AtherSliceGame() {
         : n?.kind === 'folk' ? (n.id && moglinPrompt(n.id)) || `E · talk to the folk of ${n.s.name}`
         : n?.kind === 'zone' ? zonePrompt(n.u)   // M114 s2
         : atFairDoor(lc.px, lc.pz) ? 'E · the Thistledown Fair'
+        : zone.kind === 'wilds' && attendantAt(lc.px, lc.pz) >= 0 ? `E · ${HALL_TALK.name}`   // M228 s1
         : rinPrompt() ?? (cAimRef.current.crystal && cAimRef.current.dist < aimRef.current.dist ? crystalPrompt() : treePrompt())
       setPrompt(p)
       let where = 'your plot'
@@ -1063,8 +1068,9 @@ function AtherSliceGame() {
         if (nw) {
           const st = settlementAt(nw, lc.px, lc.pz), fr = nearFair(nw, lc.px, lc.pz)
           const camp = !st && !fr && Math.hypot(lc.px - BURR_CAMP.x, lc.pz - BURR_CAMP.z) < BURR_CAMP.r * 2   // M112 s2: the Burrfolk camp
-          const place = st ? st.name : fr ? FAIR_NAME : camp ? CAMP_LABEL : null
-          if (place && place !== placeRef.current) hudSay(st ? `${st.name} · a free Moglin settlement` : fr ? `${FAIR_NAME} · this season's pitch` : CAMP_LABEL, 'zone')
+          const ling = !st && !fr && !camp && onLingston(lc.px, lc.pz)   // M228 s1
+          const place = st ? st.name : fr ? FAIR_NAME : camp ? CAMP_LABEL : ling ? LINGSTON_NAME : null
+          if (place && place !== placeRef.current) hudSay(st ? `${st.name} · a free Moglin settlement` : fr ? `${FAIR_NAME} · this season's pitch` : ling ? `${LINGSTON_NAME} · ${EXCHANGE_NAME}` : CAMP_LABEL, 'zone')
           placeRef.current = place
           if (place) where = st ? `${st.name} · free Moglins` : place
         }
@@ -1466,6 +1472,7 @@ function AtherSliceGame() {
           ...(standing ? [...standing.settlements].sort((a, b) => Math.hypot(a.x - pos.current.x, a.z - pos.current.z) - Math.hypot(b.x - pos.current.x, b.z - pos.current.z)).slice(0, 4)
             .map(st => ({ x: st.x, z: st.z, color: '#d9c39a', title: st.name })) : []),
           ...(net?.fair ? [{ x: net.fair.x, z: net.fair.z, color: '#b37fd6', title: FAIR_NAME }] : []),
+          { x: LINGSTON.x, z: LINGSTON.z, color: '#e2b552', title: `${LINGSTON_NAME} · ${EXCHANGE_NAME}` },   // M228 s1
           ...waymarks.filter(w => ww?.byName.has(w.tile)).map(w => { const o = ww!.offsetOf(w.tile); return { x: w.x + o.x, z: w.z + o.z, color: '#6fd3c4', title: 'your waymark' } }),
         ]
     marksRef.current = [...marksRef.current, ...questMarks(zone.kind === 'plot' ? 'ather' : zone.kind)]   // the journal's waymarks (pack.tsx); M67 s1b-2: the Glade has its own (the pool, Greg)
@@ -1642,6 +1649,10 @@ function AtherSliceGame() {
   }), [settlerC, tut])
   const settlerSpeaker = settlerC ? (settlerC.mode === 'bark' ? speakerOf(settlerC.script[0]) : settlerAt(settlerC.who)) : null
   const settlerHead = settlerSpeaker && zone.kind === 'wilds' && ww ? { x: settlerSpeaker.x, y: ww.heightAt(settlerSpeaker.x, settlerSpeaker.z) + MOGLIN_HEIGHT.chibi, z: settlerSpeaker.z } : null
+  const hallGround = useCallback((x: number, z: number) => (ww ? ww.heightAt(x, z) : 0), [ww])   // M228 s1: stable, the hall lays its paving once
+  const hallNode = useMemo<TalkNode>(() => ({ line: HALL_TALK.hello, options: [   // M228 s1: an attendant's answers (one node: TalkChoices keeps its pick)
+    { label: HALL_TALK.offers, pick: () => setPanel({ kind: 'exchange', tab: 'offers' }) }, { label: HALL_TALK.search, pick: () => setPanel({ kind: 'exchange', tab: 'search' }) },
+    { label: HALL_TALK.mine, pick: () => setPanel({ kind: 'exchange', tab: 'mine' }) }, { label: HALL_TALK.bye, pick: () => setPanel(null) }] }), [])
   const [ledger, setLedger] = useLedger()   // M114 s2: a Shop zone's panel buys with the keeper's purse (the continent's own hook)
   const gFennel = useGladeFennel(panel?.kind === 'gfennel' ? panel.c : null, c => setPanel(c ? { kind: 'gfennel', c } : null), () => setPanel({ kind: 'folk', s: GLADE }), gladeZoneGround)   // M68 s3b
   const spiritTalk = useSpiritTalk(panel?.kind === 'spirit' ? panel.c : null, useCallback((c: SpiritTalkState | null) => setPanel(c ? { kind: 'spirit', c } : null), []), hudSize === 'phone')   // M109 s1
@@ -1795,6 +1806,7 @@ function AtherSliceGame() {
       if (e.code === 'KeyE' && !n && atFairDoor(pos.current.x, pos.current.z)) {
         hudSay(`${FAIR_NAME} · the troupe is still pitching. The season's games, contests and market open soon.`, 'info', 6); return
       }
+      if (e.code === 'KeyE' && !n && zone.kind === 'wilds' && attendantAt(pos.current.x, pos.current.z) >= 0) { setPanel({ kind: 'hall', i: attendantAt(pos.current.x, pos.current.z) }); return }   // M228 s1
       if (e.code === 'KeyE' && n) {
         if (n.kind === 'greg') openGreg()
         else if (n.kind === 'friend') openFriend(n.f)
@@ -1903,6 +1915,8 @@ function AtherSliceGame() {
         {zone.kind === 'wilds' && ww && standing && <Settlements net={standing} loaded={(x, z) => ww.tileAtPoint(x, z) ? ww.heightAt(x, z) : null} />}
         {zone.kind === 'wilds' && ww && <FirstSettlement loaded={(x, z) => ww.tileAtPoint(x, z) ? ww.heightAt(x, z) : null} />}   {/* M70 s1 */}
         {zone.kind === 'wilds' && ww && net?.fair && ww.tileAtPoint(net.fair.x, net.fair.z) && <BigTop fair={net.fair} y={ww.heightAt(net.fair.x, net.fair.z)} />}
+        {zone.kind === 'wilds' && ww && ww.tileAtPoint(LINGSTON.x, LINGSTON.z) && <LingstonHall ground={hallGround} />}   {/* M228 s1 */}
+        {panel?.kind === 'hall' && ww && (() => { const a = attendantSpots()[panel.i]; return <TalkBubble at={[a.x, ww.heightAt(a.x, a.z) + 1.7, a.z]} name={HALL_TALK.name} line={HALL_TALK.hello} /> })()}
         {terrain && (
           <CombatLayer spirits={spiritFight} T={terrain} locked={locked} frozen={frozen} active={zone.kind === 'wilds' && fade === 0}
             groundAt={ww ? (x: number, z: number) => biomeGround(ww.biomeAt(x, z)) : undefined}
@@ -1993,6 +2007,8 @@ function AtherSliceGame() {
       {spiritTalk.panel}
       {panel?.kind === 'greg' && <GregPanel garden={{ ...garden, pages: pagesNow }} onBuy={buy} onClose={() => setPanel(null)} />}
       {panel?.kind === 'cluster' && <ClusterPanel c={cl} onClose={() => setPanel(null)} />}
+      {panel?.kind === 'hall' && <TalkChoices node={hallNode} phone={hudSize === 'phone'} />}   {/* M228 s1 */}
+      {panel?.kind === 'exchange' && <ExchangeHallPanel ledger={ledger} setLedger={setLedger} startTab={panel.tab} onClose={() => setPanel(null)} />}
       {panel?.kind === 'shop' && <ShopPanel id={panel.id} ledger={ledger} setLedger={setLedger} onClose={() => setPanel(null)} isTouch={isTouch} />}   {/* M114 s2: a Shop zone */}
       {panel?.kind === 'brew' && <BrewingPanel station={panel.station} onClose={() => setPanel(null)} />}
       {panel?.kind === 'chordstone' && <ChordstonePanel cluster={cl} onClose={() => setPanel(null)} />}   {/* M188 s2 */}

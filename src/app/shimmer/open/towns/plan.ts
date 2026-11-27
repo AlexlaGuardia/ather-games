@@ -249,7 +249,7 @@ export function planTown(R: Region, p: RegionPlace, pi: number, opts?: { r?: num
     const w = 36, d = 26, off = sq.r + 3 + d / 2
     const ex = { x: sq.x + Math.cos(a) * off, z: sq.z + Math.sin(a) * off, yaw: into, w, d }
     const g = fits(ex, 1, undefined, true)
-    if (g) keep({ ...ex, floors: 3, y0: g.y0, y1: g.y1, kind: 'hall', rim: 0, v: 0.5, core: true, front: 'grand-exchange' })
+    if (g) keep({ ...ex, floors: 3, y0: g.y0, y1: g.y1, kind: 'hall', rim: 0, v: 0.5, core: true, front: 'citadel-hall' })   // M228: the Grand Exchange is Lingston's (gates.md 11-27); the square keeps its civic hall, no door
     wallR = sq.r + 3.5 * (big ? 30 : 32)
     plan.wall = { x: sq.x, z: sq.z, r: wallR }
     // ── THE ENCHANT TEMPLE (Magii + Alex 11-16, world/schools.md › Enchant Temple: "In Year 1672 the Enchant Temple stands

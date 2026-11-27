@@ -207,14 +207,14 @@ export const FURNITURE: Readonly<Record<string, PieceDef>> = {
   // ── UNIQUE pieces, Nyx-side (Alex 11-17: "unique pieces are SOLD FOR MARKS by the carpenter + other Nyx-side shops";
   //    Magii c52ba1c: which shops stock decor is ours, no new names). Made of the continent's canon goods (game/economy.md:
   //    Spine ore + stone, ruin salvage, station mana cells), so each says where it came from. Rune Hold's Smithy is the
-  //    first shop a keeper reaches; the Citadel's Grand Exchange is the capital's dearer stock. Prices on the ladder's
+  //    first shop a keeper reaches; the Co.'s stock at the Grand Exchange in Lingston (moved from the Citadel, M228) is the dearer stock. Prices on the ladder's
   //    scale (economy/prices.ts: a contract run pays ~2-8k): a lantern is a run, a mana-cell lamp is a week.
   iron_lantern: { name: 'Iron Lantern', blurb: 'Smith-wrought iron on its own post. It throws a warm light across the plot.', recipe: [], sold: { at: 'smithy', price: 1_200 }, w: 0.4, d: 0.4, h: 1.9, solid: false, wood: 'iron', glow: '#ffcf7a' },
   iron_brazier: { name: 'Brazier', blurb: 'A bowl of hammered iron on three legs, warm to stand by.', recipe: [], sold: { at: 'smithy', price: 2_500 }, w: 0.8, d: 0.8, h: 1.0, solid: true, wood: 'iron', glow: '#ff9a4a' },
   weathervane: { name: 'Weathervane', blurb: 'An iron arrow on a tall pole. It points at the wind, wherever that is.', recipe: [], sold: { at: 'smithy', price: 4_000 }, w: 0.4, d: 0.4, h: 3.2, solid: false, wood: 'iron' },
-  spinestone_birdbath: { name: 'Spinestone Bowl', blurb: 'Pale Spine stone, cut into a shallow bowl and set on a short pillar.', recipe: [], sold: { at: 'grand-exchange', price: 6_000 }, w: 0.8, d: 0.8, h: 0.9, solid: true, wood: 'stone' },
-  ruin_column: { name: 'Salvaged Column', blurb: 'A carved column out of an old ruin. Nobody remembers what it held up.', recipe: [], sold: { at: 'grand-exchange', price: 9_000 }, w: 0.7, d: 0.7, h: 2.6, solid: true, wood: 'stone' },
-  mana_cell_lamp: { name: 'Mana-cell Lamp', blurb: 'A charged mana cell in a brass cage. It hums, very quietly.', recipe: [], sold: { at: 'grand-exchange', price: 15_000 }, w: 0.5, d: 0.5, h: 1.6, solid: false, wood: 'iron', glow: '#8fe3ff' },
+  spinestone_birdbath: { name: 'Spinestone Bowl', blurb: 'Pale Spine stone, cut into a shallow bowl and set on a short pillar.', recipe: [], sold: { at: 'lingston', price: 6_000 }, w: 0.8, d: 0.8, h: 0.9, solid: true, wood: 'stone' },
+  ruin_column: { name: 'Salvaged Column', blurb: 'A carved column out of an old ruin. Nobody remembers what it held up.', recipe: [], sold: { at: 'lingston', price: 9_000 }, w: 0.7, d: 0.7, h: 2.6, solid: true, wood: 'stone' },
+  mana_cell_lamp: { name: 'Mana-cell Lamp', blurb: 'A charged mana cell in a brass cage. It hums, very quietly.', recipe: [], sold: { at: 'lingston', price: 15_000 }, w: 0.5, d: 0.5, h: 1.6, solid: false, wood: 'iron', glow: '#8fe3ff' },
   // ── THE WATER TAP + its tanks (canon RULED 11-15, world/mana-tech.md › The water tap; ather/water.ts holds the rules).
   //    Mortal mana-tech bought Nyx-side, set in the fold: the only water a garden has. Plain nouns (Magii 11-18, athernyx
   //    2bfa6b2). Sold at Rune Hold's Smithy, the first shop a keeper reaches. Blurbs = @lark's 11-18 drafts, awaiting Alex sign-off.

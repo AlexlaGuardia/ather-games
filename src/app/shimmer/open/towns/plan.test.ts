@@ -68,7 +68,7 @@ const fronts = new Set(rh.buildings.map(b => b.front).filter(Boolean))
 for (const f of ['kindled-mug', 'forgelight-inn', 'bookstore', 'smithy', 'spirit-corner', 'station']) ok(fronts.has(f), `Rune Hold's core has ${f}`)
 ok(rh.buildings.filter(b => b.core).length === 10, `Rune Hold's core places all 10 grid buildings: ${rh.buildings.filter(b => b.core).length}`)
 // the Enchant Temple stands in the CITADEL in 1672 (Magii + Alex 11-16), on the square by the Grand Exchange, not in Rune Hold
-const citT = byId.get('citadel')!, temple = citT.buildings.find(b => b.front === 'enchant-temple'), exchT = citT.buildings.find(b => b.front === 'grand-exchange')
+const citT = byId.get('citadel')!, temple = citT.buildings.find(b => b.front === 'enchant-temple'), exchT = citT.buildings.find(b => b.front === 'citadel-hall')   // M228: the old GE building, now the square's civic hall
 ok(!!temple && !!exchT && Math.hypot(temple.x - exchT.x, temple.z - exchT.z) < 90, `the Enchant Temple stands on the Citadel square by the Exchange (${temple && exchT ? Math.hypot(temple.x - exchT.x, temple.z - exchT.z).toFixed(0) : '-'} m)`)
 ok(!!temple && !!citT.wall && Math.hypot(temple.x - citT.wall.x, temple.z - citT.wall.z) < citT.wall.r - 5, 'the Enchant Temple stands inside the heritage wall')
 ok(!rh.buildings.some(b => b.front === 'enchant-temple'), 'Rune Hold no longer holds the Enchant Temple')
@@ -165,9 +165,11 @@ ok(badBoard === 0, `name boards on the road or in water: ${badBoard}`)
 // ── Citadel (geography.md › THE TOWNS IN 1672): the Grand Exchange stands on the square, the heritage wall rings the
 // old city, and no building stands in the wall's band (streets pass through its gaps; buildings never straddle it)
 const cit = byId.get('citadel')!
-const exch = cit.buildings.find(b => b.front === 'grand-exchange')
+const exch = cit.buildings.find(b => b.front === 'citadel-hall')
 const csq = meta.network!.junctions.find(j => j.kind === 'square' && j.place === 'citadel')!
-ok(!!exch && Math.hypot(exch.x - csq.x, exch.z - csq.z) < csq.r + 30, 'the Grand Exchange stands on the Citadel square')
+ok(!!exch && Math.hypot(exch.x - csq.x, exch.z - csq.z) < csq.r + 30, 'the civic hall stands on the Citadel square')
+// M228 (canon world/gates.md 11-27): the Grand Exchange is Lingston's, NEVER the Citadel's: no Citadel building carries it
+ok(!meta.places.some(p => byId.get(p.id)?.buildings.some(b => b.front === 'grand-exchange')), 'no continent town carries a Grand Exchange front')
 ok(!!cit.wall && cit.wall.r > 100, `Citadel's heritage wall rings the old city (r ${cit.wall?.r})`)
 let straddle = 0
 if (cit.wall) for (const b of cit.buildings) for (const [x, z] of corners(b)) if (Math.abs(Math.hypot(x - cit.wall.x, z - cit.wall.z) - cit.wall.r) < 3) straddle++

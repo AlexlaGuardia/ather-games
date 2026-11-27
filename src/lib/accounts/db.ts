@@ -185,6 +185,17 @@ const SCHEMA = `
       PRIMARY KEY (brewing_id, step),
       UNIQUE (brewing_id, user_id)
     );
+    -- BETA M228 s1: the Grand Exchange's ONE shared order book at Lingston (exchange.ts; rules: ather/exchange-rules.ts).
+    -- Goods only. An open order holds its goods / Marks in the keeper's own save until cancelled; s1 does not match orders.
+    CREATE TABLE IF NOT EXISTS exchange_orders (
+      order_id   TEXT PRIMARY KEY,
+      user_id    TEXT NOT NULL,
+      side       TEXT NOT NULL,
+      item       TEXT NOT NULL,
+      n          INTEGER NOT NULL,
+      price      INTEGER NOT NULL,
+      created_at INTEGER NOT NULL
+    );
 `
 
 /** Our own stable id — deliberately NOT the google sub, so a provider can change later. */
@@ -429,6 +440,7 @@ export function deleteAccount(user_id: string): boolean {
   d.prepare('DELETE FROM cluster_seen WHERE user_id = ?').run(user_id)
   d.prepare('DELETE FROM brewing_seats WHERE user_id = ? OR brewing_id IN (SELECT brewing_id FROM brewings WHERE host_id = ?)').run(user_id, user_id)
   d.prepare('DELETE FROM brewings WHERE host_id = ?').run(user_id)
+  d.prepare('DELETE FROM exchange_orders WHERE user_id = ?').run(user_id)
   d.prepare('DELETE FROM saves WHERE user_id = ?').run(user_id)
   const res = d.prepare('DELETE FROM accounts WHERE user_id = ?').run(user_id)
   return Number(res.changes) > 0
