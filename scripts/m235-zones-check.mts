@@ -29,6 +29,9 @@ import { GREG_WAYMARK } from '../src/app/shimmer/open/ather/waymarks'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games').replace(/\/$/, ''), out = flag('--out', '/tmp/m235'), DESK = process.argv.includes('--desk')
 mkdirSync(out, { recursive: true })
+// the phone tap card closes on a tap; the no-touch "Click to play" card needs pointer lock, which headless refuses: it is pointer-events
+// none and sits under the panels, so failing to close it is not a failure of the check
+const card = async (p: any) => { try { await dismissStartCard(p, 5000) } catch { /* see above */ } }
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 let fails = 0
 const ok = (c: boolean, m: string) => { console.log(`${c ? '✓' : '✗'} ${m}`); if (!c) fails++ }
@@ -50,7 +53,7 @@ async function page(seed?: Store) {
   const A = (fn: string, ...args: unknown[]) => p.evaluate((f: string, a: unknown[]) => (window as any).__ather?.[f]?.(...a), fn, args) as Promise<any>
   const SM = (fn: string, ...a: unknown[]) => p.evaluate((f: string, args: unknown[]) => { const s = (window as any).__spreadMap?.(); return s ? (typeof s[f] === 'function' ? s[f](...args) : s[f]) : null }, fn, a) as Promise<any>
   const store = (suffix: string) => p.evaluate((s: string) => { const k = Object.keys(localStorage).find(x => x.endsWith(s)); return k ? JSON.parse(localStorage.getItem(k) ?? 'null') : null }, suffix) as Promise<any>
-  const load = async () => { await p.goto(`${url}/shimmer/open/ather?hour=13`, { waitUntil: 'load', timeout: 240000 }); await p.waitForFunction(() => !!(window as any).__ather?.wm, { timeout: 240000 }); await sleep(3000); await dismissStartCard(p) }
+  const load = async () => { await p.goto(`${url}/shimmer/open/ather?hour=13`, { waitUntil: 'load', timeout: 240000 }); await p.waitForFunction(() => !!(window as any).__ather?.wm, { timeout: 240000 }); await sleep(3000); await card(p) }
   const toWilds = async () => { if ((await A('zone')) !== 'wilds') { await poll(async () => { if ((await A('zone')) === 'wilds') return true; await A('travel', { kind: 'waymark', w: GREG_WAYMARK }); await sleep(4000); return (await A('zone')) === 'wilds' }, 120000) } ; return poll(async () => !!(await SM('seen'))?.length, 60000) }
   return { p, A, SM, store, load, toWilds }
 }
@@ -70,7 +73,7 @@ try {
     const tap = async (src: string) => { const b = await p.evaluate((s: string) => { const rx = new RegExp(s, 'i'); let best: DOMRect | null = null, area = Infinity; for (const e of document.querySelectorAll<HTMLElement>('button, a, [role="button"], div, span')) { const t = (e.innerText ?? '').trim(); if (!t || !rx.test(t) || t.length > 40) continue; const r = e.getBoundingClientRect(); if (r.width && r.height && r.width * r.height < area) { area = r.width * r.height; best = r } } return best ? { x: best.x + best.width / 2, y: best.y + best.height / 2 } : null }, src); if (b) await p.mouse.click(b.x, b.y); return !!b }
     await p.goto(`${url}/shimmer/open/ather?hour=13`, { waitUntil: 'load', timeout: 240000 })
     await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 240000 })
-    await dismissStartCard(p)
+    await card(p)
     await poll(() => p.evaluate(() => !!document.querySelector('[data-panel="birth"]')), 90000)
     await tap('^BE BORN')
     await poll(() => p.evaluate(() => !!document.querySelector('[data-creator-done]')), 45000)
