@@ -12,7 +12,7 @@
 // with the current brush. Esc (the browser's own exit) frees the pointer. With `lockLook` off the old grammar is untouched:
 // left-drag sculpts where the pointer is, right-drag looks.
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import * as THREE from 'three'
 import { stepCam, lookCam, zoomCam, toggleTop, camOver, NO_KEYS, type Cam, type Keys } from './fly-cam'
@@ -171,6 +171,8 @@ function Lock({ camRef, hover, painting, pr, setLocked }: { camRef: React.Mutabl
   const { gl, camera, scene, raycaster } = useThree()
   const look = useCentre()
   const centreHit = useRef<() => { x: number; z: number } | null>(() => null)
+  const stroke = useRef<{ erase: boolean; last: { x: number; z: number } | null } | null>(null)   // M85 s2: a held scatter stroke
+  const onLand = useCallback((x: number, z: number) => Number.isFinite(pr.current.heightAt(x, z)), [pr])
   centreHit.current = () => {
     camera.updateMatrixWorld(); raycaster.setFromCamera(CENTRE, camera)
     const terrain: THREE.Object3D[] = []; scene.traverse(o => { if (o.userData?.terrain) terrain.push(o) })
@@ -183,6 +185,11 @@ function Lock({ camRef, hover, painting, pr, setLocked }: { camRef: React.Mutabl
     const change = () => { const l = isLocked(); setLocked(l); pr.current.onLock?.(l); if (!l) { hover.current = null; if (painting.current) { painting.current = false; pr.current.onEnd() } } }
     const down = (e: PointerEvent) => {
       const P = pr.current.placing ? pr.current.place : undefined   // M153: Place mode always locks (the crosshair is the hand)
+      if (P?.scatter && isLocked()) {   // M85 s2: the scatter brush: right paints, left / Shift / Alt + right erases; held = a stroke
+        if (e.button !== 0 && e.button !== 2) return
+        const to = centreHit.current(); const erase = e.button === 0 || e.shiftKey || e.altKey
+        stroke.current = { erase, last: to }; if (to) P.dab(to.x, to.z, erase, onLand); return
+      }
       if (P && isLocked()) { const c = look(); const to = aimed(c, P.hand); if (e.button === 2 && to) P.put(to.x, to.z); else if (e.button === 0 && c.id) P.pick(c.id); return }
       if (e.button !== 0 || (!pr.current.lockLook && !P)) return
       if (!isLocked()) { try { const r = el.requestPointerLock() as unknown; if (r && typeof (r as Promise<void>).catch === 'function') (r as Promise<void>).catch(() => {}) } catch { /* cooldown after an Esc */ } return }
@@ -192,9 +199,10 @@ function Lock({ camRef, hover, painting, pr, setLocked }: { camRef: React.Mutabl
     const move = (e: MouseEvent) => { if (isLocked() && camRef.current) camRef.current = lookCam(camRef.current, e.movementX, e.movementY) }
     // Esc frees: the browser does this itself for a real key; also here, so a synthetic Esc (a check, a remapped key) frees it too
     const esc = (e: KeyboardEvent) => { if (e.key === 'Escape' && isLocked()) document.exitPointerLock() }
-    el.addEventListener('pointerdown', down); document.addEventListener('mousemove', move); document.addEventListener('pointerlockchange', change); window.addEventListener('keydown', esc)
+    const up = () => { stroke.current = null }
+    el.addEventListener('pointerdown', down); document.addEventListener('pointerup', up); document.addEventListener('mousemove', move); document.addEventListener('pointerlockchange', change); window.addEventListener('keydown', esc)
     return () => {
-      el.removeEventListener('pointerdown', down); document.removeEventListener('mousemove', move); document.removeEventListener('pointerlockchange', change); window.removeEventListener('keydown', esc)
+      el.removeEventListener('pointerdown', down); document.removeEventListener('pointerup', up); document.removeEventListener('mousemove', move); document.removeEventListener('pointerlockchange', change); window.removeEventListener('keydown', esc)
       if (isLocked()) document.exitPointerLock()
     }
   }, [gl, camRef, hover, painting, pr, setLocked, look])
@@ -204,6 +212,9 @@ function Lock({ camRef, hover, painting, pr, setLocked }: { camRef: React.Mutabl
   useFrame(() => {
     if (document.pointerLockElement !== gl.domElement) return
     const p = centreHit.current(); hover.current = p
+    const st = stroke.current, P = pr.current.placing ? pr.current.place : undefined   // M85 s2: the stroke dabs again every half radius
+    if (st && P?.scatter && p && (!st.last || Math.hypot(p.x - st.last.x, p.z - st.last.z) >= P.scatter.radius * 0.5)) { st.last = p; P.dab(p.x, p.z, st.erase, onLand) }
+    else if (st && !P?.scatter) stroke.current = null
     if (p) { pr.current.onHover?.(p.x, p.z); if (painting.current) pr.current.onMove(p.x, p.z) }
   })
   // test hook: the terrain point under the crosshair right now

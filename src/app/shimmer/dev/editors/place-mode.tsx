@@ -19,6 +19,7 @@ import { BUILD_SUBS } from '../../open/ather/furniture'
 import { BuildIcon } from '../../open/ather/build-icon'   // M169
 import { SCENERY, SCENERY_BY, SCENERY_GROUPS, paletteOf, placeableOn, type SceneryMap, endSnap, floats, floatSpot, type Water, fenceTilt, isSolid, sceneryBoxes, sceneryPlaced, type PlacedProp } from '../../open/ather/scenery'
 import { SceneryView } from '../../open/ather/scenery-view'
+import { SCATTER_KINDS, SCATTER_DEFAULT_MIX, SCATTER_MAX, DENSITY_STEPS, RADIUS_STEP, clampRadius, eraseScatter, paintScatter, scatterCount } from '../../world/scatter-brush'   // M85 s2
 import { tiltMatrix } from '../../open/ather/scenery-filler'
 import { GladeLots, useGladeStanding } from '../../open/ather/glade-lots-view'
 import { GladeHome } from '../../open/ather/glade-home-view'
@@ -47,6 +48,9 @@ export interface PlaceApi {
   setTarget: (id: string | null) => void
   /** M168 s2: the draft's water, as drawn */
   water: Water
+  /** M85 s2: the scatter brush is on (K): right paints, left / Shift / Alt + right erases, held = a stroke; null = placing */
+  scatter: { radius: number } | null
+  dab: (x: number, z: number, erase: boolean, ok?: (x: number, z: number) => boolean) => void
 }
 const SLOTS = 9
 const FIRST: (string | null)[] = [...['Trees', 'Bushes', 'Crystals', 'Props', 'Furniture'].flatMap(g => SCENERY.filter(s => s.group === g).slice(0, 2).map(s => s.k as string | null))].slice(0, SLOTS)
@@ -73,10 +77,12 @@ export function usePlace(on: boolean, props: readonly Prop[], setProps: (ps: Pro
   const [slot, setSlot] = useState(0), [snap, setSnap] = useState<number>(0.5), [turn, setTurn] = useState<number>(45)
   const [inv, setInv] = useState(false), [moving, setMoving] = useState<string | null>(null), [target, setTarget] = useState<string | null>(null)
   const [held, setHeld] = useState<Omit<Hand, 'k'>>({ q: 0, s: 1 })
+  // M85 s2: the scatter brush (K): its own dials, its mix of kinds
+  const [scat, setScat] = useState(false), [sRadius, setSRadius] = useState(3), [sDensity, setSDensity] = useState(0.5), [sKinds, setSKinds] = useState<string[]>([...SCATTER_DEFAULT_MIX])
   const mp = moving ? props.find(p => p.id === moving) ?? personPiece(moving) : null
-  const sk = slots[slot], k = mp ? mp.k : sk && placeableOn(map, sk) ? sk : null   // M85: a Glade-only kind in a slot is an empty slot on the Wilds
+  const sk = slots[slot], k = scat ? null : mp ? mp.k : sk && placeableOn(map, sk) ? sk : null   // M85: a Glade-only kind in a slot is an empty slot on the Wilds
   const hand = useMemo<Hand | null>(() => (k ? { k, ...held, ...(isNode({ k }) || isRoom({ k }) || isStanding({ k }) ? { s: 1, solid: undefined } : {}) } : null), [k, held])
-  const S = useRef({ props, slots, slot, snap, turn, moving, target, held, hand, inv }); S.current = { props, slots, slot, snap, turn, moving, target, held, hand, inv }
+  const S = useRef({ props, slots, slot, snap, turn, moving, target, held, hand, inv, scat, sRadius, sDensity, sKinds }); S.current = { props, slots, slot, snap, turn, moving, target, held, hand, inv, scat, sRadius, sDensity, sKinds }
   const go = useRef({ setProps, say, water }); go.current = { setProps, say, water }
   const put = useCallback((x: number, z: number) => {
     const c = S.current; if (!c.hand) { go.current.say('this slot is empty: E opens the inventory'); return }
@@ -96,17 +102,33 @@ export function usePlace(on: boolean, props: readonly Prop[], setProps: (ps: Pro
     const p = c.props.find(q => q.id === id); if (!p || c.moving) return
     go.current.setProps(removeProp(c.props, id)); setSlots(s => s.map((v, i) => (i === c.slot ? p.k : v))); setHeld(handOf(p))
   }, [setSlots])
-  const wheel = useCallback((dy: number) => { const kk = S.current.hand?.k; setHeld(h => ({ ...h, s: scaleBy(h.s, dy, kk) })) }, [])   // M85: the outcrops scale to 10
+  // M85 s2: one dab of the brush (a held button dabs again as the crosshair moves: BuilderFly). The list is kept here too, so two dabs
+  // in one frame never hand out the same id before the editor's next render.
+  const dab = useCallback((x: number, z: number, erase: boolean, ok?: (x: number, z: number) => boolean) => {
+    const c = S.current
+    const n = erase ? eraseScatter(c.props, x, z, c.sRadius) : paintScatter(c.props, { x, z, radius: c.sRadius, density: c.sDensity, kinds: c.sKinds, seed: (Date.now() ^ Math.floor(Math.random() * 2 ** 30)) | 0, ok })
+    if (n !== c.props) { S.current = { ...c, props: n }; go.current.setProps(n) }
+    else if (!erase && !c.sKinds.length) go.current.say('the scatter mix is empty: 1-8 pick its kinds')
+    else if (!erase && scatterCount(c.props) >= SCATTER_MAX) go.current.say(`the map holds ${SCATTER_MAX} scattered pieces at most`)
+  }, [])
+  const wheel = useCallback((dy: number) => { if (S.current.scat) { setSRadius(r => clampRadius(r + (dy < 0 ? RADIUS_STEP : -RADIUS_STEP))); return } const kk = S.current.hand?.k; setHeld(h => ({ ...h, s: scaleBy(h.s, dy, kk) })) }, [])   // M85: the outcrops scale to 10
   const choose = useCallback((kk: string) => { setSlots(s => s.map((v, i) => (i === S.current.slot ? kk : v))); setHeld(h => ({ q: h.q, s: 1 })); setMoving(null) }, [setSlots])
   // a piece undone / rolled back away while it is being moved: let go of it
   useEffect(() => { if (moving && !mp) { setMoving(null); setHeld({ q: 0, s: 1 }) } }, [moving, mp])
-  useEffect(() => { if (!on) { setInv(false); setMoving(null) } }, [on])
+  useEffect(() => { if (!on) { setInv(false); setMoving(null); setScat(false) } }, [on])
   useEffect(() => {
     if (!on) return
     const key = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement | null
       if ((el && /^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName)) || e.ctrlKey || e.metaKey || e.repeat) return
       const c = S.current
+      if (e.code === 'KeyK') { setScat(v => !v); setMoving(null); return }   // M85 s2
+      if (c.scat) {   // the brush's own keys: 1-8 = a kind in or out of the mix, , . = density
+        const i = /^Digit[1-8]$/.test(e.code) ? +e.code.slice(5) - 1 : -1
+        if (i >= 0 && SCATTER_KINDS[i]) { const kk = SCATTER_KINDS[i]; setSKinds(a => (a.includes(kk) ? a.filter(v => v !== kk) : [...a, kk])) }
+        else if (e.code === 'Comma' || e.code === 'Period') { const a = DENSITY_STEPS as readonly number[], j = a.indexOf(c.sDensity); setSDensity(a[Math.max(0, Math.min(a.length - 1, (j < 0 ? 2 : j) + (e.code === 'Period' ? 1 : -1)))]) }
+        if (i >= 0 || e.code === 'Comma' || e.code === 'Period') return
+      }
       if (/^Digit[1-9]$/.test(e.code)) { setSlot(+e.code.slice(5) - 1); setMoving(null); setHeld({ q: c.held.q, s: 1 }) }
       else if (e.code === 'KeyE') { setInv(v => { if (!v && document.pointerLockElement) document.exitPointerLock(); return !v }) }
       else if (e.code === 'KeyG') setSnap(v => nextOf(PROP_SNAPS as readonly number[], v))
@@ -128,8 +150,10 @@ export function usePlace(on: boolean, props: readonly Prop[], setProps: (ps: Pro
     }
     window.addEventListener('keydown', key); return () => window.removeEventListener('keydown', key)
   }, [on])
-  const api = useMemo<PlaceApi>(() => ({ props, hand, moving, snap, put, pick, wheel, setTarget, water }), [props, hand, moving, snap, put, pick, wheel, water])
-  return { api, slots, slot, setSlot, snap, turn, inv, setInv, choose, target, held, hand, map }
+  const scatter = useMemo(() => (scat ? { radius: sRadius } : null), [scat, sRadius])
+  const api = useMemo<PlaceApi>(() => ({ props, hand, moving, snap, put, pick, wheel, setTarget, water, scatter, dab }), [props, hand, moving, snap, put, pick, wheel, water, scatter, dab])
+  const toggleKind = useCallback((kk: string) => setSKinds(a => (a.includes(kk) ? a.filter(v => v !== kk) : [...a, kk])), [])
+  return { api, slots, slot, setSlot, snap, turn, inv, setInv, choose, target, held, hand, map, scat, setScat, sRadius, sDensity, setSDensity, sKinds, toggleKind }
 }
 
 // ── in the Canvas ──
@@ -150,7 +174,7 @@ export function useCentre() {
 export const aimed = (c: ReturnType<ReturnType<typeof useCentre>> | null, hand: Pick<Hand, 'k'> | null | undefined) => (c ? (hand && floats(hand) && c.water) || c.ground : null)
 /** the placed pieces of the draft, the piece in hand (a ghost on the crosshair) and the frame round the piece under it */
 export function PlaceLayer({ api, active, heightAt, rev, label, solids }: { solids?: readonly Box[]; api: PlaceApi | null; active: boolean; heightAt: Ground; rev: number; label: (text: string, color: string) => { tex: THREE.CanvasTexture; aspect: number } }) {
-  const centre = useCentre(), ghost = useRef<THREE.Group>(null), lean = useRef<THREE.Group>(null), frame = useRef<THREE.LineSegments>(null), last = useRef<string | null>(null)
+  const centre = useCentre(), ring = useRef<THREE.Mesh>(null), ghost = useRef<THREE.Group>(null), lean = useRef<THREE.Group>(null), frame = useRef<THREE.LineSegments>(null), last = useRef<string | null>(null)
   const items = useMemo(() => (api ? sceneryPlaced(api.props.filter(p => p.id !== api.moving), padGround(api.props, heightAt), heightAt, api.water) : []), [api, heightAt, rev])   // eslint-disable-line react-hooks/exhaustive-deps
   const gk = active ? api?.hand?.k : undefined
   const ghostItems = useMemo<PlacedProp[]>(() => (gk ? [{ id: 'ghost', k: gk, x: 0, y: 0, z: 0, q: 0, s: 1 }] : []), [gk])
@@ -160,6 +184,8 @@ export function PlaceLayer({ api, active, heightAt, rev, label, solids }: { soli
   useFrame(() => {
     const on = active && !!api && document.pointerLockElement === gl.domElement, c = on ? centre() : null
     if (api && (c?.id ?? null) !== last.current) { last.current = c?.id ?? null; api.setTarget(last.current) }
+    const rg = ring.current, sr = api?.scatter?.radius   // M85 s2: the brush's ring on the ground under the crosshair
+    if (rg) { const at = sr && c?.ground ? c.ground : null, y = at ? heightAt(at.x, at.z) : NaN; rg.visible = !!at && Number.isFinite(y); if (rg.visible && at) { rg.position.set(at.x, y + 0.15, at.z); rg.scale.setScalar(sr!) } }
     const g = ghost.current
     if (g) {
       const h = api?.hand, to = aimed(c, h), at = to && h ? spotFor(api!.props, h, api!.moving, api!.snap, to.x, to.z) : null, x = at?.x ?? 0, z = at?.z ?? 0, r = at && h && isRoom(h) ? roomPad({ id: 'ghost', k: h.k, x, z, q: h.q, s: 1 }) : null, tl = at && h ? fenceTilt({ k: h.k, x, z, q: h.q, s: h.s }, heightAt) : null, y = at && h && floats(h) ? floatSpot({ k: h.k, x, z, s: h.s }, api!.water) ?? NaN : r ? roomTop(r) : tl ? tl.y : at ? heightAt(x, z) : NaN
@@ -184,6 +210,7 @@ export function PlaceLayer({ api, active, heightAt, rev, label, solids }: { soli
       <sprite position-y={K.h + 0.6} scale={[0.55 * tags[i].aspect, 0.55, 1]} renderOrder={4} raycast={() => {}}><spriteMaterial map={tags[i].tex} depthTest={false} /></sprite>
       <mesh rotation-x={-Math.PI / 2} position-y={0.12} raycast={() => {}}><ringGeometry args={[1.25, 1.5, 32]} /><meshBasicMaterial color="#8ef0c0" transparent opacity={0.85} depthWrite={false} /></mesh>
     </group> })}
+    <mesh ref={ring} rotation-x={-Math.PI / 2} visible={false} renderOrder={5} raycast={() => {}} name="scatter-ring"><ringGeometry args={[0.96, 1, 64]} /><meshBasicMaterial color="#fbbf24" depthTest={false} transparent opacity={0.9} /></mesh>
     <lineSegments ref={frame} geometry={edges} visible={false} renderOrder={5}><lineBasicMaterial color="#fbbf24" depthTest={false} transparent /></lineSegments>
   </group>
 }
@@ -285,7 +312,7 @@ export function GladeFixed({ heightAt, rev = 0, place, trees = GLADE_FRAME.meado
 // ── the screen: hotbar, status line, inventory ──
 const COLOR: Record<string, string> = { Nodes: '#8ef0c0', Rooms: '#d8a85c', Trees: '#4f9a5f', Bushes: '#8fb35a', Plants: '#a9c763', 'Rocks and logs': '#8b857b', 'Fences and signs': '#a5834f', Crystals: '#9a8ae0', Props: '#b98a4e', Build: '#c9a36a', Furniture: '#7fa6c4' }
 export function PlaceHud({ place, locked, count, status }: { place: ReturnType<typeof usePlace>; locked: boolean; count: number; status?: string }) {
-  const { slots, slot, setSlot, snap, turn, inv, setInv, choose, held, hand, api, target, map } = place
+  const { slots, slot, setSlot, snap, turn, inv, setInv, choose, held, hand, api, target, map, scat, setScat, sRadius, sDensity, sKinds, toggleKind } = place
   const PAL = paletteOf(map)   // M85 s1
   const dry = useMemo(() => api.props.filter(p => floats(p) && api.water(p.x, p.z) === null).length, [api.props, api.water])
   const tp = target ? api.props.find(p => p.id === target) ?? personPiece(target) : null, name = (k: string | null | undefined) => (k && isStanding({ k }) ? personName(k) : k ? SCENERY_BY.get(k)?.label ?? k : 'empty')
@@ -307,15 +334,25 @@ export function PlaceHud({ place, locked, count, status }: { place: ReturnType<t
       </div>
     </div>}
     <div className="absolute left-1/2 bottom-2 -translate-x-1/2 z-[9] flex flex-col items-center gap-1 pointer-events-none w-[96%]" data-testid="place-hud">
-      <div className="rounded bg-black/70 px-2 py-1 text-[11px] font-mono text-white/80 tabular-nums text-center">
+      {scat && <div className="rounded bg-black/70 px-2 py-1 text-[11px] font-mono text-white/80 tabular-nums text-center" data-testid="scatter-hud">
+        Scatter · radius {sRadius} m (wheel) · density {sDensity}/m² (, .) · right paints · left, Shift or Alt + right erases · {scatterCount(api.props)}/{SCATTER_MAX} · K back to placing
+        {status && <span className="block text-amber-200">{status}</span>}
+        {!locked && <span className="block text-white/55">click the view to paint · Esc frees the mouse</span>}
+      </div>}
+      {scat && <div className="flex flex-wrap justify-center gap-1 pointer-events-auto w-full max-w-[720px]">{SCATTER_KINDS.map((kk, i) =>
+        <button key={kk} onClick={() => toggleKind(kk)} data-testid={`scatter-kind-${kk}`} className={`min-w-0 h-9 rounded border text-[10px] leading-tight px-2 ${sKinds.includes(kk) ? 'border-amber-400 bg-amber-500/25 text-white' : 'border-white/20 bg-black/60 text-white/60'}`}>
+          <span className="text-white/40 mr-1">{i + 1}</span>{SCENERY_BY.get(kk)?.label ?? kk}</button>)}
+        <button onClick={() => setScat(false)} className="h-9 rounded border border-white/20 bg-black/60 text-white/70 text-[10px] px-2">Placing (K)</button></div>}
+      {!scat && <div className="rounded bg-black/70 px-2 py-1 text-[11px] font-mono text-white/80 tabular-nums text-center">
         {api.moving ? 'moving ' : ''}{name(hand?.k)} · {hand && isStanding(hand) ? 'right puts down' : hand && isNode(hand) ? `true size · grows back in ${nodeWaitH(hand)} h (N)` : hand && isRoom(hand) ? 'true size' : `size ${held.s.toFixed(2)} (wheel)`} · turn {Math.round(held.q * 90)}° (R, step {turn}° T) · snap {snap || 'free'} (G){hand && floats(hand) ? ' · on water' : hand && !isNode(hand) && !isRoom(hand) && !isStanding(hand) ? ` · ${isSolid(hand) ? 'blocks' : 'walk through'} (B)` : ''} · {count}/{PROPS_MAX}{dry ? ` · ${dry} not drawn: no water` : ''}
         {tp && <span className="block text-amber-200">{name(tp.k)} · {isStanding(tp) ? 'left or M moves · X back to the first spot' : 'left pick up · M move · X delete'} {isStanding(tp) ? '' : '· '}{isStanding(tp) ? '' : isNode(tp) ? `N grows back in ${nodeWaitH(tp)} h` : isRoom(tp) ? 'true size' : floats(tp) ? 'on water' : `B ${isSolid(tp) ? 'blocks' : 'walk through'}`}</span>}
         {status && <span className="block text-amber-200">{status}</span>}
-        {!locked && <span className="block text-white/55">click the view: right places, left picks up · E inventory · Esc frees the mouse</span>}
-      </div>
-      <div className="flex gap-1 pointer-events-auto w-full max-w-[620px]">{slots.map((k, i) =>
+        {!locked && <span className="block text-white/55">click the view: right places, left picks up · E inventory · K scatter brush · Esc frees the mouse</span>}
+      </div>}
+      {!scat && <div className="flex gap-1 pointer-events-auto w-full max-w-[620px]">{slots.map((k, i) =>
         <button key={i} onClick={() => setSlot(i)} data-testid={`place-slot-${i + 1}`} className={`flex-1 min-w-0 h-11 rounded border text-[9px] leading-tight px-1 text-center overflow-hidden ${i === slot ? 'border-amber-400 bg-amber-500/25 text-white' : 'border-white/20 bg-black/60 text-white/70'}`}>
-          <span className="block text-[9px] text-white/40">{i + 1}</span>{k ? name(k) : ''}</button>)}</div>
+          <span className="block text-[9px] text-white/40">{i + 1}</span>{k ? name(k) : ''}</button>)}
+        <button onClick={() => setScat(true)} data-testid="scatter-toggle" className="flex-none h-11 rounded border border-white/20 bg-black/60 text-white/70 text-[9px] px-2">Scatter (K)</button></div>}
     </div>
   </>
 }

@@ -56,14 +56,17 @@ export const isRoom = (p: Pick<Prop, 'k'>) => p.k.startsWith(ROOM_PREFIX)
 export const roomOf = (k: string): GladeRoom | null => { const w = k.slice(ROOM_PREFIX.length) as GladeRoom; return k.startsWith(ROOM_PREFIX) && GLADE_ROOMS.includes(w) ? w : null }
 /** a piece that is always there: people and houses */
 export const isStanding = (p: Pick<Prop, 'k'>) => isWho(p) || isPlace(p)
-/** the pieces the cap counts: people and houses are extra */
-export const pieceCount = (ps: readonly Prop[]) => ps.reduce((n, p) => n + (isStanding(p) ? 0 : 1), 0)
+// ── M85 s2: SCATTERED pieces (the scatter brush, scatter-brush.ts): ids `s` + a count, never solid, their own cap (SCATTER_MAX) ──
+export const SCATTER_PREFIX = 's', SCATTER_MAX = 4000
+export const isScatter = (p: Pick<Prop, 'id'>) => p.id[0] === SCATTER_PREFIX
+/** the pieces the cap counts: people, houses and scattered pieces are extra */
+export const pieceCount = (ps: readonly Prop[]) => ps.reduce((n, p) => n + (isStanding(p) || isScatter(p) ? 0 : 1), 0)
 
 export const PROPS_MAX = 600, SCALE_MIN = 0.5, SCALE_MAX = 2, SCALE_STEP = 0.05
 /** G walks these (m; 0 = free); T walks these (degrees) */
 export const PROP_SNAPS = [1, 0.5, 0.25, 0] as const
 export const PROP_TURNS = [90, 45, 15, 5] as const
-const ID = /^[pn][0-9a-z]{1,8}$/, KIND = /^[a-z]{2,10}:[a-z0-9_-]{1,40}$/, XZ_MAX = 20000
+const ID = /^[pns][0-9a-z]{1,8}$/, KIND = /^[a-z]{2,10}:[a-z0-9_-]{1,40}$/, XZ_MAX = 20000
 const num = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
 const round = (v: number, d: number) => { const m = 10 ** d, r = Math.round(v * m) / m; return r === 0 ? 0 : r }
 /** one turn = 4; kept in [0, 4) */
@@ -87,22 +90,24 @@ export function cleanProp(v: unknown): Prop | null {
   }
   if (!o || typeof o !== 'object' || typeof o.id !== 'string' || !ID.test(o.id) || typeof o.k !== 'string' || !KIND.test(o.k)) return null
   if (!num(o.x) || !num(o.z) || Math.abs(o.x) > XZ_MAX || Math.abs(o.z) > XZ_MAX) return null
+  if (isScatter(o as Prop) && (isNode({ k: o.k }) || isRoom({ k: o.k }))) return null   // M85 s2: the brush scatters plain scenery only
   if (isNode({ k: o.k })) {
     const w = num(o.w) ? round(Math.min(WAIT_MAX_H, Math.max(WAIT_MIN_H, o.w)), 2) : NODE_WAIT_H
     return { id: o.id, k: o.k, x: round(o.x, 3), z: round(o.z, 3), q: num(o.q) ? wrapQ(o.q) : 0, s: 1, ...(w === NODE_WAIT_H ? {} : { w }) }
   }
   if (isRoom({ k: o.k })) return roomOf(o.k) ? { id: o.id, k: o.k, x: round(o.x, 3), z: round(o.z, 3), q: num(o.q) ? wrapQ(o.q) : 0, s: 1 } : null
-  return { id: o.id, k: o.k, x: round(o.x, 3), z: round(o.z, 3), q: num(o.q) ? wrapQ(o.q) : 0, s: num(o.s) ? clampScale(o.s, o.k) : 1, ...(typeof o.solid === 'boolean' ? { solid: o.solid } : {}) }
+  return { id: o.id, k: o.k, x: round(o.x, 3), z: round(o.z, 3), q: num(o.q) ? wrapQ(o.q) : 0, s: num(o.s) ? clampScale(o.s, o.k) : 1, ...(typeof o.solid === 'boolean' && !isScatter(o as Prop) ? { solid: o.solid } : {}) }   // M85 s2: a scattered piece never blocks
 }
 /** a layer JSON's props: junk dropped, one per id (the first), PROPS_MAX at most */
 export function cleanProps(j: unknown): Prop[] {
   const a = (j as { props?: unknown } | null)?.props
   if (!Array.isArray(a)) return []
   const out: Prop[] = [], seen = new Set<string>()
-  let n = 0
+  let n = 0, sc = 0
   for (const v of a) {
-    const p = cleanProp(v); if (!p || seen.has(p.id) || (!isStanding(p) && n >= PROPS_MAX)) continue
-    seen.add(p.id); out.push(p); if (!isStanding(p)) n++
+    const p = cleanProp(v); if (!p || seen.has(p.id)) continue
+    const scat = isScatter(p); if (scat ? sc >= SCATTER_MAX : !isStanding(p) && n >= PROPS_MAX) continue
+    seen.add(p.id); out.push(p); if (scat) sc++; else if (!isStanding(p)) n++
   }
   return out
 }
