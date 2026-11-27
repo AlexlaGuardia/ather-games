@@ -6,12 +6,13 @@
 // the counter + the tower stand in the walker's solids (setSettlementBoxes, the same register the settlements use).
 import { useEffect, useMemo } from 'react'
 import * as THREE from 'three'
+import { useThree } from '@react-three/fiber'
 import { MoglinModel, furOf } from '../shared/moglin-model'
 import { BlueprintStack } from './blueprint-stack'
 import { placeBlueprint } from './plot-blueprint'
 import { tradeBuilding, setSettlementBoxes } from './settlement-lots'
 import type { Box } from '../terrain-world'
-import { LINGSTON, SQUARE_HALF, HALL, COUNTER, ATTENDANT_X, ATTENDANT_Z, CLOCKTOWER, EXCHANGE_NAME, toWorld, frontageLots } from './lingston'
+import { LINGSTON, SQUARE_HALF, HALL, COUNTER, ATTENDANT_X, ATTENDANT_Z, DAIS, CLOCKTOWER, EXCHANGE_NAME, toWorld, frontageLots } from './lingston'
 
 const STONE = '#b9ad97', STONE_DK = '#8f846f', ROOF = '#7b4a35', WOOD = '#6b4a30'
 /** the attendants' ids (nameless; only their fur tone hashes off these) */
@@ -68,6 +69,29 @@ export function LingstonHall({ ground }: { ground: (x: number, z: number) => num
   const sign = useMemo(() => signTexture(EXCHANGE_NAME), [])
   useEffect(() => () => sign.dispose(), [sign])
   const cy = hy(0, COUNTER.z), ty = hy(CLOCKTOWER.x, CLOCKTOWER.z)
+  // M228 s2: the attendants' step, one level top over the highest ground under it (the square is old, not levelled)
+  const daisY = Math.max(cy, ...ATTENDANT_X.map(x => hy(x, ATTENDANT_Z)), hy(-COUNTER.half, DAIS.z1), hy(COUNTER.half, DAIS.z1)) + DAIS.h
+  const { camera, scene } = useThree()
+  useEffect(() => {   // M228 s2 check probe (READ only): can the camera see each attendant's head + shoulders, or what blocks it
+    const g = window as unknown as { __ather?: Record<string, unknown> }
+    const HEAD = 0.65, SHOULDER = 0.42   // a chibi Moglin's head centre / shoulders above its feet (moglin-model BUILD.chibi)
+    const sight = () => {
+      const groups: THREE.Object3D[] = []; scene.traverse(o => { if (typeof o.userData?.attendant === 'number') groups.push(o) })
+      const rc = new THREE.Raycaster(); rc.camera = camera
+      const at = (grp: THREE.Object3D, y: number) => {
+        const pt = grp.localToWorld(new THREE.Vector3(0, y, 0)), from = camera.position.clone(), d = pt.distanceTo(from)
+        rc.set(from, pt.clone().sub(from).normalize()); rc.far = d - 0.02
+        const hit = rc.intersectObjects(scene.children, true).find(h => {
+          let o: THREE.Object3D | null = h.object; while (o) { if (o === grp || !o.visible) return false; o = o.parent } return true
+        })
+        const ndc = pt.clone().project(camera)
+        return { clear: !hit, onScreen: Math.abs(ndc.x) <= 1 && Math.abs(ndc.y) <= 1 && ndc.z < 1, blocker: hit ? (hit.object.userData?.lingstonCounter ? 'counter' : hit.object.name || hit.object.type) : null }
+      }
+      return groups.map(grp => ({ i: grp.userData.attendant as number, head: at(grp, HEAD), shoulder: at(grp, SHOULDER) }))
+    }
+    g.__ather = { ...(g.__ather ?? {}), lingstonSight: sight }
+    return () => { if (g.__ather?.lingstonSight === sight) delete g.__ather!.lingstonSight }
+  }, [camera, scene])
   useEffect(() => {   // the walker's solids: the kit houses' walls, the counter, the tower (never the open hall's floor)
     const boxes: Box[] = [
       ...houses.flatMap(h => placeBlueprint(h.bp, { x: h.l.x, z: h.l.z, yaw: h.l.yaw, y: h.y }).boxes),
@@ -91,10 +115,12 @@ export function LingstonHall({ ground }: { ground: (x: number, z: number) => num
         ))}
         <mesh position={[HALL.x, roofY + 1.2, HALL.z + HALL.d / 2 + 0.45]}><planeGeometry args={[4.6, 1.15]} /><meshBasicMaterial map={sign} toneMapped={false} /></mesh>
         {/* the counter, and the three attendants behind it facing the keeper's side */}
-        <mesh position={[0, cy + COUNTER.h / 2 - 0.3, COUNTER.z]} castShadow><boxGeometry args={[COUNTER.half * 2, COUNTER.h + 0.6, COUNTER.d]} /><meshLambertMaterial color={WOOD} /></mesh>
-        <mesh position={[0, cy + COUNTER.h + 0.05, COUNTER.z]}><boxGeometry args={[COUNTER.half * 2 + 0.3, 0.1, COUNTER.d + 0.3]} /><meshLambertMaterial color="#8a6a46" /></mesh>
+        <mesh position={[0, cy + COUNTER.h / 2 - 0.3, COUNTER.z]} castShadow userData={{ lingstonCounter: true }}><boxGeometry args={[COUNTER.half * 2, COUNTER.h + 0.6, COUNTER.d]} /><meshLambertMaterial color={WOOD} /></mesh>
+        <mesh position={[0, cy + COUNTER.h + 0.05, COUNTER.z]} userData={{ lingstonCounter: true }}><boxGeometry args={[COUNTER.half * 2 + 0.3, 0.1, COUNTER.d + 0.3]} /><meshLambertMaterial color="#8a6a46" /></mesh>
+        {/* M228 s2: the step the attendants stand on, so their heads + shoulders clear the low counter */}
+        <mesh position={[0, daisY - (DAIS.h + 0.6) / 2, (DAIS.z0 + DAIS.z1) / 2]} receiveShadow><boxGeometry args={[COUNTER.half * 2, DAIS.h + 0.6, DAIS.z0 - DAIS.z1]} /><meshLambertMaterial color={STONE_DK} /></mesh>
         {ATTENDANT_X.map((x, i) => (
-          <group key={i} position={[x, hy(x, ATTENDANT_Z), ATTENDANT_Z]} userData={{ attendant: i }}>
+          <group key={i} position={[x, daisY, ATTENDANT_Z]} userData={{ attendant: i }}>
             <MoglinModel action="idle" garb="apron" tone={furOf(ATTENDANT_IDS[i])} seed={i * 3 + 1} />
           </group>
         ))}

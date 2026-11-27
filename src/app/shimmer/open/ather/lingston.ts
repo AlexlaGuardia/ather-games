@@ -19,8 +19,12 @@ export const EXCHANGE_NAME = 'The Grand Exchange'
 export const SQUARE_HALF = 17, LINGSTON_CLEAR = 30
 /** the hall in the square's frame: an open market hall (columns + roof, no walls) */
 export const HALL = { x: 0, z: -5, w: 18, d: 10, h: 4.2 } as const
-/** the counter runs along the hall's front, inside it; the attendants stand behind it */
-export const COUNTER = { z: -1.6, half: 6.6, h: 1.05, d: 0.9 } as const
+/** the counter runs along the hall's front, inside it; the attendants stand behind it.
+ *  M228 s2 (Alex 11-27 yes): 1.05 m hid the Moglins (~0.9 m tall) to the ears. Now a LOW counter (0.72 m) and the attendants
+ *  stand on a STEP (DAIS) behind it, so a keeper at the counter sees each Moglin's head and shoulders (m228-exchange-check 12). */
+export const COUNTER = { z: -1.6, half: 6.6, h: 0.72, d: 0.9 } as const
+/** the attendants' step behind the counter: from the counter's back face to past the attendants, as long as the counter */
+export const DAIS = { h: 0.45, z0: -2.05, z1: -4.0 } as const
 /** M228 s1: Jin's count = THREE Moglin attendants (one book, any of them takes an order). Nameless until named (canon). */
 export const ATTENDANTS = 3
 export const ATTENDANT_X: readonly number[] = [-4, 0, 4]
