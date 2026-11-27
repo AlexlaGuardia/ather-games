@@ -11,7 +11,14 @@ export const SCARF = ['#b3473a', '#d9a441', '#4f7c8a', '#5a8a4f', '#7a4f8a', '#e
 
 export const OPT = {
   frame: ['Small', 'Medium', 'Large'],
-  torso: ['Broad', 'Curved'],
+  // M216 s2b (Alex 11-26 'it's more about the variety', locked sheet athernyx keeper-body-cartoon/bodies-LOCKED.png): the six
+  // torso shapes A-C x male / female (keeper-bodies.ts). EVEN = a male shape = the Broad models' dials, ODD = female = Curved
+  // (modelId), so an old save's Broad (0) / Curved (1) lands on A male / A female. Shape only; sizes stay the model's dials.
+  torso: ['A male', 'A female', 'B male', 'B female', 'C male', 'C female'],
+  // M216 s2b: the sheet's six scarves (male = thick wrap, short side knot; female = long tails), every one offered to either
+  scarfStyle: ['A male', 'A female', 'B male', 'B female', 'C male', 'C female'],
+  // M216 s2b: the sheet's five belts; every belt carries a seed pouch (her / his right hip) + a tool loop (left hip)
+  belt: ['Level buckle', 'Ring buckle', 'Tied end', 'Sagging', 'Sagging two-strap'],
   skin: SKIN,
   hairStyle: ['Short', 'Tousled', 'Spiky', 'Swept', 'Bob', 'Long', 'Bun', 'Tail'],
   hair: HAIR,
@@ -35,7 +42,8 @@ export const OPT = {
 export type LookKey = keyof typeof OPT
 /** the creator's rows, in order, with their labels (the mock's) */
 export const ROWS: readonly { key: LookKey; label: string; swatch: boolean }[] = [
-  { key: 'frame', label: 'Frame', swatch: false }, { key: 'torso', label: 'Torso', swatch: false }, { key: 'skin', label: 'Skin', swatch: true },
+  { key: 'frame', label: 'Frame', swatch: false }, { key: 'torso', label: 'Torso', swatch: false },
+  { key: 'scarfStyle', label: 'Scarf shape', swatch: false }, { key: 'belt', label: 'Belt', swatch: false }, { key: 'skin', label: 'Skin', swatch: true },
   { key: 'hairStyle', label: 'Hair', swatch: false }, { key: 'hair', label: 'Hair colour', swatch: true }, { key: 'head', label: 'Head', swatch: false }, { key: 'face', label: 'Face', swatch: false }, { key: 'eyes', label: 'Eyes', swatch: false },
   { key: 'brows', label: 'Brows', swatch: false }, { key: 'mouth', label: 'Mouth', swatch: false }, { key: 'ears', label: 'Ears', swatch: false }, { key: 'topColor', label: 'Body colour', swatch: true },
   { key: 'accent', label: 'Hands and feet', swatch: true }, { key: 'scarf', label: 'Scarf', swatch: true },
@@ -44,12 +52,17 @@ export const FRAME_NOTE = ['A smaller hitbox and +5% move speed.', 'The baseline
 
 export type Look = { v: 1 } & Record<LookKey, number>
 /** the mock's starting keeper */
-export const DEFAULT_LOOK: Look = { v: 1, frame: 1, torso: 0, skin: 1, hairStyle: 1, hair: 2, eyes: 0, brows: 0, mouth: 0, ears: 1, topColor: 0, accent: 5, scarf: 0, face: 0, head: 0 }
+export const DEFAULT_LOOK: Look = { v: 1, frame: 1, torso: 0, skin: 1, hairStyle: 1, hair: 2, eyes: 0, brows: 0, mouth: 0, ears: 1, topColor: 0, accent: 5, scarf: 0, face: 0, head: 0, scarfStyle: 0, belt: 0 }
 /** the rows a cartoon head draws itself (M216 s2a): the creator hides them while a head is picked; the builder ignores them */
 export const HEAD_OWNS: readonly LookKey[] = ['face', 'hairStyle', 'eyes', 'brows', 'mouth']
 /** M216 s2a: an OLD save with an M116 face set (1-4 = Soft, Keen, Calm, Strong) and no head row lands on the same-letter
  *  head (A-D), female on the Curved torso: the face sets' look side was replaced by the heads (hub call 11-27) */
-export const headForOldFace = (face: number, torso: number) => face >= 1 && face <= 4 ? (face - 1) * 2 + 1 + (torso === 1 ? 1 : 0) : 0
+export const headForOldFace = (face: number, torso: number) => face >= 1 && face <= 4 ? (face - 1) * 2 + 1 + (isFemaleTorso(torso) ? 1 : 0) : 0
+/** M216 s2b: odd torso shapes are the sheet's female ones (and build on the Curved models' dials) */
+export const isFemaleTorso = (torso: number) => torso % 2 === 1
+/** M216 s2b: the belt each torso wore on the locked sheet (A-M level, A-F sagging, B-M level, B-F two-strap, C-M ring, C-F
+ *  tied); an OLD save with no belt row lands on its torso's own belt, and on its torso's own scarf */
+export const BELT_FOR_TORSO = [0, 3, 0, 4, 1, 2] as const
 
 // ── the ONE PvP choice ──
 /** what FRAME does in play: `hit` scales the keeper's hitbox (radius + reach tests), `speed` the walk/run, `damage` what a hit
@@ -71,6 +84,8 @@ export function parseLook(raw: unknown): Look | null {
     if (Number.isInteger(n) && (n as number) >= 0 && (n as number) < OPT[k].length) out[k] = n as number
   }
   if (o.head === undefined) out.head = headForOldFace(out.face, out.torso)
+  if (o.scarfStyle === undefined) out.scarfStyle = out.torso
+  if (o.belt === undefined) out.belt = BELT_FOR_TORSO[out.torso] ?? 0
   return out
 }
 export const setLook = (l: Look, k: LookKey, i: number): Look => (i >= 0 && i < OPT[k].length ? { ...l, [k]: i } : l)
@@ -84,10 +99,11 @@ export function randomLook(l: Look, rnd: () => number = Math.random): Look {
 /** Packed for presence (M27: a remote keeper draws your look): one short string, one digit/letter per row in ROWS order. */
 /** ★ the pack order is FROZEN (a remote reads it): the rows as they were, then each new row appended (M116 'face'), so a
  *  pack from a client one row behind still reads (the missing tail takes its default). */
-export const PACK_KEYS: readonly LookKey[] = ['frame', 'torso', 'skin', 'hairStyle', 'hair', 'eyes', 'brows', 'mouth', 'ears', 'topColor', 'accent', 'scarf', 'face', 'head']
+export const PACK_KEYS: readonly LookKey[] = ['frame', 'torso', 'skin', 'hairStyle', 'hair', 'eyes', 'brows', 'mouth', 'ears', 'topColor', 'accent', 'scarf', 'face', 'head', 'scarfStyle', 'belt']
 export const packLook = (l: Look) => PACK_KEYS.map(k => l[k].toString(36)).join('')
 export function unpackLook(s: unknown): Look | null {
-  if (typeof s !== 'string' || s.length < PACK_KEYS.length - 1 || s.length > PACK_KEYS.length) return null
+  // tolerant of a client up to three rows behind (pre-M216 s2b = no scarfStyle / belt; pre-s2a = no head either)
+  if (typeof s !== 'string' || s.length < PACK_KEYS.length - 3 || s.length > PACK_KEYS.length) return null
   const o: Record<string, number> = { v: 1 }
   PACK_KEYS.forEach((k, i) => { if (i < s.length) o[k] = parseInt(s[i], 36) })
   return parseLook(o)

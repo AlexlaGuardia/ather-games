@@ -10,19 +10,14 @@ import { surf, type HeadShape } from '../../open/shared/keeper-faces'
 import { CARTOON } from '../../open/shared/keeper-heads'
 import { OPT, type Look } from '../../open/shared/keeper-look'
 import { MODELS, type Proportions } from '../../open/shared/keeper-proportions'
+import { TORSO_STARTS } from '../../open/shared/keeper-bodies'
+import { BELT_FOR_TORSO } from '../../open/shared/keeper-look'
 
 /** index 0 = today (the look's own Mouth row); 1-5 = the sheet's mouths 1-5 */
 export const BENCH_MOUTHS = ['Today', '1 Neutral line', '2 Slight smile', '3 Soft full lips', '4 Smirk', '5 Closed calm'] as const
-type Prof = [number, number][]
-export interface TorsoOpt { label: string; prof: Prof | null; /** a STARTING POINT copied onto the sliders when picked (M216: never laid over them) */ dials: Partial<Proportions>; side?: { chest: number; hip: number; belly: number } }
-/** index 0 = today's Curved lathe; 1-3 = the sheet's T1-T3 (numbers copied from torso.ts). Curved models only. */
-export const BENCH_TORSOS: readonly TorsoOpt[] = [
-  { label: 'Today', prof: null, dials: {} },
-  { label: 'T1 Defined waist', prof: [[0, 0], [0.08, 0.03], [0.16, 0.15], [0.19, 0.3], [0.138, 0.52], [0.18, 0.7], [0.2, 0.86], [0.1, 1]], dials: { torsoL: 1.0 } },
-  { label: 'T2 Tall slim', prof: [[0, 0], [0.06, 0.03], [0.12, 0.14], [0.16, 0.3], [0.132, 0.5], [0.18, 0.7], [0.215, 0.87], [0.1, 1]], dials: { torsoL: 1.08, torsoW: 0.92, handY: -0.03 } },
-  { label: 'T3 Shaped mesh', prof: [[0, 0], [0.08, 0.03], [0.16, 0.15], [0.19, 0.3], [0.138, 0.52], [0.18, 0.7], [0.2, 0.86], [0.1, 1]], dials: { torsoL: 1.0 }, side: { chest: 0.24, hip: 0.16, belly: 0.12 } },
-]
-
+/** M216 s2b: the bench's Torso picker = the six LOCKED torso shapes (keeper-bodies.ts), which replace the M116b T1-T3
+ *  try-on (Curved only). Picking one COPIES its starting dials onto the sliders (TORSO_STARTS); the build lays nothing over. */
+export const BENCH_TORSOS = OPT.torso
 /** M216 s2a: the cartoon heads' STARTING dials (the sheet's jaws: A soft oval, B long V chin, C square, D heart; mouth set
  *  low by letter), copied onto the sliders when a head is picked, exactly like a torso option: the head itself bakes none
  *  of them (keeper-heads.ts), the sliders stay the only source. Index = Look.head (0 = Classic, no start). */
@@ -35,44 +30,33 @@ export const HEAD_STARTS: readonly Partial<Proportions>[] = [
 ]
 export const pickHead = (p: Proportions, h: number): Proportions => ({ ...p, ...(HEAD_STARTS[h] ?? {}) })
 
-export interface BenchLook { face: number; mouth: number; torso: number; head: number }
-export const DEFAULT_BENCH: BenchLook = { face: 0, mouth: 0, torso: 0, head: 0 }
+/** M216 s2b: torso / scarf / belt = Look.torso / scarfStyle / belt (the locked body set) */
+export interface BenchLook { face: number; mouth: number; torso: number; head: number; scarf: number; belt: number }
 export const isCurved = (model: string) => model.endsWith('-curved')
+/** a model's own starting pick: a Broad model wears A male (torso, scarf, belt), a Curved one A female */
+export const defaultBench = (model: string): BenchLook => { const t = isCurved(model) ? 1 : 0; return { face: 0, mouth: 0, torso: t, head: 0, scarf: t, belt: BELT_FOR_TORSO[t] } }
+export const DEFAULT_BENCH: BenchLook = defaultBench('medium-broad')
 const idx = (v: unknown, n: number) => typeof v === 'number' && Number.isInteger(v) && v >= 0 && v < n ? v : 0
-/** one model's bench choice, clamped; a Broad model never has a torso option */
+/** one model's bench choice, clamped; a missing / bad torso, scarf or belt takes the model's own (defaultBench). A file from
+ *  before s2b (torso = a T1-T3 try-on, no scarf / belt) lands on the model's default body: the T options are retired. */
 export function parseBench(model: string, raw: unknown): BenchLook {
-  const o = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
-  return { face: idx(o.face, OPT.face.length), mouth: idx(o.mouth, BENCH_MOUTHS.length), torso: isCurved(model) ? idx(o.torso, BENCH_TORSOS.length) : 0, head: idx(o.head, OPT.head.length) }
+  const o = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>, d = defaultBench(model)
+  const s2b = o.scarf !== undefined || o.belt !== undefined
+  const pick = (v: unknown, n: number, def: number) => typeof v === 'number' && Number.isInteger(v) && v >= 0 && v < n ? v : def
+  return { face: idx(o.face, OPT.face.length), mouth: idx(o.mouth, BENCH_MOUTHS.length), torso: s2b ? pick(o.torso, OPT.torso.length, d.torso) : d.torso, head: idx(o.head, OPT.head.length),
+    scarf: pick(o.scarf, OPT.scarfStyle.length, d.scarf), belt: pick(o.belt, OPT.belt.length, d.belt) }
 }
 export function parseBenchFile(raw: unknown): Record<string, BenchLook> {
   const o = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
   return Object.fromEntries(MODELS.map(m => [m, parseBench(m, o[m])]))
 }
-export const sameBench = (a: BenchLook, b: BenchLook) => a.face === b.face && a.mouth === b.mouth && a.torso === b.torso && a.head === b.head
-export const isDefaultBench = (b: BenchLook) => sameBench(b, DEFAULT_BENCH)
+export const sameBench = (a: BenchLook, b: BenchLook) => a.face === b.face && a.mouth === b.mouth && a.torso === b.torso && a.head === b.head && a.scarf === b.scarf && a.belt === b.belt
+export const isDefaultBench = (b: BenchLook, model = 'medium-broad') => sameBench(b, defaultBench(model))
 /** M216 one source: picking a torso option COPIES its starting dials onto the sliders (they stay the only source, and the
  *  owner moves them freely after); the build itself never lays anything over the sliders. Today (0) leaves them alone. */
-export const pickTorso = (p: Proportions, t: number): Proportions => ({ ...p, ...(BENCH_TORSOS[t]?.dials ?? {}) })
+export const pickTorso = (p: Proportions, t: number): Proportions => ({ ...p, ...(TORSO_STARTS[t] ?? {}) })
 
 // ── geometry (copied from the protos; cached) ──
-const LATHES = new Map<number, THREE.BufferGeometry>()
-export function torsoGeo(i: number): THREE.BufferGeometry | null {
-  const o = BENCH_TORSOS[i]; if (!o?.prof) return null
-  let g = LATHES.get(i)
-  if (!g) {
-    g = new THREE.LatheGeometry(o.prof.map(([r, y]) => new THREE.Vector2(r, y)), 24)
-    if (o.side) {   // T3: bend the round lathe front / back (chest forward, flat belly, hips back)
-      const pos = g.attributes.position, gs = (y: number, c: number, w: number) => Math.exp(-(((y - c) / w) ** 2))
-      for (let k = 0; k < pos.count; k++) {
-        const y = pos.getY(k), z = pos.getZ(k)
-        pos.setZ(k, z * (z > 0 ? 1 + o.side.chest * gs(y, 0.64, 0.12) - o.side.belly * gs(y, 0.36, 0.1) : 1 + o.side.hip * gs(y, 0.24, 0.12)))
-      }
-      g.computeVertexNormals()
-    }
-    LATHES.set(i, g)
-  }
-  return g
-}
 const STRIPS = new Map<string, THREE.BufferGeometry>()
 function strip(w: number, th: number, arch: number) {
   const key = `${w}|${th}|${arch}`, hit = STRIPS.get(key); if (hit) return hit
@@ -110,11 +94,9 @@ export function drawBenchMouth(g: THREE.Object3D, m: number, H: number, f: HeadS
   if (m === 5) { decal(strip(mw * 0.7, H * 0.014, -0.1), LINE, 0, my, 0.02); decal(strip(mw * 0.42, H * 0.012, -0.25), lipOf(skin, 0.3), 0, my - H * 0.03, 0.018) }
 }
 
-/** The bench's keeper: buildKeeper with the face set, then the torso option's lathe and the bench mouth swapped in. */
+/** The bench's keeper: buildKeeper with the face set / head / torso / scarf / belt picks, then the bench mouth swapped in. */
 export function benchKeeper(look: Look, p: Proportions, b: BenchLook): KeeperBody {
-  const o: Look = { ...look, face: b.face, head: b.head }, k = buildKeeper(o, p)
-  const geo = look.torso === 1 ? torsoGeo(b.torso) : null
-  if (geo) { const body = k.group.getObjectByName('body')!; for (const m of body.children.slice(0, 2) as THREE.Mesh[]) m.geometry = geo }
+  const o: Look = { ...look, face: b.face, head: b.head, torso: b.torso, scarfStyle: b.scarf, belt: b.belt }, k = buildKeeper(o, p)
   if (b.mouth > 0) {
     const head = k.group.getObjectByName('head')!
     for (const c of head.children.filter(c => c.userData.mouth)) head.remove(c)   // a cartoon head's 'mouth' group too

@@ -26,7 +26,8 @@ import { poseKeeper } from '../../open/shared/keeper-figure'
 import { DEFAULT_LOOK, OPT, type Look } from '../../open/shared/keeper-look'
 import { DIALS, DEFAULT_PROPORTIONS, MODELS, MODEL_LABEL, parseFile, type DialKey, type Proportions } from '../../open/shared/keeper-proportions'
 import { DollVsRayman } from './doll-vs-rayman'
-import { BENCH_MOUTHS, BENCH_TORSOS, DEFAULT_BENCH, HEAD_STARTS, benchKeeper, isCurved, pickHead, pickTorso, parseBenchFile, sameBench, type BenchLook } from './bench-looks'
+import { BENCH_MOUTHS, HEAD_STARTS, benchKeeper, defaultBench, pickHead, pickTorso, parseBenchFile, sameBench, type BenchLook } from './bench-looks'
+import { TORSO_STARTS } from '../../open/shared/keeper-bodies'
 
 const chip: React.CSSProperties = { background: '#211f2b', border: '1px solid #38344a', color: '#ddd6ea', padding: '5px 10px', borderRadius: 4, fontSize: 11, cursor: 'pointer' }
 const BACKDROPS = [
@@ -57,6 +58,15 @@ function figureSig(k: ReturnType<typeof benchKeeper>) {
   })
   const torso = (k.group.getObjectByName('body')!.children[0] as THREE.Mesh).geometry.attributes.position
   let tz = 0; for (let i = 0; i < torso.count; i++) tz += Math.abs(torso.getZ(i)) + torso.getX(i) * 0.37
+  // M216 s2b: the whole body group in world space (torso shape, scarf shape, belt + pouch + loop), so a scarf / belt pick or a
+  // Belt / Belt height slider shows on the sig
+  k.group.updateMatrixWorld(true)
+  const wv = new (k.group.position.constructor as typeof THREE.Vector3)()
+  k.group.getObjectByName('body')!.traverse(o => {
+    const m = o as THREE.Mesh; if (!m.isMesh) return
+    const pos = m.geometry.attributes.position
+    for (let i = 0; i < pos.count; i += 2) { wv.fromBufferAttribute(pos as THREE.BufferAttribute, i).applyMatrix4(m.matrixWorld); tz += wv.x * 0.13 + wv.y * 0.29 + Math.abs(wv.z) * 0.41 }
+  })
   // M216: the head's own build (geometry shape + every face part's place and size), so a check sees a chin / eye dial land
   let hv = 0
   k.group.getObjectByName('head')!.traverse(o => {
@@ -114,13 +124,13 @@ function ProportionsBench() {
 
   const saved = savedAll?.[model] ?? DEFAULT_PROPORTIONS
   const cur = edits[model] ?? saved
-  const benchSaved = benchAll?.[model] ?? DEFAULT_BENCH
+  const benchSaved = benchAll?.[model] ?? defaultBench(model)
   const bench = benchEdits[model] ?? benchSaved
   const benchDirty = !sameBench(bench, benchSaved)
   const pick = (k: keyof BenchLook, v: number) => {
     setBenchEdits(e => ({ ...e, [model]: { ...(e[model] ?? benchSaved), [k]: v } }))
     // M216 one source: a torso option's starting numbers go ONTO the sliders (never laid over them), so every number shows
-    if (k === 'torso' && v > 0) setEdits(e => ({ ...e, [model]: pickTorso(e[model] ?? saved, v) }))
+    if (k === 'torso') setEdits(e => ({ ...e, [model]: pickTorso(e[model] ?? saved, v) }))
     // M216 s2a: a cartoon head's starting jaw / chin / mouth height go onto the sliders the same way (the head bakes none)
     if (k === 'head' && v > 0) setEdits(e => ({ ...e, [model]: pickHead(e[model] ?? saved, v) }))
   }
@@ -154,7 +164,7 @@ function ProportionsBench() {
 
   const picker = (k: keyof BenchLook, label: string, opts: readonly string[]) => (
     <div key={k} data-picker={k} style={{ padding: '3px 0' }}>
-      <span className="gx-label" style={{ fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase', color: bench[k] ? '#e8d49a' : '#9a94a8' }}>{label}</span>
+      <span className="gx-label" style={{ fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase', color: bench[k] !== defaultBench(model)[k] ? '#e8d49a' : '#9a94a8' }}>{label}</span>
       <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 3 }}>
         {opts.map((o, i) => <button key={o} data-pick={`${k}-${i}`} data-on={bench[k] === i ? '1' : '0'} onClick={() => pick(k, i)} style={{ ...chip, padding: '3px 7px', opacity: bench[k] === i ? 1 : 0.45 }}>{o}</button>)}
       </div>
@@ -219,11 +229,12 @@ function ProportionsBench() {
         </div>}
         {bench.head === 0 ? picker('face', 'Face', OPT.face) : <div style={{ fontSize: 10, color: '#6f6a7c', padding: '3px 0' }}>Face sets: Classic head only</div>}
         {picker('mouth', 'Mouth', BENCH_MOUTHS)}
-        {isCurved(model) ? picker('torso', 'Torso shape', BENCH_TORSOS.map(t => t.label))
-          : <div style={{ fontSize: 10, color: '#6f6a7c', padding: '3px 0' }}>Torso shapes: on the Curved models</div>}
-        {bench.torso > 0 && <div data-torso-note style={{ fontSize: 10, color: '#c8b98a', padding: '2px 0' }}>
-          {BENCH_TORSOS[bench.torso].label} starts at {Object.entries(BENCH_TORSOS[bench.torso].dials).map(([k, v]) => `${DIALS.find(d => d.key === k)?.label.toLowerCase()} ${v}`).join(', ')} on the sliders
+        {picker('torso', 'Torso', OPT.torso)}
+        {Object.keys(TORSO_STARTS[bench.torso] ?? {}).length > 0 && <div data-torso-note style={{ fontSize: 10, color: '#c8b98a', padding: '2px 0' }}>
+          {OPT.torso[bench.torso]} starts at {Object.entries(TORSO_STARTS[bench.torso]).map(([k, v]) => `${DIALS.find(d => d.key === k)?.label.toLowerCase()} ${v}`).join(', ')} on the sliders
         </div>}
+        {picker('scarf', 'Scarf', OPT.scarfStyle)}
+        {picker('belt', 'Belt', OPT.belt)}
         <h2 className="gx-label" style={{ fontSize: 10, letterSpacing: '0.14em', color: '#7f7a8c', margin: '10px 0 2px' }}>SIZE</h2>
         {DIALS.filter(d => d.kind === 'size').map(row)}
         <h2 className="gx-label" style={{ fontSize: 10, letterSpacing: '0.14em', color: '#7f7a8c', margin: '12px 0 2px' }}>SPACING</h2>

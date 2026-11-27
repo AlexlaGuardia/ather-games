@@ -29,6 +29,7 @@ export const DIALS = [
   { key: 'torsoW', label: 'Torso width', kind: 'size', min: 0.6, max: 1.5, step: 0.01, def: 1, note: 'the hands stay at its side' },
   { key: 'torsoD', label: 'Torso depth', kind: 'size', min: 0.6, max: 1.5, step: 0.01, def: 1, note: 'front to back' },
   { key: 'scarf', label: 'Scarf', kind: 'size', min: 0.6, max: 1.5, step: 0.01, def: 1, note: 'ring + tail' },
+  { key: 'belt', label: 'Belt', kind: 'size', min: 0.6, max: 1.6, step: 0.01, def: 1, note: 'strap, buckle, pouch + loop (every belt)' },
   { key: 'hand', label: 'Hand size', kind: 'size', min: 0.5, max: 1.8, step: 0.01, def: 1, note: '' },
   { key: 'foot', label: 'Foot size', kind: 'size', min: 0.5, max: 1.8, step: 0.01, def: 1, note: 'stays on the ground' },
   // ── SPACING ──
@@ -40,6 +41,7 @@ export const DIALS = [
   { key: 'eyeGap', label: 'Eye spacing', kind: 'spacing', min: -0.03, max: 0.04, step: 0.001, def: 0, note: 'm, each eye out from the middle (every face)' },
   { key: 'eyeLift', label: 'Eye height', kind: 'spacing', min: -0.04, max: 0.04, step: 0.001, def: 0, note: 'm, eyes + brows up / down (every face)' },
   { key: 'mouthLift', label: 'Mouth height', kind: 'spacing', min: -0.05, max: 0.05, step: 0.001, def: 0, note: 'm, the mouth up / down (every face and head)' },
+  { key: 'beltY', label: 'Belt height', kind: 'spacing', min: -0.12, max: 0.15, step: 0.005, def: 0, note: 'm, the belt up / down the torso (every belt)' },
   { key: 'footX', label: 'Stance width', kind: 'spacing', min: -0.1, max: 0.2, step: 0.005, def: 0, note: 'm, feet apart' },
 ] as const satisfies readonly Dial[]
 
@@ -51,7 +53,8 @@ export const DEFAULT_PROPORTIONS: Proportions = Object.fromEntries(DIALS.map(d =
 export const FRAMES = ['small', 'medium', 'large'] as const
 export const TORSOS = ['broad', 'curved'] as const
 export const MODELS = FRAMES.flatMap(f => TORSOS.map(t => `${f}-${t}`))
-export const modelId = (l: Pick<Look, 'frame' | 'torso'>) => `${FRAMES[l.frame] ?? 'medium'}-${TORSOS[l.torso] ?? 'broad'}`
+/** M216 s2b: six torso shapes, two dial sets: an even (male) shape builds on the Broad model's dials, odd (female) on Curved */
+export const modelId = (l: Pick<Look, 'frame' | 'torso'>) => `${FRAMES[l.frame] ?? 'medium'}-${TORSOS[l.torso % 2] ?? 'broad'}`
 export const MODEL_LABEL = (id: string) => id.split('-').map(s => s[0].toUpperCase() + s.slice(1)).join(' / ')
 
 /** one model's saved dials, clamped field by field: unknown keys dropped, a missing / bad field takes the default */

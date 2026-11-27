@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `need model (one of ${MODELS.join(', ')})` }, { status: 400 })
     const all = parseBenchFile(await load()), bench = parseBench(body.model, body.bench)
     all[body.model] = bench
-    const out = Object.fromEntries(Object.entries(all).filter(([, b]) => !isDefaultBench(b)))
+    const out = Object.fromEntries(Object.entries(all).filter(([m, b]) => !isDefaultBench(b, m)))
     await mkdir(join(process.cwd(), 'data'), { recursive: true })
     await writeFile(FILE, JSON.stringify(out, null, 1) + '\n')
     return NextResponse.json({ ok: true, model: body.model, bench })

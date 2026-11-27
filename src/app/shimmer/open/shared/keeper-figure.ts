@@ -8,6 +8,7 @@ import { OPT, type Look } from './keeper-look'
 import { proportionsFor, type Proportions } from './keeper-proportions'
 import { faceSet, headShapeGeo, drawFaceSet, surf, type HeadShape } from './keeper-faces'
 import { cartoonHead, drawCartoonFace } from './keeper-heads'
+import { torsoGeo, drawScarf, drawBelt } from './keeper-bodies'
 
 const grad = (() => {
   const t = new THREE.DataTexture(new Uint8Array([90, 170, 255]), 3, 1, THREE.RedFormat)
@@ -18,11 +19,6 @@ const LOCK = new THREE.LatheGeometry([[0, 0], [0.5, 0.05], [0.55, 0.22], [0.45, 
 const CAP = new THREE.SphereGeometry(1, 24, 14, 0, Math.PI * 2, 0, Math.PI * 0.5)
 /** a pointed ear: a petal (round at the root, a tip at the top); shared with the NPC rig (folk-model.tsx) */
 export const EAR = new THREE.LatheGeometry([[0, -0.5], [0.45, -0.38], [0.5, -0.1], [0.36, 0.2], [0.14, 0.42], [0, 0.5]].map(([r, y]) => new THREE.Vector2(r, y)), 10)
-const SCARF_RING = new THREE.TorusGeometry(1, 0.45, 10, 24)
-const EGG = [
-  [[0, 0], [0.07, 0.03], [0.13, 0.15], [0.19, 0.42], [0.24, 0.74], [0.22, 0.92], [0.12, 1]],   // Broad
-  [[0, 0], [0.16, 0.06], [0.2, 0.25], [0.17, 0.52], [0.19, 0.76], [0.18, 0.92], [0.09, 1]],    // Curved
-].map(pts => new THREE.LatheGeometry(pts.map(([r, y]) => new THREE.Vector2(r, y)), 24))
 /** M103 chin taper + M216 chin length: ONE head geometry for every face, from the dials only (0 + 0 = the plain sphere SPH) */
 const headGeo = (p: HeadShape) => headShapeGeo(p.jaw, p.chin, SPH)
 const ARCS = new Map<string, THREE.TorusGeometry>()
@@ -62,13 +58,15 @@ export function buildKeeper(o: Look, p0: Proportions = proportionsFor(o)): Keepe
   // M103: every term below is today's body times a dial at 1 (or plus a dial at 0), so the defaults change nothing
   const tw = wide * p.torsoW, base = L * 0.62 * p.legs, TB = B * 1.08 * p.torsoL, topY = base + TB, Hf = H * 1.15, sf = p.scarf
   const body = new THREE.Group(); body.name = 'body'; g.add(body)
-  put(body, EGG[o.torso] ?? EGG[0], top, [0, base, 0], [tw, TB, wide * 0.8 * p.torsoD])
+  // M216 s2b: the torso is one of the six locked shapes (keeper-bodies.ts), a unit outline sized here by the dials only
+  put(body, torsoGeo(o.torso), top, [0, base, 0], [tw, TB, wide * 0.8 * p.torsoD])
   for (const s of [-1, 1] as const) {
     put(g, SPH, acc, [s * (0.29 * tw + 0.09 + p.handX), base + TB * 0.32 + p.handY, 0.03 + p.handZ], [0.075 * p.hand, 0.1 * p.hand, 0.06 * p.hand], [0, 0, -s * 0.25], true, s < 0 ? 'hand-r' : 'hand-l')
     put(g, SPH, acc, [s * (0.17 * wide + p.footX), 0.045 * p.foot, 0.06], [0.11 * p.foot, 0.045 * p.foot, 0.15 * p.foot], [0, s * 0.25, 0], true, s < 0 ? 'foot-r' : 'foot-l')
   }
-  put(body, SCARF_RING, sc, [0, topY - 0.03, 0], [0.17 * tw * sf, 0.17 * tw * sf, 0.16 * sf], [Math.PI / 2, 0, 0])
-  put(body, BOX, sc, [0.15 * tw, topY - 0.24 * sf, 0.15 * tw], [0.09 * sf, 0.38 * sf, 0.035 * sf], [0.12, 0, 0.42])
+  // M216 s2b: the scarf shape (Scarf shape row) + the belt (Belt row), each sized and placed by the dials (keeper-bodies.ts)
+  drawScarf(body, put, o.scarfStyle, sc, topY, tw, sf)
+  drawBelt(body, put, o.torso, o.belt, acc, base, TB, tw, wide * 0.8 * p.torsoD, p)
   // a longer chin (the Chin length dial) is absorbed by lifting the head, so the neck gap stays the model's
   const hy = topY + Hf * 0.5 * p.headH + 0.07 + p.neck + Hf * 0.55 * p.chin * p.headH * 0.6
   const head = new THREE.Group(); head.name = 'head'; head.position.set(0, hy, 0); g.add(head)

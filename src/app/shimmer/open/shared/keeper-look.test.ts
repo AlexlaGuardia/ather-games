@@ -51,5 +51,15 @@ const look2: Look = { ...DEFAULT_LOOK, hairStyle: 5 }
 const locks = (l: Look) => { let n = 0; buildKeeper(l).group.traverse(o => { if ((o as { matrixAutoUpdate?: boolean }).matrixAutoUpdate === false) n++ }); return n }
 ok(locks(look2) > locks({ ...DEFAULT_LOOK, hairStyle: 0 }), 'body: Long hair has no more locks than Short (the style did nothing)')
 
+// M216 s2b: old saves (Broad 0 / Curved 1, no scarf shape / belt rows) land on the matching locked body, never crash
+const oldF = parseLook({ v: 1, frame: 1, torso: 1, skin: 2, scarf: 3 })!, oldM = parseLook({ v: 1, torso: 0, scarf: 1 })!
+ok(oldF.torso === 1 && oldF.scarfStyle === 1 && oldF.belt === 3 && oldF.scarf === 3, `old Curved save: A female torso + scarf, sagging belt, scarf colour kept (${JSON.stringify(oldF)})`)
+ok(oldM.torso === 0 && oldM.scarfStyle === 0 && oldM.belt === 0, 'old Broad save: A male torso + scarf, level belt')
+ok(parseLook({ v: 1, torso: 9, belt: 7, scarfStyle: -1 })!.torso === 0, 'bad torso clamps to the default')
+ok(OPT.torso.length === 6 && OPT.scarfStyle.length === 6 && OPT.belt.length === 5, 'body rows: 6 torsos, 6 scarves, 5 belts')
+for (let t = 0; t < 6; t++) for (let sc = 0; sc < 6; sc++) for (let b = 0; b < 5; b++) if ((t + sc + b) % 4 === 0) {
+  let threw = ''; try { buildKeeper({ ...DEFAULT_LOOK, torso: t, scarfStyle: sc, belt: b }) } catch (e) { threw = String(e) }
+  ok(!threw, `torso ${t} scarf ${sc} belt ${b} build threw ${threw}`)
+}
 if (fails.length) { console.error(`keeper-look: ${pass} pass, ${fails.length} FAIL\n  ` + fails.join('\n  ')); process.exit(1) }
 console.log(`keeper-look: ${pass} pass, 0 fail`)

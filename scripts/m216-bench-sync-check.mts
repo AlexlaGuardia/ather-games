@@ -5,12 +5,16 @@
 // ── M216 s2a: the four locked cartoon heads (A-D, male + female) as a HEAD picker: each changes the figure, picking one copies
 // its starting jaw / chin / mouth height onto the sliders, EVERY slider still moves its part on EVERY head, and the player
 // creator (fresh non-owner keeper, 390) offers the same heads. Shots: docs/looks/m216-s2a-2026-11-27/head-*.png
+// ── M216 s2b: the LOCKED body variety set as pickers: Torso (6) / Scarf (6) / Belt (5) on the bench, each pick changes the
+// figure, a torso's starts land ON the sliders, every slider still moves its part on each torso; the creator offers the same
+// rows and saves them; an OLD save (Broad / Curved, no scarf shape / belt) loads with no error. Alex's sheet pieces:
+// docs/looks/m216-s2b-2026-11-27/{torso,scarf,belt}-<i>-{front,side}.png (composed into sheet-bodies.png)
 //   OWNER_KEY=... npx tsx scripts/m216-bench-sync-check.mts [--url https://ather.games] [--tag after]
 import puppeteer, { type Page } from 'puppeteer-core'
 import { mkdirSync } from 'fs'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), tag = flag('--tag', 'after')
-const KEY = process.env.OWNER_KEY, DIR = 'docs/looks/m216-s2a-2026-11-27'
+const KEY = process.env.OWNER_KEY, DIR = 'docs/looks/m216-s2b-2026-11-27'
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 let fails = 0
 const ok = (c: boolean, m: string) => { console.log(`${c ? '✓' : '✗'} ${m}`); if (!c) fails++ }
@@ -94,6 +98,51 @@ try {
   }
   ok(await dialVal('mouthLift') !== null, 'slider mouthLift (Mouth height) on the bench')
   await click('[data-pick="head-0"]'); await click('[data-act="reset-model"]'); await sleep(400)
+  // ── s2b: the body pickers ──
+  const opts = async (k: string) => p.$$eval(`[data-pick^="${k}-"]`, es => es.map(e => (e.textContent ?? '').trim()))
+  const torsos = await opts('torso'), scarves = await opts('scarf'), belts = await opts('belt')
+  ok(torsos.length === 6 && scarves.length === 6 && belts.length === 5, `pickers: Torso ${torsos.length} / Scarf ${scarves.length} / Belt ${belts.length} (${torsos.join(' / ')} | ${belts.join(' / ')})`)
+  for (const k of ['belt', 'beltY']) ok(await dialVal(k) !== null, `slider ${k} on the bench`)
+  const shot = async (name: string) => { const c = (await (await p.$('canvas'))!.boundingBox())!; await p.screenshot({ path: `${DIR}/${name}.png`, clip: { x: c.x + c.width * 0.32, y: c.y + c.height * 0.12, width: c.width * 0.36, height: c.height * 0.8 } }) }
+  const bodySigs = new Set<string>()
+  for (const [k, list] of [['torso', torsos], ['scarf', scarves], ['belt', belts]] as const) {
+    const seen = new Set<string>()
+    for (let i = 0; i < list.length; i++) {
+      await click('[data-act="reset-model"]'); await click('[data-pick="torso-0"]'); await click('[data-pick="scarf-0"]'); await click('[data-pick="belt-0"]'); await sleep(300)
+      await click(`[data-pick="${k}-${i}"]`); await sleep(700)
+      const sig = await metric('data-sig'); seen.add(sig); bodySigs.add(sig)
+      await shot(`${k}-${i}-front`)
+    }
+    ok(seen.size === list.length, `${k}: every pick changes the figure (${seen.size}/${list.length} distinct sigs)`)
+  }
+  // B male's starting width lands ON the slider (the torso bakes none of it)
+  await click('[data-act="reset-model"]'); await click('[data-pick="torso-2"]'); await sleep(500)
+  ok(await dialVal('torsoW') === '1.06' && await p.$('[data-torso-note]') !== null, `torso B male: its start (torso width 1.06) landed on the slider (${await dialVal('torsoW')}) + note`)
+  // every slider moves the figure and comes back, on each torso
+  for (let t = 0; t < 6; t++) {
+    await click('[data-act="reset-model"]'); await click(`[data-pick="torso-${t}"]`); await click(`[data-pick="scarf-${t}"]`); await click(`[data-pick="belt-${[0, 3, 0, 4, 1, 2][t]}"]`); await sleep(500)
+    const ks = await p.$$eval('[data-dial]', es => es.map(e => e.getAttribute('data-dial')!))
+    let moved = 0; const dead: string[] = []
+    for (const k of ks) {
+      const dv0 = Number((await dialVal(k))!.replace('+', '')), el = await p.$(`[data-dial="${k}"]`)
+      const [mn, mx] = await el!.evaluate(e => [Number((e as HTMLInputElement).min), Number((e as HTMLInputElement).max)])
+      const a = await metric('data-sig')
+      await setDial(k, dv0 + (mx - dv0 > dv0 - mn ? (mx - dv0) * 0.7 : -(dv0 - mn) * 0.7)); await sleep(200)
+      const b = await metric('data-sig'); await setDial(k, dv0); await sleep(200)
+      if (a !== b && await metric('data-sig') === a) moved++; else dead.push(k)
+    }
+    ok(moved === ks.length, `torso ${t} (${torsos[t]}): every slider moves it and comes back (${moved}/${ks.length}${dead.length ? ', dead: ' + dead.join(',') : ''})`)
+  }
+  // side views for Alex's sheet: orbit the camera a quarter turn (OrbitControls: 2*PI*dx/height), then every pick again
+  {
+    const c = (await (await p.$('canvas'))!.boundingBox())!, cx = c.x + c.width / 2, cy = c.y + c.height * 0.6
+    await p.mouse.move(cx, cy); await p.mouse.down(); for (let s = 1; s <= 10; s++) await p.mouse.move(cx - (c.height / 4) * (s / 10), cy); await p.mouse.up(); await sleep(500)
+    for (const [k, list] of [['torso', torsos], ['scarf', scarves], ['belt', belts]] as const) for (let i = 0; i < list.length; i++) {
+      await click('[data-act="reset-model"]'); await click('[data-pick="torso-0"]'); await click('[data-pick="scarf-0"]'); await click('[data-pick="belt-0"]'); await sleep(200)
+      await click(`[data-pick="${k}-${i}"]`); await sleep(600); await shot(`${k}-${i}-side`)
+    }
+  }
+  await click('[data-act="reset-model"]'); await click('[data-pick="torso-0"]'); await click('[data-pick="scarf-0"]'); await click('[data-pick="belt-0"]'); await sleep(300)
   // 390x844: fits, the new sliders reachable
   await p.setViewport({ width: 390, height: 844 }); await sleep(1200)
   ok(await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), '390: no sideways page scroll')
@@ -120,9 +169,26 @@ try {
     ok(!rows.includes('eyes') && !rows.includes('hairStyle') && !rows.includes('face') && rows.includes('hair'), `creator head ${h}: the rows a head draws hide, hair colour stays (${rows.join(',')})`)
     await q.screenshot({ path: `${DIR}/creator-head-${h}.png`, clip: { x: 0, y: 0, width: 390, height: 360 } })
   }
+  // s2b: the same body rows, each pick changes the creator's figure, and the save keeps them
+  for (const [k, n] of [['torso', 6], ['scarfStyle', 6], ['belt', 5]] as const) {
+    const ls = await q.evaluate((k: string) => [...document.querySelectorAll(`[data-creator-row="${k}"] [data-opt]`)].map(e => (e.textContent ?? '').trim()), k)
+    ok(ls.length === n, `creator: ${k} row offers ${n} (${ls.join(' / ')})`)
+  }
+  for (const [k, v] of [['torso', 5], ['scarfStyle', 3], ['belt', 4]] as const) { await q.evaluate((k: string, v: number) => (document.querySelector(`[data-creator-row="${k}"] [data-opt="${v}"]`) as HTMLElement).click(), k, v); await sleep(800) }
+  await q.screenshot({ path: `${DIR}/creator-body.png`, clip: { x: 0, y: 0, width: 390, height: 420 } })
   await q.evaluate(() => (document.querySelector('[data-creator-done]') as HTMLElement | null)?.click()); await sleep(1500)
   const look = await q.evaluate(() => JSON.parse(localStorage.getItem('open.look.v1') ?? 'null'))
   ok(look?.head === 8, `creator: Looks good saves the head (${look?.head})`)
+  ok(look?.torso === 5 && look?.scarfStyle === 3 && look?.belt === 4, `creator: the save keeps torso / scarf shape / belt (${look?.torso} / ${look?.scarfStyle} / ${look?.belt})`)
 } catch (e) { ok(false, `creator crashed: ${String(e).slice(0, 300)}`) }
+// ── s2b: an OLD save (Curved, no scarf shape / belt / head rows) loads with no page error ──
+try {
+  const r = await (await br.createBrowserContext()).newPage(); await r.setViewport({ width: 390, height: 844 })
+  const before = errs.length; r.on('pageerror', e => errs.push(String(e).slice(0, 200)))
+  await r.evaluateOnNewDocument('window.__name = (f) => f')
+  await r.evaluateOnNewDocument(`try { localStorage.setItem('open.look.v1', JSON.stringify({ v: 1, frame: 1, torso: 1, skin: 2, hairStyle: 5, hair: 3, eyes: 2, brows: 0, mouth: 1, ears: 1, topColor: 2, accent: 5, scarf: 3, face: 2 })) } catch {}`)
+  await r.goto(`${url}/shimmer/open/ather?hour=13`, { waitUntil: 'load', timeout: 240000 }); await sleep(12000)
+  ok(errs.length === before, `old save (Curved, pre-s2b) loads with no page error${errs.length > before ? ': ' + errs.slice(before).join(' | ') : ''}`)
+} catch (e) { ok(false, `old save crashed: ${String(e).slice(0, 300)}`) }
 ok(errs.length === 0, `0 page errors${errs.length ? ': ' + errs.slice(0, 3).join(' | ') : ''}`)
 await br.close(); console.log(fails ? `FAIL (${fails})` : 'PASS'); process.exit(fails ? 1 : 0)

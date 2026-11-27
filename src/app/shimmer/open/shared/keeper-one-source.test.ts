@@ -8,7 +8,8 @@ import { buildKeeper } from './keeper-figure'
 import { FACE_SETS } from './keeper-faces'
 import { CARTOON_HEADS, CARTOON } from './keeper-heads'
 import { DEFAULT_LOOK, OPT, type Look } from './keeper-look'
-import { BENCH_TORSOS, benchKeeper } from '../../dev/keeper-body/bench-looks'
+import { BENCH_TORSOS, benchKeeper, defaultBench } from '../../dev/keeper-body/bench-looks'
+import { TORSO_SHAPES, TORSO_R, SCARF_STYLES, BELT_STYLES, SCARF, BELT } from './keeper-bodies'
 let pass = 0
 const fails: string[] = []
 const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
@@ -84,6 +85,7 @@ const OWN: Record<DialKey, readonly string[]> = {
   torsoL: ['body', 'head', 'hand-l', 'hand-r'], torsoW: ['body', 'hand-l', 'hand-r'], torsoD: ['body'], scarf: ['body'],
   hand: ['hand-l', 'hand-r'], handX: ['hand-l', 'hand-r'], handY: ['hand-l', 'hand-r'], handZ: ['hand-l', 'hand-r'],
   foot: ['foot-l', 'foot-r'], footX: ['foot-l', 'foot-r'], legs: ['body', 'head', 'hand-l', 'hand-r'],
+  belt: ['body'], beltY: ['body'],
 }
 const MAIN: Partial<Record<DialKey, string>> = { torsoL: 'body', torsoW: 'body', legs: 'body' }
 ok(DIALS.every(d => OWN[d.key]?.length), 'a dial has no OWN row in this guard: add one when you add a dial')
@@ -104,12 +106,12 @@ for (const { tag, face, head } of VARIANTS) {
 // 5. THE BENCH LAYS NOTHING OVER THE SLIDERS: every try-on torso builds with exactly the sliders' numbers
 const fem: Look = { ...DEFAULT_LOOK, torso: 1 }
 for (let t = 0; t < BENCH_TORSOS.length; t++) {
-  const b = benchKeeper(fem, tuned, { face: 2, mouth: 0, torso: t, head: 0 }), live = buildKeeper({ ...fem, face: 2 }, tuned)
+  const bb = { ...defaultBench('medium-curved'), face: 2, torso: t }, b = benchKeeper(fem, tuned, bb), live = buildKeeper({ ...fem, face: 2, torso: t, scarfStyle: bb.scarf, belt: bb.belt }, tuned)
   ok(b.height === live.height && b.headY === live.headY, `bench torso ${t}: build height differs from the sliders' (an option lays dials over them)`)
   for (const n of ['hand-l', 'foot-r', 'head']) ok(b.group.getObjectByName(n)!.position.equals(live.group.getObjectByName(n)!.position), `bench torso ${t}: ${n} not where the sliders put it`)
 }
 for (let head = 1; head <= CARTOON_HEADS.length; head++) {
-  const b = benchKeeper(fem, tuned, { face: 0, mouth: 0, torso: 1, head }), live = buildKeeper({ ...fem, head }, tuned)
+  const b = benchKeeper(fem, tuned, { ...defaultBench('medium-curved'), head }), live = buildKeeper({ ...fem, head }, tuned)
   ok(b.height === live.height && b.headY === live.headY, `bench head ${head}: build height differs from the sliders'`)
 }
 
@@ -140,6 +142,69 @@ for (let head = 1; head <= CARTOON_HEADS.length; head++) {
 // the shared eye size is ONE size: every head's white spans the same share of the shared box width (outlines fill the unit box)
 const spans = CARTOON_HEADS.map((_, i) => facePlace(i + 1, DEFAULT_PROPORTIONS).w / (H0 * CARTOON.eyeW))
 ok(spans.every(s => s > 0.88 && s < 1.08), `a head's eye outline does not fill the shared box (${spans.map(s => s.toFixed(2)).join(' ')}): a size hidden in the outline`)
+
+// ── 7. M216 s2b: THE BODY VARIETY SET (six torsos, six scarves, five belts) BRINGS SHAPE ONLY ──
+// 7a. every torso is a UNIT outline: widest point exactly 1, bottom (0, 0), top at height 1, height never turning back. A
+//     torso that is wider (or taller) than the box hides a size TORSO_R / the Torso dials should own.
+ok(TORSO_SHAPES.length === OPT.torso.length && SCARF_STYLES.length === OPT.scarfStyle.length && BELT_STYLES.length === OPT.belt.length, 'one shape per Torso / Scarf shape / Belt option')
+TORSO_SHAPES.forEach((t, i) => {
+  const rs = t.prof.map(q => q[0]), ys = t.prof.map(q => q[1])
+  ok(Math.max(...rs) === 1, `torso ${i} (${t.tag}): widest point ${Math.max(...rs)} is not the unit box (a size baked into the shape)`)
+  ok(ys[0] === 0 && rs[0] === 0 && ys[ys.length - 1] === 1 && ys.every((y, k) => !k || y >= ys[k - 1]), `torso ${i} (${t.tag}): outline does not run 0..1 up the box (a length baked in)`)
+  ok(Object.keys(t).sort().join() === 'prof,tag', `torso ${i}: carries more than a tag + outline (${Object.keys(t).join(',')})`)
+})
+// 7b. a scarf / belt is words + a side: no dial or place key, and no number but -1 / 0 / 1 (a side). Every length, thickness
+//     and place lives once in SCARF / BELT. A style that brings its own tail length or belt height fails here.
+const leaves = (o: unknown, out: unknown[] = []): unknown[] => { if (o && typeof o === 'object') Object.values(o).forEach(v => leaves(v, out)); else out.push(o); return out }
+const SHAPE_PLACE = new Set<string>([...PLACE, ...Object.keys(SCARF), ...Object.keys(BELT), 'len', 'length', 'r', 'radius', 'height', 'at', 'drop', 'angle'])
+for (const [kind, list] of [['scarf', SCARF_STYLES], ['belt', BELT_STYLES]] as const) list.forEach((st, i) => {
+  // a key named like a size / place is allowed only as a WORD or a side ('knot: -1', 'buckle: \'ring\''), never a number
+  const named: string[] = []
+  const walk = (o: unknown) => { if (o && typeof o === 'object') for (const [k, v] of Object.entries(o)) { if (KEYS.has(k) || (SHAPE_PLACE.has(k) && typeof v !== 'string' && v !== -1 && v !== 0 && v !== 1 && !Array.isArray(v))) named.push(k); walk(v) } }
+  walk(st); const keys = named
+  ok(keys.length === 0, `${kind} ${i} (${st.tag}): carries proportion key(s) ${keys.join(', ')}`)
+  const nums = leaves(st).filter(v => typeof v === 'number')
+  ok(nums.every(v => v === -1 || v === 0 || v === 1), `${kind} ${i} (${st.tag}): carries a number that is not a side (${nums.join(',')}): a size / place baked in`)
+})
+// 7c. under the same dials every torso fills the SAME box: its widest point = TORSO_R x the width scale, its height = the
+//     torso length; every belt rides at the SAME height (the Belt height dial) and every scarf ring sits in the SAME place
+const torsoBox = (look: Look, p: Proportions) => {
+  const b = buildKeeper(look, p), body = b.group.getObjectByName('body')!, t = body.children[0] as THREE.Mesh
+  t.geometry.computeBoundingBox(); const bb = t.geometry.boundingBox!
+  return { w: ((bb.max.x - bb.min.x) / 2) * t.scale.x, h: (bb.max.y - bb.min.y) * t.scale.y, sx: t.scale.x, belt: body.getObjectByName('belt')!.position.y, ring: (body.children[2] as THREE.Mesh).position.toArray().join(','), ringS: (body.children[2] as THREE.Mesh).scale.toArray().join(',') }
+}
+for (const p of [DEFAULT_PROPORTIONS, { ...tuned, torsoW: 1.2, torsoL: 0.9, beltY: 0.05, belt: 1.3, scarf: 1.2 }]) {
+  const ref = torsoBox({ ...DEFAULT_LOOK, torso: 0 }, p)
+  for (let t = 0; t < TORSO_SHAPES.length; t++) for (let sc = 0; sc < SCARF_STYLES.length; sc++) for (let be = 0; be < BELT_STYLES.length; be++) {
+    if (t % 2 !== (sc + be) % 2 && sc !== t) continue   // a spread of combinations, every part of each list hit
+    const box = torsoBox({ ...DEFAULT_LOOK, torso: t, scarfStyle: sc, belt: be }, p)
+    ok(Math.abs(box.w / box.sx - TORSO_R) < 2e-3, `torso ${t}: widest ${(box.w / box.sx).toFixed(4)} not TORSO_R ${TORSO_R} (a torso brings its own width)`)
+    ok(Math.abs(box.h - ref.h) < 1e-9, `torso ${t}: height ${box.h} not the torso length dial's ${ref.h}`)
+    ok(box.belt === ref.belt, `torso ${t} belt ${be}: belt at ${box.belt}, not the one Belt height ${ref.belt} (a belt / torso bakes its height)`)
+    ok(box.ring === ref.ring && box.ringS === ref.ringS, `torso ${t} scarf ${sc}: scarf ring ${box.ring} x ${box.ringS} not the shared ${ref.ring} x ${ref.ringS}`)
+  }
+}
+const bY = (p: Proportions) => torsoBox({ ...DEFAULT_LOOK }, p).belt
+for (let t = 0; t < TORSO_SHAPES.length; t++) {   // the torso dials size EVERY torso by exactly their number
+  const a = torsoBox({ ...DEFAULT_LOOK, torso: t }, DEFAULT_PROPORTIONS), b = torsoBox({ ...DEFAULT_LOOK, torso: t }, { ...DEFAULT_PROPORTIONS, torsoW: 1.2, torsoL: 0.9 })
+  ok(Math.abs(b.w / a.w - 1.2) < 1e-6 && Math.abs(b.h / a.h - 0.9) < 1e-6, `torso ${t}: Torso width / length 1.2 / 0.9 scaled it ${(b.w / a.w).toFixed(3)} / ${(b.h / a.h).toFixed(3)} (the shape ignores a dial)`)
+}
+ok(Math.abs(bY({ ...DEFAULT_PROPORTIONS, beltY: 0.06 }) - bY(DEFAULT_PROPORTIONS) - 0.06) < 1e-9, 'Belt height dial does not move the belt by exactly its number')
+// 7d. EVERY DIAL STILL MOVES ITS OWN PART ON EVERY NEW TORSO / SCARF / BELT (the s1 + s2a sliders and the new two)
+for (let t = 0; t < TORSO_SHAPES.length; t++) for (const [sc, be] of [[t, t % BELT_STYLES.length], [(t + 3) % 6, (t + 2) % BELT_STYLES.length]]) {
+  const look: Look = { ...DEFAULT_LOOK, torso: t, scarfStyle: sc, belt: be, head: t % 2 ? 4 : 0, eyes: 2 }
+  const at0 = partSigs(look, DEFAULT_PROPORTIONS).out
+  for (const d of DIALS) {
+    const v = d.def + (d.max - d.def > d.def - d.min ? (d.max - d.def) * 0.6 : -(d.def - d.min) * 0.6)
+    const moved = partSigs(look, { ...DEFAULT_PROPORTIONS, [d.key]: v }).out
+    const changed = PARTS.filter(n => moved[n] !== at0[n]), main = MAIN[d.key] ?? OWN[d.key][0]
+    ok(changed.includes(main), `torso ${t} scarf ${sc} belt ${be}: dial ${d.key} did not move ${main}`)
+    const stray = changed.filter(n => !OWN[d.key].includes(n))
+    ok(stray.length === 0, `torso ${t} scarf ${sc} belt ${be}: dial ${d.key} also moved ${stray.join(', ')}`)
+  }
+}
+// 7e. the bench's Torso picker IS the creator's row (one list), and every scarf / belt keeps the pouch + loop count
+ok(BENCH_TORSOS === OPT.torso, 'bench torso list is not the creator\'s')
 
 console.log(`keeper-one-source: ${pass} pass, ${fails.length} fail`)
 if (fails.length) { console.log(fails.join('\n')); process.exit(1) }
