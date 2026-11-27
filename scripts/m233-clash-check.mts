@@ -73,19 +73,20 @@ try {
     const t = clash[no], d = fairDoor(t), word = tentLabel(t)
     const back = { x: t.x + Math.sin(t.yaw) * 40, z: t.z + Math.cos(t.yaw) * 40 }
     if ((await A('zone')) === 'wilds') { await A('tp', back.x, back.z, 0); await sleep(6000) }   // already in the Wilds: walk over (a second map travel reloads the page)
-    else {
+    if ((await A('zone')) !== 'wilds') {   // not in the Wilds (or a long hop dropped her home): travel by the map
       for (let i = 0; i < 6 && !(await A('wmGoto', back.x, back.z)); i++) await sleep(2000)
       for (let k = 0; k < 40 && (await A('zone')) !== 'wilds'; k++) await sleep(1000)
       await sleep(6000)
     }
     await p.evaluate((a: any) => { const X = (window as any).__ather; X.tp(a.x, a.z, a.yaw); X.look?.(a.yaw, -0.05) }, { ...d, yaw: look(d, t) })
     let txt = ''
-    for (let i = 0; i < 60 && !txt.includes(`E · the Thistledown Fair · ${word}`); i++) { await sleep(500); txt = await body() }
+    for (let i = 0; i < 60 && !txt.includes(`E · the Thistledown Fair · ${word}`); i++) { await sleep(500); txt = await body(); if (i % 12 === 11) await p.evaluate((a: any) => { const X = (window as any).__ather; X.tp(a.x, a.z, a.yaw) }, { ...d, yaw: look(d, t) }) }   // re-place once the ground has loaded
     const door = txt.includes(`E · the Thistledown Fair · ${word}`)
     await p.keyboard.press('KeyE'); await sleep(1500)
     for (let i = 0; i < 20 && !(await p.$('[data-panel="clash"] [data-clash-tier]')); i++) await sleep(500)
     for (let i = 0; i < 10 && !(await p.evaluate(() => !!(document.querySelector('[data-clash-open="1"]') ? document.querySelector('[data-clash-prize]') : document.querySelector('[data-clash-held]')))); i++) await sleep(500)
     const info = await p.evaluate(() => { const e = document.querySelector('[data-clash-tier]') as HTMLElement | null; return e ? { tier: e.dataset.clashTier, tent: e.dataset.clashTent, open: e.dataset.clashOpen, won: e.dataset.clashWon, held: !!document.querySelector('[data-clash-held]'), foes: [...document.querySelectorAll('[data-clash-foe]')].map(f => `${(f as HTMLElement).dataset.clashFoe}/${(f as HTMLElement).dataset.form}`), enter: !((document.querySelector('[data-signup-enter] button') as HTMLButtonElement | null)?.disabled ?? true) } : null })
+    if (!info) { console.log(`   tent ${no}: door ${door}, no panel; pos ${JSON.stringify(await A('pos'))}`); await p.screenshot({ path: `${out}/x-tent-${no}.png` }) }
     return { door, word, info, pitching: /still pitching/.test(await body()) }
   }
 
@@ -128,7 +129,8 @@ try {
   for (let i = 0; i < 20 && !(await p.$('[data-clash-paid]')); i++) await sleep(500)
   const paid = await p.evaluate(() => Number((document.querySelector('[data-clash-paid]') as HTMLElement | null)?.dataset.clashPaid))
   const m1 = await marks()
-  ok(paid === CLASH_PRIZE.easy && m1.includes(1500 + CLASH_PRIZE.easy), `5. the prize lands: +${paid} Marks, purse ${m0.join('/')} -> ${m1.join('/')}`)
+  // the purse is cloud-saved (a rerun hydrates the last run's balance), so the assert reads the CHANGE
+  ok(paid === CLASH_PRIZE.easy && m1.some((v, i) => v - (m0[i] ?? 0) === CLASH_PRIZE.easy), `5. the prize lands: +${paid} Marks, purse ${m0.join('/')} -> ${m1.join('/')}`)
   await p.screenshot({ path: `${out}/3-clash-won.png` })
   const srv = await (await fetch(`${url}/api/fair/clash`, { headers: { cookie: `ather_session=${mintSession(KA.id, KA.name)}` } })).json() as { won: number[]; signedIn: boolean }
   ok(srv.signedIn && srv.won.includes(easyNo), `6. the server holds the win (won ${JSON.stringify(srv.won)}), so the prize pays once a season`)
