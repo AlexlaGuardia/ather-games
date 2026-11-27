@@ -21,6 +21,8 @@ import { hudSay } from '../shared/hud-say'
 import { clashLineup, evenSpirit, foeName } from './fair-clash'
 import { CLASH_UI as L, CLASH_OPEN, CLASH_PRIZE, CLASH_SEASON, TENT_LEVEL, type ClashTier, type ClashState, type ClashClaim } from './fair-clash-rules'
 import { CLASH_LEVEL_LABEL } from './network'
+import { useFairLobby, useAutoStart } from './fair-lobby-net'   // M233 s4 EVENT LOBBY
+import { isLobby, takers, clashField, type LobbySpirit, type LobbyStart } from './fair-lobby'
 import type { Ledger } from '../trade'
 
 const NONE: readonly string[] = []
@@ -51,6 +53,24 @@ export function ClashPanel({ tier, tent, ledger, setLedger, onClose }: { tier: C
   const alreadyNote = wonHere && !(result?.won && result.first)
   const canEnter = open && !!chosen && bout === null && lineup.length > 0
   const entrants: Entrant[] = [{ who: 'you', you: true, spirit: chosen?.name ?? null }]
+
+  // ── M233 s4: THE EVENT LOBBY. Chordmates at this tent are listed; each readies up; the host's start (or everyone ready) runs a
+  // FIELD of the chord's spirits (empty seats = this tent's line-up), the same fights on every keeper's ring (one seed).
+  const [ready, setReady] = useState(false)
+  const [fieldRun, setFieldRun] = useState<LobbyStart | null>(null)
+  const [champ, setChamp] = useState<string | null>(null)
+  const mine = useMemo<LobbySpirit | null>(() => chosen ? { name: chosen.name, species: chosen.sp, element: chosen.element,
+    bonded: bondedOf(book.pots[chosen.id], gameDay(Date.now())), known: knownOf(book.pots[chosen.id], chosen.sp), lessons: book.pots[chosen.id]?.lessons ? [...book.pots[chosen.id].lessons!] : undefined } : null, [chosen, book])
+  const lineupSpirits = useMemo<LobbySpirit[]>(() => lineup.map(f => ({ name: foeName(f), species: f.species, element: f.element })), [lineup])
+  const lobby = useFairLobby(`clash:${tent}`, open ? mine : null, ready, s => { setReady(false); setFieldRun(s); setChamp(null); setResult(null); setMsg(null); setBout(0) })
+  const inLobby = open && isLobby(lobby.list)
+  useAutoStart(lobby, list => clashField(list, lineupSpirits))
+  const field = useMemo<RingEntrant[] | null>(() => fieldRun ? fieldRun.spirits.map((sp, i) => {
+    const x = sp ?? lineupSpirits[0]
+    return { name: fieldRun.names[i] ? `${x.name} · ${fieldRun.names[i]}` : x.name, species: x.species, element: x.element, spirit: () => evenSpirit(x.species, x.element, tier, x.name),
+      bonded: x.bonded ?? undefined, known: x.known, lessons: x.lessons }
+  }) : null, [fieldRun, lineupSpirits, tier])
+  const mySeat = fieldRun ? fieldRun.seats.indexOf(lobby.me) : -1
 
   // the ring's entrants, evened to the tent's level: hers (species + her form) first, then the line-up (a fresh Spirit per bout)
   const ring = useMemo<RingEntrant[] | null>(() => chosen ? [
@@ -83,12 +103,18 @@ export function ClashPanel({ tier, tent, ledger, setLedger, onClose }: { tier: C
     setPots({ ...getPots(), [chosen.id]: { ...cur, lessons: [...(cur.lessons ?? []), l] } })
     hudSay(LESSON_UI.learned(chosen.name, LESSON_UI.name[l]), 'item', 4)
   }, [chosen])
-  const onDone = useCallback((w: boolean) => { if (w) void won(); else setResult({ won: false }) }, [chosen, ledger, tent, tier])   // eslint-disable-line react-hooks/exhaustive-deps
+  const onDone = useCallback((w: boolean, c: number | null) => {
+    if (fieldRun && field && c !== null) setChamp(field[c].name)   // M233 s4: every keeper in the chord sees the same champion
+    if (w) void won(); else setResult({ won: false })
+  }, [chosen, ledger, tent, tier, fieldRun, field])   // eslint-disable-line react-hooks/exhaustive-deps
+  const exitRing = useCallback(() => { setBout(null); if (fieldRun) { setFieldRun(null); lobby.clearRun() } }, [fieldRun, lobby])
 
   return (
     <>
       <FairSignup title={L.title(CLASH_LEVEL_LABEL[tier])} dataPanel="clash" onClose={onClose} spirits={open ? spirits : []} pick={pick} onPick={setPick}
         entrants={entrants} canEnter={canEnter} onEnter={enter}
+        lobby={inLobby ? { list: lobby.list, ready, onReady: () => setReady(r => !r), isHost: lobby.isHost, hostName: lobby.list.find(p => p.id === lobby.host)?.who ?? '',
+          canStart: lobby.isHost && bout === null && takers(lobby.list).length >= 2, onStart: () => lobby.start(list => clashField(list, lineupSpirits)), busy: bout !== null } : null}
         note={open ? <span data-clash-prize={CLASH_PRIZE[tier]} data-clash-already={alreadyNote ? '1' : '0'} style={{ fontSize: 12, color: H.inkFaint }}>{alreadyNote ? L.already : L.prize(CLASH_PRIZE[tier])}</span> : null}>
         <div data-clash-tier={tier} data-clash-tent={tent} data-clash-open={open ? '1' : '0'} data-clash-won={wonHere ? '1' : '0'} style={{ marginTop: 10, display: 'grid', gap: 6 }}>
           {!open && <div data-clash-held style={{ fontSize: 14, fontWeight: 700, color: H.ink }}>{L.held}</div>}
@@ -111,12 +137,17 @@ export function ClashPanel({ tier, tent, ledger, setLedger, onClose }: { tier: C
                 {result.won && result.first === false && <div style={{ fontSize: 12, fontWeight: 600, color: H.inkFaint }}>{L.already}</div>}
               </div>
             )}
+            {champ && <div data-clash-champion={champ} style={{ fontSize: 13, fontWeight: 800, color: H.ink }}>{L.champion(champ)}</div>}
             {msg && <div data-clash-msg style={{ fontSize: 12, color: H.rust }}>{msg}</div>}
           </>}
         </div>
       </FairSignup>
-      {bout !== null && ring && (
-        <ClashRing key={`${tent}-${pick}`} tier={tier} title={L.title(CLASH_LEVEL_LABEL[tier])} entrants={ring} result={result} onDone={onDone} onExit={() => setBout(null)} onKeeperBout={onKeeperBout} />
+      {bout !== null && fieldRun && field && (
+        <ClashRing key={`field-${fieldRun.run}`} tier={tier} title={L.title(CLASH_LEVEL_LABEL[tier])} entrants={field} result={result} onDone={onDone} onExit={exitRing} onKeeperBout={onKeeperBout}
+          field={{ me: mySeat >= 0 ? mySeat : null }} seed={fieldRun.seed} />
+      )}
+      {bout !== null && !fieldRun && ring && (
+        <ClashRing key={`${tent}-${pick}`} tier={tier} title={L.title(CLASH_LEVEL_LABEL[tier])} entrants={ring} result={result} onDone={onDone} onExit={exitRing} onKeeperBout={onKeeperBout} />
       )}
     </>
   )

@@ -20,7 +20,7 @@ import type { Spirit, Species, Element } from '../../spirits/spirit'
 import { SpiritFigure } from './spirit-model'
 import { formLook, spiritModelFor, type SpiritElement } from './spirit-models'
 import type { RigClip } from './spirit-rig'
-import { newBracket, nextBout, recordBout, keeperWon, runOver, hasYou, rounds, YOU, type Bracket } from './clash-bracket'
+import { newBracket, newField, nextBout, recordBout, runOver, fieldOver, champion, hasSeat, rounds, YOU, type Bracket } from './clash-bracket'
 import type { Bonded } from './clash-fight'   // M238
 import type { BoutRecord } from './clash-lessons'   // M233 v2c
 import { fightRunner, RING_R, type BoutPlay, type BoutPose, type BoutRunner, type BoutAct } from './clash-bout'
@@ -39,6 +39,8 @@ const AFTER_MS = 1500, YOUR_TURN_MS = 1400
 const FIG = 1.8
 /** the troupe's bouts play this much faster than hers */
 export const TROUPE_X = 3
+/** M233 s4: a chord's field plays every bout at one pace, so the chord's rings keep step */
+export const FIELD_X = 2
 /** `?clashseed=N`: bout i's fight seed = N*1000 + i (the prod check picks a line it can replay) */
 const seedDial = () => { try { const v = Number(new URLSearchParams(window.location.search).get('clashseed')); return Number.isInteger(v) && v > 0 ? v : null } catch { return null } }
 const speedDial = () => { try { const v = Number(new URLSearchParams(window.location.search).get('clashx')); return v >= 1 && v <= 20 ? v : 1 } catch { return 1 } }
@@ -54,42 +56,48 @@ const lookOf = (sp: Species, el: Element) => (el === 'base' ? spiritModelFor(sp)
 
 type Live = { i: number; play: BoutPlay; start: number; swap: boolean; x: number; mine: boolean }
 
-export function ClashRing({ tier, title, entrants, runner = fightRunner, result, onDone, onExit, speed, seed, onKeeperBout }: {
+export function ClashRing({ tier, title, entrants, runner = fightRunner, result, onDone, onExit, speed, seed, onKeeperBout, field }: {
   tier: ClashTier; title: string
+  /** M233 s4 EVENT LOBBY: a chord's field (seats paired in order, run to the final, no cheer so every keeper's ring plays the
+   *  same fights from the same seed); `me` = this keeper's seat (null = watching). Unset = the solo tree (her = seat 0). */
+  field?: { me: number | null }
   /** M243 (the /shimmer/dev?mode=fair tool): every bout's speed and the line's fight seed; unset = the ?clashx / ?clashseed dials */
   speed?: number; seed?: number | null
   /** [0] = her spirit, then the line-up */ entrants: RingEntrant[]
   runner?: BoutRunner
   /** the panel's word on the run once it is over (the prize line) */ result: { won: boolean; prize?: number } | null
-  onDone: (won: boolean) => void; onExit: () => void
+  onDone: (won: boolean, champ: number | null) => void; onExit: () => void
   /** M233 v2c: her bout is over: its whole log from her side (the panel teaches her its lessons) */
   onKeeperBout?: (r: BoutRecord, seed: number) => void
 }) {
   const [phase, setPhase] = useState<'load' | 'ring'>('load')
-  const [br, setBr] = useState<Bracket>(() => newBracket(entrants.length - 1))
+  const ME = field ? field.me : YOU, full = !!field
+  const mineOf = (bt: { a: number | null; b: number | null }) => ME !== null && hasSeat(bt as never, ME)
+  const [br, setBr] = useState<Bracket>(() => (field ? newField(entrants.length) : newBracket(entrants.length - 1)))
   const [live, setLive] = useState<Live | null>(null)
   const [yourTurn, setYourTurn] = useState(false)
   const [now, setNow] = useState(0), [cheerUsed, setCheerUsed] = useState(false)
   const liveRef = useRef<Live | null>(null)
-  const done = runOver(br), doneSent = useRef(false)
+  const done = full ? fieldOver(br) : runOver(br), doneSent = useRef(false)
+  const won = ME !== null && champion(br) === ME
   const phone = useNarrow()
 
   useEffect(() => { const t = setTimeout(() => setPhase('ring'), LOAD_MS); return () => clearTimeout(t) }, [])
   // the next bout: troupe bouts straight on, hers after a short "Your bout!" beat
   useEffect(() => {
     if (phase !== 'ring' || live || done) return
-    const i = nextBout(br); if (i === null) return
-    const bt = br.bouts[i], mine = hasYou(bt)
+    const i = nextBout(br, full); if (i === null) return
+    const bt = br.bouts[i], mine = mineOf(bt)
     const go = () => {
-      const swap = bt.b === YOU   // the runner takes her side first
+      const swap = !full && bt.b === YOU   // the runner takes her side first (a field never swaps: every ring must agree)
       const [sa, sb] = swap ? [bt.b!, bt.a!] : [bt.a!, bt.b!]
-      const play = runner.run({ spirit: entrants[sa].spirit(), keeper: sa === YOU, bonded: entrants[sa].bonded, known: entrants[sa].known, lessons: entrants[sa].lessons }, { spirit: entrants[sb].spirit(), keeper: sb === YOU, bonded: entrants[sb].bonded, known: entrants[sb].known, lessons: entrants[sb].lessons }, { tier, seed: (seed ?? seedDial()) != null ? (seed ?? seedDial())! * 1000 + i : undefined })
-      const l: Live = { i, play, start: performance.now(), swap, mine, x: (speed ?? speedDial()) * (mine ? 1 : TROUPE_X) }
+      const play = runner.run({ spirit: entrants[sa].spirit(), keeper: sa === ME, bonded: entrants[sa].bonded, known: entrants[sa].known, lessons: entrants[sa].lessons }, { spirit: entrants[sb].spirit(), keeper: sb === ME, bonded: entrants[sb].bonded, known: entrants[sb].known, lessons: entrants[sb].lessons }, { tier, seed: (seed ?? seedDial()) != null ? (seed ?? seedDial())! * 1000 + i : undefined })
+      const l: Live = { i, play, start: performance.now(), swap, mine, x: (speed ?? speedDial()) * (full ? FIELD_X : mine ? 1 : TROUPE_X) }
       liveRef.current = l; setYourTurn(false); setCheerUsed(false); setLive(l)
     }
     if (mine) { setYourTurn(true); const t = setTimeout(go, YOUR_TURN_MS); return () => clearTimeout(t) }
     go()
-  }, [phase, live, done, br, runner, entrants, tier, speed, seed])
+  }, [phase, live, done, br, runner, entrants, tier, speed, seed, full, ME])
   // a bout's end (the runner says it is over): hold on the winner, then move the tree
   const ended = !!live && live.play.over(tOf(live, now))
   useEffect(() => {
@@ -97,13 +105,15 @@ export function ClashRing({ tier, title, entrants, runner = fightRunner, result,
     const t = setTimeout(() => {
       const bt = br.bouts[live.i], w = live.play.winner() === 'a' ? (live.swap ? bt.b! : bt.a!) : (live.swap ? bt.a! : bt.b!)
       // M233 v2c: her bout's log, her side = 'a' (seat 0: the runner takes her side first)
-      const st = live.play.state, foe = entrants[live.swap ? bt.a! : bt.b!]
-      if (live.mine && st && live.play.log) onKeeperBout?.({ side: 0, foe: { species: foe.species, element: foe.element }, won: live.play.winner() === 'a', hpEnd: st.f[0].hp / Math.max(1, st.f[0].maxHp), ev: live.play.log }, live.play.seed ?? 0)
+      // a field's seat may be side 'b' (no swap): her side is wherever her seat stands
+      const side: 0 | 1 = full ? (bt.a === ME ? 0 : 1) : 0
+      const st = live.play.state, foe = entrants[full ? (side === 0 ? bt.b! : bt.a!) : live.swap ? bt.a! : bt.b!]
+      if (live.mine && st && live.play.log) onKeeperBout?.({ side, foe: { species: foe.species, element: foe.element }, won: live.play.winner() === (side === 0 ? 'a' : 'b'), hpEnd: st.f[side].hp / Math.max(1, st.f[side].maxHp), ev: live.play.log }, live.play.seed ?? 0)
       liveRef.current = null; setLive(null); setBr(b => recordBout(b, live.i, w))
     }, AFTER_MS)
     return () => clearTimeout(t)
-  }, [live, ended, br, entrants, onKeeperBout])
-  useEffect(() => { if (done && !doneSent.current) { doneSent.current = true; onDone(keeperWon(br)) } }, [done, br, onDone])
+  }, [live, ended, br, entrants, onKeeperBout, full, ME])
+  useEffect(() => { if (done && !doneSent.current) { doneSent.current = true; onDone(full ? won : br.bouts[br.bouts.length - 1].winner === YOU, champion(br)) } }, [done, br, onDone, full, won])
   // the HUD's clock (HP bars): 10 a second while a bout runs
   useEffect(() => { if (!live) return; const t = setInterval(() => setNow(performance.now()), 100); return () => clearInterval(t) }, [live])
 
@@ -128,12 +138,12 @@ export function ClashRing({ tier, title, entrants, runner = fightRunner, result,
         </Canvas>
         {/* the bout's HP bars over the ring */}
         {hud.length > 0 && (
-          <div data-clash-bout={live!.i} data-clash-keeper-bout={hasYou(bt!) ? '1' : '0'} data-clash-bonded={hasYou(bt!) && live!.play.bonded ? (b => `${b.id}:${b.twist}`)(live!.play.bonded.a)   /* the runner always takes her side first */ : undefined}
-            data-clash-tactics={hasYou(bt!) && live!.play.log ? tacticCounts(live!.play.log) : undefined} style={{ position: 'absolute', top: 10, left: 10, right: 10, display: 'flex', gap: 10, pointerEvents: 'none' }}>
+          <div data-clash-bout={live!.i} data-clash-keeper-bout={mineOf(bt!) ? '1' : '0'} data-clash-bonded={!full && mineOf(bt!) && live!.play.bonded ? (b => `${b.id}:${b.twist}`)(live!.play.bonded.a)   /* the runner always takes her side first */ : undefined}
+            data-clash-tactics={!full && mineOf(bt!) && live!.play.log ? tacticCounts(live!.play.log) : undefined} style={{ position: 'absolute', top: 10, left: 10, right: 10, display: 'flex', gap: 10, pointerEvents: 'none' }}>
             {hud.map(h => (
               <div key={h.side} data-clash-hp={h.side} data-hp={h.hp.toFixed(2)} style={{ flex: 1, padding: '6px 10px', borderRadius: 10, background: 'rgba(255,248,232,.88)', boxShadow: '0 2px 8px rgba(0,0,0,.25)' }}>
                 <div style={{ fontSize: 13, fontWeight: 800, textAlign: h.side === 'a' ? 'left' : 'right', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {entrants[h.seat].name}{h.seat === YOU && <span style={{ marginLeft: 6, color: H.ember }}>{L.you}</span>}
+                  {entrants[h.seat].name}{h.seat === ME && <span style={{ marginLeft: 6, color: H.ember }}>{L.you}</span>}
                 </div>
                 <div style={{ height: 8, borderRadius: 4, background: 'rgba(58,39,22,.18)', marginTop: 4, overflow: 'hidden', direction: h.side === 'a' ? 'ltr' : 'rtl' }}>
                   <div style={{ width: `${Math.round(h.hp * 100)}%`, height: '100%', background: h.hp > 0.35 ? H.moss : H.rust, transition: 'width .25s' }} />
@@ -143,7 +153,7 @@ export function ClashRing({ tier, title, entrants, runner = fightRunner, result,
             ))}
           </div>
         )}
-        {live?.mine && !done && !ended && (
+        {live?.mine && !full && !done && !ended && (
           <button data-clash-cheer data-cheer-used={cheerUsed ? '1' : '0'} disabled={cheerUsed} onClick={doCheer}
             style={{ position: 'absolute', bottom: 14, left: '50%', transform: 'translateX(-50%)', padding: '10px 22px', borderRadius: 22, border: 'none', fontWeight: 900, fontSize: 15,
               background: cheerUsed ? 'rgba(255,248,232,.6)' : H.ember, color: cheerUsed ? H.inkFaint : '#fff8ea', boxShadow: '0 3px 10px rgba(0,0,0,.35)', cursor: cheerUsed ? 'default' : 'pointer' }}>
@@ -152,8 +162,9 @@ export function ClashRing({ tier, title, entrants, runner = fightRunner, result,
         )}
         {yourTurn && <div data-clash-your-turn style={{ position: 'absolute', top: '38%', left: 0, right: 0, textAlign: 'center', fontSize: 30, fontWeight: 900, color: '#fff4d8', textShadow: '0 3px 10px rgba(0,0,0,.6)' }}>{L.yourBout}</div>}
         {done && (
-          <div data-clash-ring-result={keeperWon(br) ? 'won' : 'lost'} style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', width: 'min(320px, calc(100% - 32px))', padding: 18, borderRadius: 14, background: H.paper, boxShadow: '0 8px 30px rgba(0,0,0,.45)', textAlign: 'center' }}>
-            <div style={{ fontSize: 18, fontWeight: 900, color: keeperWon(br) ? H.ember : H.rust }}>{keeperWon(br) ? L.won : L.lost}</div>
+          <div data-clash-ring-result={(full ? won : br.bouts[br.bouts.length - 1].winner === YOU) ? 'won' : 'lost'} data-clash-champion={full ? champion(br) ?? '' : undefined} style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', width: 'min(320px, calc(100% - 32px))', padding: 18, borderRadius: 14, background: H.paper, boxShadow: '0 8px 30px rgba(0,0,0,.45)', textAlign: 'center' }}>
+            <div style={{ fontSize: 18, fontWeight: 900, color: (full ? won : br.bouts[br.bouts.length - 1].winner === YOU) ? H.ember : H.rust }}>{(full ? won : br.bouts[br.bouts.length - 1].winner === YOU) ? L.won : L.lost}</div>
+            {full && champion(br) !== null && <div data-clash-champion-name style={{ marginTop: 4, fontWeight: 800 }}>{L.champion(entrants[champion(br)!].name)}</div>}
             {result?.won && !!result.prize && <div style={{ marginTop: 6, fontWeight: 800 }}>{L.prizeLanded(result.prize)}</div>}
             <button data-clash-exit onClick={onExit} style={{ marginTop: 14, padding: '10px 18px', borderRadius: 10, border: 'none', background: H.ember, color: '#fff8ea', fontWeight: 800, fontSize: 15, cursor: 'pointer' }}>{L.exit}</button>
           </div>
@@ -168,14 +179,14 @@ export function ClashRing({ tier, title, entrants, runner = fightRunner, result,
             <div key={r} style={{ flex: 1, display: 'grid', gap: 6, alignContent: 'center' }}>
               <div style={{ fontSize: 11, fontWeight: 800, color: H.inkSoft, textTransform: 'uppercase', letterSpacing: '.05em' }}>{L.round(r, R)}</div>
               {br.bouts.map((b, i) => b.round !== r ? null : (
-                <div key={i} data-bracket-bout={i} data-bout-state={b.winner !== null ? 'done' : live?.i === i ? 'live' : 'waiting'} data-bout-winner={b.winner ?? ''} data-bout-you={hasYou(b) ? '1' : '0'}
+                <div key={i} data-bracket-bout={i} data-bout-state={b.winner !== null ? 'done' : live?.i === i ? 'live' : 'waiting'} data-bout-winner={b.winner ?? ''} data-bout-you={mineOf(b) ? '1' : '0'}
                   style={{ borderRadius: 8, padding: '4px 8px', background: live?.i === i ? 'rgba(224,130,63,.18)' : 'rgba(255,250,240,.7)', boxShadow: `inset 0 0 0 ${live?.i === i ? 2 : 1}px ${live?.i === i ? H.ember : 'rgba(58,39,22,.14)'}` }}>
                   {[b.a, b.b].map((seat, k) => (
                     <div key={k} style={{ display: 'flex', justifyContent: 'space-between', gap: 6, fontSize: 13, lineHeight: '20px',
                       fontWeight: seat !== null && b.winner === seat ? 900 : 600, color: seat === null ? H.inkFaint : b.winner !== null && b.winner !== seat ? H.inkFaint : H.ink,
                       textDecoration: b.winner !== null && seat !== null && b.winner !== seat ? 'line-through' : 'none' }}>
                       <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{seat === null ? '...' : entrants[seat].name}</span>
-                      {seat === YOU && <span style={{ color: H.ember, fontWeight: 800 }}>{L.you}</span>}
+                      {seat !== null && seat === ME && <span style={{ color: H.ember, fontWeight: 800 }}>{L.you}</span>}
                     </div>
                   ))}
                   {live?.i === i && <div style={{ fontSize: 11, fontWeight: 800, color: H.ember }}>{L.live}</div>}

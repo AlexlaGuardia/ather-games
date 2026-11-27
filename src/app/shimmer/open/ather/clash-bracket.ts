@@ -36,9 +36,25 @@ export const keeperOut = (b: Bracket) => b.bouts.some(bt => hasYou(bt) && bt.win
 export const keeperWon = (b: Bracket) => b.bouts[b.bouts.length - 1].winner === YOU
 export const runOver = (b: Bracket) => keeperOut(b) || b.bouts[b.bouts.length - 1].winner !== null
 
-/** the next bout to fight (both seats known, no winner), or null when her run is over */
-export function nextBout(b: Bracket): number | null {
-  if (runOver(b)) return null
+// ── BETA M233 s4 EVENT LOBBY: a CHORD's field. Every seat is a spirit in its own right (a chord member's or a troupe filler),
+// seats paired in order (0 v 1, 2 v 3, ...), and the tree runs to its final whoever falls: every keeper in the chord watches
+// the whole tournament. `full` on the helpers below = this rule (the solo tree stops when HER run is over).
+/** a field of `size` seats paired in order (a power of two) */
+export function newField(size: number): Bracket {
+  if (!isPow2(size)) throw new Error(`clash field: ${size} is not a power of two`)
+  const bouts: Bout[] = []
+  for (let i = 0; i < size; i += 2) bouts.push({ round: 0, a: i, b: i + 1, winner: null })
+  for (let r = 1, n = size / 4; n >= 1; r++, n /= 2) for (let i = 0; i < n; i++) bouts.push({ round: r, a: null, b: null, winner: null })
+  return { size, bouts }
+}
+/** the final's winner (a seat), or null while it is undecided */
+export const champion = (b: Bracket): number | null => b.bouts[b.bouts.length - 1].winner
+export const fieldOver = (b: Bracket) => champion(b) !== null
+export const hasSeat = (bt: Bout, seat: number) => bt.a === seat || bt.b === seat
+
+/** the next bout to fight (both seats known, no winner), or null when her run is over (`full`: when the final is decided) */
+export function nextBout(b: Bracket, full = false): number | null {
+  if (full ? fieldOver(b) : runOver(b)) return null
   const i = b.bouts.findIndex(bt => bt.winner === null && bt.a !== null && bt.b !== null)
   return i < 0 ? null : i
 }

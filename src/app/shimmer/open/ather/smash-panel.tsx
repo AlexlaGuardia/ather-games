@@ -4,7 +4,7 @@
 // at the special bell (one hit, the battle system's damage: fair-smash.ts), the striker climbs the pole and the bell rings
 // at the top, the hit is read out and goes to the SEASON BOARD (/api/fair/smash, shared by every keeper). SMASH_TRIES a
 // day. Labels: plain functional words (fair-smash-rules.ts SMASH_UI), for @lark to rewrite.
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { H } from '../../ui/hearth'
 import { FairSignup } from './fair-signup'
 import { spiritFormName } from '../../spirits/spirit'
@@ -14,6 +14,8 @@ import { partyIds, subscribeParty } from './spirit-party'
 import { loadStats } from './spirit-stats'
 import { smashHit } from './fair-smash'
 import { SMASH_UI as L, strikerRise, rings, type SmashBoard } from './fair-smash-rules'
+import { useFairLobby, useAutoStart } from './fair-lobby-net'   // M233 s4 EVENT LOBBY
+import { isLobby, takers, smashField, smashWinner, smashDone, LOBBY_UI, type LobbySpirit } from './fair-lobby'
 
 const NONE: readonly string[] = []
 export const SWING_MS = 450, RISE_MS = 900
@@ -38,8 +40,8 @@ export function SmashPanel({ onClose }: { onClose: () => void }) {
 
   const chosen = spirits.find(s => s.id === pick) ?? null
   const canSwing = !!chosen && !!board?.signedIn && (board?.triesLeft ?? 0) > 0 && (phase === 'idle' || phase === 'done')
-  const swing = async () => {
-    if (!chosen || !canSwing) return
+  const swing = async (): Promise<{ hit: number; by: string } | null> => {
+    if (!chosen || !canSwing) return null
     const r = smashHit(chosen.sp, loadStats()[chosen.id], chosen.element)
     setMsg(null); setHit(null); setPhase('swing')
     await new Promise(res => setTimeout(res, SWING_MS))
@@ -49,13 +51,30 @@ export function SmashPanel({ onClose }: { onClose: () => void }) {
       .catch(() => setMsg('Could not reach the board.'))
     await new Promise(res => setTimeout(res, RISE_MS)); await post
     setPhase('done')
+    return { hit: r.hit, by: chosen.name }
   }
+
+  // ── M233 s4: THE EVENT LOBBY. Chordmates at the bell ready up; at the start each keeper's own spirit swings ONCE (her own try,
+  // on the season board as ever) and says the hit; the highest wins, read the same by every keeper in the chord.
+  const [ready, setReady] = useState(false)
+  const swingRef = useRef(swing); swingRef.current = swing
+  const mine = useMemo<LobbySpirit | null>(() => chosen ? { name: chosen.name, species: chosen.sp, element: chosen.element ?? 'base' } : null, [chosen])
+  const lobby = useFairLobby('smash', mine, ready, () => { setReady(false); void swingRef.current().then(r => { if (r) lobby.sendHit(r.hit, r.by) }) })
+  const inLobby = isLobby(lobby.list) || !!lobby.run
+  useAutoStart(lobby, smashField)
+  const [, setNowTick] = useState(0)
+  useEffect(() => { if (!lobby.run) return; const t = setInterval(() => setNowTick(x => x + 1), 1000); return () => clearInterval(t) }, [lobby.run])
+  const contestOver = !!lobby.run && smashDone(lobby.hits, lobby.run.seats, lobby.startedAt, Date.now())
+  const champId = contestOver && lobby.run ? smashWinner(lobby.hits, lobby.run.seats) : null
+  const champ = champId ? lobby.hits.find(h => h.id === champId) ?? null : null
 
   const rise = phase === 'rise' || phase === 'done' ? strikerRise(hit?.hit ?? 0) : 0
   const rang = phase === 'done' && !!hit && rings(hit.hit)
   return (
     <FairSignup title={L.title} dataPanel="smash" onClose={onClose} spirits={spirits} pick={pick} onPick={setPick}
       entrants={[{ who: 'you', you: true, spirit: chosen?.name ?? null }]} canEnter={canSwing} onEnter={() => { void swing() }}
+      lobby={inLobby ? { list: lobby.list, ready, onReady: () => setReady(r => !r), isHost: lobby.isHost, hostName: lobby.list.find(p => p.id === lobby.host)?.who ?? '',
+        canStart: lobby.isHost && !lobby.run && takers(lobby.list).length >= 2, onStart: () => lobby.start(smashField), busy: !!lobby.run && !contestOver } : null}
       note={board?.signedIn ? <span data-smash-tries={board.triesLeft} style={{ fontSize: 12, color: H.inkFaint }}>{board.triesLeft > 0 ? L.tries(board.triesLeft) : L.noTries}</span> : null}>
       <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'stretch' }}>
         <SmashPole phase={phase} rise={rise} rang={rang} />
@@ -72,6 +91,19 @@ export function SmashPanel({ onClose }: { onClose: () => void }) {
           <div data-smash-best={board?.best ?? ''} style={{ fontSize: 13, fontWeight: 700, color: H.inkSoft }}>{L.best(board?.best ?? null)}</div>
         </div>
       </div>
+
+      {lobby.run && (
+        <div data-smash-contest={lobby.run.run} data-smash-over={contestOver ? '1' : '0'} data-smash-champion={champ ? `${champ.who}:${champ.hit}` : ''} style={{ marginTop: 10, display: 'grid', gap: 2, fontSize: 13 }}>
+          <div style={{ fontWeight: 700 }}>{LOBBY_UI.contest}</div>
+          {lobby.run.seats.map((id, i) => { const h = lobby.hits.find(x => x.id === id); return (
+            <div key={`${id}:${i}`} data-contest-seat={lobby.run!.names[i] ?? ''} data-contest-hit={h?.hit ?? ''} style={{ display: 'flex', gap: 8, fontWeight: id === champId ? 900 : 600, color: H.ink }}>
+              <span style={{ flex: 1 }}>{lobby.run!.names[i]}{h ? ` · ${h.spirit}` : ''}</span><span style={{ fontVariantNumeric: 'tabular-nums' }}>{h ? h.hit : '...'}</span>
+            </div>) })}
+          {!contestOver && <div style={{ fontSize: 12, color: H.inkFaint }}>{LOBBY_UI.swingWait}</div>}
+          {champ && <div style={{ fontSize: 15, fontWeight: 800, color: H.ember }}>{LOBBY_UI.winner(champ.who, champ.spirit, champ.hit)}</div>}
+          {contestOver && <button data-smash-contest-done onClick={lobby.clearRun} style={{ justifySelf: 'start', marginTop: 4, padding: '4px 12px', borderRadius: 8, border: 'none', background: H.paperLo, color: H.ink, fontWeight: 700, cursor: 'pointer' }}>{L.close}</button>}
+        </div>
+      )}
 
       <div style={{ marginTop: 12, borderTop: `1px solid ${H.rule}`, paddingTop: 8 }}>
         <div style={{ fontWeight: 700, marginBottom: 4 }}>{L.board}</div>

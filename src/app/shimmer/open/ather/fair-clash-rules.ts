@@ -68,6 +68,7 @@ export const CLASH_UI = {
   round: (r: number, of: number) => (r === of - 1 ? 'Final' : `Round ${r + 1}`),
   you: 'You',
   yourBout: 'Your bout!',
+  champion: (name: string) => `Champion: ${name}`,   // M233 s4 (@lark)
   live: 'Now',
   next: 'Next',
   out: 'Out',
