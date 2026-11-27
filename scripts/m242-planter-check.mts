@@ -46,7 +46,10 @@ const hideCard = () => p.evaluate(() => { const hits = [...document.querySelecto
 const shot = async (n: string) => { await hideCard(); try { await p.screenshot({ path: `${out}/${n}.png` }) } catch { /* slow frame */ } }
 const poll = async (fn: () => Promise<boolean>, ms = 15000) => { const t = Date.now(); while (Date.now() - t < ms) { if (await fn().catch(() => false)) return true; await sleep(400) } return false }
 const centre = (sel: string) => p.evaluate((s: string) => { const e = document.querySelector<HTMLElement>(s); if (!e) return null; e.scrollIntoView({ block: 'center' }); const r = e.getBoundingClientRect(); return r.width ? { x: r.x + r.width / 2, y: r.y + r.height / 2 } : null }, sel)
-const tap = async (sel: string) => { const b = await centre(sel); if (b) { if (desk) await p.mouse.click(b.x, b.y); else await p.touchscreen.tap(b.x, b.y); await sleep(700) } return !!b }
+// desk: under pointer lock a mouse click lands on the locked canvas, not the button under the cursor -> click the element itself
+const tap = async (sel: string) => { const b = await centre(sel); if (b) {
+  if (desk && await p.evaluate(() => !!document.pointerLockElement)) await p.evaluate((s: string) => (document.querySelector(s) as HTMLElement | null)?.click(), sel)
+  else if (desk) await p.mouse.click(b.x, b.y); else await p.touchscreen.tap(b.x, b.y); await sleep(700) } return !!b }
 const A = (k: string, ...a: unknown[]) => p.evaluate((k: string, a: unknown[]) => { const f = (window as any).__ather?.[k]; return typeof f === 'function' ? f(...a) : null }, k, a)
 const tp = async (x: number, z: number) => { await A('tp', x, z, 0); await sleep(1500) }
 const aim = async (x: number, z: number, ty: number) => {
@@ -93,7 +96,9 @@ const placeFromBag = async (item: string, at: [number, number]): Promise<Pc | nu
   if (slot < 0 || slot >= 8) { console.log(`  (${item} not on the hotbar: slot ${slot})`); return null }
   const had = new Set((await pieces()).map(x => x.id))
   await tp(at[0], at[1]); await A('look', 0, -0.35).catch(() => null); await sleep(600)
-  if (desk) await p.keyboard.press(String(slot + 1)); else await tap(`[data-hud="hotbar"] button[aria-label="slot ${slot + 1}"]`)
+  // the hotbar button by pointer on both (desk digit keys only count once the game has input = pointer lock, refused headless)
+  if (desk) await p.keyboard.press(String(slot + 1))
+  if (!(await poll(async () => !!(await centre('[data-act="place"]')), desk ? 2000 : 1))) await tap(`[data-hud="hotbar"] button[aria-label="slot ${slot + 1}"]`)
   await poll(async () => !!(await centre('[data-act="place"]')), 8000)
   for (let t = 0; t < 5; t++) {
     await tap('[data-act="place"]'); await sleep(900)
