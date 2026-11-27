@@ -88,7 +88,7 @@ export function ExchangeHallPanel({ ledger, setLedger, onClose, startTab = 'offe
       <div style={{ padding: '6px 14px 14px', fontSize: 13, color: H.ink }}>
         {tab === 'search' && (
           <div style={{ marginBottom: 8 }}>
-            <input data-x-search value={q} placeholder="Item name" onChange={e => { setQ(e.target.value); setItem(null) }}
+            <input data-x-search onKeyDown={e => e.stopPropagation()} value={q} placeholder="Item name" onChange={e => { setQ(e.target.value); setItem(null) }}
               style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: 6, border: `1px solid ${H.rule}`, font: '14px system-ui', background: H.paperHi }} />
             {!item && matches.length > 0 && (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 6 }}>
@@ -132,8 +132,8 @@ export function ExchangeHallPanel({ ledger, setLedger, onClose, startTab = 'offe
                 <div style={{ marginBottom: 6 }}><b data-x-item={item}>{nameOf(item)}</b> <span style={{ color: H.inkSoft }}>· you have {countOf(inv, item)} · {ledger.marks.toLocaleString('en-US')} Marks</span></div>
                 <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
                   {(['buy', 'sell'] as const).map(s => <button key={s} data-x-side={s} onClick={() => setSide(s)} style={{ padding: '6px 12px', borderRadius: 6, border: 0, cursor: 'pointer', font: '700 12px system-ui', background: side === s ? (s === 'buy' ? H.sky : H.moss) : H.tabIdle, color: side === s ? '#fff' : H.ink }}>{s === 'buy' ? 'Buy' : 'Sell'}</button>)}
-                  <label style={{ font: '12px system-ui' }}>How many <input data-x-n value={n} inputMode="numeric" onChange={e => setN(e.target.value.replace(/\D/g, ''))} style={{ width: 52, padding: 4 }} /></label>
-                  <label style={{ font: '12px system-ui' }}>Price each <input data-x-price value={price} inputMode="numeric" onChange={e => setPrice(e.target.value.replace(/\D/g, ''))} style={{ width: 70, padding: 4 }} /></label>
+                  <label style={{ font: '12px system-ui' }}>How many <input data-x-n onKeyDown={e => e.stopPropagation()} value={n} inputMode="numeric" onChange={e => setN(e.target.value.replace(/\D/g, ''))} style={{ width: 52, padding: 4 }} /></label>
+                  <label style={{ font: '12px system-ui' }}>Price each <input data-x-price onKeyDown={e => e.stopPropagation()} value={price} inputMode="numeric" onChange={e => setPrice(e.target.value.replace(/\D/g, ''))} style={{ width: 70, padding: 4 }} /></label>
                 </div>
                 <div style={{ marginTop: 6, color: H.inkSoft, font: '12px system-ui' }}>
                   Total {total.toLocaleString('en-US')} Marks{side === 'sell' && total > 0 ? ` · fee ${feeOf(Number(n), Number(price))} (${EXCHANGE_FEE * 100}%) when it sells` : ''}
