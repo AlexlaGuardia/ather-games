@@ -6,7 +6,7 @@
 // collecting still happens inside each mode (this reads state and routes you in).
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Chakra_Petch } from 'next/font/google'
+import { chakra as display } from '@/fonts/chakra'
 import { saveHost, hostProgress } from './lib/host'
 import {
   FORGE_KEY, forgeRate, forgeHeat, canWarp, activePlanets, WARP_HEAT,
@@ -21,7 +21,6 @@ import type { HostState } from './lib/types'
 import { sfx } from './lib/sfx'
 import SiteNav from '../_components/SiteNav'
 
-const display = Chakra_Petch({ weight: ['500', '600'], subsets: ['latin'] })
 const MATCH_INTERVAL = 20 * 60 * 1000 // a match answers the beacon every 20 min (mirrors the hub)
 const DIGEST_LEAD = 220 // ms before the first haul row lands (let the card settle in)
 const DIGEST_STEP = 200 // ms between rows — the haul itemizes one beat at a time

@@ -1,9 +1,33 @@
-import { Fraunces, Nunito } from 'next/font/google'
+import localFont from 'next/font/local'
 
 // The Carved Hearth's two faces: a soft serif for what a panel IS (titles, a picked item's name,
 // the quiet italic lines) and a rounded sans for everything you read to act. Loaded here, applied by
 // `HearthFrame` as CSS variables, so a panel that wears the hearth gets its type by wearing it —
 // nothing global changes and the arcade cabinets never download them.
-export const hearthDisplay = Fraunces({ subsets: ['latin'], weight: ['500', '600', '700'], style: ['normal', 'italic'], variable: '--font-hearth-display', display: 'swap' })
-export const hearthBody = Nunito({ subsets: ['latin'], weight: ['500', '600', '700', '800'], variable: '--font-hearth-body', display: 'swap' })
+// Self-hosted (M221): files + OFL licences in src/fonts/fraunces + src/fonts/nunito (@fontsource 5.3.0, latin).
+export const hearthDisplay = localFont({
+  src: [
+    { path: '../../../fonts/fraunces/fraunces-latin-500-normal.woff2', weight: '500', style: 'normal' },
+    { path: '../../../fonts/fraunces/fraunces-latin-500-italic.woff2', weight: '500', style: 'italic' },
+    { path: '../../../fonts/fraunces/fraunces-latin-600-normal.woff2', weight: '600', style: 'normal' },
+    { path: '../../../fonts/fraunces/fraunces-latin-600-italic.woff2', weight: '600', style: 'italic' },
+    { path: '../../../fonts/fraunces/fraunces-latin-700-normal.woff2', weight: '700', style: 'normal' },
+    { path: '../../../fonts/fraunces/fraunces-latin-700-italic.woff2', weight: '700', style: 'italic' },
+  ],
+  variable: '--font-hearth-display',
+  display: 'swap',
+  adjustFontFallback: 'Times New Roman',
+  fallback: ['Georgia', 'serif'],
+})
+export const hearthBody = localFont({
+  src: [
+    { path: '../../../fonts/nunito/nunito-latin-500-normal.woff2', weight: '500', style: 'normal' },
+    { path: '../../../fonts/nunito/nunito-latin-600-normal.woff2', weight: '600', style: 'normal' },
+    { path: '../../../fonts/nunito/nunito-latin-700-normal.woff2', weight: '700', style: 'normal' },
+    { path: '../../../fonts/nunito/nunito-latin-800-normal.woff2', weight: '800', style: 'normal' },
+  ],
+  variable: '--font-hearth-body',
+  display: 'swap',
+  fallback: ['system-ui', 'sans-serif'],
+})
 export const HEARTH_FONT_VARS = `${hearthDisplay.variable} ${hearthBody.variable}`

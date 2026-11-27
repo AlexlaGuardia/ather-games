@@ -1,32 +1,13 @@
 import type { Metadata, Viewport } from "next";
-import { Cormorant_Garamond, Inter, Chakra_Petch } from "next/font/google";
+import { cormorant, inter } from "@/fonts/site";
+import { chakra } from "@/fonts/chakra";
 import "./globals.css";
 import "./gameui.css";
 import SaveOwnerBoot from "./_components/SaveOwnerBoot";
 import AnalyticsBoot from "./_components/AnalyticsBoot";
 
-const cormorant = Cormorant_Garamond({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  variable: "--font-display",
-  display: "swap",
-});
-
-// the squared, industrial game display face — Eurostile's free cousin. Exposed as
-// --font-game for the game-UI layer (gameui.css); does NOT change anything until a
-// .gx-title/.gx-label opts in. See GAME_UI_LAYER.md.
-const chakra = Chakra_Petch({
-  subsets: ["latin"],
-  weight: ["500", "600", "700"],
-  variable: "--font-game",
-  display: "swap",
-});
-
-const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-body",
-  display: "swap",
-});
+// Fonts are self-hosted (src/fonts, M221). Chakra Petch = the game display face, exposed as
+// --font-game for the game-UI layer (gameui.css); see GAME_UI_LAYER.md.
 
 export const viewport: Viewport = {
   width: "device-width",

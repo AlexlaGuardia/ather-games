@@ -8,13 +8,12 @@
 // in-world (glow/hotbar/starting ability) is the mechanics seat's wiring — onChoose() hands
 // it the id. Standalone, no dep on Shimmer3D.
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Chakra_Petch } from 'next/font/google'
+import { chakra as display } from '@/fonts/chakra'
 import { ELEMENTS, RUNES, runesOf, type ElementId, type Rune } from './runes.data'
 import { RuneMark } from './RuneMark'
 import { BIRTH_KEY } from '../rune-inventory'
 import { keeperKey } from '@/lib/keeper-local'
 
-const display = Chakra_Petch({ weight: ['500', '600', '700'], subsets: ['latin'] })
 
 
 

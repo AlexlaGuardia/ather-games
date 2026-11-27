@@ -6,10 +6,9 @@
 // Canvas drives the visuals on elapsed time; a few timed beats drive the staged text.
 
 import { useEffect, useRef, useState } from 'react'
-import { Chakra_Petch } from 'next/font/google'
+import { chakra as display } from '@/fonts/chakra'
 import { mulberry32 } from '../lib/rng'
 
-const display = Chakra_Petch({ weight: ['500', '600'], subsets: ['latin'] })
 
 export interface WarpData {
   fromNode: number

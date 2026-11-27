@@ -10,12 +10,12 @@ import Module from 'node:module'
 import type { PlacedStruct, StationKind } from './StationMenus'
 
 // ★ THE HEARTH KIT LOADS `next/font`, WHICH ONLY EXISTS INSIDE NEXT'S COMPILER (2026-09-23). The menus
-// wear the Carved Hearth now; `ui/hearth-fonts.ts` calls `Fraunces()`/`Nunito()`, which Next rewrites at
+// wear the Carved Hearth now; `ui/hearth-fonts.ts` calls `localFont()` (self-hosted since M221), which Next rewrites at
 // build time and which are not functions under node. Stub the module for THIS render — the fonts are CSS
 // variables the markup names, and nothing here asserts a typeface — then load the menus after it.
 const realLoad = (Module as unknown as { _load: (...a: unknown[]) => unknown })._load
 ;(Module as unknown as { _load: (...a: unknown[]) => unknown })._load = function (req: unknown, ...rest: unknown[]) {
-  if (req === 'next/font/google') return new Proxy({}, { get: () => () => ({ variable: '', className: '' }) })
+  if (req === 'next/font/local') { const f = () => ({ variable: '', className: '' }); return Object.assign(f, { default: f }) }
   return realLoad.call(this, req, ...rest)
 }
 // …and its stylesheet (`import './hearth.css'`), which only a bundler can load. Motion and scrollbars — no assert reads them.

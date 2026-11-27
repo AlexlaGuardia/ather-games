@@ -6,7 +6,7 @@
 // harvest) buys the armory. One loop, two rooms.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Chakra_Petch } from 'next/font/google'
+import { chakra as display } from '@/fonts/chakra'
 import Orrery from '../components/Orrery'
 import Emblem from '../components/Emblem'
 import SiteNav from '../../_components/SiteNav'
@@ -16,7 +16,6 @@ import { planetMilestone } from '../lib/milestones'
 
 // the display face — squared, industrial, the genre's voice (Eurostile's free cousin).
 // labels/tabs/titles only; mono keeps the numbers and the flavor text.
-const display = Chakra_Petch({ weight: ['500', '600'], subsets: ['latin'] })
 import { HostState } from '../lib/types'
 import { loadHost, saveHost, guardProgress } from '../lib/host'
 import { sfx } from '../lib/sfx'
