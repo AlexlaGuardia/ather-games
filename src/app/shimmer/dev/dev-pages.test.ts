@@ -171,6 +171,15 @@ for (const g of DEV_GROUP_ORDER) {
   ok(DEV_GROUPS[g] !== undefined, `ORDERED GROUP UNDEFINED: "${g}" is in DEV_GROUP_ORDER but not DEV_GROUPS`)
 }
 
+// ★ M214 s2: Doctor and Mesh Bench tabs are archived (DEV_ARCHIVE.md). The hub must not offer or load them.
+const hubSrc = readFileSync(join(DEV, 'page.tsx'), 'utf8')
+const archSrc = readFileSync(ARCHIVE, 'utf8')
+for (const [id, file] of [['doctor', 'DoctorPanel.tsx'], ['meshbench', 'MeshBench.tsx']] as const) {
+  ok(!new RegExp(`id: '${id}'|^\\s+${id}:`, 'm').test(hubSrc), `ARCHIVED TAB LIVE: ${id} is still a tab / editor entry in dev/page.tsx`)
+  ok(!existsSync(join(DEV, 'editors', file)), `ARCHIVED TAB SHIPPING: editors/${file} exists`)
+  ok(archSrc.includes('| `' + id + '` |'), `NOT ARCHIVED: DEV_ARCHIVE.md has no row for the ${id} tab`)
+}
+
 // ── REPORT ────────────────────────────────────────────────────────────────────────────────────
 console.log(`dev-pages: ${pass} pass, ${fails.length} fail`)
 console.log(`  discovered ${shimmerDevRoutes.length} under /shimmer/dev + ${outOfTreeDevRoutes.length} out-of-tree, ${DEV_PAGES.length} registered`)

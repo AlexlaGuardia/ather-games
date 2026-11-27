@@ -22,7 +22,7 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 
 const ARCHIVED = [...readFileSync('DEV_ARCHIVE.md', 'utf8').matchAll(/^\| `(\/[^`]+)` \| `([0-9a-f]{7,40})` \|/gm)].map(m => m[1])
 const LIVE = DEV_PAGES.filter(p => p.era === 'live').map(p => p.path)
-const KEPT_MODES = ['terrain', 'spirits', 'moves', 'evolution', 'tools', 'alchemy', 'farming', 'resources', 'items', 'skills', 'mana', 'daycycle', 'doctor', 'meshbench']
+const KEPT_MODES = ['terrain', 'spirits', 'moves', 'evolution', 'tools', 'alchemy', 'farming', 'resources', 'items', 'skills', 'mana', 'daycycle']
 ok(ARCHIVED.length >= 30, `DEV_ARCHIVE.md lists ${ARCHIVED.length} removed routes`)
 
 const br = await puppeteer.launch({ protocolTimeout: 600000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
@@ -91,6 +91,10 @@ try {
   await go('/shimmer/dev?mode=map')
   await sleep(1500)
   ok(await p.evaluate(() => !!document.querySelector('[data-creative-pill]')), 'a removed tab (?mode=map) falls back to the index')
+  for (const gone of ['doctor', 'meshbench']) {
+    await go(`/shimmer/dev?mode=${gone}`); await sleep(2500)
+    ok(await p.evaluate(() => !!document.querySelector('[data-creative-pill]')) && !(await p.evaluate(() => /Doctor|Mesh Bench/.test(document.body.innerText))), `M214 s2: ?mode=${gone} falls back to the index, no Doctor / Mesh Bench tab`)
+  }
   errs.length = 0   // 404 pages are not the sweep's subject
 
   // ── 4. sweep every kept tool for page errors ──

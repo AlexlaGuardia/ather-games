@@ -23,12 +23,10 @@ const SkillsEditor = dynamic(() => import('./editors/SkillsEditor'))
 const MovesEditor = dynamic(() => import('./editors/MovesEditor'))
 const DayCycleEditor = dynamic(() => import('./editors/DayCycleEditor'))
 const ManaEditor = dynamic(() => import('./editors/ManaEditor'))            // engine/mana: alchemy reads it
-const MeshBench = dynamic(() => import('./editors/MeshBench'))
-const DoctorPanel = dynamic(() => import('./editors/DoctorPanel'))
 const TerrainEditor = dynamic(() => import('./editors/TerrainEditor'))   // BETA M62: sculpt the real Wilds
 const SpiritGallery = dynamic(() => import('./editors/SpiritGallery'), { ssr: false })   // BETA M213: every spirit model on a dial
 
-type EditorMode = 'index' | 'items' | 'farming' | 'alchemy' | 'evolution' | 'resources' | 'tools' | 'skills' | 'moves' | 'daycycle' | 'mana' | 'doctor' | 'meshbench' | 'terrain' | 'spirits'
+type EditorMode = 'index' | 'items' | 'farming' | 'alchemy' | 'evolution' | 'resources' | 'tools' | 'skills' | 'moves' | 'daycycle' | 'mana' | 'terrain' | 'spirits'
 
 const EDITOR_MAP: Record<Exclude<EditorMode, 'index'>, { component: ComponentType<any>; deployable: boolean }> = {
   items:      { component: ItemEditor,          deployable: true },
@@ -41,8 +39,6 @@ const EDITOR_MAP: Record<Exclude<EditorMode, 'index'>, { component: ComponentTyp
   skills:     { component: SkillsEditor,        deployable: true },
   mana:       { component: ManaEditor,          deployable: true },
   daycycle:   { component: DayCycleEditor,      deployable: true },
-  doctor:     { component: DoctorPanel,         deployable: false },
-  meshbench:  { component: MeshBench,           deployable: false },
   terrain:    { component: TerrainEditor,       deployable: false },
   spirits:    { component: SpiritGallery,       deployable: false },
 }
@@ -78,13 +74,6 @@ const TAB_GROUPS: { label: string; tabs: { id: EditorMode; label: string }[]; li
       { id: 'skills', label: 'Skills' },
       { id: 'mana', label: 'Mana' },
       { id: 'daycycle', label: 'Day/Night' },
-    ],
-  },
-  {
-    label: 'Checks',
-    tabs: [
-      { id: 'doctor', label: 'Doctor' },
-      { id: 'meshbench', label: 'Mesh Bench' },
     ],
   },
 ]

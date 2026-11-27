@@ -47,7 +47,7 @@ git checkout <sha> -- <dir>
 | `/shimmer/arena` | `1555ca2f` | 2026-09-02 | `src/app/shimmer/arena` | Keeper's Arena cold-play harness. components/ArenaBattle.tsx stays (play3d/voxel3d mount it). |
 | `/shimmer/voxel3d/tex` | `a70e9508` | 2026-09-09 | `src/app/shimmer/voxel3d/tex/page.tsx + layout.tsx + TexSpike.tsx + TileStrip.tsx` | Block texture spike route. The rest of voxel3d/tex stays: the live HUD draws item icons through tex/item-icon.ts. |
 
-## Hub editor tabs (16)
+## Hub editor tabs (18)
 
 Removed from `/shimmer/dev?mode=...` (EDITOR_MAP, TAB_GROUPS, the Ctrl-K palette). Files live in
 `src/app/shimmer/dev/editors/`; bring one back from the M214 removal commit's parent. Rule used: a tab stays only
@@ -69,6 +69,8 @@ if the live open world (`src/app/shimmer/open/**`, static import closure) reads 
 | `encounters` | Encounters | `EncounterEditor.tsx` | engine/encounters: not reached by open/ |
 | `quests` | Quests | `QuestEditor.tsx` | engine/quests: not reached by open/ (the live quests are open/shared) |
 | `grimoire` | Grimoire | `GrimoireEditor.tsx` | spirits/grimoire: not reached by open/ (the live grimoire is a different thing) |
+| `doctor` | Doctor | `DoctorPanel.tsx` | M214 s2, Alex 11-26. Checks panel over /shimmer/doctor (last sha `755504d6`). The route + checks.ts stay: canon-drift and subjects.test read them. |
+| `meshbench` | Mesh Bench | `MeshBench.tsx` | M214 s2, Alex 11-26. Voxel greedy-mesh bench (last sha `bc438122`); voxel/greedy stays, the live item icons mesh through it. |
 | `weather` | Weather | `WeatherEditor.tsx` | engine/weather: not reached by open/ |
 | `spinner` | Spinner | `SpinnerEditor.tsx` | Luna thinking-config on :8200, not the game |
 
@@ -80,5 +82,4 @@ HUD through voxel3d/tex/item-icon.ts) · Evolution (spirits/evolution-config <- 
 (voxel/crops.ts CROP_DEFS <- voxel/registry) · Resources (world/resources <- open/ather/forestry) · Mana (engine/mana <- alchemy).
 Route kept: `/shimmer/play3d/birth` (on the audit's list, but the live Options dev panel links to it and its
 BirthScreen writes the live keeper's birth rune, the same screen open/birth-gate.tsx mounts).
-Kept in doubt, for Alex: Doctor (checks the sprite/save-route tables; still covers ITEM_ICONS) and Mesh Bench (voxel/greedy, which the live
-item icons still mesh through).
+Doctor and Mesh Bench were kept in doubt in s1 and dropped in M214 s2 (Alex 11-26).

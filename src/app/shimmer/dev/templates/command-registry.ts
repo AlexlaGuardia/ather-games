@@ -31,8 +31,6 @@ export const COMMAND_REGISTRY: CommandEntry[] = [
   { id: 'skills', label: 'Skills', keywords: ['ability', 'talent'], category: 'editor', action: 'switchMode', mode: 'skills' },
   { id: 'mana', label: 'Mana', keywords: ['magic', 'energy'], category: 'editor', action: 'switchMode', mode: 'mana' },
   { id: 'daycycle', label: 'Day/Night', keywords: ['time', 'cycle', 'clock'], category: 'editor', action: 'switchMode', mode: 'daycycle' },
-  { id: 'doctor', label: 'Doctor', keywords: ['check', 'lint'], category: 'editor', action: 'switchMode', mode: 'doctor' },
-  { id: 'meshbench', label: 'Mesh Bench', keywords: ['voxel', 'mesh'], category: 'editor', action: 'switchMode', mode: 'meshbench' },
 
   // Links
   { id: 'index', label: 'All dev pages', keywords: ['index', 'home', 'everything', 'list'], category: 'editor', action: 'switchMode', mode: 'index' },
