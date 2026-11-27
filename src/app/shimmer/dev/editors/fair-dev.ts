@@ -75,7 +75,7 @@ export function logLine(t: number, e: FightEvent, names: [string, string]): stri
   const mv = e.moveId ? ` (${e.moveId})` : e.move ? ` (${e.move})` : ''
   const ts = `${t.toFixed(2).padStart(6)}s`
   switch (e.kind) {
-    case 'start': return `${ts} start`
+    case 'start': return `${ts} ${who} starts${mv}`   // a wind-up / an evade / a guard begins
     case 'hit': return `${ts} ${who} hits ${foe}${mv} -${Math.round(e.dmg ?? 0)}${e.clean ? ' clean' : ''}`
     case 'miss': return `${ts} ${who} misses${mv}`
     case 'evaded': return `${ts} ${foe} evades ${who}${mv}`
@@ -84,6 +84,7 @@ export function logLine(t: number, e: FightEvent, names: [string, string]): stri
     case 'cheer': return `${ts} ${who} cheered`
     case 'ko': return `${ts} ${who} down`
     case 'end': return `${ts} end: ${who} wins`
+    default: return `${ts} ${who} ${String(e.kind)}${mv}`   // an event kind added later reads as its name
   }
 }
 

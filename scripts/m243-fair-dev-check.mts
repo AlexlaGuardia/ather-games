@@ -89,7 +89,7 @@ try {
   const ringUp = await p.$('[data-clash-ring]'); ok(!!ringUp, '3a Run mounts the REAL Clash ring')
   await sleep(9000); await shot('b-clash-ring')
   const c1 = await result('clash', null, 300000)
-  const log = await p.evaluate(() => { const e = document.querySelector('[data-fair-log]'); return { n: Number(e?.getAttribute('data-log-lines') ?? 0), txt: (e as HTMLElement | null)?.innerText ?? '' } })
+  const log = await p.evaluate(() => { const e = document.querySelector('[data-fair-log]'); return { n: Number(e?.getAttribute('data-log-lines') ?? 0), txt: [...(e?.children ?? [])].map(c => c.textContent).join('\n') } })
   ok(!!c1 && c1.seed === '4242', `3b the line plays to a result: ${c1?.sig}`)
   const bouts = (c1?.sig.split('|')[1] ?? '').split('>').filter(Boolean).length, ends = (log.txt.match(/end: .* wins/g) ?? []).length
   ok(log.n > 50 && /hits/.test(log.txt) && bouts >= 2 && ends === bouts && log.txt.includes(`bout ${bouts}:`), `3c the engine log scrolls (${log.n} lines; hits, ${ends} ends for ${bouts} bouts played)`)

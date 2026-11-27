@@ -40,6 +40,7 @@ ok(g.winner() === wA, `the game's own runner gives the same winner for that seed
 // headless: different seeds do not all agree (the seed really drives it)
 const winners = new Set(Array.from({ length: 12 }, (_, i) => runFight(devEntrant(fox), devEntrant(owl), 500 + i).seconds.toFixed(2)))
 ok(winners.size > 6, `different seeds = different fights (${winners.size}/12 distinct lengths)`)
+ok(logLine(2, { kind: 'start', side: 1, move: 'bonded', moveId: 'stone_throw' }, ['Vulnyx', 'Owl']).includes('Owl starts (stone_throw)'), 'a start line names who winds up what')
 ok(logLine(1.5, { kind: 'hit', side: 0, dmg: 12.4, move: 'melee' }, ['Vulnyx', 'Owl']).includes('Vulnyx hits Owl (melee) -12'), 'a log line reads who hit whom')
 
 // odds: the sim's loop, replayable, chunkable

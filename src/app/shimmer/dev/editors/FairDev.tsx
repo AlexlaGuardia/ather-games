@@ -192,12 +192,13 @@ function ClashRun({ me, foes, tier, seed, speed, onDone, onExit }: { me: Pick; f
   const [lines, setLines] = useState<string[]>([])
   const winners = useRef<Record<number, string>>({})
   const buf = useRef<string[]>([])
+  const heads = useRef(new Set<number>())
   const [open, setOpen] = useState(true)
   // the frozen line-up for this run (picks changed mid-run wait for the next)
   const entrants = useMemo<RingEntrant[]>(() => [me, ...foes].map(p => ({ name: pickName(p), species: p.species, element: p.element, spirit: () => devSpirit(p) })), [])   // eslint-disable-line react-hooks/exhaustive-deps
   const runner = useMemo(() => devClashRunner((bout: number, l: TickLog, names: [string, string]) => {
+    if (!heads.current.has(bout)) { heads.current.add(bout); buf.current.push(`── bout ${bout + 1}: ${names[0]} v ${names[1]} ──`) }
     for (const e of l.ev) {
-      if (e.kind === 'start') buf.current.push(`── bout ${bout + 1}: ${names[0]} v ${names[1]} ──`)
       buf.current.push(logLine(l.t, e, names))
       if (e.kind === 'end') winners.current[bout] = names[e.side]
     }
@@ -206,6 +207,7 @@ function ClashRun({ me, foes, tier, seed, speed, onDone, onExit }: { me: Pick; f
   const logRef = useRef<HTMLDivElement>(null)
   useEffect(() => { const el = logRef.current; if (el) el.scrollTop = el.scrollHeight }, [lines])
   const done = useCallback((won: boolean) => {
+    setOpen(false)   // the line is over: fold the log so the ring's result card (and its Back button) is clear, on a phone above all
     const w = Object.keys(winners.current).map(Number).sort((a, b) => a - b).map(b => winners.current[b])
     onDone('clash', seed, `${won ? 'won' : 'lost'}|${w.join('>')}`, `${won ? 'She won the line.' : 'She is out.'}\n${w.map((n, i) => `bout ${i + 1}: ${n}`).join('\n')}`)
   }, [seed, onDone])
