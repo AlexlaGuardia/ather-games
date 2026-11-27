@@ -55,7 +55,12 @@ try {
   const tabs = await p.$$eval('[data-fair-tab]', es => es.map(e => e.getAttribute('data-fair-tab')))
   ok(tabs.join() === 'clash,dash,smash', `2 the bench opens with its tabs (${tabs.join()})`)
 
-  const setNum = async (sel: string, v: number) => { await p.click(sel, { clickCount: 3 }); await p.keyboard.press('Backspace'); await p.type(sel, String(v)); await sleep(150) }
+  // a React number input: the native value setter + an input event (typing into it appended to the old value)
+  const setNum = async (sel: string, v: number) => {
+    await p.$eval(sel, (e, val) => { const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!; set.call(e, String(val)); e.dispatchEvent(new Event('input', { bubbles: true })) }, v)
+    await sleep(200)
+    const got = await p.$eval(sel, e => (e as HTMLInputElement).value); if (got !== String(v)) console.log(`  (set ${sel} = ${v}, reads ${got})`)
+  }
   const pick = async (row: string, species: string, form: string, level?: number) => {
     await p.select(`[data-fair-pick="${row}"] [data-fair-species]`, species); await p.select(`[data-fair-pick="${row}"] [data-fair-form]`, form)
     if (level !== undefined) await setNum(`[data-fair-pick="${row}"] [data-fair-level]`, level)
@@ -86,7 +91,8 @@ try {
   const c1 = await result('clash', null, 300000)
   const log = await p.evaluate(() => { const e = document.querySelector('[data-fair-log]'); return { n: Number(e?.getAttribute('data-log-lines') ?? 0), txt: (e as HTMLElement | null)?.innerText ?? '' } })
   ok(!!c1 && c1.seed === '4242', `3b the line plays to a result: ${c1?.sig}`)
-  ok(log.n > 50 && /hits/.test(log.txt) && /end: .* wins/.test(log.txt) && /bout 3/.test(log.txt), `3c the engine log scrolls (${log.n} lines; hits + ends + the final)`)
+  const bouts = (c1?.sig.split('|')[1] ?? '').split('>').filter(Boolean).length, ends = (log.txt.match(/end: .* wins/g) ?? []).length
+  ok(log.n > 50 && /hits/.test(log.txt) && bouts >= 2 && ends === bouts && log.txt.includes(`bout ${bouts}:`), `3c the engine log scrolls (${log.n} lines; hits, ${ends} ends for ${bouts} bouts played)`)
   await shot('c-clash-result')
   await p.click('[data-clash-exit]').catch(() => p.click('[data-fair-stop]'))
   await sleep(800)
