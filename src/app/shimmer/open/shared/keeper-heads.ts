@@ -48,7 +48,7 @@ export const CARTOON_HEADS: readonly CartoonHead[] = [
 export const cartoonHead = (head: number): CartoonHead | null => CARTOON_HEADS[head - 1] ?? null
 
 /** THE ONE shared place + size for every cartoon head (fractions of the head size H). The dials move / scale from here. */
-export const CARTOON = { eyeX: 0.17, eyeY: 0.0, eyeW: 0.16, eyeH: 0.1, browUp: 0.13, browW: 0.15, browTh: 0.032, mouthY: -0.24 } as const
+export const CARTOON = { eyeX: 0.19, eyeY: 0.0, eyeW: 0.22, eyeH: 0.14, browUp: 0.15, browW: 0.15, browTh: 0.032, mouthY: -0.24 } as const
 
 const FLAT = new Map<string, THREE.MeshBasicMaterial>()
 const flat = (c: string) => { let m = FLAT.get(c); if (!m) { m = new THREE.MeshBasicMaterial({ color: c, side: THREE.DoubleSide }); FLAT.set(c, m) } return m }
