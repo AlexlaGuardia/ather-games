@@ -289,6 +289,13 @@ Steps (one worker each, in order; each keeps `beta-m7-saves` green):
 - **Never waits on Alex:** a 🔒 row goes to the queue and the next row is taken. A row that fails twice is ⛔ blocked.
 - **Rules:** only rows on this list. No new systems, no lore, nothing public. Canon gate + tests before every build.
 
+## Night shift queue 11-26 -> 11-27 (hub-drafted 21:3x for Alex; lanes take the top unstruck line, hub strikes on ship; looks ship to 🟨 + Alex's queue, never wait on him)
+- **PLAY:** M204 s3b canon green (in flight) · M218 centre tooltip · M220 first keepstone punch + move · M203 s2 form pages count toward seen tiers (ruled 142d15d) · M194 tutorial points out the tool panel · M182 Greg's eight Dewbears (ruled bcdceeb) · M134 Smithy edges + tips · M144 demolished pieces into the catalog store
+- **WORLD:** M216 s1 body bench sync (in flight) · M216 s2 creator pickers (torso x6, scarf x6, belt x5) · M219 stale gate in Alex's garden · M141 s2 spirits fetch ground loot · M85 World Builder p3 scenery + scatter + stamps · M86 World Builder p4 node zones
+- **SPRITES A:** M202 Athowl line redo (in flight) · M174 Lepara snout rework · M174 Shellmere · M174 Croakling (keep the lure) · M174 Luminara (sheets only; wiring waits for Alex's OK on each)
+- **SPRITES B (assets):** M202 Hovari wrap (in flight) · Aurlotl glyph panels (infusion pattern, 0d6d577) · gallery Glow = Steep mix preview · M213 gallery bugs left · M167 worn pruner + worn spike looks · M154 Tess / Bonn / Otto grown (looks locked ebfc2f1)
+- **HUB chores between reviews:** prod check suite rotation; morning checkpoint 09:00 with every sheet for Alex in one batch
+
 ## Inbox (Alex's brain dump: hub writes here at once, dated, his words; triaged into rows / queue / CANON_GAPS / killed)
 - 11-26 21:2x Alex: 'for my garden a stale resource.. the gate is still there under the new design' -> M219
 - 11-26 21:2x Alex: 'the first keepstone the player gets.. make sure it can be melee punched and picked up, incase the player wants to move it' -> M220
