@@ -1,8 +1,8 @@
 // ── M141 s3: SPECIES FETCH MOVES, PLAYED (desktop 900x600; --mobile = 390x844). A SEEDED fresh profile (every non-GET stubbed, nothing
-// saved anywhere; never Alex's save): three Spirit Beds with a bloomed Vulnyx (fox, dash), Croakling (frog, hop) and Hovari
-// (hummingbird, pluck), all FOLLOWING. In the Wilds the keeper finishes lone Goldwoods from 6 m and stands: each spirit that fetches
+// saved anywhere; never Alex's save): three Spirit Beds with a bloomed Vulnyx (fox, dash), Athowl (owl, swoop) and Hovari
+// (hummingbird, pluck), all FOLLOWING (the Croakling, hop, has no grown model yet: unit test only). In the Wilds the keeper finishes lone Goldwoods from 6 m and stands: each spirit that fetches
 // leaves a per-frame trace (spirit-fetch fetchTrace) and its style's SIGNATURE is read off it: the dash has a burst out above the walk
-// and a bounce away from the keeper before the return; the hop has its arcs; the pluck keeps her hover height then dips at the grab.
+// and a bounce away from the keeper before the return; the swoop waits in place rising, then dives once; the pluck keeps her hover height then dips at the grab.
 // Every finished round trip averages no faster than the keeper's walk (D / T); bag + ground = the roll; 0 errors.
 //   npx tsx scripts/m141s3-fetch-moves-check.mts [--url https://ather.games] [--mobile] [--out dir]
 import puppeteer, { type Page } from 'puppeteer-core'
@@ -13,7 +13,7 @@ import { lootOf, sumOf } from './lib/loot.mts'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), out = flag('--out', 'docs/looks/m141-s3-2026-11-27'), mobile = process.argv.includes('--mobile'); mkdirSync(out, { recursive: true })
 const gold = loneTree('goldwood', 12), W = 4.2
-const SPS = ['fox', 'frog', 'hummingbird'] as const, STYLE: Record<string, string> = { fox: 'dash', frog: 'hop', hummingbird: 'pluck' }
+const SPS = ['fox', 'owl', 'hummingbird'] as const, STYLE: Record<string, string> = { fox: 'dash', owl: 'swoop', hummingbird: 'pluck' }   // the Croakling has no 3D model yet: her hop is unit-tested only
 let fails = 0
 const T00 = Date.now(), log = (m: string) => console.log(`  .. ${Math.round((Date.now() - T00) / 1000)}s ${m}`)
 const ok = (c: boolean, m: string) => { console.log(c ? '  ok  ' : '  FAIL', m); if (!c) fails++ }
@@ -96,9 +96,12 @@ try {
       ok(vmax > W * 1.15, `dash: a burst out above the walk (peak ${vmax.toFixed(2)} m/s)`)
       ok(Math.max(...dists.slice(0, 15)) > dists[0] + 0.3 && Math.max(...carry.map(q => q.lift)) > 0.05, `dash: bounces away from the keeper with it before the return (+${(Math.max(...dists.slice(0, 15)) - dists[0]).toFixed(2)} m)`)
       ok(dists[dists.length - 1] < dists[0], 'dash: then brings it back')
-    } else if (sp === 'frog') {
-      const l = go.map(q => q.lift); console.log(`  hop samples: go lift ${l.map(x => x.toFixed(2)).join(',')}`)
-      ok(peaks(l) >= 2 && Math.max(...l) > 0.2 && Math.min(...l) >= 0, `hop: ${peaks(l)} hop arcs on the way (top ${Math.max(...l).toFixed(2)} m)`)
+    } else if (sp === 'owl') {
+      const l = go.map(q => q.lift), top = l.indexOf(Math.max(...l)), hold = go.slice(0, top + 1), dive = go.slice(top)
+      console.log(`  swoop samples: go t/lift/moved ${go.map(q => `${q.t.toFixed(2)}/${q.lift.toFixed(2)}/${Math.hypot(q.x - go[0].x, q.z - go[0].z).toFixed(2)}`).join(',')}`)
+      const held = Math.max(...hold.map(q => Math.hypot(q.x - go[0].x, q.z - go[0].z)))
+      ok(hold.length >= 2 && hold[hold.length - 1].t >= 0.9 && held < 0.15, `swoop: waits ${hold[hold.length - 1]?.t.toFixed(2)} s in place (moved ${held.toFixed(2)} m), rising to ${Math.max(...l).toFixed(2)} m`)
+      ok(dive.length >= 2 && dive.every((q, i) => i === 0 || q.lift <= dive[i - 1].lift + 1e-3) && dive[dive.length - 1].lift < 0.3 && Math.hypot(dive[dive.length - 1].x - go[0].x, dive[dive.length - 1].z - go[0].z) > 1, `swoop: then ONE dive down onto the drop (ends ${dive[dive.length - 1].lift.toFixed(2)} m up)`)
     } else {
       const l = go.map(q => q.lift), half = l.slice(0, Math.floor(l.length / 2)); console.log(`  pluck samples: go lift ${l.map(x => x.toFixed(2)).join(',')} | carry ${carry.map(q => q.lift.toFixed(2)).join(',')}`)
       ok(half.length >= 2 && half.every(x => Math.abs(x) < 1e-3), 'pluck: keeps her hover height on the way')

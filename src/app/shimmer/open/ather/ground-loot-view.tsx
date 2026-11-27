@@ -51,7 +51,8 @@ export function GroundLoot({ keeper, ground, can, place = 'wilds' }: {
     return () => { for (const id of f.keys()) releaseLoot(id, ME); f.clear(); endFetch() }   // M141 s2: a spirit's hold too   // left the Wilds mid-flight: it is on the ground
   }, [place])
   useFrame((_, dtRaw) => {
-    const dt = Math.min(0.1, dtRaw), now = Date.now(), all = lootNow(now, place), f = keeper(), tm = T.current, may = can()
+    const dt = Math.min(0.25, dtRaw), now = Date.now(), all = lootNow(now, place), f = keeper(), tm = T.current, may = can()
+    // M141 s3: dt capped like her trot (0.25), so her fetch's round-trip clock counts the time her walk really took
     // M141 s2: a following spirit's fetch (spirit-fetch.ts) first; the keeper walking up to a drop she is going for takes it
     tickFetch({ now, dt, keeper: f, loot: all, hollow: hollowAbout(), fighting: id => fightSlot(id) !== null, can: may, fits: item => give(getInv(), item, 1).left === 0,
       at: id => { const s = spiritLive.get(id); return s && now - s.at < 5000 ? { x: s.x, y: s.y, z: s.z } : null },   // 5 s, not 500 ms: a phone at 1 fps still has her (gone = deleted on unmount)
