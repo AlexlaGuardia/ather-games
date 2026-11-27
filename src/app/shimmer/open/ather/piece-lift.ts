@@ -7,7 +7,7 @@ import { pickUpPiece, type Works } from './rooms'
 import { FURNITURE } from './furniture'
 import { stowPiece } from './plot-store'
 import { carryPot, type Pots } from './spirit-seeds'
-import { carryBox, PLANTER_BOX, type Boxes } from './planter-box'
+import { carryBox, isPlanterBox, type Boxes } from './planter-box'
 import type { Inv } from '../shared/inventory'
 
 // M113 s1: a Planter Box's sapling (planter-box.ts) rides along the same way: `boxes` in, `boxes` out (unchanged = same object).
@@ -26,6 +26,7 @@ export function liftPiece(works: Works, id: string, inv: Inv, pots: Pots, boxes:
   // M144: a building piece (a slab, a panel: furniture.ts `build`) goes into the garden's store, never the bag, so a full bag
   // never refuses it; Break down on the catalog gives the piece itself back
   if (FURNITURE[p.item]?.build) return { works: { ...works, pieces: works.pieces.filter(x => x.id !== id), stored: stowPiece(works.stored, p.item) as Works['stored'] }, inv, pots: next, boxes }
+  // M242: every Planter Box style; the style rides along with its plant (planter-box.ts carryBox)
   const r = pickUpPiece(works, id, inv)
-  return r ? { works: r.works, inv: r.inv, pots: next, boxes: p.item === PLANTER_BOX ? carryBox(boxes, id) : boxes } : 'full'
+  return r ? { works: r.works, inv: r.inv, pots: next, boxes: isPlanterBox(p.item) ? carryBox(boxes, id, p.item) : boxes } : 'full'
 }

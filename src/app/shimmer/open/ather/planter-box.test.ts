@@ -41,7 +41,7 @@ ok(takeSapling(newInv(), { v: 1, stacks: [] }, 'goldwood_sapling') === null, 'no
 
 // carry + settle
 const c = carryBox(b1, 'pb1')
-ok(!c.pb1 && JSON.stringify(c['carried:pb1']) === JSON.stringify(b1.pb1), 'carry keeps sapling + planting time')
+ok(!c.pb1 && JSON.stringify(c['carried:pb1']) === JSON.stringify({ ...b1.pb1, box: 'planter_box' }), 'carry keeps sapling + planting time (M242: + the box style stamp)')
 ok(carryBox({}, 'pb1') !== null && Object.keys(carryBox({}, 'pb1')).length === 0, 'an empty box carries nothing')
 const s = settleBox(c, 'pb2')
 ok(JSON.stringify(s) === JSON.stringify({ pb2: b1.pb1 }), 'the next box set down takes it back')
@@ -56,7 +56,7 @@ for (const [name, r] of [['E pick up', liftPiece(w, 'pb1', newInv(), {}, b1)], [
   ok(!!r && typeof r === 'object', `${name}: the box comes up`)
   if (!r || typeof r !== 'object') continue
   ok(countOf(r.inv, 'planter_box') === 1 && !r.works.pieces.some(p => p.id === 'pb1'), `${name}: the box is in the bag`)
-  ok(!r.boxes.pb1 && JSON.stringify(r.boxes['carried:pb1']) === JSON.stringify(b1.pb1), `${name}: the sapling rides along unchanged`)
+  ok(!r.boxes.pb1 && JSON.stringify(r.boxes['carried:pb1']) === JSON.stringify({ ...b1.pb1, box: 'planter_box' }), `${name}: the sapling rides along unchanged (M242: stamped with its style)`)
   const back = settleBox(r.boxes, 'pb9')
   ok(!!back.pb9 && stageOf(back.pb9, t0 + 2 * STAGE_MS) === 2, `${name}: re-placed, same stage`)
 }

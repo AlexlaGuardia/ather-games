@@ -27,6 +27,16 @@ PIECES = {
     'planter_box': ('goldwood', 'A planter box lined with bark.', lambda h, m, d:
         r(5, 15, 22, 11, m, d, 1) + r(4.4, 13.6, 23.2, 2.6, h, d, 0.8) + r(5, 19.4, 22, 2.2, '#8a6a3a', d, 0.4)
         + '<path d="M11 13.6 Q10 8 13 6 M16 13.6 Q16 7 18 5 M21 13.6 Q22 9 24 8" fill="none" stroke="#5f9a4a" stroke-width="1.4" stroke-linecap="round"/>'),
+    # M242 s1: Planter Box styles
+    'planter_box_banded': ('shimmeroak', 'A planter box held by dark bands.', lambda h, m, d:
+        r(5, 15, 22, 11, m, d, 1) + r(4.4, 13.6, 23.2, 2.6, h, d, 0.8) + r(4.6, 17, 22.8, 1.8, '#3b3633', '#26231f', 0.3) + r(4.6, 22.6, 22.8, 1.8, '#3b3633', '#26231f', 0.3)
+        + '<path d="M11 13.6 Q10 8 13 6 M16 13.6 Q16 7 18 5 M21 13.6 Q22 9 24 8" fill="none" stroke="#5f9a4a" stroke-width="1.4" stroke-linecap="round"/>'),
+    'planter_box_carved': ('dawnwood', 'A carved planter box with capped posts.', lambda h, m, d:
+        r(6, 15, 20, 11, m, d, 0.6) + r(4.4, 13, 3, 13.4, d, d, 0.4) + r(24.6, 13, 3, 13.4, d, d, 0.4) + r(4, 12.2, 3.8, 1.4, h, d, 0.4) + r(24.2, 12.2, 3.8, 1.4, h, d, 0.4) + r(10, 17.6, 12, 5, '#a85e36', d, 0.8)
+        + '<path d="M11 13.6 Q10 8 13 6 M16 13.6 Q16 7 18 5 M21 13.6 Q22 9 24 8" fill="none" stroke="#5f9a4a" stroke-width="1.4" stroke-linecap="round"/>'),
+    'planter_tub_round': ('stone', 'A round stone planter tub.', lambda h, m, d:
+        '<path d="M7 15 L25 15 L23 26 Q16 28 9 26 Z" fill="' + m + '" stroke="' + d + '" stroke-width=".8"/>' + '<ellipse cx="16" cy="15" rx="9.5" ry="2.4" fill="#5a3d25" stroke="' + d + '" stroke-width=".8"/>'
+        + '<path d="M12 14.6 Q11 9 14 7 M16 14.6 Q16 8 18 6 M20 14.6 Q21 10 23 9" fill="none" stroke="#5f9a4a" stroke-width="1.4" stroke-linecap="round"/>'),
     'shimmeroak_shelf': ('shimmeroak', 'A tall shelf.', lambda h, m, d:
         r(7, 3, 18, 24, d, d, 0.6) + r(6, 3, 2.6, 24, m, d) + r(23.4, 3, 2.6, 24, m, d)
         + ''.join(r(8, y, 16, 1.8, h, d, 0.3) for y in (8.5, 14.5, 20.5))
