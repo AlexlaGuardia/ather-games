@@ -7,7 +7,7 @@
 
 import { useEffect, useMemo, useRef } from 'react'
 import { fpGunAds } from '../shared/fp-gun'
-import { adsFov, adsLookScale } from '../shared/optics'
+import { viewFov, adsLookScale } from '../shared/optics'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { createLoco, tickLocomotion, eyeY, WALK_SPEED, SPEED_CAP, type LocoWorld } from '../shared/locomotion'
@@ -135,7 +135,7 @@ export function Walker({ world, ground, spawn, locked, fallY, onFall, onTick, fr
     const st = getSettings()
     const fov = st.fov + (st.speedFov ? FOV_KICK : 0) * Math.min(1, Math.max(0, (speed - WALK_SPEED) / (SPEED_CAP - WALK_SPEED)))
     const ads = fpGunAds()
-    if (ads.optic && ads.t > 0.001) { const f = adsFov(st.fov, ads.optic, ads.t); if (Math.abs(cam.fov - f) > 0.01) { cam.fov = f; cam.updateProjectionMatrix() } }   // the gun already eases t: follow it exactly
+    if (ads.optic && ads.t > 0.001) { const f = viewFov(st.fov, ads.optic, ads.t);   /* M178 s2: a bought prism's 3x lives in its lens; the view punches in only its `view` */ if (Math.abs(cam.fov - f) > 0.01) { cam.fov = f; cam.updateProjectionMatrix() } }   // the gun already eases t: follow it exactly
     else if (Math.abs(cam.fov - fov) > 0.05) { cam.fov += (fov - cam.fov) * Math.min(1, dt * 8); cam.updateProjectionMatrix() }
     onTick(lc, yaw, dt)
   })

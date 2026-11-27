@@ -8,10 +8,11 @@
 // rail or port. The Charred Rifle is the Prototype: stamped plate, sealed strapped cell, scorched shroud, no core, nothing lit.
 //
 // ★ grip / fore are the shipped anchors of each gun's Slate, so a saved hand tune (offsets from them) still lands.
-import { box, type Model, type Part, type PartColor } from './gun-kit'
+import type { Model, Part, PartColor } from './gun-kit'   // types only: gun-kit reads V2_SIGHTS (M178 s2), so no runtime import back
 import type { GunTune } from './fp-gun'
 
 type V3 = Part['o']
+const box = (o: V3, s: Part['s'], c: PartColor = 'body'): Part => ({ o, s, c })   // gun-kit's box, the same shape
 type P2 = [number, number]
 const cyl = (o: V3, d: number, len: number, c: PartColor, axis: 'x' | 'y' | 'z' = 'z', seg = 14, end?: number): Part => ({ o, s: [d, d, len], c, shape: 'cyl', axis, seg, end })
 /** an outline extruded across the gun ([z, y] points, centred on x = o[0]) */

@@ -8,7 +8,7 @@
 // Owned (M81 s3, hub 11-22): FREE = the gun's own sight + the one it aims through today (the 2x); everything else is BOUGHT at a gun
 // shop for that gun (Loadout.fit[gun].owned). GRANDFATHERED: a sight fitted before s3 (any of the old free set, e.g. the open lens)
 // stays owned, so nobody loses what they had on.
-import { KIT_GUNS, KIT_SIGHTS, kitModel, sightsFor, type KitGunId, type KitSightId, type Model } from './gun-kit'
+import { KIT_GUNS, KIT_SIGHTS, kitModel, sightsFor, type KitGun, type KitGunId, type KitSightId, type Model } from './gun-kit'
 import { opticOf, type OpticId } from './optics'
 import { RANGE_GUNS } from './gunplay'
 import type { Loadout } from './loadout'
@@ -31,10 +31,12 @@ export function ownedSights(l: Loadout, gunId: string): KitSightId[] {
   if (!isKitGun(gunId)) return []
   const f = l.fit?.[gunId], out = freeSights(gunId)
   const add = (s: unknown) => { if (isSight(s) && !out.includes(s)) out.push(s) }
-  if (sightsFor(KIT_GUNS[gunId]).includes(f?.sight as KitSightId)) add(f?.sight)   // grandfathered: fitted from the old free set
+  if (OLD_FREE(KIT_GUNS[gunId]).includes(f?.sight as KitSightId)) add(f?.sight)   // grandfathered: fitted from the old free set
   for (const s of f?.owned ?? []) add(s)
-  return sightsFor(KIT_GUNS[gunId]).concat(Object.keys(KIT_SIGHTS) as KitSightId[]).filter((s, i, a) => a.indexOf(s) === i && out.includes(s))   // a stable order
+  return sightsFor(KIT_GUNS[gunId]).filter(s => out.includes(s))   // a stable order; M178 s2: never a sight this rail does not take
 }
+/** the M81 s2 free set a fitting may be grandfathered from (M178 s2 widened the rails' lists; a bought-only sight is never grandfathered) */
+const OLD_FREE = (g: KitGun): KitSightId[] => ['irons', g.own, 'lens', 'scope2']
 /** a bought sight joins this gun's owned set */
 export function addOwnedSight(l: Loadout, gunId: KitGunId, sightId: KitSightId): Loadout {
   const f = l.fit?.[gunId] ?? {}, owned = f.owned ?? []
@@ -46,16 +48,21 @@ export function fittedSight(l: Loadout, gunId: string): KitSightId | null {
   const s = l.fit?.[gunId]?.sight
   return isSight(s) && ownedSights(l, gunId).includes(s) ? s : defaultSight(gunId)
 }
-export type FitResult = { ok: true; loadout: Loadout } | { ok: false; why: 'no-rail' | 'not-owned' | 'not-yours' }
+export type FitResult = { ok: true; loadout: Loadout } | { ok: false; why: 'no-rail' | 'not-owned' | 'not-yours' | 'not-for-this-gun' }
+/** M178 s2: may this gun wear this sight at all (M149's fitting: the holo on the Backbone + Lance, the 3x prism on the Lance + Backbone) */
+export const sightFits = (gunId: string, sightId: string): boolean => isKitGun(gunId) && isSight(sightId) && sightsFor(KIT_GUNS[gunId]).includes(sightId)
 /** fit an owned sight to an owned kit gun */
 export function fitSight(l: Loadout, gunId: string, sightId: string): FitResult {
   if (!isKitGun(gunId)) return { ok: false, why: 'no-rail' }
   if (!l.guns.includes(gunId)) return { ok: false, why: 'not-yours' }
+  if (!sightFits(gunId, sightId)) return { ok: false, why: 'not-for-this-gun' }
   if (!isSight(sightId) || !ownedSights(l, gunId).includes(sightId)) return { ok: false, why: 'not-owned' }
   // a grandfathered sight (fitted before s3, never bought) is written into owned as it comes off, so swapping never loses it
   const cur = l.fit?.[gunId]?.sight, base = isSight(cur) && cur !== sightId && !freeSights(gunId).includes(cur) && ownedSights(l, gunId).includes(cur) ? addOwnedSight(l, gunId, cur) : l
   return { ok: true, loadout: { ...base, fit: { ...base.fit, [gunId]: { ...base.fit?.[gunId], sight: sightId } } } }
 }
+/** M178 s2: take a bought sight off: back to the irons (the sight stays owned, one tap to put back on) */
+export const unfitSight = (l: Loadout, gunId: string): FitResult => isKitGun(gunId) ? fitSight(l, gunId, defaultSight(gunId)) : { ok: false, why: 'no-rail' }
 // the drawn model, one object per (gun, sight): fp-gun keys its geometry on the model, so a fresh object each frame would rebuild it
 const cache = new Map<string, Model>()
 /** the model a kit gun draws with its fitted sight, or null for a gun the kit does not cover (fp-gun keeps its own) */

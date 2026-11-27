@@ -27,7 +27,7 @@ import { bottlesIn, sellBottles } from './corkhouse'
 import { SMOKEHOUSE_STOCK } from '../ather/cooking'
 import { useLoadout, setLoadout, getLoadout, claimKaelsArms } from '../shared/loadout'   // M179: the rack names the gun's class (either slot takes any gun)
 import { buyGun, buySigil, GUN_PRICES, SIGIL_PRICE, SIGIL_ITEM, buySight, stockOf as gunStockOf, shopGunsOf, SIGHT_PRICES } from './gun-shop'   // furniture has its own stockOf
-import { ownedSights, sightName } from '../shared/gun-fit'   // M81 s3a
+import { ownedSights, sightName, fittedSight, fitSight, unfitSight } from '../shared/gun-fit'   // M81 s3a; M178 s2: fit / take off at the counter
 import { RANGE_GUNS } from '../shared/gunplay'
 import { yardRows, buyPart, slotName, YARD_SLOTS } from './courser-yard'
 import { makeOfTown, modelsOfMake, buyCourser, DARTER_MODEL } from './courser-lot'
@@ -341,6 +341,13 @@ function GunShopPanel({ town, ledger, setLedger, onClose }: { town: string; ledg
                   const r = buySight(getLoadout(), ledger, town, gun, sight)
                   if (r.ok) { setLedger(r.ledger); setLoadout(r.loadout); const t = `${sightName(sight)} bought · fit it in your Character tab`; setMsg(t); hudSay(t, 'item') } else setMsg(r.why ?? null)
                 }}>{!haveGun ? 'No such gun' : owned ? 'Yours' : short ? 'Not enough Marks' : 'Buy'}</HearthButton></span>
+                {owned && (() => {   // M178 s2: an owned sight fits (or comes off, back to the irons) right here, saved per gun
+                  const on = fittedSight(l, gun) === sight
+                  return <span data-fit-at-shop={`${gun}:${sight}`} data-on={on ? '1' : '0'} style={{ display: 'contents' }}><HearthButton small onClick={() => {
+                    const r = on ? unfitSight(getLoadout(), gun) : fitSight(getLoadout(), gun, sight)
+                    if (r.ok) { setLoadout(r.loadout); setMsg(on ? `${sightName(sight)} off · back to the irons` : `${sightName(sight)} fitted on the ${gunName[0] + gunName.slice(1).toLowerCase()}`) }
+                  }}>{on ? 'Take off' : 'Fit'}</HearthButton></span>
+                })()}
               </div>
             )
           })}

@@ -1,10 +1,13 @@
 // THE GUN IN HAND + ITS SIGHTS (Alex 11-18), played in the Wilds with real input: a keeper with Kael's arms draws (R), the gloves hold
-// the gun, right-click aims (the Charred Rifle's 2x: the scope ring takes the screen, the model gives way), a tap swaps to the Repeater
-// (its 1x: no ring, the gun stays up with the etched mark centred), a shot flares the mark, the ammo chip names the gun in hand.
+// the gun, right-click aims, a tap swaps to the Repeater, a shot flares the mark, the ammo chip names the gun in hand.
+// M178 s2 REWROTE the sights half (meaning changed: since M178 s1 every gun aims down IRONS by default, no scope ring on any gun): the
+// Charred Rifle aims down its crude irons (1.3x, the model stays up), the Repeater its clean irons (1.1x); the keeper's re-cut mark is read
+// off the gun (the pip), not off a ring. The post-at-centre pixel read lives in m178-irons-check; bought sights in m178s2-sight-check.
 // Screenshots to --out for the LOOK (Alex). Zero page errors.
 //   npx tsx scripts/fp-gun-check.mts [--url https://ather.games] [--out dir]
 import puppeteer from 'puppeteer-core'
 import { mkdirSync } from 'node:fs'
+import { dismissStartCard } from './lib/start-card.mts'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), out = flag('--out', '/tmp/fp-gun')
 mkdirSync(out, { recursive: true })
@@ -30,30 +33,31 @@ const ring = () => p.$('[data-hud="scope"]').then(Boolean)
 const poll = async (fn: () => Promise<boolean>, ms = 8000) => { const t = Date.now(); while (Date.now() - t < ms) { if (await fn()) return true; await sleep(150) } return false }
 const tapR = async () => { await p.keyboard.down('KeyR'); await sleep(80); await p.keyboard.up('KeyR'); await sleep(500) }
 await p.goto(`${url}/shimmer/open/ather?hour=13&waymark=greg`, { waitUntil: 'load', timeout: 240000 })
+await dismissStartCard(p)
 await p.waitForFunction(() => (window as any).__ather?.zone?.() === 'wilds' && !!(window as any).__fpGun, { timeout: 240000 }); await sleep(4000)
 await p.mouse.click(640, 380); await sleep(800)
 res.stowed = await G()
 res.freeHandsStowed = await p.evaluate(() => (window as any).__openHands?.visible?.() ?? null)   // stowed: the free gloves ARE drawn
-// 1 · R draws the primary: the Charred Rifle, held, its 2x, the etching lit faintly
+// 1 · R draws the primary: the Charred Rifle, held, on its irons (M178), the etching lit faintly
 await tapR(); await poll(async () => !!(await G())?.shown); res.drawn = await G()
 // 1b · ONE pair of hands (Alex 11-18: 'extra hands when I pull out a weapon'): with the gun out the free gloves are not drawn at
 //      all, and a jump (which throws the free hands up) does not bring them back over the gun
 res.freeHandsDrawnWithGun = await p.evaluate(() => (window as any).__openHands?.visible?.() ?? null)
 await p.keyboard.down('Space'); await sleep(250); res.freeHandsMidJump = await p.evaluate(() => (window as any).__openHands?.visible?.() ?? null); await p.keyboard.up('Space'); await sleep(900)
 await p.screenshot({ path: `${out}/1-hip-rifle.png` })
-// 2 · right-click: the sights; at full ADS the 2x's scope ring takes the screen and the model gives way
+// 2 · right-click: the sights; at full ADS no scope ring, the model stays up (you look along the irons)
 await p.mouse.down({ button: 'right' })
 res.adsReached = await poll(async () => ((await G())?.ads ?? 0) >= 0.99)
 res.aimedRifle = await G(); res.ringRifle = await ring()
-await p.screenshot({ path: `${out}/2-scope-2x.png` })
+await p.screenshot({ path: `${out}/2-irons-rifle.png` })
 await p.mouse.up({ button: 'right' })
 res.adsLeft = await poll(async () => ((await G())?.ads ?? 1) <= 0.01)
 res.ringGone = !(await ring())
-// 3 · tap R: swap to the Repeater; aim: the 1x, no ring, the gun stays up
-await tapR(); await poll(async () => (await G())?.key === 'repeater:reddot'); res.swapped = await G()
+// 3 · tap R: swap to the Repeater; aim: its irons, no ring, the gun stays up
+await tapR(); await poll(async () => (await G())?.key === 'repeater:irons'); res.swapped = await G()
 await p.mouse.down({ button: 'right' }); await poll(async () => ((await G())?.ads ?? 0) >= 0.99)
 res.aimedRepeater = await G(); res.ringRepeater = await ring()
-await p.screenshot({ path: `${out}/3-sight-1x.png` })
+await p.screenshot({ path: `${out}/3-irons-repeater.png` })
 // 4 · a shot: the etching flares above its faint idle
 const idle = (await G())?.glow ?? 0
 await p.mouse.down({ button: 'left' }); let flare = 0
@@ -73,11 +77,11 @@ await p.click('[data-sight="charred-rifle"] [data-tint="mana"]').catch(() => {})
 await p.screenshot({ path: `${out}/5-sight-menu.png` })
 res.savedLook = await p.evaluate(() => { const k = Object.keys(localStorage).find(x => x.endsWith('open.sights.v1')); return k ? JSON.parse(localStorage.getItem(k)!)['charred-rifle'] ?? null : null })
 await p.keyboard.press('Escape'); await sleep(700); await p.mouse.click(640, 380); await sleep(600)
-await tapR(); await poll(async () => (await G())?.key === 'charred-rifle:scope2:sscope2')   // M81 s2: a kit gun's key carries its fitted sight (default: the 2x)
+await tapR(); await poll(async () => (await G())?.key === 'charred-rifle:irons-long:sirons')   // M81 s2: a kit gun's key carries its fitted sight (M178: the irons)
 await p.mouse.down({ button: 'right' }); await poll(async () => ((await G())?.ads ?? 0) >= 0.99)
-res.recut = await G(); await poll(ring, 4000)   // the ring is DOM: it renders a frame after the sights reach full
+res.recut = await G(); await sleep(900)   // the DOM ring (if one ever came back) renders a frame after full ADS
 res.ringMark = await p.evaluate(() => document.querySelector('[data-hud="scope"]')?.getAttribute('data-mark') ?? null)
-await p.screenshot({ path: `${out}/6-scope-recut.png` })
+await p.screenshot({ path: `${out}/6-irons-recut.png` })
 await p.mouse.up({ button: 'right' })
 res.pageErrors = errs
 console.log(JSON.stringify(res, null, 1))
@@ -85,12 +89,12 @@ const d = res.drawn as any, ar = res.aimedRifle as any, sw = res.swapped as any,
 const pass = !!st && !st.shown
   && (res.sound as any)?.ctx >= 1 && (res.sound as any)?.osc > 0 && (res.sound as any)?.src > 0
   && res.freeHandsStowed === true && res.freeHandsDrawnWithGun === false && res.freeHandsMidJump === false
-  && d?.shown && d.key === 'charred-rifle:scope2:sscope2' && d.optic === 'scope2' && d.glow >= 0.15 && d.glow <= 0.5
-  && !!res.adsReached && ar?.ads >= 0.99 && !!res.ringRifle && ar.shown === false
+  && d?.shown && d.key === 'charred-rifle:irons-long:sirons' && d.optic === 'irons-long' && d.glow >= 0.15 && d.glow <= 0.5
+  && !!res.adsReached && ar?.ads >= 0.99 && !res.ringRifle && ar.shown === true
   && !!res.adsLeft && !!res.ringGone
-  && sw?.key === 'repeater:reddot' && rp?.ads >= 0.99 && !res.ringRepeater && rp.shown === true
+  && sw?.key === 'repeater:irons' && rp?.ads >= 0.99 && !res.ringRepeater && rp.shown === true
   && (res.flare as number) > idle
   && !!res.sightRow && (res.savedLook as any)?.mark === 'ring' && (res.savedLook as any)?.tint === 'mana'
-  && (res.recut as any)?.mark === 'ring:mana' && res.ringMark === 'ring'
+  && (res.recut as any)?.mark === 'ring:mana' && (res.recut as any)?.shown === true && res.ringMark === null
   && errs.length === 0
 console.log(pass ? 'PASS' : 'FAIL'); await br.close(); process.exit(pass ? 0 : 1)

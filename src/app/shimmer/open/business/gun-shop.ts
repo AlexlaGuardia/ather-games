@@ -5,7 +5,7 @@ import { RANGE_GUNS, type RangeGun } from '../shared/gunplay'
 import { give, type Inv } from '../shared/inventory'
 import { equip, slotOfGun, type Loadout } from '../shared/loadout'
 import type { Ledger } from '../trade'
-import { addOwnedSight, ownedSights, isKitGun } from '../shared/gun-fit'
+import { addOwnedSight, ownedSights, isKitGun, sightFits } from '../shared/gun-fit'
 import type { KitGunId, KitSightId } from '../shared/gun-kit'
 
 export const GUN_PRICES: Record<string, number> = { repeater: 400, spitter: 900, backbone: 1800, roar: 3200, lance: 4500 }
@@ -41,16 +41,18 @@ export function buySigil(ledger: Ledger, inv: Inv): SigilBuy {
 // joins that gun's owned set (shared/gun-fit.ts); the Character tab fits it. Only railed guns take sights (gun-kit: Backbone,
 // Charred Rifle). Stock + prices are Jin's dials.
 
-export const SIGHT_PRICES: Record<string, number> = { lens: 300, hood: 450, ring: 450 }
+// M178 s2 (Alex 11-25: irons on every gun, "better sights are bought"): the 2x scope, the holo and the 3x prism join the counters, each
+// only for a gun whose rail takes it (gun-kit sightsFor: holo on the Backbone + Lance, prism on the Lance + Backbone). Dials, Alex's queue.
+export const SIGHT_PRICES: Record<string, number> = { lens: 300, hood: 450, ring: 450, scope2: 600, holo: 700, prism: 1200 }
 export interface SightStock { gun: KitGunId; sight: KitSightId }
 export interface ShopStock { guns: string[]; sights: SightStock[] }
 const ALL = Object.keys(GUN_PRICES)
 export const GUNSHOP_STOCK: Record<string, ShopStock> = {
-  'rune-hold':  { guns: ALL, sights: [{ gun: 'backbone', sight: 'lens' }] },
-  ashfeld:      { guns: ['repeater', 'spitter', 'backbone', 'roar'], sights: [{ gun: 'charred-rifle', sight: 'lens' }] },
-  citadel:      { guns: ALL, sights: [{ gun: 'backbone', sight: 'ring' }, { gun: 'charred-rifle', sight: 'hood' }] },
-  veradyn:      { guns: ['repeater', 'spitter', 'backbone', 'lance'], sights: [{ gun: 'backbone', sight: 'lens' }, { gun: 'charred-rifle', sight: 'lens' }] },
-  'gale-haven': { guns: ['repeater', 'backbone', 'roar', 'lance'], sights: [{ gun: 'backbone', sight: 'ring' }] },
+  'rune-hold':  { guns: ALL, sights: [{ gun: 'backbone', sight: 'lens' }, { gun: 'backbone', sight: 'holo' }] },
+  ashfeld:      { guns: ['repeater', 'spitter', 'backbone', 'roar'], sights: [{ gun: 'charred-rifle', sight: 'lens' }, { gun: 'backbone', sight: 'holo' }, { gun: 'backbone', sight: 'scope2' }] },
+  citadel:      { guns: ALL, sights: [{ gun: 'backbone', sight: 'ring' }, { gun: 'charred-rifle', sight: 'hood' }, { gun: 'backbone', sight: 'prism' }] },
+  veradyn:      { guns: ['repeater', 'spitter', 'backbone', 'lance'], sights: [{ gun: 'backbone', sight: 'lens' }, { gun: 'charred-rifle', sight: 'lens' }, { gun: 'charred-rifle', sight: 'scope2' }] },
+  'gale-haven': { guns: ['repeater', 'backbone', 'roar', 'lance'], sights: [{ gun: 'backbone', sight: 'ring' }, { gun: 'lance', sight: 'prism' }, { gun: 'lance', sight: 'holo' }] },
 }
 export const DEFAULT_STOCK: ShopStock = { guns: ALL, sights: [] }
 export const stockOf = (town: string): ShopStock => GUNSHOP_STOCK[town] ?? DEFAULT_STOCK
@@ -62,6 +64,7 @@ export function buySight(loadout: Loadout, ledger: Ledger, town: string, gunId: 
   const no = (why: string): SightBuy => ({ ok: false, why, loadout, ledger })
   const st = stockOf(town).sights.find(x => x.gun === gunId && x.sight === sightId), price = SIGHT_PRICES[sightId]
   if (!st || price === undefined || !isKitGun(gunId)) return no('Not sold here.')
+  if (!sightFits(gunId, sightId)) return no('It does not fit that gun.')
   if (!loadout.guns.includes(gunId)) return no('It fits a gun you do not have.')
   if (ownedSights(loadout, gunId).includes(st.sight)) return no('Already yours.')
   if (ledger.marks < price) return no(`It costs ${price.toLocaleString()} Marks. You have ${ledger.marks.toLocaleString()}.`)

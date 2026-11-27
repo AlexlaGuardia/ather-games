@@ -77,7 +77,8 @@ ok(bs2.ok && bs2.loadout.secondary === 'repeater', 'an empty secondary gets the 
   const L = rich(2000)
   ok(Object.keys(GUNSHOP_STOCK).length === 5, `five sight dealers (${Object.keys(GUNSHOP_STOCK)})`)
   ok(stockOf('unnamed-village-0') === DEFAULT_STOCK && DEFAULT_STOCK.sights.length === 0 && shopGunsOf('unnamed-village-0').length === 5, 'any other gun shop: the five guns, no sights')
-  ok(Object.values(GUNSHOP_STOCK).every(s => s.sights.length >= 1 && s.sights.length <= 2 && s.guns.length >= 4), 'each dealer: 1-2 sights, a slightly different gun list')
+  // M178 s2 rewrote this (meaning changed: the 2x / holo / prism joined the counters): Alex's 11-22 'a new sight for a gun or two' = each dealer's sights serve 1-2 guns
+  ok(Object.values(GUNSHOP_STOCK).every(s => s.sights.length >= 1 && s.sights.length <= 3 && new Set(s.sights.map(x => x.gun)).size <= 2 && s.guns.length >= 4), 'each dealer: sights for a gun or two, a slightly different gun list')
   ok(new Set(Object.values(GUNSHOP_STOCK).map(s => s.guns.join())).size >= 3, 'the dealers do not all sell the same guns')
   ok(shopGunsOf('ashfeld').some(g => g.id === 'spitter'), 'Ashfeld still sells the Spitter (gunshop-check buys it there)')
   const b = buySight(withBB, L, 'rune-hold', 'backbone', 'lens')
