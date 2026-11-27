@@ -51,6 +51,8 @@ import { loadGladeBlueprints } from '../../open/ather/glade-lots-view'
 import { ZoneBuilder } from './ZoneBuilder'   // M84 s2: build on a zone
 import { FURNITURE } from '../../open/ather/furniture'
 import { quad } from '../../open/ather/build-prefs'
+import { applySettlementEdits, addSettlementEdit, moveSettlementEdit, removeSettlementEdit, patchEdit, removedIds, type SettlementEdits, type EditedSettlement } from '../../open/ather/settlement-edits'   // M237
+import { SettlementMarkers, SettlementsPanel } from './settlements-tool'
 
 // ── BETA M83 p1 s1a: the editor works on the World Builder DRAFT (world/builder.ts), never on the live layer. Save + autosave write
 // the draft; PUBLISH makes it a version and puts it live; the history rolls back to any version. Players see nothing until Publish.
@@ -80,9 +82,9 @@ const isCheck = (n: string) => n.startsWith('check:')
 /** ox, oz = the tile's centre in world coords (a Wilds tile: tx/ty * TILE_M; the Glade's tile: its own centre). `voidV` (Glade):
  *  vertices that are NOT ground: heightAt answers NaN there, so the brush skips them, and Fly drops their triangles. */
 interface Base { meta: WildsMeta; tx: number; ty: number; ox: number; oz: number; h: Float32Array; voided?: Uint8Array; voidV?: Uint8Array }
-type Tool = Brush | 'water' | 'dry' | 'falls' | 'void' | 'zone' | 'place' | 'nodes'
-const TOOLS: Tool[] = [...BRUSHES, 'water', 'dry', 'falls', 'void', 'zone', 'nodes']
-const TOOL_KEY: Record<Tool, string> = { raise: 'Raise', lower: 'Lower', flatten: 'Flatten', smooth: 'Smooth', water: 'Water', dry: 'Dry', falls: 'Falls', void: 'Void', zone: 'Zone', place: 'Place', nodes: 'Nodes' }
+type Tool = Brush | 'water' | 'dry' | 'falls' | 'void' | 'zone' | 'place' | 'nodes' | 'settle'
+const TOOLS: Tool[] = [...BRUSHES, 'water', 'dry', 'falls', 'void', 'zone', 'nodes', 'settle']
+const TOOL_KEY: Record<Tool, string> = { raise: 'Raise', lower: 'Lower', flatten: 'Flatten', smooth: 'Smooth', water: 'Water', dry: 'Dry', falls: 'Falls', void: 'Void', zone: 'Zone', place: 'Place', nodes: 'Nodes', settle: 'Settlements' }
 // M84 s1: the building zones live beside the edits; a change marks this key dirty so autosave / Save send them
 const ZONES_KEY = 'zones/'
 // M104: the void brush's cells live in the same store under one key (not a tile name: '/' never passes TILE_NAME), so one undo
@@ -99,6 +101,8 @@ const KIND_ZONE: Record<NodeKindZone, { label: string; node: string; rgb: string
 }
 // M86: the node zones' cells (node-zones.ts) live in the same store under one key, like the void brush; the layer carries them as `nodes`
 const NODES_KEY = 'nodes/'
+// M237: the settlement edits (settlement-edits.ts) are a list beside the store, like the zones; a change marks this key dirty
+const SETTLES_KEY = 'settlements/'
 // the editor keeps heights and water in ONE store (so one undo history covers both): '<tile>' = heights, 'water/<tile>' = water
 const wkey = (t: string) => WATER_PREFIX + t, fkey = (t: string) => FALLS_PREFIX + t
 const tileOfKey = (k: string) => k.startsWith(WATER_PREFIX) ? k.slice(WATER_PREFIX.length) : k.startsWith(FALLS_PREFIX) ? k.slice(FALLS_PREFIX.length) : k
@@ -154,6 +158,13 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
   const [zones, setZonesS] = useState<Zone[]>([])
   const zonesRef = useRef<Zone[]>([])
   const setZones = (z: Zone[]) => { zonesRef.current = z; setZonesS(z) }
+  // M237: the settlements tool: the bake (read bare) + the draft's edits on top
+  const [settles, setSettlesS] = useState<SettlementEdits>([]), settlesRef = useRef<SettlementEdits>([])
+  const [baseNet, setBaseNet] = useState<Network | null>(null), [selSettle, setSelSettle] = useState<string | null>(null)
+  const setSettles = (e: SettlementEdits, dirty = true) => { settlesRef.current = e; setSettlesS(e); if (dirty) markDirty([SETTLES_KEY]) }
+  const settleList = useMemo(() => (baseNet ? applySettlementEdits(baseNet, settles).settlements as EditedSettlement[] : []), [baseNet, settles])
+  const settleListRef = useRef(settleList); settleListRef.current = settleList
+  const selSettleRef = useRef(selSettle); selSettleRef.current = selSettle
   const [selZone, setSelZone] = useState<string | null>(null)   // the zone whose tag popup is open
   const [buildZone, setBuildZone] = useState<string | null>(null)   // M84 s2: the zone whose build is open
   const zoneDrag = useRef<{ ax: number; az: number; bx: number; bz: number } | null>(null)
@@ -225,7 +236,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
       }).catch(err => setStatus(`failed to load: ${String(err)}`))
       return () => { dead = true }
     }
-    Promise.all([loadIndex(), loadNetwork(), builderCall('wilds')]).then(([idx, nw, b]) => {
+    Promise.all([loadIndex(), loadNetwork(undefined, undefined, false), builderCall('wilds')]).then(([idx, nw, b]) => {
       if (dead) return
       if (!b) { setStatus('could not read the builder draft (owner only)'); return }
       const layer = { edits: b.draft.tiles, water: b.draft.water, falls: b.draft.falls }
@@ -239,6 +250,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
       if (b.draft.voids) store[VOIDS_KEY] = { ...b.draft.voids }; if (b.draft.nodes) store[NODES_KEY] = { ...b.draft.nodes }
         if (b.draft.props) store[PROPS_KEY] = propsToStore(b.draft.props)
       edits.current = store; setZones(b.draft.zones ?? []); setZoneNet(nw ?? null)
+      setBaseNet(nw ?? null); setSettles(b.draft.settlements ?? [], false)   // M237
       setTiles(idx.tiles.filter(t => t.land > 0.02).map(t => ({ name: t.name, tx: t.tx, ty: t.ty, land: t.land })).sort((a, b) => a.ty - b.ty || a.tx - b.tx))
       setStatus('')
       setRev(r => r + 1)
@@ -432,7 +444,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
     } else if (o.brush === 'nodes') {   // M86: node zones (the Wilds only)
       if (glade || nyx) return
       markDirty(mergeEdits(edits.current, { [NODES_KEY]: paintNodeZones(x, z, o.radius, o.nzType === 'erase' ? null : zoneCode(o.nzType, o.nzStep)) }))
-    } else if (o.brush !== 'falls' && o.brush !== 'zone' && o.brush !== 'place') {
+    } else if (o.brush !== 'falls' && o.brush !== 'zone' && o.brush !== 'place' && o.brush !== 'settle') {
       const d = applyBrush(heightAt, brushTiles(), edits.current, { kind: o.brush, x, z, r: o.radius, s: o.strength, target })
       markDirty(mergeEdits(edits.current, d))
     }
@@ -466,6 +478,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
   const beginAt = (px: number, pz: number) => {
     const p = { x: px, z: pz }
     if (!ready) return
+    if (opts.current.brush === 'settle') return   // M237: the settlement markers take their own clicks (settlements-tool.tsx)
     if (opts.current.brush === 'place') return   // M153: Place mode's clicks are its own (place-mode.tsx)
     if (opts.current.picking) { setLevel(Math.round(heightAt(p.x, p.z) * 10) / 10); setPicking(false); return }
     if (opts.current.brush === 'falls') { const b = bases.current.get(tileRef.current)!; line.current = [[p.x - b.ox, p.z - b.oz]]; return }
@@ -547,6 +560,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
       if (k === VOIDS_KEY) L.voids = m; else if (k === NODES_KEY) L.nodes = m; else if (k === PROPS_KEY) L.props = propsOfStore(m); else if (k.startsWith(WATER_PREFIX)) L.water[tileOfKey(k)] = m; else if (k.startsWith(FALLS_PREFIX)) L.falls[tileOfKey(k)] = m; else L.tiles[k] = m
     }
     if (zonesRef.current.length) L.zones = zonesRef.current
+    if (settlesRef.current.length) L.settlements = settlesRef.current   // M237
     return L
   }
   const loadLayer = (L: Layer) => {
@@ -554,6 +568,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
     if (L.voids) store[VOIDS_KEY] = { ...L.voids }
     if (L.nodes) store[NODES_KEY] = { ...L.nodes }
     if (L.props) store[PROPS_KEY] = propsToStore(L.props)
+    setSettles(L.settlements ?? [], false); setSelSettle(null)
     edits.current = store; setZones(L.zones ?? []); setSelZone(null); hist.current = new EditHistory(); dirtyRef.current.clear(); setDirty([]); setRev(r => r + 1)
   }
   const save = useCallback(async (auto = false): Promise<boolean> => {
@@ -700,6 +715,8 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
         hist.current.commit(); setRev(v => v + 1); return true
       },
       nodeCells: () => ({ ...(edits.current[NODES_KEY] ?? {}) }),
+      /** M237: the settlements as the draft makes them (bake + edits), and the raw edits */
+      settlements: () => settleListRef.current.map(q => ({ ...q })), settleEdits: () => settlesRef.current.map(q => ({ ...q })), selSettle: () => selSettleRef.current,
       voidRev, status: () => status,
       /** M105: the overlay: on/off, toggle, and the data it draws (the game's own) */
       overlay: { on: showOv, set: setShowOv, data: () => ovAll, doors: ovDoors },
@@ -748,7 +765,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
           {full && (
             <div className="absolute top-3 left-3 z-10 flex flex-col gap-1.5 pointer-events-none [&>*]:pointer-events-auto">
               <div className="flex gap-1 items-center rounded bg-black/70 border border-white/10 px-2 py-1.5">
-                {TOOLS.map((t, i) => <button key={t} className={`${btn} ${brush === t ? on : off}`} disabled={(t === 'void' || t === 'nodes') && (glade || nyx)} onClick={() => setBrush(t)}>{i + 1} {t[0].toUpperCase() + t.slice(1)}</button>)}
+                {TOOLS.map((t, i) => <button key={t} className={`${btn} ${brush === t ? on : off}`} disabled={(t === 'void' || t === 'nodes' || t === 'settle') && (glade || nyx)} onClick={() => setBrush(t)}>{i + 1} {t[0].toUpperCase() + t.slice(1)}</button>)}
                 {brush === 'void' && <button className={`${btn} ${on}`} onClick={() => setVoidMode(m => (m === -1 ? 1 : -1))}>{voidMode === -1 ? 'Erase' : 'Paint'} (V)</button>}
                 {canPlace && <button className={`${btn} ${placing ? on : off}`} onClick={() => setBrush(b => (b === 'place' ? 'raise' : 'place'))}>{glade ? 'Place (P)' : 'Scenery (P)'}</button>}
                 <span className="text-[11px] font-mono text-white/70 tabular-nums pl-2">radius {radius} m [ ] · strength {strength.toFixed(2)} - =</span>
@@ -792,6 +809,9 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
               </g>) })}
           </svg>
         )}
+        {B && !glade && !nyx && (brush === 'settle' || showOv) && <SettlementMarkers box={{ x0: B.ox - B.meta.sizeX / 2, z0: B.oz - B.meta.sizeZ / 2, sx: B.meta.sizeX, sz: B.meta.sizeZ }} list={settleList} sel={selSettle} active={brush === 'settle'}
+          onAdd={(x, z) => { if (!baseNet) return; const r = addSettlementEdit(settlesRef.current, baseNet, x, z); setSettles(r.edits); setSelSettle(r.id) }}
+          onMove={(id, x, z) => setSettles(moveSettlementEdit(settlesRef.current, id, x, z))} onSelect={setSelSettle} />}
         {B && (brush === 'zone' || zoneBox) && (
           <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox={`${B.ox - B.meta.sizeX / 2} ${B.oz - B.meta.sizeZ / 2} ${B.meta.sizeX} ${B.meta.sizeZ}`} preserveAspectRatio="none" data-testid="zone-tile">
             {zones.map(z => <rect key={z.id} x={z.x0} y={z.z0} width={z.x1 - z.x0} height={z.z1 - z.z0} fill={z.id === selZone ? 'rgba(232,121,249,0.25)' : 'rgba(232,121,249,0.10)'} stroke="#e879f9" strokeWidth={z.id === selZone ? 2 : 1} vectorEffect="non-scaling-stroke" data-zone={z.id} />)}
@@ -827,7 +847,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
         <div>
           <div className="text-[10px] uppercase tracking-[0.18em] text-white/40 mb-1">Brush</div>
           <div className="flex flex-wrap gap-1">
-            {TOOLS.map((b, i) => <button key={b} className={`${btn} ${brush === b ? on : off} disabled:opacity-35`} disabled={(b === 'void' || b === 'nodes') && (glade || nyx)} onClick={() => setBrush(b)} data-testid={`brush-${b}`}>{i + 1} {TOOL_KEY[b]}</button>)}
+            {TOOLS.map((b, i) => <button key={b} className={`${btn} ${brush === b ? on : off} disabled:opacity-35`} disabled={(b === 'void' || b === 'nodes' || b === 'settle') && (glade || nyx)} onClick={() => setBrush(b)} data-testid={`brush-${b}`}>{i + 1} {TOOL_KEY[b]}</button>)}
           </div>
           {(glade || nyx) && <div className="text-[11px] text-white/40 mt-1" data-testid="void-note">Void brush: {glade ? 'the Glade' : 'the Nyx continent'} has no cloud voids; it works on the Wilds.</div>}
           {brush === 'void' && !glade && !nyx && <div className="flex flex-col gap-1 mt-2" data-testid="void-panel">
@@ -852,6 +872,11 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
             </div>}
             <div className="text-[11px] text-white/45">{nzType === 'none' ? 'no trees, crystals or stones stand here (paths, clearings). Grey.' : nzType === 'forest' ? `adds ${FOREST_PER_CELL[nzStep - 1]} trees per ${NZ_CELL} m square, of the zone's own kinds. Green.` : nzType === 'crystal' ? `adds ${CRYSTAL_PER_CELL[nzStep - 1]} crystal nodes per ${NZ_CELL} m square, of the zone's own kinds. Violet.` : isKindZone(nzType) ? `adds ${KIND_PER_CELL[nzStep - 1]} ${KIND_ZONE[nzType].node} nodes per ${NZ_CELL} m square, only that kind. ${KIND_ZONE[nzType].col}.` : "back to the map's own rule."} Players see it after Publish.</div>
           </div>}
+          {brush === 'settle' && !glade && !nyx && <SettlementsPanel list={settleList} base={baseNet} sel={selSettle} removed={removedIds(settles)} btn={btn} on={on} off={off}
+            onSelect={setSelSettle} onGo={q => { const w = gridRef.current, t = w?.at(Math.floor((q.x + TILE_M / 2) / TILE_M), Math.floor((q.z + TILE_M / 2) / TILE_M)); if (t && t.name !== tile) setTile(t.name) }}
+            onPatch={(id, p, clear) => { let e = patchEdit(settlesRef.current, id, p); if (clear?.length) e = patchEdit(e, id, Object.fromEntries(clear.map(k => [k, undefined]))); setSettles(e) }}
+            onRemove={id => { setSettles(removeSettlementEdit(settlesRef.current, id)); setSelSettle(null) }}
+            onRestore={id => setSettles(patchEdit(settlesRef.current, id, { removed: undefined }))} />}
           {brush === 'flatten' && <div className="text-[11px] text-white/45 mt-1">levels to the height under your first click</div>}
           {brush === 'zone' && <div className="text-[11px] text-white/45 mt-1" data-testid="zone-hint">drag a building zone: the ground inside levels to the height under your first click, the edge blends over {ZONE_BLEND_M} m. Click a zone to tag or delete it. Delete puts the ground back (undo does not reach past a zone). {zones.length} zone{zones.length === 1 ? '' : 's'} on this map.</div>}
           {(brush === 'water' || brush === 'dry') && <div className="text-[11px] text-white/45 mt-1">{brush === 'water' ? 'paints water at the level below; it fills wherever the level stands above the ground (carve a bowl, paint = a lake). A pond edge over lower water falls by itself.' : 'removes painted water and waterfall lines under the brush'}</div>}

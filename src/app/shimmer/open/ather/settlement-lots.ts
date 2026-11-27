@@ -41,7 +41,8 @@ export function settlementLots(s: Settlement, season: number, folk: Folk[] = fol
   if (s.id === GLADE_ID) return []
   const firstOf = new Map<Profession, Folk>()
   for (const f of folk) if (ORDER.includes(f.profession) && !firstOf.has(f.profession)) firstOf.set(f.profession, f)
-  const trades = [...firstOf.keys()].sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b)).slice(0, MAX_LOTS)
+  // M237: the owner's home count (World Builder > Settlements) caps the lots; absent = one per trade present, up to MAX_LOTS
+  const trades = [...firstOf.keys()].sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b)).slice(0, Math.min(MAX_LOTS, s.homes ?? MAX_LOTS))
   return trades.map((p, k) => {
     const { x, z, yaw } = lotSlot(s, season, k)
     return { id: `${s.id}:${p}`, settlement: s.id, profession: p, folkId: firstOf.get(p)!.id, x, z, yaw, w: LOT_W, d: LOT_D }

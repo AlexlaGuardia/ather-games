@@ -9,12 +9,15 @@
 
 import { LINGSTON, LINGSTON_CLEAR } from './lingston'
 import { GLADE } from './moonwell-glade'
+import { applySettlementEdits } from './settlement-edits'   // M237
+import { ensureEdits, settlementEditsLive } from './wilds-edits'
 export const SEASON = 1   // until the season clock exists, the network is season 1's
 export type SettlementBiome = 'shore' | 'meadow' | 'woods' | 'rock'
 /** `biome` = what lies around it (the bake guarantees at least one of each, Alex 11-17); older bakes lack it */
 /** `pads` (M39 s3, baked by scripts/bake-path-profiles.mts): each generated lot slot's level pad [x, z, yaw, y]: the footprint's
  *  ONE height, so every tile reads the same ground there (relief.ts levels it). Absent on the Glade and on older bakes. */
-export interface Settlement { id: string; name: string; x: number; z: number; biome?: SettlementBiome; pads?: [number, number, number, number][] }
+/** `homes` (M237, the owner's settlement layer): how many lots stand (settlement-lots caps at it); absent = the trades' own count */
+export interface Settlement { id: string; name: string; x: number; z: number; biome?: SettlementBiome; pads?: [number, number, number, number][]; homes?: number }
 /** What a settlement's Moglins gather, by its biome: their PRODUCT (Magii 11-17, c52ba1c: idle gathering is a Moglin's
  *  product, never a keeper skill), moved by want-list trade. Existing items only; which goods are BUILD (Jin's).
  *  Woods gives goldwood logs as the stand-in for DEADFALL (fallen tier-1 goldwood, canon) until that item exists. */
@@ -52,8 +55,17 @@ export const FAIR_NAME = 'The Thistledown Fair'
 /** how near counts as "in" a settlement (the message line names it) and "at" the fair's door */
 export const SETTLEMENT_R = 45, FAIR_R = 34, FAIR_DOOR_R = 9
 
-export async function loadNetwork(season = SEASON, base = '/open/wilds'): Promise<Network | null> {
-  try { const r = await fetch(`${base}/network-s${season}.json`); return r.ok ? withGlade((await r.json()) as Network) : null } catch { return null }
+/** `layer` (BETA M237): the owner's published settlement edits (World Builder > Settlements, settlement-edits.ts) applied on top of
+ *  the baked file; the World Builder itself reads the bake bare (layer = false) and draws its draft's edits over it. */
+export async function loadNetwork(season = SEASON, base = '/open/wilds', layer = true): Promise<Network | null> {
+  try {
+    const r = await fetch(`${base}/network-s${season}.json`); if (!r.ok) return null
+    const n = withGlade((await r.json()) as Network); if (!layer) return n
+    await ensureEdits()   // never throws: no layer = the bake as it is
+    const m = applySettlementEdits(n, settlementEditsLive())
+    if (typeof window !== 'undefined') (window as unknown as { __atherNet?: () => Network }).__atherNet = () => m   // checks: READ only
+    return m
+  } catch { return null }
 }
 
 /** Moonwell Glade joined every season's settlements (M30) until M67 s1b-2 (hub 11-22) took it OUT of the Wilds into the
