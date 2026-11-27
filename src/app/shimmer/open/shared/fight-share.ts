@@ -6,7 +6,6 @@
 //           roster, with no election message; when the host leaves, the next lowest takes over from the last snapshot
 //           (its Hollows are already there).
 // ★ PURE (no React, no three, no socket). Node test: fight-share.test.ts.
-import { NET_HIT_MAX } from '../ather/combat'
 import type { Combat, CombatEvent, Hollow, HollowKind, HollowState, Terrain } from '../ather/combat'
 import { CHAMP, CHAMP_ID, THERE_R, hurtChampion, thereAt, throwVolley, type Attack, type Champion, type ChampState } from '../ather/champion'
 
@@ -133,6 +132,9 @@ export const DOWN_MS = 8000, HAND_MS = 25_000
 /** the fall is told again, for a word the relay dropped (once is believed) */
 export const DOWN_AGAIN = [1000, 2500]
 /** a guest's rounds on the champion: no more than this a second (the best gun in the game, and room) */
+/** M245: the most one guest round may claim on a Hollow or the champion (was 200 at the old numbers): a Charred head 154 x the 1.3 amp = 200.2.
+ *  Lives here, not in combat.ts: combat imports this file, and a value import back made a cycle that broke the prod bundle's init order. */
+export const NET_HIT_MAX = 500
 export const CHAMP_DPS_MAX = 700   // M245: was 250 at the old gun numbers (the guns' damage went up to 4.9x; a Lance head 216 x the 1.3 amp)
 const CSTATES: ChampState[] = ['rise', 'idle', 'windup', 'act', 'recover', 'submerge', 'home']
 const ATTACKS: Attack[] = ['slam', 'lunge', 'volley']

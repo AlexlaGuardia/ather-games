@@ -1,6 +1,7 @@
 // node test: npx tsx src/app/shimmer/open/shared/fight-share.test.ts (BETA M28 slice 2)
 import { hostOf, sharing, encodeSnap, applySnap, SNAP_MAX, encodeHits, decodeHits, newDrops, decodeKills, layDrop, encodeHurt, decodeHurt, type NetHollow } from './fight-share'
-import { newCombat, spawnHollow, stepCombat, applyNetHit, applyNetHurt, blowCost, SHAMBLER, NET_HIT_MAX, type Terrain } from '../ather/combat'
+import { newCombat, spawnHollow, stepCombat, applyNetHit, applyNetHurt, blowCost, SHAMBLER, type Terrain } from '../ather/combat'
+import { NET_HIT_MAX } from './fight-share'
 let fails = 0
 const ok = (c: boolean, m: string) => { console.log(`${c ? '✓' : '✗'} ${m}`); if (!c) fails++ }
 const T: Terrain = { heightAt: () => 0, walkable: () => true }

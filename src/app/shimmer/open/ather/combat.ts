@@ -16,7 +16,7 @@
 import { canFire, spreadDeg, bloomAfterShot, bloomAfterRest, weaponDef, type WeaponDef } from '../../engine/weapons'
 import { RANGE_GUNS, M245_HOLLOW_SCALE } from '../shared/gunplay'
 import { stepChampion, hitChampion, CHAMP, type Champion } from './champion'
-import { easeRemote } from '../shared/fight-share'   // M28: a non-host's Hollows ease to the host's snapshot
+import { easeRemote, NET_HIT_MAX } from '../shared/fight-share'   // M28: a non-host's Hollows ease to the host's snapshot
 import { ECON, payReload } from '../shared/vitals-economy'
 import { stepFlit, flitHit, type FlitStep } from './flit-pose'
 import { bodyBlocked, segmentHit, lineOfSight, steer, type Structures, type SteerMem } from './obstacles'
@@ -339,8 +339,6 @@ export function stripSkin(c: Combat): boolean {
   popSkin(c, f); return true
 }
 
-/** M245: the most one guest round may claim on a Hollow (was 200 at the old numbers): a Charred head 154 x the 1.3 amp = 200.2 */
-export const NET_HIT_MAX = 500
 export function applyNetHit(c: Combat, id: number, dmg: number) {
   const h = c.hollows.find(o => o.id === id)
   if (!h || h.hp <= 0 || !(dmg > 0) || dmg > NET_HIT_MAX) return

@@ -1,6 +1,7 @@
 // node test: npx tsx src/app/shimmer/open/shared/champ-share.test.ts (BETA M156 s3: one champion, one kill, a clear for everyone there)
 import { applyChamp, applySnap, believeDown, champNetHit, encodeHand, encodeSnap, shownOf, takeHand, CHAMP_DPS_MAX, CHAMP_ID, DOWN_MS, SNAP_MAX, decodeChamp, encodeChamp, decodeKills, type HitBudget, type Shown } from './fight-share'
-import { newCombat, stepCombat, spawnHollow, NET_HIT_MAX, type Combat, type CombatEvent, type Terrain } from '../ather/combat'
+import { NET_HIT_MAX } from './fight-share'
+import { newCombat, stepCombat, spawnHollow, type Combat, type CombatEvent, type Terrain } from '../ather/combat'
 import { CHAMP, THERE_R, wakeChampion } from '../ather/champion'
 import { freshInfection, guestClue, fell, begin, parseInfection, purge, CLUES } from '../ather/infection'
 import { freshTell, dueGiven, told, due, note, carried } from '../ather/infect-tell'
