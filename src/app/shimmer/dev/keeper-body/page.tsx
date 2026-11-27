@@ -66,7 +66,13 @@ function figureSig(k: ReturnType<typeof benchKeeper>) {
     hv += Math.abs(o.position.x) * 11 + o.position.y * 13 + o.position.z * 7 + o.scale.x * 5 + o.scale.y * 3
     if (o.parent && o.parent.name.startsWith('eye-')) hv += Math.abs(o.parent.position.x) * 17 + o.parent.position.y * 19
   })
-  return `${meshes}|${mouth}|${mv.toFixed(4)}|${tz.toFixed(3)}|${k.height.toFixed(3)}|${hv.toFixed(4)}`
+  // M216: every named part's place + size (head group scale, torso mesh scale, hands, feet), so each slider shows on the sig
+  let pv = 0
+  for (const [i, n] of ['head', 'body', 'hand-l', 'hand-r', 'foot-l', 'foot-r'].entries()) {
+    const o = k.group.getObjectByName(n)!, m = o.children[0]
+    pv += (i + 1) * (o.position.x * 3 + o.position.y * 5 + o.position.z * 7 + o.scale.x * 11 + o.scale.y * 13 + (m ? m.scale.x * 17 + m.scale.y * 19 + m.scale.z * 23 : 0))
+  }
+  return `${meshes}|${mouth}|${mv.toFixed(4)}|${tz.toFixed(3)}|${k.height.toFixed(3)}|${hv.toFixed(4)}|${pv.toFixed(5)}`
 }
 
 export default function KeeperBodyBench() {
