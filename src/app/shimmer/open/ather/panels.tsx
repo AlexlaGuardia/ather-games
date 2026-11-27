@@ -56,7 +56,24 @@ function AreaView({ world, regionsByTile, cx, cz, fog, tileOff, waymarks }: {
       ctx.drawImage(tmp, (dx + 1) * PER, (dy + 1) * PER)
     }
   }, [world, regionsByTile, cx, cz, fog, fog?.rev, tileOff, waymarks])
-  return <canvas ref={ref} style={{ width: '100%', height: '100%', display: 'block' }} />
+  // M235 s2: over the picture, the zones lost (void, outlined) and the one under threat (pulses), in world metres
+  const tx0 = Math.round(cx / TILE_M), ty0 = Math.round(cz / TILE_M)
+  const marks = [...regionsByTile].flatMap(([name, rs]) => { const t = world.byName.get(name); return t && Math.abs(t.tx - tx0) <= 1 && Math.abs(t.ty - ty0) <= 1 ? rs.filter(r => r.threat || r.state === 'lost').map(r => ({ ...r, key: `${name}|${r.id}|${r.poly[0]?.x}`, pts: r.poly.map(p => `${p.x + t.tx * TILE_M},${p.z + t.ty * TILE_M}`).join(' ') })) : [] })
+  return (
+    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+      <canvas ref={ref} style={{ width: '100%', height: '100%', display: 'block' }} />
+      {marks.length > 0 && (
+        <svg viewBox={`${(tx0 - 1.5) * TILE_M} ${(ty0 - 1.5) * TILE_M} ${3 * TILE_M} ${3 * TILE_M}`} preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
+          {marks.map(r => (
+            <polygon key={r.key} points={r.pts} vectorEffect="non-scaling-stroke" data-area-state={r.state} data-threat={r.threat ? '1' : undefined}
+              fill={r.threat ? 'rgba(200,120,255,0.18)' : 'none'} stroke={r.threat ? 'rgba(200,120,255,0.95)' : STATE_LOOK.lost.line} strokeWidth={r.threat ? 4 : 2} strokeLinejoin="round">
+              {r.threat && <animate attributeName="stroke-opacity" values="1;0.15;1" dur="1.1s" repeatCount="indefinite" />}
+            </polygon>
+          ))}
+        </svg>
+      )}
+    </div>
+  )
 }
 
 /** The Ather's relief plate (plate.ts), the same picture the minimap draws. */

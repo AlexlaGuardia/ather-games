@@ -52,6 +52,8 @@ const seeded = (): Store => ({
 })
 const fw0 = [...tiles.find(t => t.name === 'first-wilds')!.nodes].sort((a: any, b: any) => Math.hypot(a.x - SETTLEMENT.x, a.z - SETTLEMENT.z) - Math.hypot(b.x - SETTLEMENT.x, b.z - SETTLEMENT.z))[0]
 const has = (id: string) => F.members.has(id)
+const MAP = 'ather.spreadmap.v1'
+const spots = (id: string) => { const ids = F.members.get(id)!; return tiles.flatMap(t => t.nodes.map((n: any) => ({ id: n.id, x: n.x + t.tx * 1000, z: n.z + t.ty * 1000 }))).filter(n => ids.includes(n.id)) }   // the sections' champion spots: walkable dry ground
 const nbs = (id: string) => { const [i, j] = id.slice(1).split(',').map(Number); return [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([a, b]) => `z${i + a},${j + b}`).filter(has) }
 const fwIds = new Set(tiles.find(t => t.name === 'first-wilds')!.nodes.map((n: any) => Z(n.id)))
 const centre = (id: string) => { const ids = F.members.get(id)!, ns = tiles.flatMap(t => t.nodes.map((n: any) => ({ id: n.id, x: n.x + t.tx * 1000, z: n.z + t.ty * 1000 }))).filter(n => ids.includes(n.id)); return { x: ns.reduce((s, n) => s + n.x, 0) / ns.length, z: ns.reduce((s, n) => s + n.z, 0) / ns.length } }
@@ -76,15 +78,17 @@ try {
   ok((await A('wmClear', I)) === true, 'B. I cleared (its champion down)'); await sleep(800)
   ok((await SM('neglectTick')) === null && (await SM('neglect'))?.calm, 'B. answered: no threat, calm set')
   // ── C · not answered ──
-  const h0 = await SM('height', cc.x, cc.z)
+  const sp = spots(C), h0s = await Promise.all(sp.map(q => SM('height', q.x, q.z)))
   ok(await SM('seedNeglect', C, I, 10), 'C. seeded again')
   ok((await SM('neglectTick'))?.id === C, 'C. threatened again')
   await A('skipDays', 2.2); await sleep(1500)
   const ng = await SM('neglect')
   ok(!!ng?.lost?.[C] && ng.lost[C].season === ng.season, `C. not answered: ${C} LOST for season ${ng?.season} (${JSON.stringify(ng?.lost)})`)
   ok((await SM('state', C)) === 'lost' && !(await SM('clean')).includes(C), 'C. the map reads it lost, out of the ledger')
-  ok(await poll(async () => { const h = await SM('height', cc.x, cc.z); return h0 !== null && h !== null && Number.isFinite(h) && h < h0 - 20 }, 60000), `C. the world's ground at C's centre is gone (${h0?.toFixed?.(1)} -> ${(await SM('height', cc.x, cc.z))?.toFixed?.(1)})`)
-  ok((await SM('lostDepth', cc.x, cc.z)) > 10, 'C. C reads as void (lost depth)')
+  const deepest = async () => { let best = { k: -1, d: 0 }; for (let k = 0; k < sp.length; k++) { const d = await SM('lostDepth', sp[k].x, sp[k].z); if (d > best.d) best = { k, d } } return best }
+  const dp = await deepest(), q = sp[Math.max(0, dp.k)]
+  ok(dp.d > 14, `C. C reads as void (lost depth ${dp.d.toFixed(1)} m in at ${q.id})`)
+  ok(await poll(async () => { const h = await SM('height', q.x, q.z), h0 = h0s[Math.max(0, dp.k)]; return h0 !== null && h !== null && Number.isFinite(h) && h < h0 - 30 }, 60000), `C. the world's ground there is gone: carved (${h0s[Math.max(0, dp.k)]?.toFixed?.(1)} -> ${(await SM('height', q.x, q.z))?.toFixed?.(1)})`)
   ok(await poll(() => p.evaluate(() => !!(window as any).__blackLight?.on), 10000), `C. the black light is up in the Wilds (${JSON.stringify(await p.evaluate(() => (window as any).__blackLight))})`)
   await sleep(6500); await p.screenshot({ path: `${out}/c-wilds-pillar.png` })
   await A('open', 'gate'); await sleep(2500)
