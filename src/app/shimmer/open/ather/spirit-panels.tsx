@@ -12,7 +12,7 @@ import { hudSay } from '../shared/hud-say'
 import { SPECIES_NAMES, type Species } from '../../spirits/spirit'
 import { SEED_NAME, seedIcon, speciesOf, plant, ripen, growth, settlePot, tend, canTend, tendedToday, bloomAt, growDay, gameDay, seedsOnPlot, takeSeed, BLOOM_DAYS, hasten, growingIn, spiritsAt, featuredAt, withFeatured, BED_RECORD_MAX, type SeedId } from './spirit-seeds'
 import { GAME_DAY_MS } from './nodes'
-import { loadBook, saveBook, see, seenCount, formCount, syncForms, freshBook, type Book, type Page } from './grimoire-book'
+import { loadBook, saveBook, see, seenCount, baseCount, formCount, syncForms, freshBook, type Book, type Page } from './grimoire-book'
 import { secondFormName } from '../../spirits/evolution'
 import { ELEMENT_LABEL } from './second-form-view'
 import { GRIMOIRE_SIZE } from './plot'
@@ -186,14 +186,15 @@ export function PlanterPanel({ pieceId, onClose, footer, bank }: { pieceId: stri
 export function GrimoirePanel({ onClose, footer }: { onClose: () => void; footer: React.ReactNode }) {
   const b = useBook(), m = useManifest()
   useEffect(() => { ripenBook() }, [])
-  // M203: the base capacity (10 / 15 / 25, from base pages only) plus one page per form taken
-  const size = GRIMOIRE_SIZE(seenCount(b)) + formCount(b)
+  // M203: the base capacity (10 / 15 / 25, from base pages) plus one page per form taken (the slots drawn; the TIERS count
+  // every page, base and form: seenCount, M203 s2)
+  const size = GRIMOIRE_SIZE(baseCount(b)) + formCount(b)
   const [open, setOpen] = useState<number | null>(null)
   const page = open !== null ? b.pages[open] : null, card = page && m ? m[nameOf(page.species)] : null
   return (
     <HearthFrame title="Grimoire" maxWidth={460} onClose={onClose} fixed dataPanel="grimoire">
       <div style={{ padding: '26px 16px 14px', display: 'grid', gap: 12 }}>
-        <div data-grimoire-count={seenCount(b)} data-grimoire-forms={formCount(b)} style={{ fontSize: 13, color: H.inkSoft, fontVariantNumeric: 'tabular-nums' }}>{b.pages.length} / {size} pages</div>
+        <div data-grimoire-count={seenCount(b)} data-grimoire-base={baseCount(b)} data-grimoire-forms={formCount(b)} style={{ fontSize: 13, color: H.inkSoft, fontVariantNumeric: 'tabular-nums' }}>{b.pages.length} / {size} pages</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6 }}>
           {Array.from({ length: size }, (_, i) => {
             const p = b.pages[i], c = p && m ? m[nameOf(p.species)] : null, img = p ? pageImg(p, c) : null

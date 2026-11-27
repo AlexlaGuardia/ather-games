@@ -1,12 +1,15 @@
 // ── BETA M203 THE GRIMOIRE GETS A PAGE PER SECOND FORM: OWNER + ?spirits=3d (2026-11-26, play-M203) ─────────────────────
 // Alex 11-26 (reverses 11-14 'no evolution pages'): each second form a keeper's spirit takes gets its own new page, SEEN,
-// numbered after the pages already filled (discovery order); one page per form however many keepers take it; the plot's
-// 10 / 15 / 25 ring tiers count base pages only (Jin's pick until Magii rules; unit-tested in spirit-seeds.test.ts).
-// SETUP (stated): book = fox + owl base pages; a bloomed fox planter (party, following) whose Earth form stat bar is met
+// numbered after the pages already filled (discovery order); one page per form however many keepers take it.
+// s2 (RULED 142d15d, Magii + Alex 11-26): form pages COUNT toward the 10 / 15 / 25 ring tiers like base pages, each page = one.
+// SETUP (stated): book = 9 base pages (fox first); a bloomed fox planter (party, following) whose Earth form stat bar is met
 // (30 growths + 5 GRD), a grimoire pedestal beside it; bag = 3 Earth Meals.
-//  A. the pedestal before: 2 pages, no form page.  B. evolve her the M204 way: feed 3 Earth Meals in her panel.
-//  C. the pedestal: page 3 = her form (fox, earth, Seen, the form's name + its 2D art), base count still 2.
-//  D. reload: page 3 still there.  E. a second fox keeper takes the same Earth form (save edit + reload): still ONE form page.
+//  A. the pedestal before: 9 pages, no form page; Greg's ground: 9 pages, the 10-page ring sealed.
+//  B. evolve her the M204 way: feed 3 Earth Meals in her panel.
+//  C. the pedestal: page 10 = her form (fox, earth, Seen, the form's name + its 2D art), base 9, tier count 10;
+//     Greg's ground: 10 pages, the first ring OPEN (no square marked 10p).
+//  D. reload: page 10 still there, the ring still open.  E. a second fox keeper takes the same Earth form (save edit +
+//     reload): still ONE form page, still 10.
 //   npx tsx scripts/m203-form-pages-check.mts [--url http://localhost:3202] [--out docs/looks/m203-2026-11-26]
 import puppeteer from 'puppeteer-core'
 import { existsSync, mkdirSync, readFileSync } from 'fs'
@@ -40,7 +43,7 @@ try {
     slots[0] = { id: 'waymark', n: 12 }; slots[1] = { id: 'earth_meal', n: 3 }
     localStorage.setItem('open.inv.v1', JSON.stringify({ v: 1, slots, gifts: ['bait1'] }))
     localStorage.setItem('open.works.v1', JSON.stringify({ v: 1, rooms: [], chests: [], pieces }))
-    localStorage.setItem('ather.grimoire.v1', JSON.stringify({ v: 1, pages: [{ species: 'fox', stage: 'seen', at: 1 }, { species: 'owl', stage: 'seen', at: 2 }], pots: { 'vx-check': { seed: 'mana_seed_fox', at, bloomed: true } }, met: [] }))
+    localStorage.setItem('ather.grimoire.v1', JSON.stringify({ v: 1, pages: ['fox', 'owl', 'axolotl', 'water-bear', 'turtle', 'frog', 'firefly', 'rabbit', 'bat'].map((species, i) => ({ species, stage: 'seen', at: i + 1 })), pots: { 'vx-check': { seed: 'mana_seed_fox', at, bloomed: true } }, met: [] }))
     localStorage.setItem('ather.spiritParty.v1', JSON.stringify(['vx-check']))
     localStorage.setItem('ather.spiritFollow.v1', JSON.stringify(['vx-check']))
     localStorage.setItem('ather.spiritStats.v1', JSON.stringify({ 'vx-check': rec }))
@@ -64,13 +67,27 @@ try {
         pages: [...(g?.querySelectorAll('[data-page]') ?? [])].map(b => ({ n: Number(b.getAttribute('data-page')), sp: b.getAttribute('data-species') ?? '', form: b.getAttribute('data-form') ?? '', stage: b.getAttribute('data-stage') ?? '', img: b.querySelector('img')?.getAttribute('src') ?? null })).filter(x => x.stage !== 'empty') }
     }) as Promise<Ped>
   }
+  // M203 s2: the ring tier as the page reads it: Greg's ground panel (pages = garden + every grimoire page, base and form)
+  async function ground(): Promise<{ pages: string; sealed10: number; sealed15: number }> {
+    await p.evaluate(() => (window as any).__ather.open('greg')); await sleep(900)
+    const g = await p.evaluate(() => {
+      const el = document.querySelector('[data-panel="greg"]'); if (!el) return null
+      const lab = [...el.querySelectorAll('div')].find(d => d.textContent === 'Grimoire')
+      const btns = [...el.querySelectorAll('button')].map(b => (b.textContent ?? '').trim())
+      return { pages: lab?.nextElementSibling?.textContent ?? '?', sealed10: btns.filter(t => t === '10p').length, sealed15: btns.filter(t => t === '15p').length }
+    })
+    await p.keyboard.press('Escape'); await sleep(500)
+    return g ?? { pages: 'no panel', sealed10: -1, sealed15: -1 }
+  }
   const filled = (d: Ped) => d.pages.map(x => `${x.n}:${x.sp}${x.form ? '/' + x.form : ''}:${x.stage}`).join(' ')
 
   // ── A. before: two base pages
   await load()
   const a = await pedestal()
-  ok(a.open && a.pages.length === 2 && a.count === '2' && a.forms === '0', `A before: 2 base pages, no form page (${filled(a)})`)
+  ok(a.open && a.pages.length === 9 && a.count === '9' && a.forms === '0', `A before: 9 base pages, no form page (${filled(a)})`)
   await shot('a-before'); await p.keyboard.press('Escape'); await sleep(500)
+  const ga = await ground()
+  ok(ga.pages === '9 / 10' && ga.sealed10 > 0, `A Greg's ground: 9 pages, the 10-page ring sealed (${ga.pages}, ${ga.sealed10} squares at 10p)`)
 
   // ── B. evolve her the M204 way (3 Earth Meals fed in her panel)
   await tp(KEEP.x, KEEP.z)
@@ -94,25 +111,30 @@ try {
   // ── C. the pedestal: page 3 = her form
   const name = secondFormName({ species: 'fox' }, 'earth')
   const c = await pedestal()
-  const f3 = c.pages.find(x => x.n === 3)
-  ok(c.pages.length === 3 && !!f3 && f3.sp === 'fox' && f3.form === 'earth' && f3.stage === 'seen', `C a new page 3 for her form, Seen, after the 2 base pages (${filled(c)})`)
+  const f3 = c.pages.find(x => x.n === 10)
+  ok(c.pages.length === 10 && !!f3 && f3.sp === 'fox' && f3.form === 'earth' && f3.stage === 'seen', `C a new page 10 for her form, Seen, after the 9 base pages (${filled(c)})`)
   ok(f3?.img === '/spirits/grimoire/fox-earth.webp', `C its picture is the locked 2D form art (${f3?.img})`)
-  ok(c.count === '2' && c.forms === '1', `C base pages still 2 (the ring count), forms 1 (${c.count}, ${c.forms})`)
-  await click('[data-page="3"]'); await sleep(600)
-  const title = await p.evaluate(() => document.querySelector('[data-page-open="3"]')?.textContent ?? '')
-  ok(title.includes(name) && title.includes('Seen'), `C page 3 opens: ${name}, Seen (${title.slice(0, 80)})`)
+  ok(c.count === '10' && c.forms === '1', `C the tier count is 10 (9 base + 1 form), forms 1 (${c.count}, ${c.forms})`)
+  await click('[data-page="10"]'); await sleep(600)
+  const title = await p.evaluate(() => document.querySelector('[data-page-open="10"]')?.textContent ?? '')
+  ok(title.includes(name) && title.includes('Seen'), `C page 10 opens: ${name}, Seen (${title.slice(0, 80)})`)
   const fit = await p.evaluate(() => { const e = document.querySelector('[data-panel="grimoire"]'); if (!e) return null; const r = e.getBoundingClientRect(); return r.left >= -0.5 && r.right <= innerWidth + 0.5 })
   ok(fit === true, 'C the grimoire fits 390 wide')
   // M200 (play-M200, the M203 find): the grimoire's Party roster names her by her FORM now, not her base name
   const rosterName = await p.evaluate(() => document.querySelector('[data-roster-spirit="vx-check"]')?.getAttribute('data-roster-name') ?? document.querySelector('[data-roster-spirit="vx-check"]')?.textContent ?? null)
   ok(rosterName === name, `C the Party roster names her ${name}, not her base name (${rosterName})`)
   await shot('c-form-page'); await p.keyboard.press('Escape'); await sleep(500)
+  const gc = await ground()
+  ok(gc.pages === '10 / 15' && gc.sealed10 === 0 && gc.sealed15 > 0, `C TIER: the form page crosses the 10-page ring (${gc.pages}, ${gc.sealed10} at 10p, ${gc.sealed15} at 15p)`)
+  await shot('c-ground-open')
 
   // ── D. reload: it stays
   await load()
   const d = await pedestal()
   ok(filled(d) === filled(c), `D after a reload: the same pages (${filled(d)})`)
   await p.keyboard.press('Escape'); await sleep(500)
+  const gd = await ground()
+  ok(gd.pages === '10 / 15' && gd.sealed10 === 0, `D TIER after a reload: still 10, the ring still open (${gd.pages}, ${gd.sealed10} at 10p)`)
 
   // ── E. a second fox keeper in the same Earth form: no second page
   const k = await bookKey()
@@ -120,8 +142,10 @@ try {
   await p.evaluate((key: string, at: number) => { const b = JSON.parse(localStorage.getItem(key)!); b.pots['vx-two'] = { seed: 'mana_seed_fox', at, bloomed: true, element: 'earth', meals: ['earth', 'earth', 'earth'] }; localStorage.setItem(key, JSON.stringify(b)) }, k!, Date.now() - BLOOM_MS - 60000)
   await load()
   const e = await pedestal()
-  ok(e.pages.filter(x => x.form === 'earth' && x.sp === 'fox').length === 1 && e.pages.length === 3, `E a second keeper of the same form: still one form page (${filled(e)})`)
+  ok(e.pages.filter(x => x.form === 'earth' && x.sp === 'fox').length === 1 && e.pages.length === 10 && e.count === '10', `E a second keeper of the same form: still one form page (${filled(e)})`)
   await shot('e-no-double')
+  const ge = await ground()
+  ok(ge.pages === '10 / 15', `E TIER: no double, still 10 (${ge.pages})`)
   ok(errs.length === 0, `0 page errors ${errs.join(' | ')}`)
 } finally { await br.close() }
 console.log(fails ? `${fails} FAIL` : 'ALL PASS')

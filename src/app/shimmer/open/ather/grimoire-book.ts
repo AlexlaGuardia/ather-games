@@ -3,8 +3,9 @@
 // keeper's book differs; a page has two stages, SEEN (image, type, physical description) then BONDED (the full entry +
 // a ribbon by the name). M203 (Alex 11-26, reverses 11-14 'no evolution pages'; canon amend [OPEN]): each second form a
 // keeper's spirit takes gets its OWN page (Page.form), seen like a base page, numbered in the same discovery order; one
-// page per form however many keepers take it. Form pages do NOT count toward the plot tiers (Jin's pick until Magii
-// rules): seenCount / seenSet read base pages only. The 10 / 15 / 25 seen tiers gate the plot (plot.ts › RING_PAGES, M71).
+// page per form however many keepers take it. RULED 142d15d (Magii + Alex 11-26, M203 s2): form pages COUNT toward the
+// 10 / 15 / 25 seen tiers like base pages, each page = one (seenCount); seenSet / baseCount stay base-only (the Anemonyx
+// visits key off species). The tiers gate the plot (plot.ts › RING_PAGES, M71).
 // Here: the spirit you BLOOM takes the next page as SEEN. What makes a page BONDED is a later row (canon: the spirit
 // "decides, all on its own, whether you are someone worth staying for"), so `bond` exists but nothing calls it yet.
 //
@@ -43,8 +44,11 @@ export function syncForms(b: Book, now: number): Book {
   for (const p of Object.values(b.pots)) if (p.bloomed && p.element) next = seeForm(next, speciesOf(p.seed), p.element, now)
   return next
 }
-/** Seen pages = every filled BASE page (a bonded page was seen first). What the plot tiers count (M203: forms excluded). */
-export const seenCount = (b: Book) => b.pages.filter(p => !p.form).length
+/** Seen pages = every filled page, base AND form, each one page (a bonded page was seen first). What the plot tiers count
+ *  (M203 s2, RULED 142d15d: form pages count like base pages). */
+export const seenCount = (b: Book) => b.pages.length
+/** The filled BASE pages (one per species). */
+export const baseCount = (b: Book) => b.pages.filter(p => !p.form).length
 export const seenSet = (b: Book) => new Set(b.pages.filter(p => !p.form).map(p => p.species))
 /** M203: the form pages filled. */
 export const formCount = (b: Book) => b.pages.filter(p => p.form).length
@@ -56,7 +60,9 @@ export function parseBook(v: unknown): Book {
   const FORMS = ['mana', 'storm', 'earth', 'water']
   const pages = Array.isArray(o.pages) ? o.pages.filter((p): p is Page => !!p && typeof p.species === 'string' && (p.stage === 'seen' || p.stage === 'bonded'))
     // M203: a bad form is dropped (the page is kept as nothing it was not); a good one rides
-    .filter(p => p.form === undefined || FORMS.includes(p.form)) : []
+    .filter(p => p.form === undefined || FORMS.includes(p.form))
+    // M203 s2: every page counts toward the tiers, so a page saved twice (same species + form) is kept once, the first
+    .filter((p, i, all) => all.findIndex(q => q.species === p.species && q.form === p.form) === i) : []
   const pots: Record<string, Pots[string]> = {}
   for (const [id, p] of Object.entries(o.pots ?? {})) if (p && isSeed(p.seed) && typeof p.at === 'number') {
     // M106: v 2 = the day rule, with the game days it was tended on; no v = an M76 pot (keeps its 16-min promise)

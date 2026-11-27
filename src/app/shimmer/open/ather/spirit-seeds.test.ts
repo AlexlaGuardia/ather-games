@@ -7,7 +7,7 @@ import { GAME_DAY_MS } from './nodes'
 import { freshBank, putIn, bankCount, bankCap } from './garden-bank'
 import { give, countOf, SLOTS, type Inv } from '../shared/inventory'
 const freshInv = (): Inv => ({ v: 1, slots: Array(SLOTS).fill(null) }) as Inv
-import { freshBook, see, bond, seenCount, seenSet, parseBook, seeForm, syncForms, formCount } from './grimoire-book'
+import { freshBook, see, bond, seenCount, baseCount, seenSet, parseBook, seeForm, syncForms, formCount } from './grimoire-book'
 import { RING_PAGES, GRIMOIRE_SIZE } from './plot'
 let pass = 0, fail = 0
 const ok = (c: unknown, m: string) => { if (c) pass++; else { fail++; console.log('FAIL', m) } }
@@ -137,7 +137,8 @@ ok(seenCount(parseBook(null)) === 0, 'null = fresh book')
   ok(hasten(pots0, 'pz', later, 'now')!.pz.at < pots0.pz.at && pots0.pz.at === t1, 'hasten: input untouched')
 }
 
-// M203: second-form pages (Alex 11-26): own page, discovery order, one per form however many keepers; ring tiers untouched
+// M203: second-form pages (Alex 11-26): own page, discovery order, one per form however many keepers; s2 (RULED 142d15d):
+// they count toward the ring tiers like base pages, each page = one
 {
   const bloomedPot = (sp: (typeof SPECIES)[number], element?: 'mana' | 'storm' | 'earth' | 'water') => ({ seed: seedOf(sp), at: 1, bloomed: true as const, ...(element ? { element } : {}) })
   let g = see(see(freshBook(), 'bat', 1), 'owl', 2)
@@ -149,19 +150,30 @@ ok(seenCount(parseBook(null)) === 0, 'null = fresh book')
   ok(g2.pages.length === 3, 'M203: a second keeper of the same form does not double the page')
   const g3 = syncForms({ ...g2, pots: { ...g2.pots, d: bloomedPot('bat', 'storm'), e: bloomedPot('fox') } }, 40)
   ok(g3.pages.map(p => p.form ?? '-').join() === '-,-,water,storm', 'M203: another form of the same species = its own page, numbered after')
-  ok(seenCount(g3) === 2 && formCount(g3) === 2 && !seenSet(g3).has('fox'), 'M203: form pages do not count as base pages')
+  ok(baseCount(g3) === 2 && formCount(g3) === 2 && !seenSet(g3).has('fox'), 'M203: form pages do not count as base pages')
   const g4 = see(g3, 'bat', 50)
   ok(g4 === g3, 'M203: a seen base species stays one page with forms in the book')
   const g5 = see(seeForm(freshBook(), 'frog', 'earth', 1), 'frog', 2)
-  ok(g5.pages.length === 2 && seenCount(g5) === 1 && !g5.pages[1].form, 'M203: a form page first still leaves the base page to be seen')
+  ok(g5.pages.length === 2 && baseCount(g5) === 1 && !g5.pages[1].form, 'M203: a form page first still leaves the base page to be seen')
   ok(bond(g5, 'frog').pages[0].stage === 'seen' && bond(g5, 'frog').pages[1].stage === 'bonded', 'M203: bonding the species bonds its base page only')
   ok(JSON.stringify(parseBook(JSON.parse(JSON.stringify(g3)))) === JSON.stringify(g3), 'M203: form pages round-trip through save')
   ok(parseBook({ pages: [{ species: 'owl', stage: 'seen', at: 1, form: 'fire' }] }).pages.length === 0, 'M203: a bad form drops the page')
-  // ring tiers: 9 base + 3 forms is still under the 10-page ring; the capacity is read from base pages alone
+  // s2 ring tiers: N base + M form pages cross a tier at N + M (each page = one)
   let r9 = freshBook()
   for (const sp of SPECIES.slice(0, 9)) r9 = see(r9, sp, 1)
-  r9 = syncForms({ ...r9, pots: { x: bloomedPot('fox', 'mana'), y: bloomedPot('owl', 'storm'), z: bloomedPot('bat', 'earth') } }, 2)
-  ok(r9.pages.length === 12 && seenCount(r9) === 9 && seenCount(r9) < RING_PAGES[1] && GRIMOIRE_SIZE(seenCount(r9)) === 10, 'M203: ring tiers unchanged (form pages never open a ring)')
+  ok(seenCount(r9) === 9 && seenCount(r9) < RING_PAGES[1] && GRIMOIRE_SIZE(seenCount(r9)) === 10, 'M203 s2: 9 base pages sit under the 10-page ring')
+  const r10 = syncForms({ ...r9, pots: { x: bloomedPot('fox', 'mana') } }, 2)
+  ok(r10.pages.length === 10 && baseCount(r10) === 9 && seenCount(r10) === 10 && seenCount(r10) >= RING_PAGES[1] && GRIMOIRE_SIZE(seenCount(r10)) === 15, 'M203 s2: 9 base + 1 form = 10 pages, the first ring opens')
+  const r15 = syncForms({ ...r9, pots: { x: bloomedPot('fox', 'mana'), y: bloomedPot('owl', 'storm'), z: bloomedPot('bat', 'earth'), w: bloomedPot('fox', 'water'), v: bloomedPot('owl', 'mana') } }, 3)
+  ok(seenCount(r15) === 14 && seenCount(r15) < RING_PAGES[2], 'M203 s2: 9 + 5 forms = 14, one short of the 15 ring')
+  const r15b = syncForms({ ...r15, pots: { ...r15.pots, u: bloomedPot('bat', 'water') } }, 4)
+  ok(seenCount(r15b) === 15 && seenCount(r15b) >= RING_PAGES[2] && GRIMOIRE_SIZE(seenCount(r15b)) === 25, 'M203 s2: 9 + 6 forms = 15, the second ring opens')
+  // reload keeps the count; no double: a second keeper of a taken form, a re-sync, and a page saved twice all leave it
+  ok(seenCount(parseBook(JSON.parse(JSON.stringify(r10)))) === 10, 'M203 s2: a reload keeps the tier count')
+  ok(seenCount(syncForms({ ...r10, pots: { ...r10.pots, dup: bloomedPot('fox', 'mana') } }, 9)) === 10, 'M203 s2: a second keeper of the same form does not add a page to the count')
+  ok(seenCount(syncForms(syncForms(r10, 5), 6)) === 10, 'M203 s2: syncing again does not add a page')
+  ok(seenCount(parseBook({ ...r10, pages: [...r10.pages, { ...r10.pages[9] }, { ...r10.pages[0] }] })) === 10, 'M203 s2: a page saved twice (form or base) counts once')
+  ok(seenCount(parseBook({ ...r9, pages: [...r9.pages, { species: 'fox', stage: 'seen', at: 3, form: 'mana' }, { species: 'fox', stage: 'seen', at: 4, form: 'storm' }] })) === 11, 'M203 s2: two forms of one species = two pages')
 }
 
 console.log(`spirit-seeds: ${pass} pass, ${fail} fail`)
