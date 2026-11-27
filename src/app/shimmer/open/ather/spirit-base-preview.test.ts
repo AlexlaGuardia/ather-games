@@ -2,7 +2,7 @@
 // A built base is drawn for the owner only (gallery + own garden) until Alex OKs it: players' registries must NOT list it,
 // its glb must ship rigged with every game clip, and it must draw at its ruled full-grown size (creature-size.ts GROWN).
 import * as fs from 'fs'
-import { BASE_PREVIEW, basePreviewFor, LEPARA_GLB_TALL, SHELLMERE_GLB_TALL, CROAKLING_GLB_TALL } from './spirit-base-preview'
+import { BASE_PREVIEW, basePreviewFor, LEPARA_GLB_TALL, SHELLMERE_GLB_TALL, CROAKLING_GLB_TALL, LUMINARA_GLB_LONG, LUMINARA_RIG } from './spirit-base-preview'
 import { SPIRIT_MODELS, SPIRIT_RIGS, rigLook } from './spirit-models'
 import { RIG_CLIPS } from './spirit-rig'
 import { GROWN } from '../../sprites/creature-size'
@@ -36,6 +36,15 @@ ok(!!crk && Math.abs(crk.h * CROAKLING_GLB_TALL - GROWN.frog.height) < 1e-9, `cr
 const cj = crk ? glbJson(crk.url) : null, lureIx = (n: string) => cj ? cj.nodes.findIndex((x: { name: string }) => x.name === n) : -1
 ok(!!cj && ['b_lure', 'b_lure2', 'b_lure3', 'b_throat'].every(n => lureIx(n) >= 0), 'croakling: lure (3 bones) + throat bones')
 ok(!!cj && ['b_lure', 'b_lure3'].every(n => cj.animations.find((a: { name: string }) => a.name === 'idle')?.channels.some((c: { target: { node: number } }) => c.target.node === lureIx(n))), 'croakling: idle animates the lure')
+// Luminara at her ruled full-grown size (~0.30 m long flier: nose to the abdomen's tip, read off the glb's own rest bounds, not a hand copy),
+// hovering on the Hovari contract (rig.hover + its own culling, b_hover unkeyed), her pulsing abdomen = the glow part `lamp`, wings + antennae on bones
+const lum = BASE_PREVIEW.firefly!, lj = lum ? glbJson(lum.url) : null
+const lumLong = (() => { if (!lj) return 0; let z0 = 9, z1 = -9; for (const me of lj.meshes) if (me.name !== 'eyes') { const a = lj.accessors[me.primitives[0].attributes.POSITION]; z0 = Math.min(z0, a.min[2]); z1 = Math.max(z1, a.max[2]) } return z1 - z0 })()
+ok(!!lum && Math.abs(lum.h * LUMINARA_GLB_LONG - GROWN.firefly.length!) < 1e-9 && Math.abs(lumLong - LUMINARA_GLB_LONG) < 0.002, `luminara: ${GROWN.firefly.length} m long (h ${lum?.h}, glb ${lumLong.toFixed(4)} units)`)
+const lIx = (n: string) => lj ? lj.nodes.findIndex((x: { name: string }) => x.name === n) : -1
+ok(!!lj && ['b_hover', 'b_abd', 'b_fw_l', 'b_hw_r', 'b_ant_l', 'b_ant2_r', 'lamp'].every(n => lIx(n) >= 0), 'luminara: hover, abdomen, wing, antenna bones + the lamp mesh')
+ok(!!lj && lj.animations.every((a: { channels: { target: { node: number } }[] }) => !a.channels.some(c => c.target.node === lIx('b_hover'))), 'luminara: no clip keys b_hover (the hover contract)')
+ok(!!LUMINARA_RIG.hover && !!LUMINARA_RIG.cull && !LUMINARA_RIG.fly && lum?.glow?.part === 'lamp', 'luminara: a hoverer with her own culling, the lamp glows')
 ok(basePreviewFor('fox') === null && basePreviewFor(null) === null, 'a species with a player model, or none, has no preview')
 
 console.log(`spirit-base-preview: ${pass} pass, ${fails.length} fail`)
