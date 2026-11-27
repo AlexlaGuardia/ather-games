@@ -39,6 +39,7 @@ export const DIALS = [
   { key: 'handZ', label: 'Hand forward', kind: 'spacing', min: -0.15, max: 0.2, step: 0.005, def: 0, note: 'm' },
   { key: 'eyeGap', label: 'Eye spacing', kind: 'spacing', min: -0.03, max: 0.04, step: 0.001, def: 0, note: 'm, each eye out from the middle (every face)' },
   { key: 'eyeLift', label: 'Eye height', kind: 'spacing', min: -0.04, max: 0.04, step: 0.001, def: 0, note: 'm, eyes + brows up / down (every face)' },
+  { key: 'mouthLift', label: 'Mouth height', kind: 'spacing', min: -0.05, max: 0.05, step: 0.001, def: 0, note: 'm, the mouth up / down (every face and head)' },
   { key: 'footX', label: 'Stance width', kind: 'spacing', min: -0.1, max: 0.2, step: 0.005, def: 0, note: 'm, feet apart' },
 ] as const satisfies readonly Dial[]
 

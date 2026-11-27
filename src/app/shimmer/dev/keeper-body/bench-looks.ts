@@ -7,6 +7,7 @@
 import * as THREE from 'three'
 import { buildKeeper, type KeeperBody } from '../../open/shared/keeper-figure'
 import { surf, type HeadShape } from '../../open/shared/keeper-faces'
+import { CARTOON } from '../../open/shared/keeper-heads'
 import { OPT, type Look } from '../../open/shared/keeper-look'
 import { MODELS, type Proportions } from '../../open/shared/keeper-proportions'
 
@@ -22,20 +23,32 @@ export const BENCH_TORSOS: readonly TorsoOpt[] = [
   { label: 'T3 Shaped mesh', prof: [[0, 0], [0.08, 0.03], [0.16, 0.15], [0.19, 0.3], [0.138, 0.52], [0.18, 0.7], [0.2, 0.86], [0.1, 1]], dials: { torsoL: 1.0 }, side: { chest: 0.24, hip: 0.16, belly: 0.12 } },
 ]
 
-export interface BenchLook { face: number; mouth: number; torso: number }
-export const DEFAULT_BENCH: BenchLook = { face: 0, mouth: 0, torso: 0 }
+/** M216 s2a: the cartoon heads' STARTING dials (the sheet's jaws: A soft oval, B long V chin, C square, D heart; mouth set
+ *  low by letter), copied onto the sliders when a head is picked, exactly like a torso option: the head itself bakes none
+ *  of them (keeper-heads.ts), the sliders stay the only source. Index = Look.head (0 = Classic, no start). */
+export const HEAD_STARTS: readonly Partial<Proportions>[] = [
+  {},
+  { jaw: 0.35, chin: 0.08, mouthLift: 0.012 }, { jaw: 0.45, chin: 0.06, mouthLift: 0.012 },
+  { jaw: 0.75, chin: 0.16, mouthLift: 0 }, { jaw: 0.8, chin: 0.12, mouthLift: 0 },
+  { jaw: 0.12, chin: 0.06, mouthLift: 0.012 }, { jaw: 0.25, chin: 0.04, mouthLift: 0.012 },
+  { jaw: 0.6, chin: 0.08, mouthLift: -0.008 }, { jaw: 0.6, chin: 0.06, mouthLift: -0.008 },
+]
+export const pickHead = (p: Proportions, h: number): Proportions => ({ ...p, ...(HEAD_STARTS[h] ?? {}) })
+
+export interface BenchLook { face: number; mouth: number; torso: number; head: number }
+export const DEFAULT_BENCH: BenchLook = { face: 0, mouth: 0, torso: 0, head: 0 }
 export const isCurved = (model: string) => model.endsWith('-curved')
 const idx = (v: unknown, n: number) => typeof v === 'number' && Number.isInteger(v) && v >= 0 && v < n ? v : 0
 /** one model's bench choice, clamped; a Broad model never has a torso option */
 export function parseBench(model: string, raw: unknown): BenchLook {
   const o = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
-  return { face: idx(o.face, OPT.face.length), mouth: idx(o.mouth, BENCH_MOUTHS.length), torso: isCurved(model) ? idx(o.torso, BENCH_TORSOS.length) : 0 }
+  return { face: idx(o.face, OPT.face.length), mouth: idx(o.mouth, BENCH_MOUTHS.length), torso: isCurved(model) ? idx(o.torso, BENCH_TORSOS.length) : 0, head: idx(o.head, OPT.head.length) }
 }
 export function parseBenchFile(raw: unknown): Record<string, BenchLook> {
   const o = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
   return Object.fromEntries(MODELS.map(m => [m, parseBench(m, o[m])]))
 }
-export const sameBench = (a: BenchLook, b: BenchLook) => a.face === b.face && a.mouth === b.mouth && a.torso === b.torso
+export const sameBench = (a: BenchLook, b: BenchLook) => a.face === b.face && a.mouth === b.mouth && a.torso === b.torso && a.head === b.head
 export const isDefaultBench = (b: BenchLook) => sameBench(b, DEFAULT_BENCH)
 /** M216 one source: picking a torso option COPIES its starting dials onto the sliders (they stay the only source, and the
  *  owner moves them freely after); the build itself never lays anything over the sliders. Today (0) leaves them alone. */
@@ -78,8 +91,8 @@ const lipOf = (skin: string, k: number) => '#' + new THREE.Color(skin).lerp(new 
 const MOUTH_Y = [-0.17, -0.2, -0.22, -0.21, -0.24]
 
 /** Draw bench mouth `m` (1-5) on a head group centred at (0,0,0), head size H. Every mesh is tagged userData.mouth. */
-export function drawBenchMouth(g: THREE.Object3D, m: number, H: number, f: HeadShape, skin: string, face: number) {
-  const my = H * (MOUTH_Y[face] ?? MOUTH_Y[0]), mw = H * 0.1, LINE = '#4a2620'
+export function drawBenchMouth(g: THREE.Object3D, m: number, H: number, f: HeadShape, skin: string, face: number, lift = 0, head = 0) {
+  const my = H * (head > 0 ? CARTOON.mouthY : (MOUTH_Y[face] ?? MOUTH_Y[0])) + lift, mw = H * 0.1, LINE = '#4a2620'
   const decal = (geo: THREE.BufferGeometry, color: string, x: number, y: number, dz: number, rotZ = 0, sx = 1, sy = 1) => {
     const s = surf(H, f, x, y), me = new THREE.Mesh(geo, mat(color))
     me.position.set(x, y, s.z + H * dz); me.rotation.set(s.pitch, s.yaw, rotZ, 'YXZ'); me.scale.set(sx, sy, 1); me.userData.mouth = true; g.add(me)
@@ -99,14 +112,14 @@ export function drawBenchMouth(g: THREE.Object3D, m: number, H: number, f: HeadS
 
 /** The bench's keeper: buildKeeper with the face set, then the torso option's lathe and the bench mouth swapped in. */
 export function benchKeeper(look: Look, p: Proportions, b: BenchLook): KeeperBody {
-  const o: Look = { ...look, face: b.face }, k = buildKeeper(o, p)
+  const o: Look = { ...look, face: b.face, head: b.head }, k = buildKeeper(o, p)
   const geo = look.torso === 1 ? torsoGeo(b.torso) : null
   if (geo) { const body = k.group.getObjectByName('body')!; for (const m of body.children.slice(0, 2) as THREE.Mesh[]) m.geometry = geo }
   if (b.mouth > 0) {
     const head = k.group.getObjectByName('head')!
-    for (const c of head.children.filter(c => c.userData.mouth)) head.remove(c)
+    for (const c of head.children.filter(c => c.userData.mouth)) head.remove(c)   // a cartoon head's 'mouth' group too
     const r = (v: number) => Math.round(v * 100) / 100   // the head geometry's own rounding, so the mouth sits on it
-    drawBenchMouth(head, b.mouth, 0.5 * 1.15, { jaw: r(p.jaw), chin: r(p.chin) }, OPT.skin[o.skin], b.face)
+    drawBenchMouth(head, b.mouth, 0.5 * 1.15, { jaw: r(p.jaw), chin: r(p.chin) }, OPT.skin[o.skin], b.face, p.mouthLift, b.head)
   }
   return k
 }

@@ -26,7 +26,7 @@ import { poseKeeper } from '../../open/shared/keeper-figure'
 import { DEFAULT_LOOK, OPT, type Look } from '../../open/shared/keeper-look'
 import { DIALS, DEFAULT_PROPORTIONS, MODELS, MODEL_LABEL, parseFile, type DialKey, type Proportions } from '../../open/shared/keeper-proportions'
 import { DollVsRayman } from './doll-vs-rayman'
-import { BENCH_MOUTHS, BENCH_TORSOS, DEFAULT_BENCH, benchKeeper, isCurved, pickTorso, parseBenchFile, sameBench, type BenchLook } from './bench-looks'
+import { BENCH_MOUTHS, BENCH_TORSOS, DEFAULT_BENCH, HEAD_STARTS, benchKeeper, isCurved, pickHead, pickTorso, parseBenchFile, sameBench, type BenchLook } from './bench-looks'
 
 const chip: React.CSSProperties = { background: '#211f2b', border: '1px solid #38344a', color: '#ddd6ea', padding: '5px 10px', borderRadius: 4, fontSize: 11, cursor: 'pointer' }
 const BACKDROPS = [
@@ -65,6 +65,7 @@ function figureSig(k: ReturnType<typeof benchKeeper>) {
     for (let i = 0; i < pos.count; i += 3) hv += Math.abs(pos.getX(i)) + Math.abs(pos.getY(i)) * 1.3 + Math.abs(pos.getZ(i)) * 0.7
     hv += Math.abs(o.position.x) * 11 + o.position.y * 13 + o.position.z * 7 + o.scale.x * 5 + o.scale.y * 3
     if (o.parent && o.parent.name.startsWith('eye-')) hv += Math.abs(o.parent.position.x) * 17 + o.parent.position.y * 19
+    if (o.parent && o.parent.name === 'mouth') hv += o.parent.position.y * 23 + o.parent.position.z * 3   // M216 s2a: a cartoon head's mouth group
   })
   // M216: every named part's place + size (head group scale, torso mesh scale, hands, feet), so each slider shows on the sig
   let pv = 0
@@ -120,6 +121,8 @@ function ProportionsBench() {
     setBenchEdits(e => ({ ...e, [model]: { ...(e[model] ?? benchSaved), [k]: v } }))
     // M216 one source: a torso option's starting numbers go ONTO the sliders (never laid over them), so every number shows
     if (k === 'torso' && v > 0) setEdits(e => ({ ...e, [model]: pickTorso(e[model] ?? saved, v) }))
+    // M216 s2a: a cartoon head's starting jaw / chin / mouth height go onto the sliders the same way (the head bakes none)
+    if (k === 'head' && v > 0) setEdits(e => ({ ...e, [model]: pickHead(e[model] ?? saved, v) }))
   }
   const dialsDirty = !same(cur, saved)
   const dirty = dialsDirty || benchDirty
@@ -210,7 +213,11 @@ function ProportionsBench() {
         </div>
         <div data-status style={{ fontSize: 11, color: status.startsWith('save failed') || status.startsWith('could not') ? '#e88' : '#9ac49a', minHeight: 16 }}>{status || (dirty ? 'unsaved changes' : '')}</div>
         <h2 className="gx-label" style={{ fontSize: 10, letterSpacing: '0.14em', color: '#7f7a8c', margin: '10px 0 2px' }}>TRY-ON (BENCH ONLY)</h2>
-        {picker('face', 'Face', OPT.face)}
+        {picker('head', 'Head', OPT.head)}
+        {bench.head > 0 && <div data-head-note style={{ fontSize: 10, color: '#c8b98a', padding: '2px 0' }}>
+          {OPT.head[bench.head]} starts at {Object.entries(HEAD_STARTS[bench.head]).map(([k, v]) => `${DIALS.find(d => d.key === k)?.label.toLowerCase()} ${v}`).join(', ')} on the sliders
+        </div>}
+        {bench.head === 0 ? picker('face', 'Face', OPT.face) : <div style={{ fontSize: 10, color: '#6f6a7c', padding: '3px 0' }}>Face sets: Classic head only</div>}
         {picker('mouth', 'Mouth', BENCH_MOUTHS)}
         {isCurved(model) ? picker('torso', 'Torso shape', BENCH_TORSOS.map(t => t.label))
           : <div style={{ fontSize: 10, color: '#6f6a7c', padding: '3px 0' }}>Torso shapes: on the Curved models</div>}

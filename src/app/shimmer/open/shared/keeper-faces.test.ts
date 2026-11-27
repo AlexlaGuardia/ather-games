@@ -2,7 +2,7 @@
 import * as THREE from 'three'
 import { FACE_SETS, BOOST_MAX, BOOST_NEAR, BOOST_FAR, boostAt, faceSet } from './keeper-faces'
 import { buildKeeper } from './keeper-figure'
-import { OPT, DEFAULT_LOOK, PACK_KEYS, ROWS, packLook, unpackLook, parseLook, type Look } from './keeper-look'
+import { OPT, DEFAULT_LOOK, PACK_KEYS, ROWS, packLook, unpackLook, parseLook, headForOldFace, type Look } from './keeper-look'
 import { proportionsFor } from './keeper-proportions'
 let pass = 0
 const fails: string[] = []
@@ -44,11 +44,12 @@ white.onBeforeRender(null as never, null as never, cam, null as never, null as n
 ok(far > 1.3 && eye.scale.x === 1, `boost hook: far ${far.toFixed(2)}, near ${eye.scale.x}`)
 // presence pack: frozen order, the face rides at the end, a pack one row short (an older client) still reads
 ok(PACK_KEYS.length === ROWS.length && new Set(PACK_KEYS).size === ROWS.length && ROWS.every(r => PACK_KEYS.includes(r.key)), 'pack: keys and rows disagree')
-ok(PACK_KEYS[PACK_KEYS.length - 1] === 'face', 'pack: face must be appended last')
+ok(PACK_KEYS[PACK_KEYS.length - 2] === 'face' && PACK_KEYS[PACK_KEYS.length - 1] === 'head', 'pack: face then head (M216 s2a) must be appended last')
 const lk = { ...DEFAULT_LOOK, face: 3, eyes: 4 }
 ok(JSON.stringify(unpackLook(packLook(lk))) === JSON.stringify(lk), 'pack: face lost in the round trip')
 const short = unpackLook(packLook(lk).slice(0, -1))
-ok(!!short && short.face === 0 && short.eyes === 4, 'pack: an older client\'s pack (no face) did not read')
+// M216 s2a: the missing tail is now the head row: an M116 client's face set lands on the same-letter head (hub call 11-27)
+ok(!!short && short.face === 3 && short.eyes === 4 && short.head === headForOldFace(3, lk.torso) && short.head === 5, 'pack: an older client\'s pack (no head) did not read onto its face\'s head')
 ok(unpackLook(packLook(lk) + '0') === null, 'pack: an over-long pack read')
 
 console.log(`keeper-faces: ${pass} pass, ${fails.length} fail`)

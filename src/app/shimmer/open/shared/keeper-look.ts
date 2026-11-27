@@ -24,6 +24,10 @@ export const OPT = {
   // M116 (Alex 11-23): face sets = the options sheet's adult eyes + brows on one universal head (keeper-faces.ts). Classic =
   // today's head, drawn from the Eyes / Brows rows, so an old keeper keeps its face until it is changed.
   face: ['Classic', 'Soft', 'Keen', 'Calm', 'Strong'],
+  // M216 s2a (Alex 11-26, locked sheet athernyx 7a49931 keeper-head-cartoon/heads-LOCKED.png): the four cartoon heads A-D,
+  // each male + female (keeper-heads.ts). 0 = Classic (no cartoon head: the Face / Eyes / Brows / Mouth / Hair rows draw it).
+  // A head brings its eyes, brows, mouth and hair SHAPE; every proportion stays the model's dials. Labels: placeholders (@lark).
+  head: ['Classic', 'A male', 'A female', 'B male', 'B female', 'C male', 'C female', 'D male', 'D female'],
   topColor: CLOTH,
   accent: CLOTH,
   scarf: SCARF,
@@ -32,7 +36,7 @@ export type LookKey = keyof typeof OPT
 /** the creator's rows, in order, with their labels (the mock's) */
 export const ROWS: readonly { key: LookKey; label: string; swatch: boolean }[] = [
   { key: 'frame', label: 'Frame', swatch: false }, { key: 'torso', label: 'Torso', swatch: false }, { key: 'skin', label: 'Skin', swatch: true },
-  { key: 'hairStyle', label: 'Hair', swatch: false }, { key: 'hair', label: 'Hair colour', swatch: true }, { key: 'face', label: 'Face', swatch: false }, { key: 'eyes', label: 'Eyes', swatch: false },
+  { key: 'hairStyle', label: 'Hair', swatch: false }, { key: 'hair', label: 'Hair colour', swatch: true }, { key: 'head', label: 'Head', swatch: false }, { key: 'face', label: 'Face', swatch: false }, { key: 'eyes', label: 'Eyes', swatch: false },
   { key: 'brows', label: 'Brows', swatch: false }, { key: 'mouth', label: 'Mouth', swatch: false }, { key: 'ears', label: 'Ears', swatch: false }, { key: 'topColor', label: 'Body colour', swatch: true },
   { key: 'accent', label: 'Hands and feet', swatch: true }, { key: 'scarf', label: 'Scarf', swatch: true },
 ]
@@ -40,7 +44,12 @@ export const FRAME_NOTE = ['A smaller hitbox and +5% move speed.', 'The baseline
 
 export type Look = { v: 1 } & Record<LookKey, number>
 /** the mock's starting keeper */
-export const DEFAULT_LOOK: Look = { v: 1, frame: 1, torso: 0, skin: 1, hairStyle: 1, hair: 2, eyes: 0, brows: 0, mouth: 0, ears: 1, topColor: 0, accent: 5, scarf: 0, face: 0 }
+export const DEFAULT_LOOK: Look = { v: 1, frame: 1, torso: 0, skin: 1, hairStyle: 1, hair: 2, eyes: 0, brows: 0, mouth: 0, ears: 1, topColor: 0, accent: 5, scarf: 0, face: 0, head: 0 }
+/** the rows a cartoon head draws itself (M216 s2a): the creator hides them while a head is picked; the builder ignores them */
+export const HEAD_OWNS: readonly LookKey[] = ['face', 'hairStyle', 'eyes', 'brows', 'mouth']
+/** M216 s2a: an OLD save with an M116 face set (1-4 = Soft, Keen, Calm, Strong) and no head row lands on the same-letter
+ *  head (A-D), female on the Curved torso: the face sets' look side was replaced by the heads (hub call 11-27) */
+export const headForOldFace = (face: number, torso: number) => face >= 1 && face <= 4 ? (face - 1) * 2 + 1 + (torso === 1 ? 1 : 0) : 0
 
 // ── the ONE PvP choice ──
 /** what FRAME does in play: `hit` scales the keeper's hitbox (radius + reach tests), `speed` the walk/run, `damage` what a hit
@@ -61,6 +70,7 @@ export function parseLook(raw: unknown): Look | null {
     const n = o[k]
     if (Number.isInteger(n) && (n as number) >= 0 && (n as number) < OPT[k].length) out[k] = n as number
   }
+  if (o.head === undefined) out.head = headForOldFace(out.face, out.torso)
   return out
 }
 export const setLook = (l: Look, k: LookKey, i: number): Look => (i >= 0 && i < OPT[k].length ? { ...l, [k]: i } : l)
@@ -74,7 +84,7 @@ export function randomLook(l: Look, rnd: () => number = Math.random): Look {
 /** Packed for presence (M27: a remote keeper draws your look): one short string, one digit/letter per row in ROWS order. */
 /** ★ the pack order is FROZEN (a remote reads it): the rows as they were, then each new row appended (M116 'face'), so a
  *  pack from a client one row behind still reads (the missing tail takes its default). */
-export const PACK_KEYS: readonly LookKey[] = ['frame', 'torso', 'skin', 'hairStyle', 'hair', 'eyes', 'brows', 'mouth', 'ears', 'topColor', 'accent', 'scarf', 'face']
+export const PACK_KEYS: readonly LookKey[] = ['frame', 'torso', 'skin', 'hairStyle', 'hair', 'eyes', 'brows', 'mouth', 'ears', 'topColor', 'accent', 'scarf', 'face', 'head']
 export const packLook = (l: Look) => PACK_KEYS.map(k => l[k].toString(36)).join('')
 export function unpackLook(s: unknown): Look | null {
   if (typeof s !== 'string' || s.length < PACK_KEYS.length - 1 || s.length > PACK_KEYS.length) return null

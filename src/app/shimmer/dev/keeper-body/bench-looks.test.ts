@@ -1,10 +1,10 @@
 // M116c body-bench try-on options. Run: npx tsx src/app/shimmer/dev/keeper-body/bench-looks.test.ts
 import * as THREE from 'three'
 import { readFileSync } from 'fs'
-import { BENCH_MOUTHS, BENCH_TORSOS, DEFAULT_BENCH, benchKeeper, pickTorso, parseBench, parseBenchFile, isDefaultBench } from './bench-looks'
+import { BENCH_MOUTHS, BENCH_TORSOS, DEFAULT_BENCH, HEAD_STARTS, benchKeeper, pickHead, pickTorso, parseBench, parseBenchFile, isDefaultBench } from './bench-looks'
 import { buildKeeper } from '../../open/shared/keeper-figure'
 import { DEFAULT_LOOK, OPT, type Look } from '../../open/shared/keeper-look'
-import { MODELS, proportionsFor } from '../../open/shared/keeper-proportions'
+import { DEFAULT_PROPORTIONS, MODELS, proportionsFor } from '../../open/shared/keeper-proportions'
 let pass = 0
 const fails: string[] = []
 const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
@@ -25,9 +25,13 @@ for (const [i, key] of [[1, 'T1'], [2, 'T2'], [3, 'T3']] as const) {
 }
 
 // parse: clamp, unknown -> default, a Broad model never carries a torso
-ok(JSON.stringify(parseBench('medium-curved', { face: 2, mouth: 3, torso: 3 })) === '{"face":2,"mouth":3,"torso":3}', 'parse keeps a good choice')
+ok(JSON.stringify(parseBench('medium-curved', { face: 2, mouth: 3, torso: 3, head: 4 })) === '{"face":2,"mouth":3,"torso":3,"head":4}', 'parse keeps a good choice')
+ok(parseBench('medium-broad', { head: 9 }).head === 0 && parseBench('medium-broad', {}).head === 0, 'parse: a bad / missing head is Classic')
+// M216 s2a: picking a head COPIES its starting dials onto the sliders (like a torso), and the build lays nothing over them
+ok(HEAD_STARTS.length === OPT.head.length && Object.keys(HEAD_STARTS[0]).length === 0, 'head starts: one per head, Classic none')
+ok(pickHead(DEFAULT_PROPORTIONS, 3).jaw === HEAD_STARTS[3].jaw && pickHead(DEFAULT_PROPORTIONS, 0).jaw === DEFAULT_PROPORTIONS.jaw, 'pickHead: B male copies its jaw, Classic leaves the sliders')
 ok(parseBench('medium-broad', { torso: 2 }).torso === 0, 'Broad model got a torso option')
-ok(isDefaultBench(parseBench('small-curved', { face: 9, mouth: -1, torso: 1.5 })), 'bad values not clamped to default')
+ok(isDefaultBench(parseBench('small-curved', { face: 9, mouth: -1, torso: 1.5, head: 0 })), 'bad values not clamped to default')
 ok(isDefaultBench(parseBench('small-curved', 'junk')), 'junk not default')
 ok(Object.keys(parseBenchFile(null)).length === MODELS.length, 'file parse lacks a model')
 
@@ -51,11 +55,11 @@ const fem: Look = { ...DEFAULT_LOOK, torso: 1 }, pf = proportionsFor(fem)
 const mouthSig = (b: typeof DEFAULT_BENCH) => { const h = benchKeeper(fem, pf, b).group.getObjectByName('head')!; return h.children.filter(c => c.userData.mouth).map(c => `${(c as THREE.Mesh).geometry.uuid}${c.position.x.toFixed(4)}`).join(',') }
 const mSigs = new Set<string>()
 for (let m = 1; m <= 5; m++) for (const face of [0, 1, 4]) {
-  const k = benchKeeper(fem, pf, { face, mouth: m, torso: 0 }), head = k.group.getObjectByName('head')!
+  const k = benchKeeper(fem, pf, { face, mouth: m, torso: 0, head: 0 }), head = k.group.getObjectByName('head')!
   const mouth = head.children.filter(c => c.userData.mouth)
   ok(mouth.length >= 1 && mouth.every(c => (c as THREE.Mesh).material instanceof THREE.MeshBasicMaterial && ((c as THREE.Mesh).material as THREE.Material).side === THREE.DoubleSide), `mouth ${m} face ${face}: not drawn as DoubleSide decals`)
   ok(mouth.every(c => c.position.z > 0.2), `mouth ${m} face ${face}: not on the face front`)
-  if (face === 0) mSigs.add(mouthSig({ face: 0, mouth: m, torso: 0 }))
+  if (face === 0) mSigs.add(mouthSig({ face: 0, mouth: m, torso: 0, head: 0 }))
 }
 mSigs.add(mouthSig(DEFAULT_BENCH))
 ok(mSigs.size === 6, `mouths not all distinct (${mSigs.size})`)
@@ -63,7 +67,7 @@ ok(mSigs.size === 6, `mouths not all distinct (${mSigs.size})`)
 // each torso option swaps the lathe (mesh + ink hull); its dials are copied ONTO the sliders at pick (M216), never laid over; Broad ignores it
 const torsoes = new Set<string>()
 for (let t = 0; t <= 3; t++) {
-  const k = benchKeeper(fem, pf, { face: 0, mouth: 0, torso: t })
+  const k = benchKeeper(fem, pf, { face: 0, mouth: 0, torso: t, head: 0 })
   ok(torsoGeoOf(k.group) === ink(k.group), `torso ${t}: ink hull not swapped with the mesh`)
   torsoes.add(torsoGeoOf(k.group).uuid)
   const d = pickTorso(pf, t)
@@ -71,14 +75,14 @@ for (let t = 0; t <= 3; t++) {
   ok(k.height === buildKeeper({ ...fem }, pf).height, `torso ${t}: the build laid its dials over the sliders (height moved)`)
 }
 ok(torsoes.size === 4, 'torso options do not each give a distinct shape')
-const t3 = torsoGeoOf(benchKeeper(fem, pf, { face: 0, mouth: 0, torso: 3 }).group).attributes.position, t1 = torsoGeoOf(benchKeeper(fem, pf, { face: 0, mouth: 0, torso: 1 }).group).attributes.position
+const t3 = torsoGeoOf(benchKeeper(fem, pf, { face: 0, mouth: 0, torso: 3, head: 0 }).group).attributes.position, t1 = torsoGeoOf(benchKeeper(fem, pf, { face: 0, mouth: 0, torso: 1, head: 0 }).group).attributes.position
 let front = 0; for (let i = 0; i < t3.count; i++) if (t3.getZ(i) > 0 && t3.getY(i) > 0.6 && t3.getY(i) < 0.7) front = Math.max(front, t3.getZ(i) - t1.getZ(i))
 ok(front > 0.01, `T3: chest not bent forward of T1 (${front})`)
-const broad = benchKeeper(DEFAULT_LOOK, proportionsFor(DEFAULT_LOOK), { face: 0, mouth: 0, torso: 2 })
+const broad = benchKeeper(DEFAULT_LOOK, proportionsFor(DEFAULT_LOOK), { face: 0, mouth: 0, torso: 2, head: 0 })
 ok(torsoGeoOf(broad.group) === torsoGeoOf(buildKeeper(DEFAULT_LOOK).group), 'Broad keeper took a female torso lathe')
 // the bench never touches the shared caches: a later live build is unchanged
-ok(torsoGeoOf(buildKeeper(fem).group) !== torsoGeoOf(benchKeeper(fem, pf, { face: 0, mouth: 0, torso: 1 }).group), 'bench lathe leaked into the live build')
-ok(stats(buildKeeper(fem).group).mouth === stats(buildKeeper(fem).group).mouth && stats(benchKeeper(fem, pf, { face: 0, mouth: 3, torso: 0 }).group).mouth === 3, 'mouth 3 should be 3 meshes')
+ok(torsoGeoOf(buildKeeper(fem).group) !== torsoGeoOf(benchKeeper(fem, pf, { face: 0, mouth: 0, torso: 1, head: 0 }).group), 'bench lathe leaked into the live build')
+ok(stats(buildKeeper(fem).group).mouth === stats(buildKeeper(fem).group).mouth && stats(benchKeeper(fem, pf, { face: 0, mouth: 3, torso: 0, head: 0 }).group).mouth === 3, 'mouth 3 should be 3 meshes')
 
 // nothing in the game imports the bench options
 import { execSync } from 'child_process'

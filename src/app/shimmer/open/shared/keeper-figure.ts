@@ -7,6 +7,7 @@ import * as THREE from 'three'
 import { OPT, type Look } from './keeper-look'
 import { proportionsFor, type Proportions } from './keeper-proportions'
 import { faceSet, headShapeGeo, drawFaceSet, surf, type HeadShape } from './keeper-faces'
+import { cartoonHead, drawCartoonFace } from './keeper-heads'
 
 const grad = (() => {
   const t = new THREE.DataTexture(new Uint8Array([90, 170, 255]), 3, 1, THREE.RedFormat)
@@ -80,7 +81,8 @@ export function buildKeeper(o: Look, p0: Proportions = proportionsFor(o)): Keepe
 /** The head + hair v3 + face, built round (0,0,0) = the head's centre (the mock's hy, moved onto the head group). */
 function headAndFace(g: THREE.Group, o: Look, H: number, hair: string, skin: string, p: Proportions) {
   const hy = 0, ea = p.ear, ei = p.eye
-  const fs = faceSet(o.face)
+  const ch = cartoonHead(o.head)   // M216 s2a: a cartoon head draws its own eyes / brows / mouth / hair shape (keeper-heads.ts)
+  const fs = ch ? null : faceSet(o.face)
   const r2 = (v: number) => Math.round(v * 100) / 100, shape: HeadShape = { jaw: r2(p.jaw), chin: r2(p.chin) }   // the geometry's rounding
   put(g, headGeo(shape), skin, [0, hy, 0], [H * 0.5, H * 0.55, H * 0.5])
   // the nose + Mouth row sit on the round head's front; dz = how far the tapered / longer head's front moved there (0 at 0 + 0)
@@ -90,7 +92,7 @@ function headAndFace(g: THREE.Group, o: Look, H: number, hair: string, skin: str
   else for (const s of [-1, 1]) put(g, SPH, skin, [s * H * 0.5, hy, 0], [H * 0.08 * ea, H * 0.12 * ea, H * 0.06 * ea])
   // ── HAIR v3 (Alex 11-19: the cap + blobs read bald / helmet-like): LOCKS, tapered petals rooted on the scalp, standing a
   //    little proud so the outline breaks; a small cap underneath fills the gaps. A style = which locks.
-  const hs = OPT.hairStyle[o.hairStyle], R = H * 0.5
+  const hs = ch ? ch.hair : OPT.hairStyle[o.hairStyle], R = H * 0.5
   put(g, CAP, hair, [0, hy + H * 0.02, -H * 0.02], [R * 1.05, H * 0.55 * 1.05, R * 1.05], [-0.4, 0, 0], true)
   const centre = new THREE.Vector3(0, hy, 0), DOWN = new THREE.Vector3(0, -1, 0)
   const lock = (a: number, p: number, len: number, wid: number, lift = 0.15, sweep = 0, grav = 0.6) => {
@@ -120,13 +122,23 @@ function headAndFace(g: THREE.Group, o: Look, H: number, hair: string, skin: str
   if (hs === 'Bob')     { ring(14, 0.95, H * 0.62, H * 0.27, 0.22, 0, 0.95, 2 * Math.PI - 0.95, 0, 0.75); fringe(5, H * 0.32, 0, 0.8, 0.75) }
   if (hs === 'Long')    { ring(14, 0.95, H * 1.15, H * 0.27, 0.2, 0, 1.0, 2 * Math.PI - 1.0, 0.1, 0.85); fringe(5, H * 0.34, 0.2, 0.8, 0.75) }
   if (hs === 'Bun')     { ring(10, 0.8, H * 0.28, H * 0.22, 0.06, 0, 0.7, 2 * Math.PI - 0.7, 0, 0.6); fringe(3, H * 0.24, 0, 0.8, 0.45); put(g, SPH, hair, [0, hy + H * 0.5, -H * 0.24], [H * 0.21, H * 0.21, H * 0.21]) }
+  // M216 s2a: the cartoon heads' hair (sheet NOTES.md, column A-D x male / female), chunky locks like every style above
+  if (hs === 'A-M') { ring(10, 0.85, H * 0.3, H * 0.22, 0.08, 0, 0.7, 2 * Math.PI - 0.7, 0, 0.6); ring(5, 0.35, H * 0.44, H * 0.17, 0.9, 0.35, -1.3, 1.3, 0.15, 0); fringe(4, H * 0.3, 0.25, 0.75) }
+  if (hs === 'A-F') { ring(12, 0.95, H * 1.1, H * 0.26, 0.2, 0, 1.0, 2 * Math.PI - 1.0, 0.1, 0.85); for (const s of [-1, 1]) lock(s * 0.95, 0.9, H * 1.2, H * 0.2, 0.1, 0, 0.95); fringe(4, H * 0.36, 0.6, 0.6, 0.6); for (const a of [-0.2, 0.25]) lock(a, 0.15, H * 0.3, H * 0.13, 0.9, 0, 0) }
+  if (hs === 'B-M') { ring(10, 0.8, H * 0.3, H * 0.22, 0.08, 0, 0.7, 2 * Math.PI - 0.7, 0, 0.6); fringe(5, H * 0.42, 0.9, 0.4, 0.7); ring(3, 0.5, H * 0.42, H * 0.15, 0.85, 0.3, 2.3, 4.0, 0.1, 0); lock(0.3, 0.2, H * 0.34, H * 0.15, 0.85, 0.4, 0) }
+  if (hs === 'B-F') { ring(14, 0.95, H * 1.15, H * 0.27, 0.2, 0, 1.0, 2 * Math.PI - 1.0, 0.1, 0.85); fringe(5, H * 0.5, 0.9, 0.4, 0.7); for (const s of [-1, 1]) lock(s * 0.9, 0.95, H * 1.1, H * 0.2, 0.1, 0, 0.9) }
+  if (hs === 'C-M') { ring(10, 0.85, H * 0.22, H * 0.22, 0.08, 0, 0.7, 2 * Math.PI - 0.7, 0, 0.6); ring(7, 0.4, H * 0.34, H * 0.15, 1.0, 0, -1.4, 1.4, 0, 0); fringe(3, H * 0.2, 0, 0.8, 0.5) }
+  if (hs === 'C-F') { ring(10, 0.8, H * 0.28, H * 0.22, 0.06, 0, 0.7, 2 * Math.PI - 0.7, 0, 0.6); fringe(4, H * 0.28, 0.5, 0.7, 0.55); for (const s of [-1, 1]) lock(s * 0.85, 0.9, H * 0.7, H * 0.16, 0.1, 0, 0.9); put(g, SPH, hair, [0, hy + H * 0.42, -H * 0.28], [H * 0.13, H * 0.13, H * 0.13]); for (const d of [-0.15, 0, 0.15]) lock(back + d, 0.55, H * 0.9, H * 0.18, 0.7, 0, 0.45) }
+  if (hs === 'D-M') { ring(11, 0.75, H * 0.38, H * 0.22, 0.25, 0, 0.6, 2 * Math.PI - 0.6, 0.3, 0.45); for (const a of [-0.4, 0.5]) lock(a, 0.15, H * 0.3, H * 0.14, 0.85, 0.2, 0); fringe(4, H * 0.32, 0.2, 0.6, 0.6, 0.2); for (const s of [-1, 1]) lock(s * 1.15, 0.8, H * 0.8, H * 0.08, 0.7, s * 0.5, 0.3) }
+  if (hs === 'D-F') { ring(14, 0.95, H * 0.62, H * 0.27, 0.22, 0, 0.95, 2 * Math.PI - 0.95, 0, 0.75); fringe(6, H * 0.3, 0, 0.85, 0.8); for (const s of [-1, 1]) lock(s * 0.95, 0.95, H * 0.72, H * 0.18, 0.1, 0, 0.9) }
   if (hs === 'Tail')    { ring(10, 0.8, H * 0.28, H * 0.22, 0.06, 0, 0.7, 2 * Math.PI - 0.7, 0, 0.6); fringe(3, H * 0.24, 0, 0.8, 0.45); for (const d of [-0.2, 0, 0.2]) lock(back + d, 1.05, H * 0.8, H * 0.17, 0.15, 0, 0.9) }
 
   // ── FACE ──
   const INKC = '#1c1712', ey = hy + H * 0.02 + p.eyeLift, ez = H * 0.47, eyes = OPT.eyes[o.eyes]
   const arc = (x: number, y: number, r: number, thick: number, span: number, rotZ: number, color = INKC) => flat(g, arcGeo(thick, span), color, [x, y, ez + H * 0.03], [r, r, r], [0, 0, rotZ])
   const ball = (x: number, y: number, sx: number, sy: number, color = INKC, dz = 0.03) => flat(g, SPH, color, [x, y, ez + H * dz], [sx, sy, H * 0.03])
-  if (fs) drawFaceSet(g, o.face, H, hair, OPT.brows[o.brows] !== 'None', shape, { eye: ei, gap: p.eyeGap, y: p.eyeLift })
+  if (ch) drawCartoonFace(g, o.head, H, hair, skin, true, shape, { eye: ei, gap: p.eyeGap, y: p.eyeLift }, p.mouthLift)
+  else if (fs) drawFaceSet(g, o.face, H, hair, OPT.brows[o.brows] !== 'None', shape, { eye: ei, gap: p.eyeGap, y: p.eyeLift })
   else for (const s of [-1, 1]) {
     const ex = s * (H * 0.17 + p.eyeGap)
     const kind = eyes === 'Wink' ? (s < 0 ? 'Round' : 'Happy') : eyes
@@ -143,9 +155,10 @@ function headAndFace(g: THREE.Group, o: Look, H: number, hair: string, skin: str
     const brows = OPT.brows[o.brows]
     if (brows !== 'None') flat(g, BOX, hair, [ex, ey + H * 0.18, ez + H * 0.02], [H * 0.16, H * (brows === 'Bold' ? 0.045 : 0.025), H * 0.02], [0, 0, s * 0.08])
   }
+  if (ch) return   // a cartoon head: NO nose (the locked sheet), its own mouth already drawn (drawCartoonFace)
   put(g, SPH, '#d9a47c', [0, hy - H * 0.08, H * 0.5 + dz(hy - H * 0.08)], [H * 0.05, H * 0.05, H * 0.05], null, false)
   const m0 = g.children.length   // M116c: the Mouth row's meshes are tagged userData.mouth (the body bench swaps them)
-  const my = hy - H * 0.17, mouth = OPT.mouth[o.mouth]
+  const my = hy - H * 0.17 + p.mouthLift, mouth = OPT.mouth[o.mouth]
   if (mouth === 'Smile') arc(H * 0.06, my + H * 0.01, H * 0.09, 0.18, Math.PI * 0.7, Math.PI * 1.15)
   if (mouth === 'Grin') { ball(0, my - H * 0.01, H * 0.11, H * 0.05, '#ffffff', 0.0); arc(0, my + H * 0.02, H * 0.12, 0.16, Math.PI, Math.PI) }
   if (mouth === 'Smirk') arc(H * 0.08, my + H * 0.02, H * 0.08, 0.18, Math.PI * 0.45, Math.PI * 1.35)

@@ -7,7 +7,7 @@
 import { useState } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { HearthFrame, HearthButton, H, hearthDisplay } from '../ui/hearth'
-import { OPT, ROWS, FRAME_NOTE, setLook, randomLook, type Look, type LookKey } from './shared/keeper-look'
+import { OPT, ROWS, HEAD_OWNS, FRAME_NOTE, setLook, randomLook, type Look, type LookKey } from './shared/keeper-look'
 import { getLook, saveLook } from './shared/look-store'
 import { KeeperFigure } from './shared/keeper-figure-view'
 
@@ -41,7 +41,7 @@ export function KeeperCreator({ onDone, first = false }: { onDone: () => void; f
           <Preview look={look} />
         </div>
         <div className="grid gap-3 content-start">
-          {ROWS.map(r => (
+          {ROWS.filter(r => !(look.head > 0 && HEAD_OWNS.includes(r.key))).map(r => (
             <div key={r.key} data-creator-row={r.key}>
               <div className="text-[11px] font-bold uppercase tracking-[.14em] mb-1" style={{ color: H.inkSoft }}>{r.label}</div>
               <div className="flex flex-wrap gap-1.5">
