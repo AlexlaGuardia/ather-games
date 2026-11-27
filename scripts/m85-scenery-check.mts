@@ -85,7 +85,7 @@ try {
   ok(ps.length === 3 && ['filler:rock-large', 'filler:fence', 'filler:sign'].every(k => ps.some(p => p.k === k)), `2. three pieces of three kinds placed (${ps.map(p => `${p.k}@${p.x},${p.z}`).join(' ')})`)
   const rock = ps.find(p => p.k === 'filler:rock-large')
   // move + turn + scale the rock: aim at it, M picks it up, R turns, the wheel grows it past 2, put it down at ROCK
-  await aim(o, ROCK0.x, ROCK0.z); const tgt = (await T(o)).place.target
+  await aim(o, ROCK0.x, ROCK0.z); let tgt = null; for (let i = 0; i < 16 && tgt !== rock?.id; i++) { tgt = (await T(o)).place.target; if (tgt !== rock?.id) await sleep(500) }   // the target lands a frame after the aim (~1 fps on swiftshader)
   ok(tgt === rock?.id, `3. the crosshair finds the rock (${tgt})`)
   await key(o, 'KeyM'); ok((await T(o)).place.moving === rock?.id, '3. M picks it up to move')
   await key(o, 'KeyR'); for (let i = 0; i < 24; i++) { await wheel(o, -100); await sleep(60) }
