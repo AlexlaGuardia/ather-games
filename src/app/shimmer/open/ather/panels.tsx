@@ -68,7 +68,7 @@ function PlateView({ W }: { W: Wilds }) {
 
 /** The fog of war over the tile image, painted by the shared map kit (same cloud as the continent map). The fog
  *  is one continent-wide grid in world coords; this crops it to the tile. */
-function FogLayer({ fog, W }: { fog: Fog; W: Wilds }) {
+function FogLayer({ fog, W, cut = [] }: { fog: Fog; W: Wilds; /** M235 s1: uncovered zones, their mist cut away whole */ cut?: Region[] }) {
   const ref = useRef<HTMLCanvasElement>(null)
   useEffect(() => {
     const cv = ref.current; if (!cv) return
@@ -77,7 +77,13 @@ function FogLayer({ fog, W }: { fog: Fog; W: Wilds }) {
     const cellPx = px / (W.meta.sizeX / FOG_CELL)
     const ctx = cv.getContext('2d')!; ctx.clearRect(0, 0, px, px)
     drawCloud(ctx, fog, cellPx, -((x0 - cellOrigin.x) / FOG_CELL) * cellPx, -((z0 - cellOrigin.z) / FOG_CELL) * cellPx, ATHER_CLOUD)
-  }, [fog, fog.rev, W])
+    const k = px / W.meta.sizeX, open = cut.length > 1 ? cut.filter(r => r.state !== 'unseen') : []
+    if (open.length) {
+      ctx.globalCompositeOperation = 'destination-out'; ctx.fillStyle = '#000'
+      for (const r of open) { ctx.beginPath(); r.poly.forEach((p, i) => { const x = (p.x + W.meta.sizeX / 2) * k, y = (p.z + W.meta.sizeZ / 2) * k; if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y) }); ctx.closePath(); ctx.fill() }
+      ctx.globalCompositeOperation = 'source-over'
+    }
+  }, [fog, fog.rev, W, cut])
   return <canvas ref={ref} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} />
 }
 
@@ -157,7 +163,7 @@ export function FoldMap({ view, travel, W, fog, waymarks, infected, here, inWild
                 )
               })() : (<>
               {W ? <PlateView W={W} /> : <img src={`/open/wilds/${tile}-map.png`} alt="" draggable={false} style={{ width: '100%', height: '100%', imageRendering: 'pixelated', display: 'block' }} />}
-              {fog && W && <FogLayer fog={fog} W={W} />}
+              {fog && W && <FogLayer fog={fog} W={W} cut={regions} />}
               <button title="Gregory's waymark" onClick={() => go({ kind: 'waymark', w: GREG_WAYMARK })} style={{ ...pin('#e7c766', 13), ...pct(GREG_WAYMARK.x, GREG_WAYMARK.z) }} />
               {waymarks.filter(w => w.tile === tile).map(w => (
                 <button key={w.id} title={`Your waymark · ${BIOME_NAME[w.biome]}${lit(w) ? '' : ` · ${UNLIT_LABEL}`}`} onClick={() => go({ kind: 'waymark', w })} style={{ ...pin(lit(w) ? '#6fd3c4' : '#5c6066', 13), ...pct(w.x, w.z) }} />

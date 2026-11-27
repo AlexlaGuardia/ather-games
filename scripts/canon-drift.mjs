@@ -1343,7 +1343,7 @@ console.log('canon-drift: ' + ORDER.filter((s) => counts[s]).map((s) => `${count
 const LIVE_AREAS = [...new Set(findings.map((f) => f.area))].sort()
 const PINNED_AREAS = [
   'base-species', 'birth-affinity', 'canon-holds', 'canon-vs-canon', 'creature-sizes', 'element-herbs', 'grown-sizes',
-  'infusions', 'keeper-moves', 'mist-rosters', 'npcs', 'renamed-potions', 'retired-vocab', 'second-forms', 'zones',
+  'infusions', 'keeper-moves', 'map-legend', 'mist-rosters', 'npcs', 'renamed-potions', 'retired-vocab', 'second-forms', 'zones',
 ].sort()
 
 if (!QUIET) {
@@ -1358,7 +1358,8 @@ if (!QUIET) {
     'design-brief HOLDS — a brief still holding art that a later ruling released',
     'whether a ruled fact reached the BUILD at all — a ruling nothing implements reads clean here',
     'prose claims inside canon files — only the tabled/rostered facts are diffed',
-    'VOCABULARY, beyond the exact nouns canon has listed as retired (and the alchemy.md rename package) — and read that narrowly.',
+    'VOCABULARY, beyond the exact nouns canon has listed as retired (the alchemy.md rename package, and a legend word the',
+    '  spread map retired in its own line, map-legend) — and read that narrowly.',
     '  A green retired-vocab does NOT mean the build says what canon says. It means no noun on',
     '  canon\'s list ships in a form this gate judges. ⚠ BOTH of 2026-08-24\'s vocabulary drifts',
     '  would have passed it: one used a word that was never retired, the other a word retired in',

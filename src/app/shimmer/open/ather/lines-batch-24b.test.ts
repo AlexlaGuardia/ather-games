@@ -1,6 +1,6 @@
 // npx tsx src/app/shimmer/open/ather/lines-batch-24b.test.ts
 // ★ Lark batch 11-24b, SIGNED by Alex (athernyx c1d5903): training pool UI, waymarks, Greg's fold, MAIN word for word against the
-// canon file; plus 11-24d (addf90b): the map's fourth state word, Charted, and the four-word legend. No alt ships.
+// canon file; plus the map legend (11-24d's fourth word retired 11-27 by M235, athernyx 4b5b5d1: three words now). No alt ships.
 import { existsSync, readFileSync } from 'node:fs'
 import * as TL from './training-lines'
 import * as WM from './waymarks'
@@ -18,7 +18,7 @@ ok(/: 0 points,/.test(T.play(0, 'AGI', 1, 1)), '0 points')
 if (!existsSync(B)) { console.log('SKIP the rest: athernyx canon not on this machine'); process.exit(fail ? 1 : 0) }
 const canon = readFileSync(B, 'utf8'), canonD = readFileSync(D, 'utf8')
 ok(/✅ SIGNED 2026-11-24 by Alex[^\n]*MAIN ships everywhere/.test(canon), '24b is signed (MAIN)')
-ok(/✅ SIGNED 2026-11-24 by Alex \("Charted"\)/.test(canonD), '24d is signed (Charted)')
+ok(/RETIRED 2026-11-27 by Alex/.test(readFileSync(DIR + 'shimmer-quest-glade-tutorial.md', 'utf8')), "M235: the 11-24d fourth state word is RETIRED in canon (athernyx 4b5b5d1)")
 // every table row: key -> { main, alt }. A Main is the bold text, or the plain text marked *(kept...)*
 const sec = (a: string, b: string) => canon.slice(canon.indexOf(a), canon.indexOf(b))
 const A = sec('## A.', '## B.'), Bx = sec('## B.', '## C.'), C = sec('## C.', '## Counts')
@@ -42,11 +42,12 @@ is(b, '`buyAsk`', F.buyAsk); is(b, '`buyShort`', have(F.buyShort)); is(b, '`buyD
 // C
 is(c, '`offer`', F.offer); is(c, '`ask`', F.ask); is(c, '`short`', have(F.short)); is(c, '`done`', F.done); is(c, '`go`', F.go)
 ok(used.size === 24 && [...c.keys()].includes("the keeper's \"Not yet.\""), `24 lines + the untouched signed one (${used.size})`)
-// 24d
-const word = /\| 1 \| `spread\.map\.legend`[^\n]*?\*\*([^*]+)\*\*/.exec(canonD)?.[1], legend = /signed words unchanged: \*\*([^*]+)\*\*/.exec(canonD)?.[1]
-ok(SM.LEGEND().join(' · ') === legend, `legend "${SM.LEGEND().join(' · ')}" vs canon "${legend}"`)
-ok(SM.STATE_WORD.charted === word, `the state word "${SM.STATE_WORD.charted}" vs canon "${word}"`)
-ok(readFileSync('/root/athernyx/CANON/glossary.md', 'utf8').includes(`map legend: ${SM.LEGEND().join(' · ')};`), 'the glossary says the same legend')
+// 24d, RETIRED by M235 (athernyx 4b5b5d1): the legend is the three-word one in the tutorial file, word for word; no fourth state
+void canonD
+const legend = /`spread\.map\.legend` \[map legend, three states\] ([^*\n]+?) \*\(/.exec(readFileSync(DIR + 'shimmer-quest-glade-tutorial.md', 'utf8'))?.[1]
+ok(!!legend && SM.LEGEND().join(' · ') === legend, `legend "${SM.LEGEND().join(' · ')}" vs canon "${legend}"`)
+ok(SM.AREA_STATES.length === 3 && !(SM.AREA_STATES as readonly string[]).includes('chart' + 'ed'), 'three states, the retired one gone')
+ok(readFileSync('/root/athernyx/CANON/glossary.md', 'utf8').includes(`**${SM.LEGEND().join(' · ')}**`), 'the glossary says the same legend')
 // the build speaks them: no inline copy, no old placeholder, no alt
 const read = (f: string) => readFileSync(new URL(`./${f}`, import.meta.url), 'utf8')
 const panel = read('spirit-talk.tsx'), page = read('page.tsx'), panels = read('panels.tsx'), wm = read('waymarks.ts'), gf = read('garden-fold.ts'), all = [panel, page, panels, wm, gf, read('training-lines.ts')].join('\n')

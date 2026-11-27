@@ -58,9 +58,9 @@ for (const n of nodes) s = clearAt(s, n.id, 0)
 ok(infectedIds(s, nodes).length === 0, 'spread: every node cleared')
 const w0 = plant([], onNode('g0-0'), 1)[0]
 ok(isLit(w0, new Set(infectedIds(s, nodes))), 'planted on cleared ground: lit')
-// roll days (M121's rule) until g0-0 has gone grey again
+// roll days (M235's return rule) until g0-0 has gone grey again
 let t = 0, grey = false
-let m = startRule(freshMap(), { fresh: true, firstId: null, infected: () => false, now: 0, seed: 7 }); for (const n of nodes) m = tend(m, n.id, 0)
+let m = startRule(freshMap(), { now: 0, seed: 7 }); for (const n of nodes) m = tend(m, n.id, 0)
 while (t < 3000 * GAME_DAY_MS && !grey) {
   t += GAME_DAY_MS; const r = rollSections(m, s.clean, new Set(), t); m = r.m; s = { ...s, clean: r.clean }; grey = r.turned.includes('g0-0')
   for (const id of r.turned) if (id !== 'g0-0') { m = tend(m, id, t); s = clearAt(s, id, t) }   // the others are cleared as they turn

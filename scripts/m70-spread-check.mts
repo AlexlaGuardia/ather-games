@@ -1,12 +1,14 @@
 // BETA M70 s2: the SPREAD MAP on prod, 390x844, a FRESH profile. npx tsx scripts/m70-spread-check.mts [--url ...] [--out ...]
 // Canon: CANON/game/shimmer-quest-glade-tutorial.md › the spread, as the player sees it (SIGNED). Lines compared with the canon
 // file's own text, read here. The opening (born -> the gate) is the s1 check's.
-//   1 the fold map's legend reads the four signed words (batch 11-24d: Unseen · Charted · Clear · Hollow ground); spread.map.first (Chamomile) on the first open, never again
-//   2 a far area is Unseen before the keeper goes there, Charted once they stand in it
+//   1 the fold map's legend reads the three signed words (M235, athernyx 4b5b5d1: Unseen · Hollow ground · Clear); spread.map.first (Chamomile) on the first open, never again
+//   2 a far zone is Unseen before the keeper goes there, Hollow ground once they stand in it (M235: zones start infected)
 //   (M121: the FIRST section, the settlement's, reads Hollow ground on arrival: the story's)
 //   3 the settlement's big one down -> its area Clear + 'This ground is clear.'
 //   4 skipped game days (__ather.skipDays) -> the far area turns by M121's daily roll: Hollow ground + the grow toast with its place name
 //   5 reload keeps every state; 0 page errors
+import { fuseZones } from '../src/app/shimmer/open/ather/zones'
+import { SUB } from '../src/app/shimmer/open/ather/nodes'
 import puppeteer, { type Page } from 'puppeteer-core'
 import { pickWilds } from './lib/glade-gate.mts'   // M172: E at the Glade's gate opens the fold map; the Wilds is a stop on it
 import { mkdirSync, readFileSync } from 'node:fs'
@@ -25,8 +27,12 @@ const canon = readFileSync('/root/athernyx/CANON/game/shimmer-quest-glade-tutori
 const L = (id: string) => canon.find(l => l.startsWith(`- \`${id}\``))!.replace(/^- `[^`]+`\s*(\[[^\]]*\]\s*)?/, '').replace(/^[A-Z]+:\s*/, '')
 const tiles = (JSON.parse(readFileSync('public/open/wilds/tiles.json', 'utf8')) as { tiles: { name: string; tx: number; ty: number; nodes: { id: string; x: number; z: number }[] }[] }).tiles
 const fw = tiles.find(t => t.name === 'first-wilds')!
-const FAR = fw.nodes.find(n => n.id === 'first-wilds:1,0')!   // ~690 m off the settlement, the far side of the tile
-const BIG = [...fw.nodes].sort((a, b) => Math.hypot(a.x - SETTLEMENT.x, a.z - SETTLEMENT.z) - Math.hypot(b.x - SETTLEMENT.x, b.z - SETTLEMENT.z))[0]
+const FAR0 = fw.nodes.find(n => n.id === 'first-wilds:1,0')!   // ~690 m off the settlement, the far side of the tile
+// M235: the map is keyed by ZONES (zones.ts); FAR = that section's zone
+const FZ = fuseZones(tiles.flatMap(t => t.nodes.map((n: any) => ({ ...n, tile: t.name, x: n.x + t.tx * 1000, z: n.z + t.ty * 1000, gi: t.tx * SUB + n.i, gj: t.ty * SUB + n.j }))))
+const FAR = { ...FAR0, id: FZ.zoneOf.get(FAR0.id)! }
+const BIG0 = [...fw.nodes].sort((a, b) => Math.hypot(a.x - SETTLEMENT.x, a.z - SETTLEMENT.z) - Math.hypot(b.x - SETTLEMENT.x, b.z - SETTLEMENT.z))[0]
+const BIG = { ...BIG0, id: FZ.zoneOf.get(BIG0.id)! }   // M235: its zone
 const br = await puppeteer.launch({ protocolTimeout: 300000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--mute-audio'] })
 const errs: string[] = []
 const poll = async (f: () => Promise<boolean>, ms = 60000) => { for (let t = 0; t < ms; t += 500) { if (await f().catch(() => false)) return true; await sleep(500) } return false }
@@ -109,7 +115,7 @@ try {
   // ── 2 · unseen -> clear ──
   ok((await SM('state', FAR.id)) === 'unseen', `2. ${FAR.id} is Unseen before the keeper goes there (${await SM('state', FAR.id)})`)
   await p.evaluate((x, z) => (window as any).__ather.tp(x, z, 0), FAR.x, FAR.z + 45)
-  ok(await poll(async () => (await SM('state', FAR.id)) === 'charted', 30000), `2. stood in it: Charted (${await SM('state', FAR.id)}; here ${await SM('here')})`)
+  ok(await poll(async () => (await SM('state', FAR.id)) === 'hollow', 30000), `2. stood in it: Hollow ground, it started infected (M235) (${await SM('state', FAR.id)}; here ${await SM('here')})`)
   // ── 3 · the big one down -> Clear + toast ──
   await p.evaluate((x, z) => (window as any).__ather.tp(x, z + 18, 0), BIG.x, BIG.z)
   ok(await poll(() => p.evaluate(() => !!(window as any).__ather.combat().champ), 60000), `3. ${BIG.id}'s champion wakes`)
@@ -138,11 +144,12 @@ try {
   ok(Object.values(ZONE_NAME).includes(place), `4. the far area's place name is a real zone (${place})`)
   const toastNow = () => p.evaluate(() => (document.body.innerText.match(/Hollow ground is spreading near [^\n]*\./) ?? [''])[0])
   let days = 0, toast = ''
-  for (; days < 120 && (await SM('state', FAR.id)) !== 'hollow'; days++) {   // M121 stops the spread while half the discovered ground is grey, so any other section that turns is cleared
+  await A('wmClear', FAR.id); await sleep(5000)   // M235: only a CLEARED zone can be taken back, never the one stood in
+  for (; days < 600 && (await SM('state', FAR.id)) !== 'hollow'; days++) {
     await A('skipDays', 1); await sleep(350); toast ||= await toastNow()
     for (const id of (await SM('grey') ?? []) as string[]) if (id !== FAR.id) await A('wmClear', id)
   }
-  ok((await SM('state', FAR.id)) === 'hollow' && days > 2, `4. the far area turned by the daily roll, not in its grace days: ${FAR.id} reads Hollow ground after ${days} days`)
+  ok((await SM('state', FAR.id)) === 'hollow' && days > 3, `4. the far cleared zone was taken back by the slow return, not in its grace days: ${FAR.id} reads Hollow ground after ${days} days`)
   ok(!!toast || await poll(async () => !!(toast = await toastNow()), 10000), `4. grow toast ("${toast}")`)
   ok(Object.values(ZONE_NAME).some(z => toast === L('spread.hud.grow').replace('{PLACE}', z)), `4. the toast names a real place: "${toast}"`)
   await A('open', 'gate'); await sleep(1500); await p.screenshot({ path: `${out}/s2-4-map-hollow-390.png` }); await p.keyboard.press('Escape')

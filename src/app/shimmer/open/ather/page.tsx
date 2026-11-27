@@ -173,7 +173,8 @@ import { CombatLayer, type CombatHud, type SightLink } from './combat-layer'
 import { canReload, type CombatEvent, type Terrain } from './combat'
 import { ownerOf, nodeRegions, GAME_DAY_MS, SUB, type WildsNode } from './nodes'
 import { clearAt, hasSpread, loadSpread, saveSpread, loadSkew, saveSkew, type SpreadState } from './spread'
-import { loadMap, saveMap, freshMap, startRule, rollSections, areaState, uncover, tend, firstLook, changes, growLine, clearLine, firstLine, type SpreadMap, type AreaState } from './spread-map'   // M70 s2
+import { fuseZones, mergeRegions } from './zones'
+import { loadMap, saveMap, freshMap, startRule, toZones, ZONE_RULE, rollSections, areaState, uncover, tend, firstLook, changes, growLine, clearLine, firstLine, type SpreadMap, type AreaState } from './spread-map'   // M70 s2
 import { TouchControls, type TouchAction } from '../shared/touch-controls'
 import { isTouchOnly, pressKey, touch } from '../shared/touch'
 import { PadBridge, usePadKind, usePadGlyph, padPrompt } from '../shared/pad-bridge'
@@ -618,15 +619,20 @@ function AtherSliceGame() {
   // The world catches up on load (the clock ran while you were away), then ticks live every 20 s.
   // every node on the continent, from the tile index (placed at export by the same placeNodes), in world coords: the
   // spread must know them all, loaded or not, or a streamed-out tile would forget what you cleared
-  const allNodes = useMemo<WildsNode[]>(() => ww ? ww.index.tiles.flatMap(t => t.nodes.map(n => ({ ...n, tile: t.name, x: n.x + t.tx * TILE_M, z: n.z + t.ty * TILE_M, gi: t.tx * SUB + n.i, gj: t.ty * SUB + n.j }))) : [], [ww])
-  const nodesByTile = useMemo(() => { const m = new Map<string, WildsNode[]>(); for (const n of allNodes) { const a = m.get(n.tile) ?? []; a.push(n); m.set(n.tile, a) } return m }, [allNodes])
+  const rawNodes = useMemo<WildsNode[]>(() => ww ? ww.index.tiles.flatMap(t => t.nodes.map(n => ({ ...n, tile: t.name, x: n.x + t.tx * TILE_M, z: n.z + t.ty * TILE_M, gi: t.tx * SUB + n.i, gj: t.ty * SUB + n.j }))) : [], [ww])
+  // M235 s1: the old sections fused 2 x 2 into ZONES (zones.ts): one champion, one map state, uncovered whole. From here on every
+  // id the spread, the map, the fight and a guest's ledger use is a ZONE id; ownership is still the fine per-tile section rule.
+  const fused = useMemo(() => fuseZones(rawNodes), [rawNodes])
+  const allNodes = fused.zones
+  const zoneId = (id: string | undefined | null) => (id ? fused.zoneOf.get(id) ?? id : id ?? null)
+  const nodesByTile = useMemo(() => { const m = new Map<string, WildsNode[]>(); for (const n of rawNodes) { const a = m.get(n.tile) ?? []; a.push(n); m.set(n.tile, a) } return m }, [rawNodes])
   // M70 s2 + M121: THE SPREAD MAP (spread-map.ts): uncovered sections + the ones the grey took. The daily roll below is the one
   // rule that turns a section (map + ledger together); sections holding a settlement are never rolled (canon: a settlement is
   // kept ground, never grey). The first section's opening grey is the story's, not the roll's.
   const [smap, setSmapState] = useState<SpreadMap>(() => (typeof window === 'undefined' ? freshMap() : loadMap()))
   const smapRef = useRef(smap); smapRef.current = smap
   const setSmap = (m: SpreadMap) => { if (m === smapRef.current) return; smapRef.current = m; saveMap(m); setSmapState(m) }
-  const ownerAt = (x: number, z: number) => { const w = wwRef.current; if (!w) return null; const { tx, ty } = tileOf(x, z), t = w.at(tx, ty); return t ? ownerOf(nodesByTile.get(t.name) ?? [], x, z)?.id ?? null : null }
+  const ownerAt = (x: number, z: number) => { const w = wwRef.current; if (!w) return null; const { tx, ty } = tileOf(x, z), t = w.at(tx, ty); return t ? zoneId(ownerOf(nodesByTile.get(t.name) ?? [], x, z)?.id) : null }
   // M156 s2: in a party, a guest's Wilds is the HOST's (guest-wilds.ts). `ledger` null = my own Wilds, every value below as it was.
   const ownInf = useRef<{ held: string | null; lost: readonly string[] }>({ held: null, lost: [] })
   const guest = useGuestWilds(allNodes, () => { const s = spreadRef.current, n = netRef.current; return s && n ? { clean: s.clean, grey: Object.keys(smapRef.current.grey), season: n.season, held: ownInf.current.held, lost: [...ownInf.current.lost] } : null }, zone.kind === 'wilds' && !!ww)
@@ -635,7 +641,7 @@ function AtherSliceGame() {
   useEffect(() => { visited.current = []; smapPrev.current = null }, [guest.host])
   const viewMap = useCallback((m: SpreadMap): SpreadMap => guest.ledger ? guestMap(m, guest.ledger, visited.current) : m, [guest.ledger])
   const catchUp = useCallback((cur: SpreadState) => {
-    const now = clock(), settled = new Set([SETTLEMENT, ...(netRef.current?.settlements ?? [])].map(k => ownerAt(k.x, k.z)).filter((k): k is string => !!k))
+    const now = clock(), settled = new Set([SETTLEMENT, ...(netRef.current?.settlements ?? []), ...(zoneRef0.current === 'wilds' ? [pos.current] : [])].map(k => ownerAt(k.x, k.z)).filter((k): k is string => !!k))   // M235: never the zone the keeper stands in
     const r = netRef.current ? rollSections(smapRef.current, cur.clean, settled, now) : { m: smapRef.current, clean: cur.clean, turned: [] as string[] }   // no network read = no roll (it could not know the settlements)
     setSmap(r.m)
     if (spreadRef.current && !r.turned.length) return r.turned   // nothing moved: no new ledger, no re-render
@@ -645,10 +651,15 @@ function AtherSliceGame() {
   }, [nodesByTile]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!allNodes.length) return
-    const m70 = loadTut().m70, cur = loadSpread(clock())
-    // startRule() runs once per save. Fresh = nothing saved by the spread at all, and the story's big one not already down
-    const fresh = !hasSpread() && !Object.keys(smapRef.current.seen).length && m70 !== 'down' && m70 !== 'thanked'
-    setSmap(startRule(smapRef.current, { fresh, firstId: ownerAt(SETTLEMENT.x, SETTLEMENT.z), infected: id => !cur.clean.includes(id), now: clock(), seed: Math.floor(Math.random() * 4294967296) }))
+    let cur = loadSpread(clock())
+    // M235 s1: an old save (keyed by sections) converts onto zones once (spread-map.ts toZones), with Lamps Out's picked node
+    if (!smapRef.current.zones || cur.clean.some(id => fused.zoneOf.has(id))) {
+      const z = toZones(smapRef.current, cur.clean, fused); cur = { ...cur, clean: z.clean }
+      if (hasSpread()) saveSpread(cur)
+      setSmap(z.m)
+      const t0 = loadTut(); if (t0.m70node && fused.zoneOf.has(t0.m70node)) saveTut({ ...t0, m70node: fused.zoneOf.get(t0.m70node)! })
+    }
+    setSmap(startRule(smapRef.current, { now: clock(), seed: Math.floor(Math.random() * 4294967296) }))   // once per save
     const n = catchUp(cur).length
     if (n) hudSay(`While you were away, the grey spread to ${n} place${n === 1 ? '' : 's'}.`, 'info', 6)
     const id = setInterval(() => { const c = spreadRef.current; if (c && !guestRef.current.still()) catchUp(c) }, 20000)   // live: the tick below says the grow toast
@@ -665,8 +676,8 @@ function AtherSliceGame() {
   // ownership is per tile (a node owns the nearest ground in ITS tile), the same rule the tile's borders are drawn with
   const nodeOwner = useMemo(() => ww && allNodes.length ? (x: number, z: number) => {
     const { tx, ty } = tileOf(x, z), t = ww.at(tx, ty); if (!t) return undefined
-    return ownerOf(nodesByTile.get(t.name) ?? [], x, z)?.id
-  } : undefined, [ww, allNodes, nodesByTile])
+    return zoneId(ownerOf(nodesByTile.get(t.name) ?? [], x, z)?.id) ?? undefined
+  } : undefined, [ww, allNodes, nodesByTile, fused])
   // what the fight and the plumes need: the infected nodes near you (963 mounds would sink the frame rate)
   const [nearKey, setNearKey] = useState('')
   const nearNodes = useMemo(() => { const p = pos.current; return nodes.filter(n => Math.abs(n.x - p.x) < 450 && Math.abs(n.z - p.z) < 450) }, [nodes, nearKey]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -685,7 +696,8 @@ function AtherSliceGame() {
   const standingRef = useRef(standing); standingRef.current = standing
   const fightNodes = useMemo(() => { if (!infNodes.length) return nearNodes; const p = pos.current; return [...nearNodes, ...infNodes.filter(n => Math.abs(n.x - p.x) < 450 && Math.abs(n.z - p.z) < 450)] }, [nearNodes, infNodes])
   const groundOwner = useMemo(() => !nodeOwner || !infNodes.length || !net ? nodeOwner : (x: number, z: number) => infectedGround(infectionRef.current.state, net.settlements, x, z) ?? nodeOwner(x, z), [nodeOwner, infNodes, net])
-  const infectedSet = useMemo(() => new Set([...nodes, ...infNodes].map(n => n.id)), [nodes, infNodes])
+  // M235: + each infected zone's old section ids, so a waymark bound on a section before the fuse still reads its zone (M75)
+  const infectedSet = useMemo(() => new Set([...nodes, ...infNodes].flatMap(n => [n.id, ...(fused.members.get(n.id) ?? [])])), [nodes, infNodes, fused])
   infRef.current = infectedSet
   // M70 s2: the spread map's tick, every 4 s: uncover where you stand, grow toasts for watched sections that turned Hollow ground.
   // The first read after a load only records (no toast on reload).
@@ -699,11 +711,11 @@ function AtherSliceGame() {
     for (const name of ww.loaded.keys()) {
       const t = ww.byName.get(name)!, ox = t.tx * TILE_M, oz = t.ty * TILE_M
       const local = (nodesByTile.get(name) ?? []).map(n => ({ ...n, x: n.x - ox, z: n.z - oz }))
-      m.set(name, nodeRegions(local, TILE_M, TILE_M).map(r => ({ ...r, state: areaState(viewMap(smap), r.id, infectedSet.has(r.id)) })))   // M70 s2, M121 s2: the spread map's four states
+      m.set(name, mergeRegions(nodeRegions(local, TILE_M, TILE_M), id => fused.zoneOf.get(id) ?? id).map(r => ({ ...r, state: areaState(viewMap(smap), r.id, infectedSet.has(r.id)) })))   // M70 s2, M235: one outline + one of three states per zone
       for (const n of infNodes) { const st = n.tile === name && net?.settlements.find(p => infectId(p.id) === n.id); if (st) m.get(name)!.push({ id: n.id, state: 'hollow', poly: Array.from({ length: 24 }, (_, k) => ({ x: st.x - ox + Math.cos(k * Math.PI / 12) * INFECT_R, z: st.z - oz + Math.sin(k * Math.PI / 12) * INFECT_R })) }) }   // M128
     }
     return m
-  }, [ww, wrev, nodesByTile, infectedSet, smap, smapTick, infNodes, net, viewMap]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [ww, wrev, nodesByTile, fused, infectedSet, smap, smapTick, infNodes, net, viewMap]) // eslint-disable-line react-hooks/exhaustive-deps
   const regions = regionsByTile.get(hereTile) ?? []
   useEffect(() => {   // M70 s2: the spread map's tick
     if (zone.kind !== 'wilds' || !ww || !nodeOwner) return
@@ -720,7 +732,8 @@ function AtherSliceGame() {
     }
     ;(window as unknown as { __spreadMap?: unknown }).__spreadMap = () => ({ first: smapRef.current.first, seen: Object.keys(smapRef.current.seen), here: nodeOwner(pos.current.x, pos.current.z) ?? null,
       state: (id: string) => areaState(viewMap(smapRef.current), id, infectedSet.has(id)), place: placeOf, grey: () => Object.keys(viewMap(smapRef.current).grey), rule: smapRef.current.rule ?? null,
-      infected: (id: string) => infectedSet.has(id) })   // checks read it (m70-spread-check)
+      infected: (id: string) => infectedSet.has(id), zones: allNodes.length, sections: rawNodes.length, zoneOf: (id: string) => fused.zoneOf.get(id) ?? null,
+      members: (id: string) => fused.members.get(id) ?? [], clean: () => [...(spreadRef.current?.clean ?? [])], exempt: () => ZONE_RULE })   // checks read it (m70-spread-check, m235-zones-check)
     tick(); const id = setInterval(tick, 4000); return () => clearInterval(id)
   }, [zone.kind, ww, nodeOwner, infectedSet, allNodes, viewMap]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {   // M70 s2: spread.map.first, Chamomile's line the first time the spread map is opened with ground uncovered (once)
@@ -2002,7 +2015,7 @@ function AtherSliceGame() {
       {panel?.kind === 'map' && (
         <FoldMap view={panel.view} travel={panel.travel} W={W} fog={fog} waymarks={waymarks} infected={infectedSet} here={{ x: pos.current.x - hereOff.x, z: pos.current.z - hereOff.z }}
           inWilds={zone.kind === 'wilds'} onTravel={gladeTravel} hasPlot={gardenOpen(loadTut())} tile={hereTile} pitstops={mapDoors(pitstops, runeHoldOpen({ errand: errandStage, chain, cityDoors: pitstops.length - 1 }))}
-          nodes={(nodesByTile.get(hereTile) ?? []).filter(n => infectedSet.has(n.id)).map(n => ({ ...n, x: n.x - hereOff.x, z: n.z - hereOff.z }))} regions={regions}
+          nodes={allNodes.filter(n => n.tile === hereTile && infectedSet.has(n.id)).map(n => ({ ...n, x: n.x - hereOff.x, z: n.z - hereOff.z }))} regions={regions}
           area={ww ? { world: ww, regionsByTile, cx: hereOff.x, cz: hereOff.z, tileOff, nodes: nodes.filter(n => Math.abs(n.x - hereOff.x) < 1600 && Math.abs(n.z - hereOff.z) < 1600), here: { x: pos.current.x, z: pos.current.z } } : undefined}
           onClose={() => setPanel(null)} quest={fsOn ? mapSpots(loadTut(), fsWorld.current()) : undefined}
           goal={errandToHold || runeHoldPulse(chain, fsOn) ? LANDING.id : undefined} flipPulse={flipPulse(chain, fsOn)} digGoal={runeHoldPulse(chain, fsOn) && !errandToHold} onFlip={() => setPanel(p => p?.kind === 'map' ? { ...p, view: p.view === 'ather' ? 'athernyx' : 'ather' } : p)} />

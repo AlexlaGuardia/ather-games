@@ -40,7 +40,18 @@ export function composeTilePicture(c: HTMLCanvasElement, W: Wilds, o: {
   ctx.setLineDash([])
   if (o.fog) {
     const x0 = o.tileOff.x + o.ox - sx / 2, z0 = o.tileOff.z + o.oz - sz / 2, cellPx = N / (sx / FOG_CELL)
-    drawCloud(ctx, o.fog, cellPx, -((x0 - cellOrigin.x) / FOG_CELL) * cellPx, -((z0 - cellOrigin.z) / FOG_CELL) * cellPx, ATHER_CLOUD)
+    // M235 s1: an uncovered zone is uncovered WHOLE, not only the walked ring: its fold-mist is cut away (the cloud goes on its own
+    // layer, the zone outlines are erased from it, then it is laid over the plate and the tint)
+    const open = o.regions.length > 1 ? o.regions.filter(r => r.state !== 'unseen') : []
+    const fc = open.length && typeof document !== 'undefined' ? document.createElement('canvas') : null
+    const fx = fc ? (fc.width = N, fc.height = N, fc.getContext('2d')) : null
+    const target = fx ?? ctx
+    drawCloud(target, o.fog, cellPx, -((x0 - cellOrigin.x) / FOG_CELL) * cellPx, -((z0 - cellOrigin.z) / FOG_CELL) * cellPx, ATHER_CLOUD)
+    if (fx && fc) {
+      fx.globalCompositeOperation = 'destination-out'; fx.fillStyle = '#000'
+      for (const r of open) { fx.beginPath(); r.poly.forEach((p, i) => { const [x, y] = P(p.x, p.z); if (i) fx.lineTo(x, y); else fx.moveTo(x, y) }); fx.closePath(); fx.fill() }
+      ctx.drawImage(fc, 0, 0)
+    }
   }
   const pin = (x: number, z: number, col: string, r: number) => {
     const [px, py] = P(x, z); ctx.fillStyle = col; ctx.strokeStyle = '#1a1410'; ctx.lineWidth = Math.max(1.2, 2.5 * k)

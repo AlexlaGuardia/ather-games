@@ -3,7 +3,7 @@
 // settlement infection; a guest DRAWS and plays by those. LOOKING WRITES NOTHING: the guest's ledgers are not touched, they come
 // back the moment the host is gone. s3 (Alex "B"): the champion is the host's (shared/fight-share.ts) and one kill counts for every
 // keeper there: the host's node clears, and each guest there writes it in their OWN save (already clear there = nothing written;
-// not charted = charted by the clear, as a kill alone always did). A guest's message never writes the host's ledger.
+// never uncovered = uncovered by the clear, as a kill alone always did). A guest's message never writes the host's ledger.
 // ★ PURE. The socket half is use-guest-wilds.tsx.
 import type { Infection } from './infection'
 import { freshInfection } from './infection'

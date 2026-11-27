@@ -1,3 +1,4 @@
+// ★ SUPERSEDED by scripts/m235-zones-check.mts (M235 reversed M121 11-27: its asserts no longer hold by design). Kept as history.
 // BETA M121: DISCOVERED GROUND CAN TURN GREY BY CHANCE, on prod, 390x844, non-owner. npx tsx scripts/m121-spread-check.mts [--url ...] [--out ...]
 //   A fresh profile (born -> the gate): the first section (Greg's stone) reads Hollow ground + infected; every other discovered
 //     section reads Charted (M121 s2), its region is drawn Charted on the fold map, the legend has the four words, nothing overflows 390

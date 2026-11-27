@@ -18,7 +18,7 @@ ok(inf.active?.id === 's4-2' && inf.lost.length === 2 && inf.told === 0 && inf.a
 ok(guestInfection(L, 5).active === null && !guestInfection(L, 5).lost.length, "another season's infection is not drawn")
 const own = { ...freshMap(), seen: { a: 5, b: 6 }, grey: { b: 9 } }, frozen = JSON.stringify(own)
 const m = guestMap(own, { ...L, grey: ['a'] }, ['c'])
-ok(areaState(m, 'a', true) === 'hollow' && areaState(m, 'b', true) === 'charted' && areaState(m, 'c', false) === 'clear' && areaState(m, 'd', true) === 'unseen', "host's grey over the guest's own charting")
+ok(areaState(m, 'a', true) === 'hollow' && areaState(m, 'b', true) === 'hollow' && areaState(m, 'c', false) === 'clear' && areaState(m, 'd', true) === 'unseen', "M235: what the guest uncovered reads by the host's infected set (Hollow ground / Clear)")
 ok(JSON.stringify(own) === frozen, "the guest's own map is not touched")
 const D = withDowns(L, ['tile-1:1', infectId('s4-2')])
 ok(D.clean.includes('tile-1:1') && !D.grey.includes('tile-1:1') && D.held === null && withDowns(L, [L.clean[0]]) === L, 'a shared kill reads clear before the host ledger says so; said already = the same ledger')
