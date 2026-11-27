@@ -195,20 +195,21 @@ async function clashPhase(p: Page, out: string, errs: string[]) {
     const s = await p.$(`[data-signup-spirit="${sid}"]`); if (!s) return null
     await s.click(); await sleep(300); await (await p.$('[data-signup-enter] button'))!.click()
     await p.waitForSelector('[data-clash-ring="ring"]', { timeout: 30000 })
-    let bonded: string | null = null
+    const bonded: Record<string, string> = {}
     for (let i = 0; i < 1200; i++) {
-      const st = await p.evaluate(() => ({ b: (document.querySelector('[data-clash-bonded]') as HTMLElement | null)?.dataset.clashBonded ?? null, res: (document.querySelector('[data-clash-ring-result]') as HTMLElement | null)?.dataset.clashRingResult }))
-      if (st.b && !bonded) { bonded = st.b; await p.screenshot({ path: `${out}/c-${sid}-bout.png` }).catch(() => {}) }
+      const st = await p.evaluate(() => { const e = document.querySelector('[data-clash-bonded]') as HTMLElement | null; return { b: e?.dataset.clashBonded ?? null, i: e?.dataset.clashBout ?? null, res: (document.querySelector('[data-clash-ring-result]') as HTMLElement | null)?.dataset.clashRingResult } })
+      if (st.b && st.i !== null && !bonded[st.i]) { bonded[st.i] = st.b; await p.screenshot({ path: `${out}/c-${sid}-bout${st.i}.png` }).catch(() => {}) }
       if (st.res) break
       await sleep(250)
     }
     const ex = await p.$('[data-clash-exit]'); if (ex) { await ex.click(); await sleep(800) }
     return bonded
   }
-  const ba = await run('vx-a')
-  ok(ba === 'storm_scatter:2', `C her favourite in her Clash bout: ${ba} (want storm_scatter:2, a Lv29 move above the Lv12 tent)`)
-  const bb = await run('vx-b')
-  ok(bb === `${expectB.id}:0`, `C none picked: the seeded RANDOM known move ${bb} (want ${expectB.id}:0, not the old first move)`)
+  const ba = await run('vx-a') ?? {}
+  ok(Object.keys(ba).length > 0 && Object.values(ba).every(v => v === 'storm_scatter:2'), `C her favourite in every bout of hers: ${JSON.stringify(ba)} (want storm_scatter:2, a Lv29 move above the Lv12 tent)`)
+  const bb = await run('vx-b') ?? {}
+  const wantB = Object.fromEntries(Object.keys(bb).map(i => [i, `${resolveBonded(EB, bondSeed(SEED * 1000 + Number(i), 0)).id}:0`]))
+  ok(Object.keys(bb).length > 0 && JSON.stringify(bb) === JSON.stringify(wantB), `C none picked: the seeded RANDOM known move per bout ${JSON.stringify(bb)} (want ${JSON.stringify(wantB)}; bout 1 differs from the old first move: ${expectB.id})`)
   ok(errs.length === 0, `clash: 0 page errors (${errs.join(' ; ')})`)
 }
 
