@@ -305,6 +305,8 @@ Steps (one worker each, in order; each keeps `beta-m7-saves` green):
 - **HUB chores between reviews:** prod check suite rotation; morning checkpoint 09:00 with every sheet for Alex in one batch
 
 ## Inbox (Alex's brain dump: hub writes here at once, dated, his words; triaged into rows / queue / CANON_GAPS / killed)
+- 11-27 06:5x Alex on the spirit panel portrait showing the base for an evolved spirit: 'we'd better sit down and talk about that one.. the panel is nice but im not sure i want to give away too much on how to evolve em.. hints like that id rather hide throughout the game later' -> PARKED: talk with Alex (evolution hints hidden in the world, not the panel)
+- 11-27 06:4x Alex published Wilds v17 (void lines touched up: voids only on land, not where land meets water; 151 node zones) -> committed a215f717, live == file
 - 11-27 06:0x Alex on the waiting sheets: 'ive looked over the ones that are done and they all look good for now'; picked: 4 base spirits, Athowl + Hovari redos, Aurlotl glyphs; 'the bonn and tess have a second set of eyes overlap thing other than that they are good' -> M226 go public, M227 eyes, M167 OK
 - 11-27 05:4x Alex: 'and how about the keeper body bench i noticed now i can only see the head.. i cant tune the eyes and etc.. i did like the new mouths tho ..id like the head to follow classics shape with the 0 on the chin taper.. and just tune the eyes and hair so they fit nicely.. and a huge qol thing is for the keepers avatar to not spin in the editor but let the mouse rotate it or something' -> M225
 - 11-27 05:3x Alex: 'Here's that glitch I mentioned' (screenshot) -> M193, docs/looks/m193-2026-11-27/alex-shot.jpg
