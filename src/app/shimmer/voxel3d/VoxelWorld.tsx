@@ -2082,7 +2082,7 @@ export default function VoxelWorld() {
         const b = getBook()
         learnFirst(b)
         saveRecipeBook(SEED, b)
-        say(lost > 0 ? 'satchel full — a petal fell; the page is in your book' : 'a new page in your book — Mana Draught')
+        say(lost > 0 ? 'satchel full — a petal fell; the page is in your book' : 'a new page in your book — Mana Elixir')
         break
       }
       case 'fold':

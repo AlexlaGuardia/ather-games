@@ -328,7 +328,7 @@ export const ITEMS: ItemDef[] = [
   { id: 'glowfin_rinstick', name: 'Glowfin Rinstick', type: 'tool', rarity: 'uncommon', description: 'The lure glows softly. Attracts curious Rinns.', stackable: false, maxStack: 1, sellPrice: 28, tradeable: false },
   { id: 'moonkoi_rinstick', name: 'Moonkoi Rinstick', type: 'tool', rarity: 'rare', description: 'Silver-thread line that sings in water. They come to it.', stackable: false, maxStack: 1, sellPrice: 70, tradeable: false },
   // --- Potions (brewed via Alchemy) ---
-  { id: 'mana_draught', name: 'Mana Draught', type: 'consumable', rarity: 'common', description: 'A cloudy blue vial. Restores a burst of mana.', stackable: true, maxStack: 5, sellPrice: 8, tradeable: true, effect: { stat: 'mana', amount: 30 } },
+  { id: 'mana_draught', name: 'Mana Elixir', type: 'consumable', rarity: 'common', description: 'A cloudy blue vial. Restores a burst of mana.', stackable: true, maxStack: 5, sellPrice: 8, tradeable: true, effect: { stat: 'mana', amount: 30 } },
   { id: 'shard_tonic', name: 'Shard Tonic', type: 'consumable', rarity: 'common', description: 'Gritty crystal-infused tonic. Hands move faster.', stackable: true, maxStack: 5, sellPrice: 10, tradeable: true, effect: { stat: 'harvest_speed', amount: 0.15, duration: 60 } },
   { id: 'shimmer_salve', name: 'Shimmer Salve', type: 'consumable', rarity: 'common', description: 'Warm shimmering paste. Spirits brighten when they smell it.', stackable: true, maxStack: 5, sellPrice: 12, tradeable: true, effect: { stat: 'happiness', amount: 25 } },
   { id: 'glowfin_brew', name: 'Glowfin Tonic', type: 'consumable', rarity: 'uncommon', description: 'Bioluminescent brew. Knowledge sinks in faster.', stackable: true, maxStack: 5, sellPrice: 20, tradeable: true, effect: { stat: 'xp_boost', amount: 0.2, duration: 90 } },
@@ -339,7 +339,7 @@ export const ITEMS: ItemDef[] = [
   { id: 'crystal_elixir', name: 'Crystal Elixir', type: 'consumable', rarity: 'uncommon', description: 'Clear crystalline liquid. Mana surges and lingers.', stackable: true, maxStack: 5, sellPrice: 25, tradeable: true, effect: { stat: 'mana', amount: 50 } },
   { id: 'bond_philter', name: 'Bond Philter', type: 'consumable', rarity: 'uncommon', description: 'Rose-tinted draught. Spirits feel closer after drinking it.', stackable: true, maxStack: 5, sellPrice: 22, tradeable: true, effect: { stat: 'bond', amount: 15 } },
   { id: 'holding_philter', name: 'Holding Philter', type: 'consumable', rarity: 'uncommon', description: 'Pale green, steeped from wakereed. For a bond that will not settle: it does not deepen so much as it stays.', stackable: true, maxStack: 5, sellPrice: 26, tradeable: true, effect: { stat: 'bond', amount: 10 } },
-  { id: 'starlight_tincture', name: 'Starlight Tincture', type: 'consumable', rarity: 'rare', description: 'Starwillow extract. Everything you learn sticks.', stackable: true, maxStack: 5, sellPrice: 40, tradeable: true, effect: { stat: 'xp_boost', amount: 0.3, duration: 120 } },
+  { id: 'starlight_tincture', name: 'Starlight Tonic', type: 'consumable', rarity: 'rare', description: 'Starwillow extract. Everything you learn sticks.', stackable: true, maxStack: 5, sellPrice: 40, tradeable: true, effect: { stat: 'xp_boost', amount: 0.3, duration: 120 } },
   { id: 'deep_essence', name: 'Deep Essence', type: 'consumable', rarity: 'rare', description: 'Abyssal concentrate. Fully restores your mana pool.', stackable: true, maxStack: 5, sellPrice: 50, tradeable: true, effect: { stat: 'mana_full', amount: 0 } },
   { id: 'ather_infusion', name: 'Ather Tonic', type: 'consumable', rarity: 'legendary', description: 'Pure Ather distillate. The world moves slower around you.', stackable: true, maxStack: 3, sellPrice: 80, tradeable: true, effect: { stat: 'combo', amount: 0, subEffects: [{ stat: 'harvest_speed', amount: 0.5, duration: 120 }, { stat: 'xp_boost', amount: 0.3, duration: 120 }] } },
   { id: 'dawn_cordial', name: 'Dawn Cordial', type: 'consumable', rarity: 'legendary', description: 'Ancient recipe. Like drinking a sunrise.', stackable: true, maxStack: 3, sellPrice: 120, tradeable: true, effect: { stat: 'combo', amount: 0, subEffects: [{ stat: 'happiness', amount: 50 }, { stat: 'bond', amount: 25 }, { stat: 'mana_full', amount: 0 }] } },
@@ -2786,7 +2786,7 @@ const WORN_RINSTICK = px(S, S, `
 // Palette: 1=gold, 2=brown, 3=cream, 4=outline, 5=red, 6=green, 7=blue, 8=purple
 // =============================================================
 
-// Mana Draught — round blue flask
+// Mana Elixir — round blue flask
 const MANA_DRAUGHT = px(S, S, `
   00000000000000000000000000000000
   00000000000000000000000000000000
@@ -3002,7 +3002,7 @@ const BOND_PHILTER = px(S, S, `
   00000000000000000000000000000000
 `)
 
-// Starlight Tincture — tall flask (green glow)
+// Starlight Tonic — tall flask (green glow)
 const STARLIGHT_TINCTURE = px(S, S, `
   00000000000000000000000000000000
   00000000000000000000000000000000

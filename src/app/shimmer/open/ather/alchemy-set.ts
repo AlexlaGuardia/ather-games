@@ -9,7 +9,7 @@
 //   powders or gels). The chain: crush -> mix -> distil -> combine, each potion its own step list.
 // ★ NAMES RULED 2026-11-21 (Q2-Q3, athernyx 61911e7): the naming GRAMMAR (Crusher -> a Dust or a Gel, Nook -> a Steep, Still
 //   -> an Extract, Desk -> the potion by its class word), the first recipe (Rinnscale Dust + Goldleaf Steep -> Golden Dew
-//   Extract -> Health Draught) and the three starters (Health Draught, Mana Draught, Starlight Tincture). The other
+//   Extract -> Health Salve) and the three starters (Health Salve, Mana Elixir, Starlight Tonic). The other
 //   intermediates are named BY that grammar (what went in + its word). The Rinnscale Dust is ground from the build's
 //   Shimmerscale catch (the dust is canon's name, the input is Jin's). Every name lives in this file only.
 // ⚖ Jin's (canon 09-16): every step list, every number, potency, the grade maths. Canon's: a brewing, every hand a bottle,
@@ -49,9 +49,9 @@ export const INTERMEDIATES: Readonly<Record<string, string>> = {
 const S = 1000
 export const ALC_POTIONS: Readonly<Record<string, Potion>> = {
   // THE FIRST RECIPE, as ruled (Alex's chain): Rinnscale Dust + Goldleaf Steep (Goldleaf + Dewdrop Vine) -> Still -> Golden
-  // Dew Extract -> Desk -> Health Draught.
+  // Dew Extract -> Desk -> Health Salve.
   health: {
-    name: 'Health Draught', blurb: 'Golden dew and rinnscale dust. Drink it to heal.', makes: 2, effect: { heal: 40 },
+    name: 'Health Salve', blurb: 'Golden dew and rinnscale dust. Drink it to heal.', makes: 2, effect: { heal: 40 },
     steps: [
       { at: 'crusher', in: [{ id: 'shimmerscale', n: 2 }], out: 'rinnscale_dust', ms: 6 * S },
       { at: 'nook', in: [{ id: 'crop:goldleaf', n: 2 }, { id: 'crop:dewdrop_vine', n: 2 }], out: 'goldleaf_steep', ms: 10 * S },
@@ -62,7 +62,7 @@ export const ALC_POTIONS: Readonly<Record<string, Potion>> = {
   mana: {
     // a starter (the canon first recipe; its page comes with the Desk). The vine is crushed to a GEL first (the Crusher's
     // other product, ruled with the Dust).
-    name: 'Mana Draught', blurb: 'Shard dust steeped with dewdrop gel. Drink it for mana.', makes: 2, effect: { mana: 65 },
+    name: 'Mana Elixir', blurb: 'Shard dust steeped with dewdrop gel. Drink it for mana.', makes: 2, effect: { mana: 65 },
     steps: [
       { at: 'crusher', in: [{ id: 'raw_mana_shard', n: 3 }], out: 'shard_dust', ms: 6 * S },
       { at: 'crusher', in: [{ id: 'crop:dewdrop_vine', n: 2 }], out: 'dewdrop_gel', ms: 6 * S },
@@ -71,7 +71,7 @@ export const ALC_POTIONS: Readonly<Record<string, Potion>> = {
     ],
   },
   wisdom: {
-    name: 'Starlight Tincture', blurb: 'Starwillow extract on core dust. Gathering teaches you more for a while.', makes: 2, effect: { xp: 0.25, ms: 8 * 60 * S },
+    name: 'Starlight Tonic', blurb: 'Starwillow extract on core dust. Gathering teaches you more for a while.', makes: 2, effect: { xp: 0.25, ms: 8 * 60 * S },
     steps: [
       { at: 'crusher', in: [{ id: 'pure_mana_core', n: 2 }], out: 'core_dust', ms: 6 * S },
       { at: 'still', in: [{ id: 'starwillow_sap', n: 3 }], out: 'starwillow_extract', ms: 12 * S },

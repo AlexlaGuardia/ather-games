@@ -305,7 +305,7 @@ export const PERK_INFO: Record<BeastPerk, { label: string; blurb: string }> = {
   grovekin:        { label: 'Grovekin',        blurb: 'Sometimes yields extra wood when you gather.' },
   gemsense:        { label: 'Gemsense',        blurb: 'Sometimes finds an extra shard when you mine.' },
   truesight:       { label: 'Truesight',       blurb: 'Sometimes lands an extra catch when you fish.' },
-  sporebloom:      { label: 'Sporebloom',      blurb: 'Sometimes a brew yields an extra draught.' },
+  sporebloom:      { label: 'Sporebloom',      blurb: 'Sometimes a brew yields an extra potion.' },
 }
 
 // Max bonus at full happiness (100). @15 = the WEAK tier — the @100 Mana'mal gives the strong version.

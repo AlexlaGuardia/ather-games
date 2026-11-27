@@ -26,7 +26,7 @@ export interface PotionDef {
 export const POTION_DEFS: Record<string, PotionDef> = {
   // Tier 1 — Beginner
   mana_draught: {
-    id: 'mana_draught', name: 'Mana Draught', tier: 1,
+    id: 'mana_draught', name: 'Mana Elixir', tier: 1,
     minAlchemyLevel: 1, manaCost: 5, xpGrant: 15, resultCount: 2,
     // Glow-moss (2026-09-16): canon's `world/flora.md` points it at mana potions, and the draught is
     // the mana potion. One moss for one shard — the moss is common on woodland and shore, so the
@@ -117,7 +117,7 @@ export const POTION_DEFS: Record<string, PotionDef> = {
 
   // Tier 3 — Advanced
   starlight_tincture: {
-    id: 'starlight_tincture', name: 'Starlight Tincture', tier: 3,
+    id: 'starlight_tincture', name: 'Starlight Tonic', tier: 3,
     minAlchemyLevel: 12, manaCost: 30, xpGrant: 80, resultCount: 1,
     recipe: [{ itemId: 'starwillow_sap', count: 3 }, { itemId: 'pure_mana_core', count: 2 }, { itemId: 'glowfin', count: 2 }],
   },

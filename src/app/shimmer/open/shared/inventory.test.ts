@@ -79,5 +79,24 @@ for (const id of ['bait', 'shimmerscale', 'clickclaw', 'glowfin', 'ribboneel', '
   ok(countOf(l, 'mast') === 3 && countOf(l, 'forage') === 0, 'mast: an old forage stack did not load as mast')
   delete (globalThis as any).localStorage }
 ok(!!itemDef('mast').icon && !OPEN_ITEMS.forage, 'mast: no icon, or the placeholder forage item is still a bag row')
+
+// M234 s1 (canon game/alchemy.md › THE RECIPES SIT-DOWN, 11-27): the potions and the earth infusion were RENAMED, and only the
+// NAME moved. The saved ids (potion:<kind>:<grade>, starlight_tincture, golden_tonic) stay, so a bag saved before the rename
+// loads every stack, same count, under the new name.
+{ const store: Record<string, string> = {}
+  ;(globalThis as any).localStorage = { getItem: (k: string) => store[k] ?? null, setItem: (k: string, v: string) => { store[k] = v }, removeItem: (k: string) => { delete store[k] } }
+  const old = newInv(12)
+  const kept: [string, number, string][] = [
+    ['potion:health:D', 3, 'Health Salve · D'], ['potion:mana:S', 2, 'Mana Elixir · S'], ['potion:wisdom:A', 1, 'Starlight Tonic · A'],
+    ['starlight_tincture', 4, 'Starlight Tonic'], ['golden_tonic', 5, 'Golden Glaze'],
+  ]
+  kept.forEach(([id, n], i) => { old.slots[10 + i] = { id, n } })
+  store['open.inv.v1'] = JSON.stringify(old)
+  const l = loadInv()
+  for (const [id, n, name] of kept) {
+    ok(countOf(l, id) === n, `M234: an old save's ${id} x${n} did not load (got ${countOf(l, id)})`)
+    ok(itemDef(id).name === name, `M234: ${id} reads '${itemDef(id).name}', want '${name}'`)
+  }
+  delete (globalThis as any).localStorage }
 if (fails.length) { console.error(`inventory: ${pass} pass, ${fails.length} FAIL`); for (const f of fails) console.error('  ✗ ' + f); process.exit(1) }
 console.log(`inventory: ${pass}/0`)

@@ -55,7 +55,7 @@ try {
   /** Everything the brew panel is currently saying. */
   // ⚠ READ THE PLATE BY ITS `data-panel` HOOK, never by text. Both text guesses fail while looking
   // green-ish: matching the OUTERMOST div containing "at the cauldron" drags the chat log in with it
-  // (one run read "12× mana draught" — a stray 1 from the console glued to the real 2×), and the
+  // (one run read "12× mana elixir" — a stray 1 from the console glued to the real 2×), and the
   // innermost is the title line on its own, which contains no rows at all and quietly fails
   // everything downstream. The hook is one attribute in `brew-panel.tsx`.
   const panelText = () => page.evaluate(() =>
@@ -139,7 +139,7 @@ try {
   await sleep(600)
 
   // ── 3. a brew you cannot afford refuses, and SAYS WHY ───────────────────────────────────────
-  ok(await pressRow('Mana Draught'), 'the Mana Draught row is pressable')
+  ok(await pressRow('Mana Elixir'), 'the Mana Elixir row is pressable')
   await sleep(500)
   const refused = await panelText()
   ok(/missing ingredients/.test(refused),
@@ -147,7 +147,7 @@ try {
 
   // ── 4. ★★ THE SPEND PATH — bag, mana and XP all move, and the bottle survives ───────────────
   await page.keyboard.press('Escape'); await sleep(400)
-  // Mana Draught = 4 shards + 1 glow moss + 1 violetbloom petal (alchemy.ts; the petal since Yarrow's
+  // Mana Elixir = 4 shards + 1 glow moss + 1 violetbloom petal (alchemy.ts; the petal since Yarrow's
   // counter, a8f66de). Five brews' worth of each. ⚠ Section 2c already gave TWO petals, and before
   // this line counted them the first two brews quietly ate those and the third ran dry on petals
   // while the assert blamed the shards. Top up to five and count the petals like everything else.
@@ -171,18 +171,18 @@ try {
   ok(/violetbloom petal 5\/1/.test(before.replace(/\s+/g, ' ')),
     'and five violetbloom petals against the one it needs')
 
-  ok(await pressRow('Mana Draught'), 'the row is pressed with a full bag')
+  ok(await pressRow('Mana Elixir'), 'the row is pressed with a full bag')
   await sleep(900)
   const after = await panelText()
   // ⚠ `\b` DOES NOT WORK HERE. textContent runs the row's own "×2" straight into the note's
-  // "2× mana draught" with no separator, so the char before the 2 is another digit and the word
+  // "2× mana elixir" with no separator, so the char before the 2 is another digit and the word
   // boundary never fires — the assert failed on text that was perfectly correct.
   // ⚠ AND `(^|\D)` STOPPED BEING ENOUGH when the draught gained its moss (2026-09-23): the row now
-  // ENDS in "glow moss 4/1", so textContent reads "…4/12× mana draught" and the digit before the 2 is
+  // ENDS in "glow moss 4/1", so textContent reads "…4/12× mana elixir" and the digit before the 2 is
   // real. Read the yield off innerText, which breaks between the row and the note.
   const afterLines = await page.evaluate(() =>
     (document.querySelector('[data-panel="brew"]') as HTMLElement | null)?.innerText ?? '')
-  ok(/(^|\n)\s*2× mana draught/.test(afterLines), `the panel reports the yield — ${/\d+× mana draught[^\n]*/.exec(afterLines)?.[0]}`)
+  ok(/(^|\n)\s*2× mana elixir/.test(afterLines), `the panel reports the yield — ${/\d+× mana elixir[^\n]*/.exec(afterLines)?.[0]}`)
   const manaAfter = Number(/mana\s*(\d+)/.exec(after)?.[1] ?? '-1')
   ok(manaAfter <= manaBefore - 5 + 1, `mana was drained (${manaBefore} → ${manaAfter}, cost 5)`)
   const a1 = after.replace(/\s+/g, ' ')
@@ -190,7 +190,7 @@ try {
     'and four shards + one moss + one petal left the satchel — the ingredients are really spent')
 
   await page.keyboard.press('Escape'); await sleep(500)
-  const bottles = await bagHas('Mana Draught')
+  const bottles = await bagHas('Mana Elixir')
   ok(bottles >= 2, `★ the bottles are IN THE BAG (${bottles}) — not lost to a discarded leftover`)
 
   // ── 5. XP is paid, which is the only way alchemy levels in this world ───────────────────────
@@ -201,14 +201,14 @@ try {
   // Four more draughts (5 × 15 = 75 xp total) do not reach level 2 (83 xp) — this asserts the XP *road*
   // exists, not the curve. If it ever levels here, alchemy XP has been retuned and that is worth
   // knowing loudly rather than discovering in a balance pass.
-  for (let i = 0; i < 4; i++) { await pressRow('Mana Draught'); await sleep(600) }
+  for (let i = 0; i < 4; i++) { await pressRow('Mana Elixir'); await sleep(600) }
   const spent = await panelText()
   const s1 = spent.replace(/\s+/g, ' ')
   ok(/raw mana shard 0\/4/.test(s1) && /glow moss 0\/1/.test(s1) && /violetbloom petal 0\/1/.test(s1),
     `all twenty shards, five moss and five petals are gone after five draughts — ${/raw mana shard \d+\/4 · glow moss \d+\/1 · violetbloom petal \d+\/1/.exec(s1)?.[0]}`)
   // A sixth press would be the refusal, but the loop's own last press already ran on an empty bag
   // only if the count were off by one — so press once more and demand the reason.
-  await pressRow('Mana Draught'); await sleep(600)
+  await pressRow('Mana Elixir'); await sleep(600)
   ok(/missing ingredients/.test(await panelText()),
     'and the sixth press refuses, having run the bag dry')
 

@@ -7,8 +7,8 @@
 // The history below is the room's, kept as it was.
 // The cauldron BOILS canon's brews (ather/alchemy.ts). A keeper brews a Shard Tonic at the alchemy room's cauldron (shards
 // from the room's store, bark from the bag), is refused at a full bar, drinks it at 20 mana (→ 85), drinks a Starlight
-// Tincture (the buff saves per keeper and survives a reload). SETUP (stated): an alchemy room standing at (-100, 100) with
-// 3 Raw Mana Shards in its store; bag slot 8 holds 2 Goldwood Bark, slot 9 a Starlight Tincture. Hooks: movement, reading,
+// Tonic (the buff saves per keeper and survives a reload). SETUP (stated): an alchemy room standing at (-100, 100) with
+// 3 Raw Mana Shards in its store; bag slot 8 holds 2 Goldwood Bark, slot 9 a Starlight Tonic. Hooks: movement, reading,
 // __ather.drink (the click's own handler), setMana (the spend).
 // M43 (11-20): the Make button is gone. The keeper brings the bark into the STATION STORE (store panel: Pack toggle, +/All), picks the
 // brew, quantity, FOCUS; the station works it in real time with the panel open (no Moglin seeded) into its output; Collect all.
@@ -63,7 +63,7 @@ await A('setMana', 100); await A('drink'); await sleep(300)
 res.fullDrink = (await bag()).shard_tonic ?? 0
 await A('setMana', 20); await A('drink'); await sleep(300)
 res.mana = await p.evaluate(() => (window as any).__ather.mana()); res.afterDrink = (await bag()).shard_tonic ?? 0
-// 3. the Starlight Tincture (bag slot 9, so move it to the hand by pressing nothing: drink needs it HELD, so put it on the bar)
+// 3. the Starlight Tonic (bag slot 9, so move it to the hand by pressing nothing: drink needs it HELD, so put it on the bar)
 await p.evaluate(() => { const v = JSON.parse(localStorage.getItem('open.inv.v1')!); v.slots[4] = v.slots[9]; v.slots[9] = null; localStorage.setItem('open.inv.v1', JSON.stringify(v)) })
 await p.reload({ waitUntil: 'load', timeout: 180000 }); await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 180000 }); await sleep(2500)
 await p.keyboard.press('5'); await sleep(500)
@@ -78,5 +78,5 @@ const bk = res.bank as Record<string, number>, bk2 = res.bankAfterReload as Reco
 const pass = res.made === true && bk.goldwood_log === 24 && bk.raw_mana_shard === 3 && bk2.goldwood_log === 24 && bk2.raw_mana_shard === 3
   && res.tonicSlot === 3 && res.held === true && res.fullDrink === 1 && Math.abs((res.mana as number) - 85) < 3 && res.afterDrink === 0
   && bu?.starlight > Date.now() && res.afterTincture === 0 && ba?.starlight === bu.starlight && errs.length === 0
-console.log(pass ? 'PASS: the old Alchemy room retired on load (24 Goldwood Log + 3 Raw Mana Shard in the bank, not paid twice on reload) → Shard Tonic refused at a full bar → drunk at 20 (→ 85) → Starlight Tincture drunk, the buff survives a reload' : 'FAIL')
+console.log(pass ? 'PASS: the old Alchemy room retired on load (24 Goldwood Log + 3 Raw Mana Shard in the bank, not paid twice on reload) → Shard Tonic refused at a full bar → drunk at 20 (→ 85) → Starlight Tonic drunk, the buff survives a reload' : 'FAIL')
 await br.close(); process.exit(pass ? 0 : 1)

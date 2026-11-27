@@ -35,6 +35,19 @@ def parse_block(block: str) -> dict:
         if m: out[trig].append({'option': m.group(1)}); continue
     return out
 
+# M234 s1: canon renamed the potions 11-27 (game/alchemy.md > THE RECIPES SIT-DOWN: "Lines below that record older names
+# as history keep them"). The archived script is such a record, so the copy carries canon's renames, read from the ruling.
+ALCHEMY = '/root/athernyx/CANON/game/alchemy.md'
+def canon_renames() -> list:
+    lines = open(ALCHEMY).read().split('\n')
+    i = next((k for k, l in enumerate(lines) if l.startswith('- **Renamed')), None)
+    para = '' if i is None else ' '.join(lines[i:i + 4]).split('Lines below')[0]
+    return re.findall(r'([A-Z][a-z]+ [A-Z][a-z]+) → \*\*([^*]+)\*\*', para)
+
+def renamed(src: str) -> str:
+    for a, b in canon_renames(): src = src.replace(a, b)
+    return src
+
 def q(s): return json.dumps(s, ensure_ascii=False)
 
 def emit(d: dict) -> str:
@@ -74,5 +87,5 @@ export const SCRIPT = {''']
 
 if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] == '--json':
-        print(json.dumps(parse(open(CANON).read()), ensure_ascii=False)); sys.exit(0)
-    sys.stdout.write(emit(parse(open(CANON).read())))
+        print(json.dumps(parse(renamed(open(CANON).read())), ensure_ascii=False)); sys.exit(0)
+    sys.stdout.write(emit(parse(renamed(open(CANON).read()))))

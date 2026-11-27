@@ -1,6 +1,6 @@
 // ── M57 s2 THE ALCHEMIST AT THE SET, ON THE LIVE PAGE (play 9a25bc7e, hub #15616) ─────────────────────────────────────────
 // SETUP (stated, localStorage only): an Alchemy Desk stands on open ground at (-130, 102.5); the garden holds ONE recruited
-// alchemist (since M65 s2 its LUCK sets the chance, 5% for this id); a Health Draught's LAST step (at the Desk) has already finished, waiting to be collected.
+// alchemist (since M65 s2 its LUCK sets the chance, 5% for this id); a Health Salve's LAST step (at the Desk) has already finished, waiting to be collected.
 // window.__alcRoll fixes the roll (the panel's own check hook; 0 = a lucky roll, 0.99 = an unlucky one).
 //   1. E at the Desk: the 'Alchemist at the set' row lists the alchemist with its line (+N% ..., its luck); Stand here -> it stands
 //   2. the finished brew lands with a LUCKY roll: makes + 1 bottles

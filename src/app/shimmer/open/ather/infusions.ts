@@ -8,7 +8,7 @@
 // set's stations, each from its element's gem (prospecting.ts GEM, RULED c73ab4e: Aqual water, Dinloid earth, Fuli mana,
 // Rhyloid storm; their bag ids are the old `<kind>_crystal` keys):
 //   Water = Shimmerscale ground to powder at the CRUSHER + Aqual           -> Aqual Sauce
-//   Earth = Goldleaf + Dinloid at the STILL                                -> Golden Tonic
+//   Earth = Goldleaf + Dinloid at the STILL                                -> Golden Glaze
 //   Storm = Stormgrass + Rhyloid boiled at the CAULDRON (the Cauldron Nook) -> Storm Broth
 //   Mana  = Fuli ground at the CRUSHER                                     -> Fuli Powder
 // "these would all just be part of recipes to add the element to the dish": a dish cooked with one is that element's meal
@@ -57,7 +57,7 @@ export type InfusionStation = 'crusher' | 'still' | 'nook'
 export interface InfusionRecipe { id: string; name: string; at: InfusionStation; in: readonly { id: string; n: number }[] }
 export const INFUSION: Readonly<Record<FormElement, InfusionRecipe>> = {
   water: { id: 'aqual_sauce', name: 'Aqual Sauce', at: 'crusher', in: [{ id: 'shimmerscale_scales', n: 1 }, { id: 'water_crystal', n: 1 }] },   // M206: the scales off the Filet tab (cooking.ts SCALES)
-  earth: { id: 'golden_tonic', name: 'Golden Tonic', at: 'still', in: [{ id: 'crop:goldleaf', n: 1 }, { id: 'earth_crystal', n: 1 }] },
+  earth: { id: 'golden_tonic', name: 'Golden Glaze', at: 'still', in: [{ id: 'crop:goldleaf', n: 1 }, { id: 'earth_crystal', n: 1 }] },
   storm: { id: 'storm_broth', name: 'Storm Broth', at: 'nook', in: [{ id: 'crop:stormgrass', n: 1 }, { id: 'storm_crystal', n: 1 }] },
   mana: { id: 'fuli_powder', name: 'Fuli Powder', at: 'crusher', in: [{ id: 'violet_crystal', n: 1 }] },
 }

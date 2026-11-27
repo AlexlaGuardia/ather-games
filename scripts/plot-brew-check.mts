@@ -1,8 +1,8 @@
 // BETA M57 slice 3b check (plot-brew-check): A BREWING with a party. Host A and guest B (party mates, B visiting A's plot) brew
-// one Health Draught together over the relay; each step spends from the hand that takes it; both get bottles at the pour.
+// one Health Salve together over the relay; each step spends from the hand that takes it; both get bottles at the pour.
 //   SETUP (stated): A's plot = the four alchemy pieces placed in a row (Crusher, Cauldron Nook, Still, Desk); A's bag = 2
 //   Goldleaf + 2 Dewdrop Vine, B's bag = 2 Shimmerscale. Nobody holds an alchemist (no boon). Seeded in localStorage.
-//   1. A at its Desk (E, aimed) clicks "Brew with your party: Health Draught" (real click).  2. B visits (the visit link), at the
+//   1. A at its Desk (E, aimed) clicks "Brew with your party: Health Salve" (real click).  2. B visits (the visit link), at the
 //   Crusher E opens the BREWING panel (a guest's E at a mate's piece used to be refused) and takes the crush: B's scale leaves
 //   B's bag.  3. A takes the steep at the Nook: A's crops leave A's bag.  4. once the steep is made, B takes the Still (from the
 //   pool, nothing out of its bag).  5. A takes the Desk.  6. the pour lands on its own: total = totalBottles(2, 2 hands) = 4,
@@ -45,7 +45,7 @@ const PIECES = { crusher: P('pb-crush', 'alc_mortar', -6), nook: P('pb-nook', 'a
 const WORKS = { v: 1, rooms: [], chests: [], pieces: Object.values(PIECES) }
 const bagOf = (items: { id: string; n: number }[]) => { const slots: unknown[] = Array(32).fill(null); items.forEach((it, i) => { slots[8 + i] = it }); return { v: 1, slots, gifts: ['bait1'] } }
 const TOTAL = totalBottles(ALC_POTIONS.health.makes, 2)
-console.log(`set at ${spot.x},${spot.z}, party ${CODE}, a 2-hand Health Draught pours ${TOTAL}`)
+console.log(`set at ${spot.x},${spot.z}, party ${CODE}, a 2-hand Health Salve pours ${TOTAL}`)
 
 const br = await puppeteer.launch({ protocolTimeout: 300000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
 const poll = async (fn: () => Promise<boolean>, ms = 90000) => { const t = Date.now(); while (Date.now() - t < ms) { if (await fn().catch(() => false)) return true; await sleep(500) } return false }
@@ -99,8 +99,8 @@ try {
   ok(await poll(async () => (await ev(a, '__mp', 'zone')) === `open:plot:${idA}` && (await ev(a, '__mp', 'status')) === 'live', 120000), `0. A hosts (${await ev(a, '__mp', 'zone')})`)
   // 1 · A opens a brewing at its Desk
   ok(await useAt(a, PIECES.desk, 'alchemy'), "1. A's E at its Desk opens the Desk")
-  ok(await poll(async () => !!(await a.$('[data-act="brew-open"][data-potion="health"]')), 10000) && await click(a, '[data-act="brew-open"][data-potion="health"] button'), '1. A clicked "Brew with your party: Health Draught"')
-  ok(await poll(async () => (await a.evaluate(() => (window as any).__brew.shown()?.potion)) === 'health', 8000), '1. a brewing of Health Draught is open on A')
+  ok(await poll(async () => !!(await a.$('[data-act="brew-open"][data-potion="health"]')), 10000) && await click(a, '[data-act="brew-open"][data-potion="health"] button'), '1. A clicked "Brew with your party: Health Salve"')
+  ok(await poll(async () => (await a.evaluate(() => (window as any).__brew.shown()?.potion)) === 'health', 8000), '1. a brewing of Health Salve is open on A')
 
   // 2 · B visits, takes the crush at the Crusher
   const bCtx = await br.createBrowserContext()

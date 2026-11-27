@@ -80,7 +80,7 @@ export const ROAST: readonly Job[] = [
   roast('roast_rootbulb', 'rootbulb'),
 ]
 
-/** M204 (Alex 11-26): THE ELEMENT MEALS. M207: an INFUSION (infusions.ts INFUSION: Aqual Sauce, Golden Tonic, Storm Broth,
+/** M204 (Alex 11-26): THE ELEMENT MEALS. M207: an INFUSION (infusions.ts INFUSION: Aqual Sauce, Golden Glaze, Storm Broth,
  *  Fuli Powder, made at the alchemy set) + one Shimmerscale cooks into a meal a garden spirit is FED (her panel): it adds the
  *  infusion's element to her bar for good. Not eaten by the keeper (not a DISH). Ids spelled out here so this data file stays
  *  import-free (infusions.ts INFUSION / mealId make the same strings; infusions.test checks they agree). */

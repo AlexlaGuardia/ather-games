@@ -1,7 +1,7 @@
 // BETA M188 s4: BREWINGS ON THE CHORDSTONE + THE RSVP + THE MAP DOOR, PLAYED. Signed-in TEST keepers from s3 (dummy_ash = A,
 // the host; dummy_birch = B; dummy_fir = a stranger for the private case: the check takes the ash-fir friendship away for the
 // run and gives it back). Never Alex's account.
-//   1. A at the Chordstone, Brewings card, Host tab: Health Draught, 'In 5 minutes', Public, opens two steps, posts it;
+//   1. A at the Chordstone, Brewings card, Host tab: Health Salve, 'In 5 minutes', Public, opens two steps, posts it;
 //      A's card lists it under Your brewings
 //   2. B's Brewings card, Find: A's brewing is listed; opening it shows the time, host, potion, '2 of 2 seats free';
 //      B takes a seat -> B's card shows the RSVP; A's card shows B in that seat
@@ -109,7 +109,7 @@ try {
   const mine = BW.listBrewings(KA.id).filter(b => b.mine)
   const bid = mine[0]?.brewing_id ?? ''
   ok(mine.length === 1 && mine[0].potion === 'health' && mine[0].public && JSON.stringify(mine[0].seats.map(s => s.step)) === '[1,2]' && Math.abs(mine[0].at - (t0 + 5 * 60_000)) < 20_000,
-    `the record: one public Health Draught brewing, seats [1,2], ~5 min ahead (${JSON.stringify(mine[0] ?? null).slice(0, 160)})`)
+    `the record: one public Health Salve brewing, seats [1,2], ~5 min ahead (${JSON.stringify(mine[0] ?? null).slice(0, 160)})`)
   await shot(A, 'b-hosted')
   // 2 B finds + takes a seat
   ok(await openStone(B), 'B: the Chordstone panel, Brewings card')
@@ -119,7 +119,7 @@ try {
   ok(await poll(async () => !!(await B.$(`[data-brew-detail="${bid}"]`)), 5000), 'B opens it')
   const det = { when: await text(B, '[data-brew-when]'), host: await text(B, '[data-brew-host]'), free: await text(B, '[data-brew-free]'), icon: !!(await B.$(`[data-brew-detail="${bid}"] [data-potion-icon="health"]`)) }
   ok(/\d/.test(det.when) && /in \d+ min/.test(det.when) && det.host.includes(KA.name) && det.free.startsWith('2 of 2') && det.icon,
-    `the brewing shows time "${det.when}", host "${det.host}", potion Health Draught (icon ${det.icon}), "${det.free}"`)
+    `the brewing shows time "${det.when}", host "${det.host}", potion Health Salve (icon ${det.icon}), "${det.free}"`)
   await shot(B, 'd-detail')
   ok(await click(B, '[data-brew-take="1"]'), 'B takes seat 1')
   ok(await poll(async () => !!(await B.$(`[data-brew-rsvp="${bid}"]`)), 10000), `★ B holds the RSVP ("${await text(B, `[data-brew-rsvp="${bid}"]`)}")`)

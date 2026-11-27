@@ -7935,7 +7935,7 @@ export default function Shimmer3D() {
     const rounds = Math.min(missing, Math.floor((manaRef.current.current / reloadMana) * W.clip))
     if (rounds < 1) {
       const t = performance.now()  // dry-fire calls this every 0.25s — don't toast-spam
-      if (t - dryToastAt.current > 1500) { dryToastAt.current = t; setHarvestToast('No mana to recharge — drink a Mana Draught') }
+      if (t - dryToastAt.current > 1500) { dryToastAt.current = t; setHarvestToast('No mana to recharge — drink a Mana Elixir') }
       return
     }
     reloadingRef.current = 1
@@ -9675,7 +9675,7 @@ export default function Shimmer3D() {
         <HearthPill face={HUD_FACE} accent={H.ember} style={{ position: 'fixed', top: 44, left: '50%', transform: 'translateX(-50%)', zIndex: 36 }}>{matchHud}</HearthPill>
       )}
 
-      {/* ── THE HOLD's HUD: round · salvage · the lull (the Lull Draught, ruled 09-27; the state field stays `hush`) · surge, what E does here, and the fall ── */}
+      {/* ── THE HOLD's HUD: round · salvage · the lull (the Lull Tonic, ruled 09-27; the state field stays `hush`) · surge, what E does here, and the fall ── */}
       {zoneId === HOLD_ZONE && holdHud && !editMode && (
         <>
           <HearthPill face={HUD_FACE} style={{ position: 'fixed', top: 54, left: '50%', transform: 'translateX(-50%)', zIndex: 35 }}>
@@ -9717,7 +9717,7 @@ export default function Shimmer3D() {
                   : <span>{holdKey} — {holdHud.weapon.tier === 'untuned' ? 'tune' : 're-key'} the {holdHud.weapon.name} <HearthPillSoft face={HUD_FACE}>{holdHud.weapon.next} salvage</HearthPillSoft></span>)}
               {holdHud.prompt.kind === 'bench' && !labOpen && <span>{holdKey} — the bench: study the wrack <HearthPillSoft face={HUD_FACE}>{holdHud.prompt.wrack} carried</HearthPillSoft></span>}
               {holdHud.prompt.kind === 'bench' && labOpen && <span>{holdKey} — step back from the bench</span>}
-              {holdHud.prompt.kind === 'cache' && <span>{holdKey} — take a Lull Draught (+{HOLD_TUNING.cacheSec}s) <HearthPillSoft face={HUD_FACE}>{holdHud.prompt.cost} salvage</HearthPillSoft></span>}
+              {holdHud.prompt.kind === 'cache' && <span>{holdKey} — take a Lull Tonic (+{HOLD_TUNING.cacheSec}s) <HearthPillSoft face={HUD_FACE}>{holdHud.prompt.cost} salvage</HearthPillSoft></span>}
             </HearthPill>
           )}
           {labOpen && holdHud.prompt?.kind === 'bench' && !holdHud.over && (

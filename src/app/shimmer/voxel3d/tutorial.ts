@@ -124,7 +124,7 @@ export type TutorialEffect =
   | 'take_blade'    // remove it
   | 'give_shard'    // raw_mana_shard ×1, Greg's ask
   | 'fold'          // the gate opens; hand out the starter bag (tools + crafting table)
-  | 'yarrow_page'   // Yarrow's counter: both petals in hand, the Mana Draught in the book
+  | 'yarrow_page'   // Yarrow's counter: both petals in hand, the Mana Elixir in the book
 
 export interface Talk {
   next: TutorialState

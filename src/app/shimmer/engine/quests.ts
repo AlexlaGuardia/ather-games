@@ -87,7 +87,7 @@ export const QUEST_DEFS: Record<string, QuestDef> = {
   // Side quests
   first_brew: {
     id: 'first_brew', name: 'First Brew', category: 'side',
-    description: 'Use the alchemy table to brew your first Mana Draught.',
+    description: 'Use the alchemy table to brew your first Mana Elixir.',
     prerequisites: ['gathering_101'],
     objectives: [{ type: 'brew', potionId: 'mana_draught', count: 1 }],
     rewards: [{ type: 'marks', amount: 50 }, { type: 'xp', skillId: 'alchemy', amount: 20 }],

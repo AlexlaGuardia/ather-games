@@ -51,11 +51,11 @@ ok(yes.shown.join('|') === txt(['alchemist.offer.1', 'alchemist.offer.2', 'alche
 t = rt(yes.t)
 ok(t.m70side === 'open' && deskOpen(t), 'Show me: open, Desk works')
 ok(walk(t, false).shown.join() === txt(['alchemist.bark.open']).join(), 'while open: bark.open')
-ok(walk(t, true).shown.join() === txt(['alchemist.bark.open']).join() && walk(t, true).sets === 0 && angelicaStart(t, true)?.mode === 'bark', 'open + a gifted Health Draught in the bag: still the bark, no hand-over (brew first)')
+ok(walk(t, true).shown.join() === txt(['alchemist.bark.open']).join() && walk(t, true).sets === 0 && angelicaStart(t, true)?.mode === 'bark', 'open + a gifted Health Salve in the bag: still the bark, no hand-over (brew first)')
 
 // ── step 1 gather
 const name = (id: string) => ({ shimmerscale: 'Shimmerscale', 'crop:goldleaf': 'Goldleaf', 'crop:dewdrop_vine': 'Dewdrop Vine' } as Record<string, string>)[id] ?? id
-ok(JSON.stringify(BATCH_NEEDS) === JSON.stringify([{ id: 'shimmerscale', n: 2 }, { id: 'crop:goldleaf', n: 2 }, { id: 'crop:dewdrop_vine', n: 2 }]), `the batch takes the Health Draught's raw makings (${JSON.stringify(BATCH_NEEDS)})`)
+ok(JSON.stringify(BATCH_NEEDS) === JSON.stringify([{ id: 'shimmerscale', n: 2 }, { id: 'crop:goldleaf', n: 2 }, { id: 'crop:dewdrop_vine', n: 2 }]), `the batch takes the Health Salve's raw makings (${JSON.stringify(BATCH_NEEDS)})`)
 ok(sideStep(t, {}) === 'gather' && sideQuest(t, {}, name)?.note === 'Gather 2 Shimmerscale, 2 Goldleaf and 2 Dewdrop Vine.', `gather text (${sideQuest(t, {}, name)?.note})`)
 ok(sideQuest(t, {}, name)?.title === 'A Proper Batch', 'journal title = canon')
 const bag = { shimmerscale: 2, 'crop:goldleaf:B': 1, 'crop:goldleaf:D': 1, 'crop:dewdrop_vine:C': 2, 'potion:health:D': 3 }
@@ -64,7 +64,7 @@ ok(batchReady(bag) && sideStep(t, bag) === 'brew' && sideQuest(t, bag, name)?.no
 
 // ── step 2 brew (the whole chain, the keeper's hands)
 const b = brewBatch(bag)!
-ok(b && b.make.n === 2 && b.make.id === 'potion:health:C', `the batch pours 2 Health Draughts graded from the crops (B+D goldleaf, C vine -> C) (${JSON.stringify(b?.make)})`)
+ok(b && b.make.n === 2 && b.make.id === 'potion:health:C', `the batch pours 2 Health Salves graded from the crops (B+D goldleaf, C vine -> C) (${JSON.stringify(b?.make)})`)
 ok(JSON.stringify(b.spend.map(x => `${x.id}x${x.n}`).sort()) === JSON.stringify(['crop:dewdrop_vine:Cx2', 'crop:goldleaf:Bx1', 'crop:goldleaf:Dx1', 'shimmerscalex2']), `spends exactly the raw makings (${b.spend.map(x => x.id + 'x' + x.n)})`)
 t = rt(brewed(t))
 ok(t.m70side === 'brewed' && brewed(t) === t, 'brewed (once; never backwards)')

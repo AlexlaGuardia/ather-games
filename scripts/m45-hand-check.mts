@@ -2,7 +2,7 @@
 // Alex 11-20: "i should be able to see the item in the right hand and E to place or use that item .. the planning table
 // took the placing of furniture". Plays: 1 equips two Goldwood Stools → a ghost stands ahead → an E tap sets one (bag -1) →
 // an E HOLD turns the ghost (two quarters) → the tap sets the second at q=2 → the hand empties to stowed. The planning table
-// has no Furnish / Found-Keepstone rows. 2 equips a Violet Keepstone → E sets it. 3 equips a Starlight Tincture → E drinks.
+// has no Furnish / Found-Keepstone rows. 2 equips a Violet Keepstone → E sets it. 3 equips a Starlight Tonic → E drinks.
 // Then a PHONE leg (390x844, touch): 1 equips a stool, the placing bar's Place sets it.
 // SETUP (stated): the bag holds 2 stools, 1 Violet Keepstone, 1 tincture, an empty works. Hooks: tp + reading only.
 //   npx tsx scripts/m45-hand-check.mts [--url http://localhost:3203] [--out dir]

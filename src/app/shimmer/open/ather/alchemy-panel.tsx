@@ -139,7 +139,7 @@ export function AlchemyPanel({ pid, station, onClose, footer, boon }: { pid: str
 }
 
 /** M207 (Alex 11-26): the four INFUSIONS, meal ingredients made at once at their station (infusions.ts INFUSION): Aqual Sauce +
- *  Fuli Powder at the Crusher Table, Golden Tonic at the Still, Storm Broth at the Cauldron Nook. A crop goes in worst grade
+ *  Fuli Powder at the Crusher Table, Golden Glaze at the Still, Storm Broth at the Cauldron Nook. A crop goes in worst grade
  *  first (an infusion carries no grade). The infusion cooks into its element's meal at the hearth. */
 function InfusionList({ station, have }: { station: AlcStation; have: Have }) {
   const make = (el: ReturnType<typeof infusionsAt>[number]) => {

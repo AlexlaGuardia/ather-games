@@ -1,16 +1,16 @@
 // ── BETA M204 s1 + M207 THE ELEMENT COMES FROM COOKING: OWNER + ?spirits=3d (2026-11-26, play-M204cook; M207 world-M207) ───
 // Alex 11-26: the four INFUSIONS are made at the alchemy set (M207: Aqual Sauce = Shimmerscale + Aqual at the Crusher, Fuli
-// Powder = Fuli at the Crusher, Golden Tonic = Goldleaf + Dinloid at the Still, Storm Broth = Stormgrass + Rhyloid at the
+// Powder = Fuli at the Crusher, Golden Glaze = Goldleaf + Dinloid at the Still, Storm Broth = Stormgrass + Rhyloid at the
 // Cauldron Nook), an infusion + a Shimmerscale is cooked into its element's meal at the hearth, the meal FED to a spirit fills
 // one slot of a 10-slot bar by her name in the element's colour; it never resets or changes; 3 meals of one element + M201's
 // stat bar = she evolves; 10 = the bar is full and locked. ASSERTS MOVED (M207): phase A was "grind Rootvine -> Earth Spice";
-// it is now the four infusions at three stations + an OLD SAVE's Earth Spice loading as a Golden Tonic.
+// it is now the four infusions at three stations + an OLD SAVE's Earth Spice loading as a Golden Glaze.
 // SETUP (stated): bag = 5 Shimmerscale + 1 Shimmerscale Scales (M206: the sauce grinds the scales), 1 each Aqual / Fuli / Dinloid / Rhyloid, 1 Goldleaf (B), 1 Stormgrass (C), 1 OLD
 // Earth Spice (M204 save), 2 Earth Meals + 4 Water Meals; Crusher Table, Still, Cauldron Nook 4 m apart from (-130, 102.5)
 // (phase A), a cooking room at (-100, 100) (phase B), then a bloomed fox planter at (-130, 102.5) in the party (phase C). Her
 // stat record: 30 growths + 5 GRD played, so the Earth form's GRD bar is met (asserted in the panel first).
 //  A. E at each station: its infusions listed and makeable; Make -> the infusion in the bag, its inputs spent. The old Earth
-//     Spice reads as a Golden Tonic (2 with the Still's). Rootvine is nowhere in the bag: M204 s3, an old save's 2 Rootvine (A)
+//     Spice reads as a Golden Glaze (2 with the Still's). Rootvine is nowhere in the bag: M204 s3, an old save's 2 Rootvine (A)
 //     + 1 Rootvine seed load as 2 Goldleaf (A) + 1 Goldleaf seed (canon 35c83eb: Rootvine RETIRED, Goldleaf the earth herb).
 //     C also reads the bar's label: canon's Steep, 'Steep 0/10' / '2/10' / '10/10'.
 //  B. E at the hearth: Cook each element's meal from its infusion + a scale; Focus; collect -> +1 Mana, +1 Storm, +2 Earth,
@@ -88,7 +88,7 @@ try {
     await p.keyboard.press('Escape'); await sleep(500)
   }
   const a = await bag()
-  ok(a.fuli_powder === 1 && a.aqual_sauce === 1 && a.storm_broth === 1 && a.golden_tonic === 2, `A bag: 1 Fuli Powder, 1 Aqual Sauce, 1 Storm Broth, 2 Golden Tonic (the old Earth Spice converted) ${JSON.stringify({ f: a.fuli_powder, aq: a.aqual_sauce, s: a.storm_broth, g: a.golden_tonic })}`)
+  ok(a.fuli_powder === 1 && a.aqual_sauce === 1 && a.storm_broth === 1 && a.golden_tonic === 2, `A bag: 1 Fuli Powder, 1 Aqual Sauce, 1 Storm Broth, 2 Golden Glaze (the old Earth Spice converted) ${JSON.stringify({ f: a.fuli_powder, aq: a.aqual_sauce, s: a.storm_broth, g: a.golden_tonic })}`)
   ok(!a.earth_spice && !a.water_crystal && !a.violet_crystal && !a.earth_crystal && !a.storm_crystal && !a['crop:goldleaf:B'] && !a['crop:stormgrass:C'] && !a.shimmerscale_scales && a.shimmerscale === 5,
     `A the inputs spent (gems, Goldleaf, Stormgrass, the Shimmerscale scales (M206); 5 Shimmerscale left: ${a.shimmerscale}); no spice left`)
   ok(!Object.keys(a).some(k => k.includes('rootvine')), 'A no Rootvine anywhere in the bag')

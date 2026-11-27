@@ -1044,6 +1044,42 @@ function toMarkdown(counts) {
   return md
 }
 
+// ── GATE 11b: RENAMED POTIONS (M234 s1; canon game/alchemy.md › THE RECIPES SIT-DOWN, athernyx 043e3a6) ──
+// The sit-down renamed five things in one ruling (Health Draught → Health Salve, Mana Draught → Mana Elixir, Starlight
+// Tincture → Starlight Tonic, Lull Draught → Lull Tonic, the earth infusion Golden Tonic → Golden Glaze). Canon wrote the
+// package as a prose bullet, not as a RETIRED VOCABULARY row, so GATE 11 cannot see it: this reads the pairs from the
+// ruling itself (the `- **Renamed` bullet, "X → **Y**"), so a later rename in the same bullet is checked with no edit here.
+// ★ The match is the NAME as written, spaced or run together ("Mana Draught", "ManaDraught"), case-blind; the saved IDS
+// (`mana_draught`, `starlight_tincture`, `golden_tonic`) deliberately stay so old saves keep loading, and an underscore never
+// matches. Prose counts, as in GATE 11: a comment naming the old potion is what the next person copies into a label.
+{
+  const p = join(CANON, 'game', 'alchemy.md')
+  const lines = existsSync(p) ? read(p).split('\n') : []
+  const at = lines.findIndex((l) => l.startsWith('- **Renamed'))
+  const para = at < 0 ? '' : lines.slice(at, at + 4).join(' ').split('Lines below')[0]
+  const pairs = [...para.matchAll(/([A-Z][a-z]+ [A-Z][a-z]+) → \*\*([^*]+)\*\*/g)].map((m) => [m[1], m[2]])
+  if (!pairs.length) {
+    add('BLIND', 'renamed-potions', 'could not read the rename package in game/alchemy.md — THE CHECK DID NOT RUN',
+      'The source is the `- **Renamed` bullet under THE RECIPES SIT-DOWN. If canon moved or reworded it, point this reader at it; do not delete the gate.')
+  } else {
+    const SRC = '/root/ather-games/src/app/shimmer'
+    let bad = 0
+    for (const [was, now] of pairs) {
+      const pat = was.toLowerCase().replace(' ', ' ?')
+      let hits = []
+      try {
+        hits = execSync(`grep -rniE "${pat}" --include=*.ts --include=*.tsx ${SRC} || true`, { encoding: 'utf8' }).trim().split('\n').filter(Boolean)
+      } catch { hits = [] }
+      if (!hits.length) continue
+      bad++
+      const where = hits.slice(0, 4).map((h) => h.split('/shimmer/')[1]?.split(':').slice(0, 2).join(':')).join(' · ')
+      add('COLLISION', 'renamed-potions', `'${was}' was renamed '${now}' (alchemy.md, 11-27) and still ships in ${hits.length} place(s)`,
+        `Say '${now}'. Keep the saved id (it has an underscore and is not matched) so old saves load. First hits: ${where}.`)
+    }
+    if (!bad) add('CLEAN', 'renamed-potions', `no renamed potion name ships; ${pairs.length} rename(s) read from canon`)
+  }
+}
+
 // ── GATE 13: CREATURE SIZES ─────────────────────────────────────────────────
 // ★★★ THIS IS THE GATE THAT STOPS A TRANSCRIPTION BECOMING A HAND-KEPT MIRROR.
 // `sprites/creature-size.ts` carries a height per species. Until 2026-08-27 those were the build
@@ -1252,7 +1288,7 @@ console.log('canon-drift: ' + ORDER.filter((s) => counts[s]).map((s) => `${count
 const LIVE_AREAS = [...new Set(findings.map((f) => f.area))].sort()
 const PINNED_AREAS = [
   'base-species', 'birth-affinity', 'canon-holds', 'canon-vs-canon', 'creature-sizes', 'element-herbs', 'grown-sizes',
-  'infusions', 'keeper-moves', 'mist-rosters', 'npcs', 'retired-vocab', 'second-forms', 'zones',
+  'infusions', 'keeper-moves', 'mist-rosters', 'npcs', 'renamed-potions', 'retired-vocab', 'second-forms', 'zones',
 ].sort()
 
 if (!QUIET) {
@@ -1267,7 +1303,7 @@ if (!QUIET) {
     'design-brief HOLDS — a brief still holding art that a later ruling released',
     'whether a ruled fact reached the BUILD at all — a ruling nothing implements reads clean here',
     'prose claims inside canon files — only the tabled/rostered facts are diffed',
-    'VOCABULARY, beyond the exact nouns canon has listed as retired — and read that narrowly.',
+    'VOCABULARY, beyond the exact nouns canon has listed as retired (and the alchemy.md rename package) — and read that narrowly.',
     '  A green retired-vocab does NOT mean the build says what canon says. It means no noun on',
     '  canon\'s list ships in a form this gate judges. ⚠ BOTH of 2026-08-24\'s vocabulary drifts',
     '  would have passed it: one used a word that was never retired, the other a word retired in',

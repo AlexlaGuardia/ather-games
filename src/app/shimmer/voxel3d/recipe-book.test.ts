@@ -55,7 +55,7 @@ ok(!/\s/.test(HERB_PAIR.right.name) && !/\s/.test(HERB_PAIR.wrong.name), '§4 si
 ok(fillHerbs('<RIGHT>/<WRONG>') === `${HERB_PAIR.right.name}/${HERB_PAIR.wrong.name}`, '§4 fillHerbs fills both')
 
 // §5 the draught uses the herb Yarrow hands over — or the lesson is a lie at the pot.
-ok(POTION_DEFS[FIRST_RECIPE].recipe.some(r => r.itemId === HERB_PAIR.right.itemId), '§5 ★ the Mana Draught takes the right herb')
+ok(POTION_DEFS[FIRST_RECIPE].recipe.some(r => r.itemId === HERB_PAIR.right.itemId), '§5 ★ the Mana Elixir takes the right herb')
 ok(!POTION_DEFS[FIRST_RECIPE].recipe.some(r => r.itemId === HERB_PAIR.wrong.itemId), '§5 and never the wrong one')
 
 // §6 the ladder: one pour, one page, gated by level; nothing before Yarrow's page.

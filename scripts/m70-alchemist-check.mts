@@ -5,7 +5,7 @@
 //   6 Angelica: offer.1, offer.2 + 'Show me.' / 'Later.' -> Later -> alchemist.no, no quest
 //   7 again -> Show me -> alchemist.yes; A Proper Batch in the journal (step gather); bark.open while open
 //   8 gather: the batch's raw makings put in the bag (CHECK SHORTCUT: farming + fishing are their own checks), reload -> step brew
-//   9 brew at Angelica's Desk (the real E + the panel's button) -> 2 Health Draughts, the makings spent, step hand
+//   9 brew at Angelica's Desk (the real E + the panel's button) -> 2 Health Salves, the makings spent, step hand
 //   10 hand the bottle -> reward.1-3 in order, the alchemy set in the bag once, the done line in the journal
 //   11 reload: Angelica has nothing more, no second set; 0 page errors
 import puppeteer, { type Page } from 'puppeteer-core'
@@ -211,7 +211,7 @@ try {
   ok(await p.evaluate(() => [...document.querySelectorAll('[data-desk-need]')].every(e => e.getAttribute('data-desk-ok') === '1')), '9. the Desk shows every making held')
   await p.screenshot({ path: `${out}/m70s3-2-desk-390.png` })
   await p.evaluate(() => document.querySelector<HTMLButtonElement>('[data-desk-brew] button')?.click()); await sleep(1200)
-  ok(await poll(async () => (await countIn('potion:health:C')) - potBefore === 2, 8000), `9. 2 Health Draughts poured (${(await countIn('potion:health:C')) - potBefore})`)
+  ok(await poll(async () => (await countIn('potion:health:C')) - potBefore === 2, 8000), `9. 2 Health Salves poured (${(await countIn('potion:health:C')) - potBefore})`)
   const left = await Promise.all(GOT.map(g => countIn(g.id)))
   ok(left.every(n => n === 0), `9. the makings spent (${GOT.map((g, k) => g.id + ' ' + left[k])})`)
   ok(await poll(async () => (await side())?.side === 'brewed' && (await side())?.step === 'hand', 8000), `9. brewed, step hand (${JSON.stringify(await side())})`)

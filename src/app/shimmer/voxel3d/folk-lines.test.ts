@@ -44,7 +44,19 @@ function parseBlock(block: string): Record<string, Beat[]> {
   return out
 }
 
-const canon = parse(readFileSync(CANON, 'utf8'))
+// M234 s1: canon RENAMED the potions 11-27 (game/alchemy.md › THE RECIPES SIT-DOWN, "Renamed ... Lines below that record
+// older names as history keep them"). The archived script is such a record, so the glade speaks it with canon's renames
+// applied, read from the ruling itself (the generator does the same), never from a list typed here.
+const ALCHEMY = '/root/athernyx/CANON/game/alchemy.md'
+export function canonRenames(src: string): [string, string][] {
+  const line = src.split('\n').findIndex(l => l.startsWith('- **Renamed'))
+  const para = line < 0 ? '' : src.split('\n').slice(line, line + 4).join(' ').split('Lines below')[0]
+  return [...para.matchAll(/([A-Z][a-z]+ [A-Z][a-z]+) → \*\*([^*]+)\*\*/g)].map(m => [m[1], m[2]])
+}
+const RENAMES = canonRenames(readFileSync(ALCHEMY, 'utf8'))
+ok(RENAMES.length === 5, `canon's rename package reads as 5 pairs (got ${JSON.stringify(RENAMES)})`)
+const renamed = (src: string) => RENAMES.reduce((t, [a, b]) => t.split(a).join(b), src)
+const canon = parse(renamed(readFileSync(CANON, 'utf8')))
 const ours = SCRIPT as Record<string, readonly Beat[]>
 
 ok(Object.keys(canon).length === Object.keys(ours).length,

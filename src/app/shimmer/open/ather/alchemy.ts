@@ -5,7 +5,7 @@
 // The potions, their names and recipes are canon's own (engine/alchemy.ts › POTION_DEFS, the shared table play3d + voxel
 // brew from). The open world brews the ones it can reach: every input below is a bag row the Wilds already give.
 //   · SHARD TONIC   — mana back at once (engine/potion-effects.ts › MANA_POTIONS: 65).
-//   · STARLIGHT TINCTURE — Starlight: gathering XP ×1.5 for 8 min (BUFF_DEFS.starlight, STARLIGHT_XP).
+//   · STARLIGHT TONIC — Starlight: gathering XP ×1.5 for 8 min (BUFF_DEFS.starlight, STARLIGHT_XP).
 //   · ATHER INFUSION — Ather Flow: mana regen x2 for 3 min in the open world (M78, shared/vitals-economy.ts; canon BUFF_DEFS says 10).
 // ★ WHY ATHER FLOW IS ×2 HERE, NOT THE ENGINE'S ×10: ATHER_REGEN was tuned against play3d's 1 mana a MINUTE ("a felt trickle").
 //   The open world refills 1.5 a SECOND (page.tsx manaRef); ×10 would be 15/s, a bar every seven seconds, which deletes mana as
@@ -42,7 +42,7 @@ export const POTIONS: Readonly<Record<string, PotionRow>> = {
     recipe: [{ id: 'raw_mana_shard', n: 3 }, { id: 'goldwood_bark', n: 2 }], makes: 1, mana: 65,
   },
   starlight_tincture: {
-    name: 'Starlight Tincture', blurb: 'Starwillow sap, mana cores and glowfin, boiled together. Hold it and click to drink. Gathering teaches you half again as much for 8 minutes.',
+    name: 'Starlight Tonic', blurb: 'Starwillow sap, mana cores and glowfin, boiled together. Hold it and click to drink. Gathering teaches you half again as much for 8 minutes.',
     recipe: [{ id: 'starwillow_sap', n: 3 }, { id: 'pure_mana_core', n: 2 }, { id: 'glowfin', n: 2 }], makes: 1, buff: { id: 'starlight', ms: 8 * 60_000 },
   },
   ather_infusion: {
@@ -65,7 +65,7 @@ export const withBuff = (b: Buffs, id: BuffId, ms: number, now = Date.now()): Bu
 
 export type Drink = { ok: true; mana?: number; heal?: number; buffs: Buffs; line: string } | { ok: false; why: string }
 /** What drinking `id` does now. Refuses a tonic at a full bar (it would be wasted). The page spends the bottle on ok. */
-/** `hpMax` = the keeper's max health (a Health Draught heals a share of it, M78). */
+/** `hpMax` = the keeper's max health (a Health Salve heals a share of it, M78). */
 export function drink(id: string, mana: { cur: number; max: number }, buffs: Buffs, now = Date.now(), hpMax = 100): Drink {
   if (isAlcPotion(id)) {   // M57: a graded bottle from the alchemy set; its grade is already in the numbers (effectOf)
     const e = effectOf(id)!, name = alcName(id)!

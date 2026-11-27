@@ -1,6 +1,6 @@
 // THE CORKHOUSE (BETA M57 s4): a keeper carrying bottles walks to Rune Hold's Corkhouse door (by the shipyard), E opens it, sells
 // all of one kind and one of another (real clicks): the purse rises by exactly corkhouse.ts's prices, the bottles leave the bag, and
-// with nothing left the counter says so. SETUP (stated): bag seeded with 3 Health Draught (D) + 1 Starlight Tincture (A).
+// with nothing left the counter says so. SETUP (stated): bag seeded with 3 Health Salve (D) + 1 Starlight Tonic (A).
 //   --phone: 390x844 touch: "Tap to drive", the near chip instead of E, taps on the counter, the panel shot + a fit check.
 //   npx tsx scripts/corkhouse-check.mts [--url https://ather.games] [--out dir] [--phone]
 import puppeteer from 'puppeteer-core'
@@ -65,12 +65,12 @@ try {
     const fit = await p.evaluate(() => { const e = document.querySelector('[data-panel="shop-panel"]') as HTMLElement | null, r = e?.getBoundingClientRect(); return r ? { l: r.left, r: r.right, w: window.innerWidth, scroll: document.documentElement.scrollWidth } : null })
     ok(!!fit && fit.l >= 0 && fit.r <= fit.w + 1 && fit.scroll <= fit.w + 1, `2. phone: the counter fits 390 wide (${JSON.stringify(fit)})`)
   }
-  // 3 · sell all the Health Draughts, then the one Tincture (real clicks)
+  // 3 · sell all the Health Salves, then the one Tonic (real clicks)
   const m0 = await purse()
-  ok(await click(`[data-cork-row="${HEALTH}"] [data-act="cork-sell-all"] button`), '3. clicked "All" on the Health Draughts')
+  ok(await click(`[data-cork-row="${HEALTH}"] [data-act="cork-sell-all"] button`), '3. clicked "All" on the Health Salves')
   ok(await poll(async () => (await purse()) === m0 + 3 * corkPrice(HEALTH)!, 8000), `3. purse ${m0} -> ${await purse()} (+${3 * corkPrice(HEALTH)!})`)
-  ok(!(await bag())[HEALTH], '3. the Health Draughts left the bag')
-  ok(await click(`[data-cork-row="${TINCT}"] [data-act="cork-sell-one"] button`), '3. clicked "Sell 1" on the Tincture')
+  ok(!(await bag())[HEALTH], '3. the Health Salves left the bag')
+  ok(await click(`[data-cork-row="${TINCT}"] [data-act="cork-sell-one"] button`), '3. clicked "Sell 1" on the Tonic')
   ok(await poll(async () => (await purse()) === m0 + 3 * corkPrice(HEALTH)! + corkPrice(TINCT)!, 8000) && !(await bag())[TINCT], `3. +${corkPrice(TINCT)} for the Tincture, gone from the bag`)
   ok(await poll(async () => !!(await p.$('[data-cork-empty]')), 5000), '4. nothing left: the counter says to brew some')
   ok(errs.length === 0, `5. page errors: ${errs.length} ${errs.slice(0, 3).join(' | ')}`)

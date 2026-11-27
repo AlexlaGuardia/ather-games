@@ -2,7 +2,7 @@
  * THE RECIPE BOOK — which brews THIS keeper knows, and how the book grows.
  *
  * ★ CANON (`game/alchemy.md` › THE FIRST RECIPE, ruled 2026-09-22; § 4 *Recipes unlock over time*):
- * Yarrow teaches the FIRST recipe — the Mana Draught — once, at the counter, and nothing after it.
+ * Yarrow teaches the FIRST recipe — the Mana Elixir — once, at the counter, and nothing after it.
  * *"After that it is your hands or nobody's."* Every later rung is worked out at the keeper's own pot.
  * A brewing (the party) lets a guest DRINK ahead, never LEARN ahead: bottle only. The known set, the
  * ladder, its gates and its pace are the build's — this file.

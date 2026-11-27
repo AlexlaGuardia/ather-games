@@ -1,7 +1,7 @@
 // M78 MANA + HEALTH ECONOMY (Alex 11-22, Jin play 59870cb7): "make mana felt". Every dial for the keeper's mana refill,
 // health regen, potions and reload cost lives HERE, both worlds (ather/page.tsx + continent/page.tsx via shared/use-casts.ts,
 // ather/combat.ts, ather/alchemy.ts). Build numbers, tuned "with testing": Alex feels them after.
-//   Before M78: mana refilled 1.5/s always on, HP 8/s after 5 s unhurt, Health Draught healed 40 x potency, reloads were free,
+//   Before M78: mana refilled 1.5/s always on, HP 8/s after 5 s unhurt, Health Salve healed 40 x potency, reloads were free,
 //   potions had no cooldown.
 // Healer vessels (Healing Grove etc.) are untouched on purpose: they are the in-fight healing lane.
 import type { Grade } from '../ather/farming'
@@ -19,7 +19,7 @@ export const ECON = {
   /** health regen per second, after `hpDelay` seconds unhurt */
   hpRegen: 0.3,
   hpDelay: 5,
-  /** Health Draught: an instant chunk of max HP by its grade (replaces heal 40 x potency) */
+  /** Health Salve: an instant chunk of max HP by its grade (replaces heal 40 x potency) */
   draughtPct: { D: 0.25, C: 0.35, B: 0.45, A: 0.6, S: 0.75 } as Readonly<Record<Grade, number>>,
   /** one cooldown shared by every drinkable potion, seconds */
   potionCd: 15,
@@ -49,7 +49,7 @@ export function manaTick(m: ManaPool, now: number, dt: number, flow = 1): void {
   m.seen = m.cur
 }
 
-/** What a Health Draught of `grade` heals a keeper with `hpMax` (whole HP). */
+/** What a Health Salve of `grade` heals a keeper with `hpMax` (whole HP). */
 export const draughtHeal = (grade: Grade, hpMax: number) => Math.round(ECON.draughtPct[grade] * hpMax)
 
 /** Seconds left on the shared potion cooldown (0 = ready). `lastAt`/`now` in seconds; null = never drunk. */

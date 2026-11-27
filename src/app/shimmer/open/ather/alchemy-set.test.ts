@@ -28,7 +28,7 @@ ok(['health', 'mana', 'wisdom'].every(p => p in ALC_POTIONS), 'the starter set: 
 const h = ALC_POTIONS.health.steps.map(s => s.at).join()
 ok(h === 'crusher,nook,still,desk', 'health = the ruled first recipe: Rinnscale Dust, Goldleaf Steep, Golden Dew Extract, Desk')
 ok(ALC_POTIONS.health.steps.slice(0, -1).map(s => INTERMEDIATES[s.out]).join() === 'Rinnscale Dust,Goldleaf Steep,Golden Dew Extract', 'the first recipe, word for word (61911e7)')
-ok(['health', 'mana', 'wisdom'].map(p => ALC_POTIONS[p].name).join() === 'Health Draught,Mana Draught,Starlight Tincture', 'the three ruled starters')
+ok(['health', 'mana', 'wisdom'].map(p => ALC_POTIONS[p].name).join() === 'Health Salve,Mana Elixir,Starlight Tonic', 'the three ruled starters')
 // the naming grammar: every intermediate ends in its station's word
 const WORD = { crusher: /( Dust| Gel)$/, nook: / Steep$/, still: / Extract$/ } as const
 ok(ALC_POTION_ORDER.every(p => ALC_POTIONS[p].steps.slice(0, -1).every(s => s.at !== 'desk' && WORD[s.at as keyof typeof WORD].test(INTERMEDIATES[s.out]))), 'every intermediate is named by its station (Dust/Gel, Steep, Extract)')
@@ -69,7 +69,7 @@ const w = effectOf('potion:wisdom:S')
 const wD = effectOf('potion:wisdom:D')
 ok(!!w && !!wD && 'xp' in w && 'xp' in wD && w.ms > wD.ms && w.xp === wD.xp, 'an S wisdom potion lasts longer than a D, same lift')
 ok(isAlcPotion('potion:mana:B') && !isAlcPotion('potion:nope:B') && !isAlcPotion('potion:mana'), 'isAlcPotion')
-ok(alcName('alc:golden_dew_extract:B') === 'Golden Dew Extract · B' && alcName('potion:mana:S') === 'Mana Draught · S', 'names')
+ok(alcName('alc:golden_dew_extract:B') === 'Golden Dew Extract · B' && alcName('potion:mana:S') === 'Mana Elixir · S', 'names')
 
 // pickFor spends the best first, and refuses a short bag
 const NOOK = ALC_POTIONS.health.steps.findIndex(s => s.at === 'nook'), DESK = ALC_POTIONS.health.steps.length - 1

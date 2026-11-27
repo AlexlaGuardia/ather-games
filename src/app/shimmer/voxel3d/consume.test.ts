@@ -7,6 +7,7 @@ import { BUFF_DEFS, POTION_BUFFS, type BuffId } from '../engine/potion-effects'
 import { consumeEffect, consumeRefusal, consumeLine, isConsumable, FOOD, WIRED_BUFFS } from './consume'
 import { rightClickIntent } from './interact'
 import { COOKED } from './alchemy-chain'
+import { ITEMS } from '../sprites/items'
 
 let pass = 0
 const fails: string[] = []
@@ -21,7 +22,11 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
   const expected = Object.keys(INFUSION_BREWS).length + Object.keys(POTENT_INFUSION_BREWS).length
   ok(infusions.length === expected && infusions.every(id => !isConsumable(id) && consumeRefusal(id)!.includes('spirit')),
     `§1 every elemental infusion, plain or potent, is refused, not drunk (${infusions.length} of ${expected})`)
-  ok(consumeEffect('mana_draught')?.mana === 40 && consumeEffect('mana_draught')?.kind === 'drink', '§1 a Mana Draught restores 40 mana')
+  ok(consumeEffect('mana_draught')?.mana === 40 && consumeEffect('mana_draught')?.kind === 'drink', '§1 a Mana Elixir restores 40 mana')
+  // M234 s1: renamed by canon (game/alchemy.md › THE RECIPES SIT-DOWN); the saved ids stay, so an old bag still holds them
+  for (const [id, name] of [['mana_draught', 'Mana Elixir'], ['starlight_tincture', 'Starlight Tonic']]) {
+    ok(ITEMS.find(x => x.id === id)?.name === name && POTION_DEFS[id]?.name === name, `M234: the saved id ${id} reads as ${name}`)
+  }
   ok(consumeEffect('shimmer_salve')?.hp === 50, '§1 a salve mends 50 hp')
   ok(consumeEffect('crystal_elixir')?.sh === 75, '§1 an elixir re-forms 75 shield')
   ok(consumeEffect('moonvine_tonic')?.buff === 'fleetfoot', '§1 a tonic is a timed buff')

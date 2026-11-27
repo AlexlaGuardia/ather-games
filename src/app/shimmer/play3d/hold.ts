@@ -14,7 +14,7 @@
 // ── WHAT IT IS (GBOARD 🌊 SEASON EXPEDITIONS, Alex 2026-09-24) ─────────────────────────────────
 // The CoD-Zombies loop in our clothes: rounds that escalate, seals on the windows the flooded tear
 // down, salvage for every hit, gates you buy open to reach more of the map, a weapon on the wall,
-// gear that CHARGES as you crush the flooded, and a clock that is the Lull Draught running out.
+// gear that CHARGES as you crush the flooded, and a clock that is the Lull Tonic running out.
 //
 // ── ★ ALL POWER IS IN-RUN (the rule that keeps the colossus fair) ─────────────────────────────
 // Nothing here reads a save. A new keeper and a veteran walk into the same landing with the same
@@ -22,8 +22,8 @@
 // skilled newcomer beat a boss later without a level gate lying about it.
 //
 // ── CANON ──────────────────────────────────────────────────────────────────────────────────────
-// `two-lines-two-games.md` › THE SIGNAL / THE HUSH DRAUGHT (renamed the LULL DRAUGHT 09-27: the lull is the stretch
-// before the host notices you; code keeps the `hush` field): the draught hushes the drinker so the
+// `two-lines-two-games.md` › THE SIGNAL / THE HUSH DRAUGHT (renamed for the lull 09-27, the LULL TONIC since 11-27: the lull is the stretch
+// before the host notices you; code keeps the `hush` field): the tonic hushes the drinker so the
 // host does not hear them as *near*, and it RUNS OUT. So running out is not a timer ending, it is the
 // keeper going LOUD: the tide stops coming and starts RUSHING. The flood is the host's raised body
 // (`world/nolmir.md` › THE FLOOD) — shown, fought. What made the host stays unnamed (guardrail 1):

@@ -102,7 +102,7 @@ const save = (now = Date.now()) => {
 export const forestryLevel = () => { load(); return skills.forestry.level }
 /** Any open-world skill's level, and XP granted to it (saved with Forestry's: one open-world skill set). Rinning uses it. */
 export const openLevel = (id: SkillId) => { load(); return skills[id].level }
-/** Gathering XP multiplier: a Starlight Tincture lifts it (ather/alchemy.ts; the page sets it while the buff runs). */
+/** Gathering XP multiplier: a Starlight Tonic lifts it (ather/alchemy.ts; the page sets it while the buff runs). */
 let xpMult = 1
 export const setOpenXpMult = (m: number) => { xpMult = m > 0 ? m : 1 }
 const scaled = (xp: number) => Math.round(xp * xpMult)

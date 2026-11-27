@@ -379,7 +379,7 @@ export const ROOM_KEEPS: Readonly<Record<RoomKind, string>> = {
   smith: 'deadfall and charcoal', carpentry: 'wood, bark and sap', stonemason: 'stone and crystal',
 }
 /** A room always keeps every INPUT of the jobs it works (M43: a focus job draws from the store only; 11-20 the alchemy store
- *  refused goldwood bark + glowfin, so no keeper could brew a Shard Tonic or a Starlight Tincture). */
+ *  refused goldwood bark + glowfin, so no keeper could brew a Shard Tonic or a Starlight Tonic). */
 export const roomAccepts = (kind: RoomKind, id: string) => ROOM_ACCEPTS[kind](id) || [...stockJobs(kind), ...(kind === 'carpentry' ? PIECE_JOBS : [])].some(j => j.in.some(c => c.id === id))   // M48: a piece may need a Stonery part (the Lift's Stone Brick)
 export const roomStore = (r: Room): Bank => ({ v: 1, stacks: r.store ?? [] })
 const setStore = (w: Works, id: string, b: Bank): Works => ({ ...w, rooms: w.rooms.map(r => (r.id === id ? { ...r, store: b.stacks } : r)) })

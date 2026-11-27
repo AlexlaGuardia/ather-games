@@ -4,7 +4,7 @@
 // and done line. Guard (canon): Angelica teaches and brews for her own folk; she NEVER brews or buys FOR the keeper. So the
 // keeper gathers, the keeper's own hands brew at her Desk, and the keeper hands her the bottle (for her folk).
 // ⚖ Jin's (canon gap #3, the build's): THE STEPS = 3, using what the game already has:
-//   1 gather  — the raw makings of the game's first recipe, the Health Draught (alchemy-set.ts › health, canon's first recipe:
+//   1 gather  — the raw makings of the game's first recipe, the Health Salve (alchemy-set.ts › health, canon's first recipe:
 //               Shimmerscale from the shore + Goldleaf and Dewdrop Vine grown from the settlers' own seed bundle)
 //   2 brew    — at Angelica's Desk (an Alchemy Desk standing by her), the whole chain in the keeper's hands, graded as usual
 //   3 hand    — give her one of the bottles
@@ -56,7 +56,7 @@ export function brewBatch(have: Have): { spend: { id: string; n: number }[]; mak
   }
   return make && { spend, make }
 }
-/** a Health Draught in the bag to hand over (her keeper's worst bottle: the best stay with the keeper) */
+/** a Health Salve in the bag to hand over (her keeper's worst bottle: the best stay with the keeper) */
 export function bottleToHand(have: Have): string | null {
   const ids = Object.keys(have).filter(id => have[id] > 0 && id.startsWith(`potion:${M70_BATCH}:`) && gradeOf(id))
   ids.sort((a, b) => gradeScore(gradeOf(a)!) - gradeScore(gradeOf(b)!))

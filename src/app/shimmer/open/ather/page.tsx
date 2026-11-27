@@ -1630,7 +1630,7 @@ function AtherSliceGame() {
   const settlerGive = (): boolean => {
     let inv = getInv()
     for (const st of M70_GIFT) { const r = give(inv, st.id, st.n); if (r.left) { hudSay('Your bag is full. Make room for the bundle.', 'info'); return false } inv = r.inv }
-    setInv(inv); hudSay('Health Draught ×3 · a bundle of bits and pieces · in your bag', 'item'); return true
+    setInv(inv); hudSay('Health Salve ×3 · a bundle of bits and pieces · in your bag', 'item'); return true
   }
   // M70 s3: the bottle goes to Angelica and the alchemy set comes back, together or not at all
   const angelicaHand = (withSet: boolean): boolean => {

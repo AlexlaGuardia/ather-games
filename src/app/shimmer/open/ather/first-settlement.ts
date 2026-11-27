@@ -64,7 +64,7 @@ export function m70Quest(t: Tut): { title: string; step: string } | null {
   return null
 }
 
-// ── the gift (hub call 11-23: potions = the game's basic Health Draught; the pack = what the next hour needs) ──────
+// ── the gift (hub call 11-23: potions = the game's basic Health Salve; the pack = what the next hour needs) ──────
 export const M70_POTIONS = { id: potionId('health', 'D'), n: 3 } as const
 export const M70_PACK: readonly { id: string; n: number }[] = [
   { id: 'goldwood_plank', n: 10 }, { id: 'stone_brick', n: 8 },

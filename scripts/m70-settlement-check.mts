@@ -4,7 +4,7 @@
 //   1 born -> the Glade -> the real E at the gate -> the Wilds, at the settlement: four settlers, lamps DARK, Gleaner's stall
 //   2 Chamomile's arrival lines in order + the choice -> Lamps Out in the journal; Borage barks .open
 //   3 the big one (the picked node's champion) down -> lamps LIT; Borage barks .after
-//   4 Chamomile's thanks in order -> 3 Health Draughts + the pack, once; quest.m70.after in the journal
+//   4 Chamomile's thanks in order -> 3 Health Salves + the pack, once; quest.m70.after in the journal
 //   5 reload: no second gift, the keeper still in the Wilds; 0 page errors
 import puppeteer, { type Page } from 'puppeteer-core'
 import { pickWilds } from './lib/glade-gate.mts'   // M172: E at the Glade's gate opens the fold map; the Wilds is a stop on it

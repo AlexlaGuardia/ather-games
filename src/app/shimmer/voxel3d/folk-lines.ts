@@ -171,7 +171,7 @@ export const SCRIPT = {
   ],
   "folk:YARROW:teach:page": [
     { scene: "Yarrow sets <RIGHT> in the keeper's other hand, lays a folded page on top of it, and does not ask for the first one back." },
-    { who: "YARROW", text: "<RIGHT>. That is the one with mana in it. Cauldron, then pour. Mana Draught." },
+    { who: "YARROW", text: "<RIGHT>. That is the one with mana in it. Cauldron, then pour. Mana Elixir." },
     { who: "YARROW", text: "The page is yours. I said I would show you once, and that was once." },
   ],
 } as const satisfies Record<string, readonly Beat[]>
