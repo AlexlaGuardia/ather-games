@@ -29,8 +29,11 @@ import { GLADE_ANCHOR } from '../src/app/shimmer/open/ather/moonwell'
 import { gladeZoneGround } from '../src/app/shimmer/open/ather/glade-cluster'
 import { folkSpots } from '../src/app/shimmer/open/ather/folk-spots'
 import { aimAt } from './lib/aim.mts'
+import { dismissStartCard } from './lib/start-card.mts'
 import { setGladePeople } from '../src/app/shimmer/open/ather/glade-people'
-import { parseGladeLayer } from '../src/app/shimmer/open/ather/glade-layer'
+import { parseGladeLayer, gladeLayerGround, gladeWet } from '../src/app/shimmer/open/ather/glade-layer'
+import { gladeShapeOf } from '../src/app/shimmer/open/ather/glade-people-check'
+import { terrainWorld } from '../src/app/shimmer/open/terrain-world'
 import { newInv, GIFT_YARROW_TAUGHT } from '../src/app/shimmer/open/shared/inventory'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), out = flag('--out', '/tmp/glade-check'), phone = process.argv.includes('--phone')
@@ -40,7 +43,8 @@ let fails = 0
 const ok = (c: boolean, m: string) => { console.log(`${c ? '✓' : '✗'} ${m}`); if (!c) fails++ }
 // M153 s1c: people and houses stand where the SITE's published Glade layer puts them (Place mode `who:`/place pieces; Alex's v17,
 // e721152c, moved homes + Moglins), so the plan, the lots' solids and the routes read that layer, as the game does (fetchGladeLayer)
-setGladePeople(parseGladeLayer(await (await fetch(`${url}/shimmer/open/glade-edits`, { cache: 'no-store' })).json()).props)
+const layer = parseGladeLayer(await (await fetch(`${url}/shimmer/open/glade-edits`, { cache: 'no-store' })).json())
+setGladePeople(layer.props)
 // M39: lots with Alex's blueprints (world/house-blueprints/glade-<lot>.json, the files prod reads) put their Moglin at the door
 const withBp = GLADE_LOTS.map(l => l.id).filter(l => { const f = `world/house-blueprints/glade-${l}.json`; if (!existsSync(f)) return false; setGladeBlueprint(l, parseHouse(JSON.parse(readFileSync(f, 'utf8')))); return true })
 console.log(`blueprints on: ${withBp.join(', ') || 'none'}`)
@@ -50,7 +54,12 @@ const plan = folkSpots(GLADE, GLADE_LOTS.map(l => `moonwell:${l.id}`))
 // closed Glade, whose ground ends at the garden's edge) only where the Glade zone has ground at all
 const SOLID = [...gladeLotBoxes(0), ...jettyBoxes(-1)].filter(b => b.y0 <= 1.7 && b.y1 > 0.05)
 const onGround = (x: number, z: number) => Number.isFinite(gladeZoneGround(x, z))
-const freeAt = (x: number, z: number) => onGround(x, z) && fromShore(x, z) > 0.4 && !SOLID.some(b => x + 0.4 > b.x0 && x - 0.4 < b.x1 && z + 0.4 > b.z0 && z - 0.4 < b.z1)
+// glade-walk 11-27: and the published layer's solid pieces (zone builds + scenery that blocks), by the WALKER's own shape (glade-people-check
+// gladeShapeOf = page.tsx gladeShape): the hand-kept SOLID list above knew only the lots + jetty, so it planned starts and legs through Alex's
+// published pieces (Yarrow's first 12 m start sat inside one at -299,319; Fennel's leg ran into one)
+const walker = terrainWorld(gladeShapeOf(layer)), wet = gladeWet(layer), land = gladeLayerGround(layer.edits)
+const walkerFree = (x: number, z: number) => { const g = land(x, z); if (!Number.isFinite(g)) return false; const f = walker.floorAt(x, z, g, 0.5); return f !== null && walker.bodyFree(x, z, f) && !wet(x, z) }
+const freeAt = (x: number, z: number) => onGround(x, z) && fromShore(x, z) > 0.4 && !SOLID.some(b => x + 0.4 > b.x0 && x - 0.4 < b.x1 && z + 0.4 > b.z0 && z - 0.4 < b.z1) && walkerFree(x, z)
 // pure reachability from the green over the Glade's ground (1 m grid; pond and solids out): the premise "every Moglin is
 // reachable on foot" now spans three gardens, and the real-W walk below only covers the last stretch for the friends' folk
 const reach = (() => {
@@ -94,7 +103,7 @@ try {
   for (let i = 0; i < 40 && !(await p.evaluate(() => (window as any).__ather?.zone?.() === 'glade')); i++) { await p.evaluate(() => (window as any).__ather.travel({ kind: 'glade' })); await sleep(4000) }
   ok(await poll(() => p.evaluate(() => (window as any).__ather?.zone?.() === 'glade'), 240000), 'arrived in the closed Glade (travel glade)')
   await sleep(4000); if (!phone) { await p.mouse.click(550, 340); await sleep(500) }
-  else { const vp = p.viewport()!; await p.touchscreen.tap(vp.width / 2, vp.height * 0.6); await sleep(800) }   // phone: tap the start card away, or every phone shot is the card (phone pass 11-19)
+  else { await dismissStartCard(p).catch(e => console.log(String(e))); await sleep(800) }   // phone: tap the start card away, or every phone shot is the card (phone pass 11-19)
   // 1. the five where the plan puts them
   ok(await poll(async () => ((await p.evaluate(() => (window as any).__glade?.folk?.length ?? 0)) as number) >= 5, 30000), 'the five are drawn in the Glade (__glade.folk)')
   // the blueprints arrive after the folk are first drawn (a fetch per lot), then the folk re-place: wait for that
@@ -158,6 +167,8 @@ try {
       if (!got) { stuck = true; break }
     }
     const s = await st()
+    await shot(`walk-${phone ? 'phone' : 'desk'}-${q.id.split(':')[1]}`)
+    console.log(`   ${q.id.split(':')[1]}: start ${from.x.toFixed(1)},${from.z.toFixed(1)} -> ended ${s.x.toFixed(1)},${s.z.toFixed(1)} (Moglin ${q.x.toFixed(1)},${q.z.toFixed(1)})`)
     ok(!stuck && Math.hypot(s.x - q.x, s.z - q.z) < 2.5, `4. walked to ${q.id.split(':')[1]} on foot by ${turns(r).length - 1} legs from ${Math.hypot(from.x - q.x, from.z - q.z).toFixed(0)} m out (${Math.hypot(s.x - q.x, s.z - q.z).toFixed(1)} m off)`)
     // talk: the first E is the station line, a second talk the alternate (lark, SIGNED 40bf1c6)
     const k = q.id.split(':')[1], lines = GLADE_STATION_LINES[k]
