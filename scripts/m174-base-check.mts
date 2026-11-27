@@ -45,7 +45,7 @@ const shot = async (name: string) => { if (shots) await p.screenshot({ path: `${
 
 for (const [sp, L] of Object.entries(BASE_PREVIEW) as [Species, NonNullable<(typeof BASE_PREVIEW)[Species]>][]) {
   const row = GALLERY.find(r => r.sp === sp && !r.el)!
-  ok(!SPIRIT_MODELS[sp] && !SPIRIT_RIGS[sp], `${row.name}: players' registries list no model (players keep the orb)`)
+  ok(SPIRIT_MODELS[sp] === L && SPIRIT_RIGS[sp] === L, `${row.name}: M226 players' registries list her (every keeper's model since Alex's 11-27 OK)`)
   await goto(row.num); const s = await probe(L.url)
   ok(!!s && s.sp === sp && !!s.urls[L.url] && s.skinned, `#${row.num} ${row.name}: owner gallery mounts ${L.url}, skinned (${JSON.stringify(s && { sp: s.sp, skinned: s.skinned, h: +s.h.toFixed(3) })})`)
   await shot(`${row.name}-idle`)

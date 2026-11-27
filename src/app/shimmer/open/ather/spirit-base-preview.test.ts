@@ -1,5 +1,6 @@
 // M174: the last four base forms, OWNER PREVIEW. Run: npx tsx src/app/shimmer/open/ather/spirit-base-preview.test.ts
-// A built base is drawn for the owner only (gallery + own garden) until Alex OKs it: players' registries must NOT list it,
+// A built base is drawn for the owner only (gallery + own garden) until Alex OKs it; M226 (Alex OK 11-27): all four are players' now, so
+// players' registries list the very BASE_PREVIEW look;
 // its glb must ship rigged with every game clip, and it must draw at its ruled full-grown size (creature-size.ts GROWN).
 import * as fs from 'fs'
 import { BASE_PREVIEW, basePreviewFor, LEPARA_GLB_TALL, SHELLMERE_GLB_TALL, CROAKLING_GLB_TALL, LUMINARA_GLB_LONG, LUMINARA_RIG } from './spirit-base-preview'
@@ -14,7 +15,7 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
 const glbJson = (url: string) => { const b = fs.readFileSync('public' + url), jl = b.readUInt32LE(12); return JSON.parse(b.subarray(20, 20 + jl).toString()) }
 
 for (const [sp, L] of Object.entries(BASE_PREVIEW) as [Species, NonNullable<(typeof BASE_PREVIEW)[Species]>][]) {
-  ok(!SPIRIT_MODELS[sp] && !SPIRIT_RIGS[sp], `${sp}: still owner-only (players' registries do not list it)`)
+  ok(SPIRIT_MODELS[sp] === L && SPIRIT_RIGS[sp] === L, `${sp}: M226 every keeper's model (players' registries list this very look)`)
   ok(basePreviewFor(sp) === L, `${sp}: basePreviewFor finds it`)
   ok(!!L.rig && rigLook(sp, L, true) === L && rigLook(sp, L, false) === L, `${sp}: rigLook keeps the rigged look (no player model to fall back to)`)
   ok(fs.existsSync('public' + L.url), `${sp}: ${L.url} ships`)

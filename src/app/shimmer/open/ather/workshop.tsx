@@ -63,6 +63,7 @@ import { BLOOMED_SPIRIT_LINE, planterBoxHint } from './planter-lines'
 import { SpiritOnPlanter, useFormPreview, useSpiritsDev } from './spirit-model'
 import { formLook, spiritModelFor } from './spirit-models'
 import { basePreviewFor } from './spirit-base-preview'
+import { keeperFormLook } from './spirit-public'   // M226: the OK'd forms for every keeper
 import { plotFootprints, footDist, footBlocked, bodyRadius, type Foot, type PieceFoot } from './obstacles'   // M117 s1
 import { GROWN } from '../../sprites/creature-size'
 import type { Species } from '../../spirits/spirit'
@@ -1406,7 +1407,8 @@ function PlanterSpirit({ id }: { id: string }) {
   // M107 ship (Alex 11-23): the model + her roam are for every keeper now.
   // M202 s1: an evolved spirit (pot.element) draws her SECOND FORM where her species' forms are modelled; `?form=` = the owner preview
   // M204: the form models are owner-only while they are redone: a player's evolved spirit (element set) keeps her base look
-  const owner = useOwner(), preview = useFormPreview(), sp = p?.bloomed ? speciesOf(p.seed) : null, look = formLook(sp, (owner ? p?.element : undefined) ?? preview) ?? spiritModelFor(sp) ?? (owner ? basePreviewFor(sp) : null)   // M174: built bases, owner only until Alex OKs
+  // M226: ...except the forms Alex OK'd (spirit-public.ts PUBLIC_FORMS), which every keeper's evolved spirit draws
+  const owner = useOwner(), preview = useFormPreview(), sp = p?.bloomed ? speciesOf(p.seed) : null, look = keeperFormLook(sp, p?.element, owner) ?? formLook(sp, preview) ?? spiritModelFor(sp) ?? (owner ? basePreviewFor(sp) : null)   // M174: built bases, owner only until Alex OKs; M226: the OK'd forms + bases for every keeper
   const nav = useMemo(() => (look && sp ? planterNav(id, dev, spiritBodyR(sp)) : null), [look, id, dev, sp])   // M107: she roams the garden
   useFrame(({ clock }) => { if (orb.current) orb.current.position.y = 1.0 + Math.sin(clock.elapsedTime * 1.6) * 0.06 })
   const orbMesh = <mesh ref={orb} position-y={1.0}><sphereGeometry args={[0.16, 14, 10]} /><meshBasicMaterial color={f.glow} transparent opacity={0.85} /></mesh>

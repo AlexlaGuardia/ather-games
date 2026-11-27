@@ -14,6 +14,7 @@ import type { Species } from '../../spirits/spirit'
 import { TROT, type TrotDials } from './spirit-trot'
 import { GROWN } from '../../sprites/creature-size'
 import type { RigLook } from './spirit-rig'
+import { BASE_PREVIEW } from './spirit-base-preview'   // M202 the Croakling line builds off the owner-preview base (type-only import back, no cycle)
 
 // ── SPIRITS DRAW FULL-GROWN (Alex 2026-11-24 "the manalotl is way too small"; Magii RULED-AFK athernyx 2a8b028) ─────────
 // The heights come from creature-size.ts GROWN (canon-diffed by `npm run canon`, gate grown-sizes). The model is scaled
@@ -178,6 +179,9 @@ export const SPIRIT_MODELS: Partial<Record<Species, SpiritLook>> = {
     sway: { along: 'z', sign: -1, from: 2, to: 3, dir: 'x', amp: 0, ampRun: 0, hz: 1, hzRun: 1, lag: 0 },
     trot: HOVARI_TROT,
   },
+  // M226 (Alex OK 11-27 "they all look good for now"): the last four bases (M174) leave owner preview. Their data stays in
+  // spirit-base-preview.ts BASE_PREVIEW; each is rigged only (no old unrigged body), so the model and the rig are the same look.
+  rabbit: BASE_PREVIEW.rabbit, turtle: BASE_PREVIEW.turtle, frog: BASE_PREVIEW.frog, firefly: BASE_PREVIEW.firefly,
 }
 
 // ── M132 s2 THE RIGGED MANALOTL (every keeper's since 11-24, spirit-model.tsx useSpiritRig; Alex 11-24 OK'd the v2 look and the size: 0.90 m
@@ -245,6 +249,8 @@ export const SPIRIT_RIGS: Partial<Record<Species, SpiritLook>> = {
   'water-bear': { ...SPIRIT_MODELS['water-bear']!, url: '/open/spirits/dewbear-rigged.glb', h: GROWN['water-bear'].height / DEWBEAR_GLB_TALL, rig: DEWBEAR_RIG },
   hummingbird: { ...SPIRIT_MODELS.hummingbird!, url: '/open/spirits/hovari-rigged.glb', rig: HOVARI_RIG,
     glow: { part: 'shimmer', emissive: '#b8fff0', lo: 0.35, hi: 0.6, hz: 0.5 } },
+  // M226: the four OK'd bases, rigged only (the same look as SPIRIT_MODELS lists)
+  rabbit: BASE_PREVIEW.rabbit, turtle: BASE_PREVIEW.turtle, frog: BASE_PREVIEW.frog, firefly: BASE_PREVIEW.firefly,
 }
 /** the look to draw: the rigged one where there is one and `on`. A second form IS rigged: it stays as it is with `on`, and
  *  with `?rig=0` (the old unrigged bodies, a frame-measure switch) she falls back to her species' old model. */
