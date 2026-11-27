@@ -196,6 +196,28 @@ const SCHEMA = `
       price      INTEGER NOT NULL,
       created_at INTEGER NOT NULL
     );
+    -- BETA M228b: the Exchange FILLS. Every fill (the 7-day stats + guide price read it; the clerks' farm cap counts it), the
+    -- CLAIM BOX (what a fill paid a keeper, waiting at the counter; Marks under item '$marks'), and the clerks' dial / switch.
+    CREATE TABLE IF NOT EXISTS exchange_fills (
+      fill_id    INTEGER PRIMARY KEY AUTOINCREMENT,
+      item       TEXT NOT NULL,
+      n          INTEGER NOT NULL,
+      price      INTEGER NOT NULL,
+      buyer      TEXT NOT NULL,
+      seller     TEXT NOT NULL,
+      at         INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS exchange_fills_item_at ON exchange_fills(item, at);
+    CREATE TABLE IF NOT EXISTS exchange_claims (
+      user_id    TEXT NOT NULL,
+      item       TEXT NOT NULL,
+      n          INTEGER NOT NULL,
+      PRIMARY KEY (user_id, item)
+    );
+    CREATE TABLE IF NOT EXISTS exchange_config (
+      key        TEXT PRIMARY KEY,
+      value      TEXT NOT NULL
+    );
     -- BETA M233 s1: the Thistledown Fair's SMASH board (fair-smash.ts; rules: ather/fair-smash-rules.ts). One row per keeper
     -- per season (their best hit), and the day's tries per keeper.
     CREATE TABLE IF NOT EXISTS fair_smash (
@@ -476,6 +498,7 @@ export function deleteAccount(user_id: string): boolean {
   d.prepare('DELETE FROM brewing_seats WHERE user_id = ? OR brewing_id IN (SELECT brewing_id FROM brewings WHERE host_id = ?)').run(user_id, user_id)
   d.prepare('DELETE FROM brewings WHERE host_id = ?').run(user_id)
   d.prepare('DELETE FROM exchange_orders WHERE user_id = ?').run(user_id)
+  d.prepare('DELETE FROM exchange_claims WHERE user_id = ?').run(user_id)
   d.prepare('DELETE FROM fair_smash WHERE user_id = ?').run(user_id)
   d.prepare('DELETE FROM fair_smash_tries WHERE user_id = ?').run(user_id)
   d.prepare('DELETE FROM fair_dash WHERE user_id = ?').run(user_id)
