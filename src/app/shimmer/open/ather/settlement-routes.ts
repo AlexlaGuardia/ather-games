@@ -204,6 +204,15 @@ export function rerouteNetwork(base: Network, m: Network, g: Ground): Network {
   return { ...m, settlements, paths }
 }
 
+/** M237 s5: a moved/added settlement stands ON the network when a path point is this near it (a spur starts on the lattice
+ *  point nearest it, under 15 m; one already beside a path is under SPUR_MIN) */
+export const REACH_M = 30
+/** M237 s5: the moved/added settlements NO path reaches after the merge (rerouteNetwork found no way over the ground: an island).
+ *  The World Builder warns on its marker, list line and panel, and Publish asks first. */
+export function islandIds(m: Network): string[] {
+  return rerouted(m).filter(s => { const t = nearestPoint(m.paths, s.x, s.z); return !t || t.d >= REACH_M }).map(s => s.id)
+}
+
 // ── the Fair's pitch beside a settlement (M237 s2 ownerTentSpot's siteOk): dry land, off the Hollows' wells ──
 /** a pitch keeps this far from an infected node (tiles.json nodes, where the Hollows well up) */
 export const TENT_NODE_CLEAR = 60

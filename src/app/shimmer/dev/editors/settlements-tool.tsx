@@ -14,6 +14,11 @@ import { addedFolkNames } from '../../open/ather/settlement-folk'
 export const pitchedDraft = (base: Network | null, list: EditedSettlement[]): Network | null => base ? pitchOwnerTents({ ...base, settlements: list }) : null
 /** M237 s2 (canon: never two living Moglins with one name): how many free names the NEXT added settlement's folk would get (0 = the add is refused) */
 export const namesForNextAdd = (base: Network | null, list: EditedSettlement[]) => base ? addedFolkNames(nextAddedId(list.map(q => ({ id: q.id })), base), base.season).length : 0
+/** M237 s5 (placeholders, @lark may reword): a moved/added settlement no path reaches (settlement-routes islandIds) */
+export const ISLAND_MARK = 'no path reaches here'
+export const ISLAND_LIST = 'no path'
+export const ISLAND_NOTE = 'No path reaches here: no way over the ground joins it to the network, so keepers find it only cross-country. Move it, or publish it as it is.'
+export const ISLAND_PUBLISH_ASK = 'No path reaches:'
 export const NO_NAMES_NOTE = 'No free Moglin name is left this season: a new settlement would stand empty, so adding is off until the name pool grows.'
 
 export const FOCUS_LABEL: Record<SettlementBiome, string> = { shore: 'Shore', meadow: 'Meadow', woods: 'Woods', rock: 'Rock' }
@@ -22,8 +27,8 @@ const LEVEL_OPT: Record<ClashLevel, string> = { easy: 'Easy', average: 'Average'
 const MARK = { baked: '#facc15', edited: '#fb923c', added: '#34d399', sel: '#ffffff' }
 
 /** the markers over the top-down canvas, in WORLD coords (viewBox = the tile's square). Active = it takes the pointer. */
-export function SettlementMarkers({ box, list, sel, active, onAdd, onMove, onSelect, base = null }: {
-  box: { x0: number; z0: number; sx: number; sz: number }; list: EditedSettlement[]; sel: string | null; active: boolean; base?: Network | null
+export function SettlementMarkers({ box, list, sel, active, onAdd, onMove, onSelect, base = null, islands = [] }: {
+  box: { x0: number; z0: number; sx: number; sz: number }; list: EditedSettlement[]; sel: string | null; active: boolean; base?: Network | null; islands?: string[]
   onAdd: (x: number, z: number) => void; onMove: (id: string, x: number, z: number) => void; onSelect: (id: string | null) => void
 }) {
   const svg = useRef<SVGSVGElement>(null)
@@ -59,11 +64,12 @@ export function SettlementMarkers({ box, list, sel, active, onAdd, onMove, onSel
         const g = ghost?.id === s.id ? ghost : null, x = g ? g.x : s.x, z = g ? g.z : s.z, on = s.id === sel
         const col = s.added ? MARK.added : s.moved || s.homes !== undefined || s.tent || s.bakedBiome ? MARK.edited : MARK.baked
         return (
-          <g key={s.id} data-settle={s.id} data-x={s.x} data-z={s.z} style={{ cursor: active ? 'grab' : undefined }}>
+          <g key={s.id} data-settle={s.id} data-x={s.x} data-z={s.z} data-island={islands.includes(s.id) ? '1' : undefined} style={{ cursor: active ? 'grab' : undefined }}>
             <circle cx={x} cy={z} r={SETTLEMENT_R} fill={col} fillOpacity={on ? 0.35 : 0.18} stroke={on ? MARK.sel : col} strokeWidth={on ? 2.5 : 1.5} vectorEffect="non-scaling-stroke" />
             <circle cx={x} cy={z} r={6 * m} fill={col} stroke="black" strokeWidth={1.2} vectorEffect="non-scaling-stroke" />
             {s.tent && <rect x={x + 7 * m} y={z - 14 * m} width={8 * m} height={8 * m} fill="#c084fc" stroke="black" strokeWidth={1} vectorEffect="non-scaling-stroke" />}
             <text x={x + 10 * m} y={z + 4 * m} fontSize={13 * m} fill="white" stroke="black" strokeWidth={3 * m} paintOrder="stroke" fontFamily="ui-monospace, monospace" pointerEvents="none">{s.name}</text>
+            {islands.includes(s.id) && !g && <text x={x + 10 * m} y={z + 32 * m} fontSize={11 * m} fill="#fb7185" stroke="black" strokeWidth={3 * m} paintOrder="stroke" fontFamily="ui-monospace, monospace" pointerEvents="none" data-testid={`settle-island-${s.id}`}>⚠ {ISLAND_MARK}</text>}
             {base && (() => { const c = homesCount(s, base.season); return <text x={x + 10 * m} y={z + 18 * m} fontSize={11 * m} fill={c.placed < c.set ? '#fca5a5' : '#bbf7d0'} stroke="black" strokeWidth={3 * m} paintOrder="stroke" fontFamily="ui-monospace, monospace" pointerEvents="none" data-testid={`settle-count-${s.id}`}>{homesLabel(c)}</text> })()}
           </g>)
       })}
@@ -76,8 +82,8 @@ export function SettlementMarkers({ box, list, sel, active, onAdd, onMove, onSel
 }
 
 /** the side panel: every settlement (go to it), and the selected one's dropdowns */
-export function SettlementsPanel({ list, base, sel, removed, onSelect, onGo, onPatch, onRemove, onRestore, btn, on, off }: {
-  list: EditedSettlement[]; base: Network | null; sel: string | null; removed: string[]
+export function SettlementsPanel({ list, base, sel, removed, onSelect, onGo, onPatch, onRemove, onRestore, btn, on, off, islands = [] }: {
+  list: EditedSettlement[]; base: Network | null; sel: string | null; removed: string[]; islands?: string[]
   onSelect: (id: string | null) => void; onGo: (s: EditedSettlement) => void
   onPatch: (id: string, p: { focus?: SettlementBiome; homes?: number; tent?: TentPick }, clear?: ('focus' | 'homes' | 'tent')[]) => void
   onRemove: (id: string) => void; onRestore: (id: string) => void; btn: string; on: string; off: string
@@ -90,7 +96,7 @@ export function SettlementsPanel({ list, base, sel, removed, onSelect, onGo, onP
   const sel_ = 'bg-black/40 border border-white/15 rounded px-2 py-1 font-mono text-xs flex-1'
   return (
     <div className="flex flex-col gap-1.5 mt-2" data-testid="settle-panel">
-      <div className="text-[11px] text-white/45">click empty ground to add a settlement · drag one to move it · click one to set it. Players see it after Publish. Paths do not re-route to a moved one yet.</div>
+      <div className="text-[11px] text-white/45">click empty ground to add a settlement · drag one to move it · click one to set it. Players see it after Publish. Paths re-route to a moved or added one; a red warning = no path reaches it.</div>
       {base && names === 0 && <div className="text-[11px] text-rose-300/80" data-testid="settle-no-names">{NO_NAMES_NOTE}</div>}
       {base && names > 0 && names < 3 && <div className="text-[11px] text-white/45" data-testid="settle-names-left">a new settlement gets {names} Moglin{names === 1 ? '' : 's'} (free names left this season)</div>}
       <div className="max-h-40 overflow-y-auto flex flex-col gap-0.5 pr-1" data-testid="settle-list">
@@ -99,11 +105,13 @@ export function SettlementsPanel({ list, base, sel, removed, onSelect, onGo, onP
             <button className="flex-1 text-left truncate hover:text-white" onClick={() => { onSelect(q.id); onGo(q) }} data-testid={`settle-go-${q.id}`}>{q.name}</button>
             <span className="text-white/40">{FOCUS_LABEL[q.biome ?? 'meadow']}{q.added ? ' · new' : q.moved ? ' · moved' : ''}</span>
             {base && (() => { const c = homesCount(q, base.season); return <span className={c.placed < c.set ? 'text-rose-300/80' : 'text-emerald-200/60'} data-testid={`settle-list-count-${q.id}`}>{homesLabel(c)}</span> })()}
+            {islands.includes(q.id) && <span className="text-rose-400" data-testid={`settle-list-island-${q.id}`}>⚠ {ISLAND_LIST}</span>}
             {q.tent && <span className={tentOf(q.id) ? 'text-purple-300/80' : 'text-rose-300/80'}>{tentOf(q.id) ? 'tent' : 'tent: no room'}</span>}
           </div>))}
       </div>
       {s && <div className="flex flex-col gap-1.5 rounded border border-white/10 p-2" data-testid="settle-sel" data-id={s.id}>
         <div className="text-xs font-mono text-white/85">{s.name} <span className="text-white/40">({Math.round(s.x)}, {Math.round(s.z)})</span></div>
+        {islands.includes(s.id) && <div className="text-[11px] text-rose-300 rounded border border-rose-400/40 bg-rose-500/10 px-2 py-1" data-testid="settle-island">⚠ {ISLAND_NOTE}</div>}
         {base && (() => { const c = homesCount(s, base.season), t = tentOf(s.id); return <div className="text-[11px] font-mono flex gap-3" data-testid="settle-counter" data-placed={c.placed} data-set={c.set} data-tent={t ? t.contest : s.tent ? 'no-room' : 'none'}>
           <span className={c.placed < c.set ? 'text-rose-300' : 'text-emerald-200'}>{homesLabel(c)}</span>
           <span className={s.tent ? (t ? 'text-purple-300' : 'text-rose-300') : 'text-white/40'}>{s.tent ? (t ? `Tent: ${tentLabel(t)}` : 'Tent: no room beside it') : 'Tent: none'}</span></div> })()}

@@ -14,7 +14,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { loadWilds, type WildsMeta } from '../../open/ather/wilds'
 import { loadIndex, makeWorld, zonesOf, tileOf, TILE_M, type WildsWorld } from '../../open/ather/wilds-world'
-import { loadNetwork, clearing, roadField, routeSettlementEdits } from '../../open/ather/network'
+import { loadNetwork, clearing, roadField, routeSettlementDraft } from '../../open/ather/network'
 import { makeVoids, type IndexLike } from '../../open/ather/wilds-voids'
 import { paintVoids, cellKey, cellOf, VCELL, type VoidEdits } from '../../open/ather/void-edits'
 import { paintNodeZones, zoneCode, zoneOf, nzCell, nzKey, NZ_CELL, NZ_STEPS, FOREST_PER_CELL, CRYSTAL_PER_CELL, KIND_PER_CELL, NODE_KIND_ZONES, isKindZone, type NodeZoneType, type NodeKindZone } from '../../open/ather/node-zones'   // M86
@@ -52,7 +52,7 @@ import { ZoneBuilder } from './ZoneBuilder'   // M84 s2: build on a zone
 import { FURNITURE } from '../../open/ather/furniture'
 import { quad } from '../../open/ather/build-prefs'
 import { applySettlementEdits, addSettlementEdit, moveSettlementEdit, removeSettlementEdit, patchEdit, removedIds, type SettlementEdits, type EditedSettlement } from '../../open/ather/settlement-edits'   // M237
-import { SettlementMarkers, SettlementsPanel, namesForNextAdd } from './settlements-tool'
+import { SettlementMarkers, SettlementsPanel, namesForNextAdd, ISLAND_PUBLISH_ASK } from './settlements-tool'
 
 // ── BETA M83 p1 s1a: the editor works on the World Builder DRAFT (world/builder.ts), never on the live layer. Save + autosave write
 // the draft; PUBLISH makes it a version and puts it live; the history rolls back to any version. Players see nothing until Publish.
@@ -168,10 +168,12 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
   // M237 s4: the paths as the game will route them with the DRAFT's settlements (network.ts routeSettlementEdits = the game's own
   // withRoutes: spurs to moved/added ones); drawn like the baked paths in every view. null = no edits (the bake's paths stand).
   const [routedRoads, setRoutedRoads] = useState<OvRoad[] | null>(null)
+  // M237 s5: the moved/added settlements no path reaches (islands): their marker, list line and panel warn; Publish asks first
+  const [islands, setIslands] = useState<string[]>([])
   useEffect(() => {
-    if (glade || nyx || !baseNet || !settles.length) { setRoutedRoads(null); return }
+    if (glade || nyx || !baseNet || !settles.length) { setRoutedRoads(null); setIslands([]); return }
     let dead = false
-    const t = setTimeout(() => { routeSettlementEdits(baseNet, settles).then(n => { if (!dead) setRoutedRoads(n === baseNet ? null : wildsPathRoads(n)) }).catch(() => { /* the bake's paths stand */ }) }, 350)   // a drag settles first
+    const t = setTimeout(() => { routeSettlementDraft(baseNet, settles).then(r => { if (dead) return; setRoutedRoads(r.net === baseNet ? null : wildsPathRoads(r.net)); setIslands(r.islands ?? []) }).catch(() => { /* the bake's paths stand */ }) }, 350)   // a drag settles first
     return () => { dead = true; clearTimeout(t) }
   }, [baseNet, settles, glade, nyx])
   const [selZone, setSelZone] = useState<string | null>(null)   // the zone whose tag popup is open
@@ -594,6 +596,14 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
   }, [map])
   const publish = useCallback(async (msg?: string): Promise<boolean> => {
     if (!(await save())) return false
+    if (map === 'wilds' && baseNet && settlesRef.current.length) {   // M237 s5: an island settlement is published only on a yes
+      const r = await routeSettlementDraft(baseNet, settlesRef.current).catch(() => null), ids = r?.islands ?? []
+      setIslands(ids)
+      if (ids.length) {
+        const names = ids.map(id => settleListRef.current.find(q => q.id === id)?.name ?? id).join(', ')
+        if (!window.confirm(`${ISLAND_PUBLISH_ASK} ${names}. Publish anyway?`)) { setStatus(`not published: no path reaches ${names} (live unchanged)`); return false }
+      }
+    }
     setBusy(true); setStatus('publishing…')
     if (glade) {   // M153 s1c-1: nobody is published into the void, the water, a wall, or out of a newborn's reach
       await loadGladeBlueprints(); const L = layerOf(), G = { edits: L.tiles.glade ?? null, water: L.water.glade ?? null, zones: L.zones, props: L.props }, who = gladePeople(), bad = [...placeProblems(G, gladePlaces(), who.find(p => p.who === 'newborn') ?? null), ...peopleProblems(G, who)]   // s1c-2: the houses first
@@ -604,7 +614,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
     if (b) { setSnapB(b); setNote('') }
     setStatus(b ? `published v${b.index.live} · live on the next ${LOAD_NAME[map]} load` : lastError.msg ? `${lastError.msg} (live unchanged)` : 'publish FAILED (live unchanged)')
     return !!b
-  }, [save, note, map, glade])
+  }, [save, note, map, glade, baseNet])
   const rollback = useCallback(async (v: number): Promise<boolean> => {
     setBusy(true); setStatus(`rolling back to v${v}…`)
     const b = await builderCall(map, { action: 'rollback', v })
@@ -821,7 +831,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
               </g>) })}
           </svg>
         )}
-        {B && !glade && !nyx && (brush === 'settle' || showOv) && <SettlementMarkers box={{ x0: B.ox - B.meta.sizeX / 2, z0: B.oz - B.meta.sizeZ / 2, sx: B.meta.sizeX, sz: B.meta.sizeZ }} list={settleList} base={baseNet} sel={selSettle} active={brush === 'settle'}
+        {B && !glade && !nyx && (brush === 'settle' || showOv) && <SettlementMarkers box={{ x0: B.ox - B.meta.sizeX / 2, z0: B.oz - B.meta.sizeZ / 2, sx: B.meta.sizeX, sz: B.meta.sizeZ }} list={settleList} base={baseNet} sel={selSettle} active={brush === 'settle'} islands={islands}
           onAdd={(x, z) => { if (!baseNet || namesForNextAdd(baseNet, settleList) === 0) return; const r = addSettlementEdit(settlesRef.current, baseNet, x, z); setSettles(r.edits); setSelSettle(r.id) }}
           onMove={(id, x, z) => setSettles(moveSettlementEdit(settlesRef.current, id, x, z))} onSelect={setSelSettle} />}
         {B && (brush === 'zone' || zoneBox) && (
@@ -884,7 +894,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
             </div>}
             <div className="text-[11px] text-white/45">{nzType === 'none' ? 'no trees, crystals or stones stand here (paths, clearings). Grey.' : nzType === 'forest' ? `adds ${FOREST_PER_CELL[nzStep - 1]} trees per ${NZ_CELL} m square, of the zone's own kinds. Green.` : nzType === 'crystal' ? `adds ${CRYSTAL_PER_CELL[nzStep - 1]} crystal nodes per ${NZ_CELL} m square, of the zone's own kinds. Violet.` : isKindZone(nzType) ? `adds ${KIND_PER_CELL[nzStep - 1]} ${KIND_ZONE[nzType].node} nodes per ${NZ_CELL} m square, only that kind. ${KIND_ZONE[nzType].col}.` : "back to the map's own rule."} Players see it after Publish.</div>
           </div>}
-          {brush === 'settle' && !glade && !nyx && <SettlementsPanel list={settleList} base={baseNet} sel={selSettle} removed={removedIds(settles)} btn={btn} on={on} off={off}
+          {brush === 'settle' && !glade && !nyx && <SettlementsPanel list={settleList} base={baseNet} sel={selSettle} islands={islands} removed={removedIds(settles)} btn={btn} on={on} off={off}
             onSelect={setSelSettle} onGo={q => { const w = gridRef.current, t = w?.at(Math.floor((q.x + TILE_M / 2) / TILE_M), Math.floor((q.z + TILE_M / 2) / TILE_M)); if (t && t.name !== tile) setTile(t.name) }}
             onPatch={(id, p, clear) => { let e = patchEdit(settlesRef.current, id, p); if (clear?.length) e = patchEdit(e, id, Object.fromEntries(clear.map(k => [k, undefined]))); setSettles(e) }}
             onRemove={id => { setSettles(removeSettlementEdit(settlesRef.current, id)); setSelSettle(null) }}

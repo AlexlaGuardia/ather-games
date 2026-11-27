@@ -3,7 +3,7 @@
 import { readFileSync } from 'fs'
 import { roadField, clearing, pitchOwnerTents, tentsOf, type Network, type Path } from './network'
 import { applySettlementEdits, moveSettlementEdit, removeSettlementEdit, addSettlementEdit, patchEdit, type SettlementEdits } from './settlement-edits'
-import { groundOf, profilePath, levelPads, routeOn, rerouteNetwork, keptPaths, groundBoxes, tilesFor, tentSiteOk, spurEnd, SPUR_MIN, TENT_NODE_CLEAR, type TileData } from './settlement-routes'
+import { groundOf, profilePath, levelPads, routeOn, rerouteNetwork, keptPaths, groundBoxes, tilesFor, tentSiteOk, spurEnd, SPUR_MIN, TENT_NODE_CLEAR, islandIds, REACH_M, type TileData } from './settlement-routes'
 import { LOT_W, LOT_D } from './settlement-lots'
 
 let pass = 0; const fails: string[] = []
@@ -114,6 +114,22 @@ ok(bake.tents!.filter(t => !nodes.some(n => Math.hypot(n.x - t.x, n.z - t.z) < T
     if (!t || ok2(t.x, t.z)) dryAfter++
   }
   ok(found === 3 && dryAfter === 3, `tent beside a shore settlement: ${found} wet pitches without the test, ${dryAfter} dry (or no room) with it`)
+}
+
+// ── M237 s5: the island warning (a moved/added settlement no path reaches) ──
+{
+  ok(islandIds(m).length === 0, `joined moved + added settlements are no islands (${islandIds(m).join(',')})`)
+  ok(islandIds(bake).length === 0, 'the bake: no islands (nothing moved or added)')
+  const isl = rerouteNetwork(bake, applySettlementEdits(bake, moveSettlementEdit([], 's1-10', 220, 920)), g)   // a shore islet on Bryonydell's tile
+  ok(JSON.stringify(islandIds(isl)) === '["s1-10"]', `Bryonydell dragged onto the islet (220, 920) is an island (${islandIds(isl).join(',')})`)
+  ok(!isl.paths.some(p => p.a === 's1-10'), 'the islet gets no spur (no way over the ground)')
+  const reach = rerouteNetwork(bake, applySettlementEdits(bake, moveSettlementEdit([], 's1-10', -20, 1215)), g)
+  ok(islandIds(reach).length === 0, `Bryonydell moved to (-20, 1215) is reached (${islandIds(reach).join(',')})`)
+  const p = bake.paths[0].pts[10], on = addSettlementEdit([], bake, p[0] + 5, p[1])
+  ok(islandIds(rerouteNetwork(bake, applySettlementEdits(bake, on.edits), g)).length === 0, 'added beside a path (no spur needed) is reached')
+  const far = addSettlementEdit([], bake, -1580, -1740)
+  ok(JSON.stringify(islandIds(rerouteNetwork(bake, applySettlementEdits(bake, far.edits), g))) === JSON.stringify([far.id]), 'an ADDED settlement on an islet is an island too')
+  ok(REACH_M > 15 && REACH_M < 45, 'reach: past a spur start on the 20 m lattice, inside a settlement disc')
 }
 
 console.log(`settlement-routes: ${pass} pass, ${fails.length} fail`); for (const f of fails) console.log('  ✗ ' + f)

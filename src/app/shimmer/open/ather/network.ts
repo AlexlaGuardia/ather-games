@@ -73,12 +73,21 @@ export async function loadNetwork(season = SEASON, base = '/open/wilds', layer =
 /** M237 s4 (World Builder): the bake + a DRAFT's settlement edits routed the way the game routes the published layer (the same
  *  withRoutes: spurs to moved/added settlements, pads), so the builder draws the paths the game will. No edits = the bake. */
 export async function routeSettlementEdits(baked: Network, edits: SettlementEdits | null | undefined, base = '/open/wilds'): Promise<Network> {
-  return (await withRoutes(baked, applySettlementEdits(baked, edits), base)).m
+  return (await routeSettlementDraft(baked, edits, base)).net
+}
+/** M237 s5: the same routing + the moved/added settlements NO path reaches (settlement-routes islandIds: no way over the ground,
+ *  an island). islands = null when the routing itself failed (tiles did not load): unknown, never a false warning. */
+export async function routeSettlementDraft(baked: Network, edits: SettlementEdits | null | undefined, base = '/open/wilds'): Promise<{ net: Network; islands: string[] | null }> {
+  const m = applySettlementEdits(baked, edits)
+  if (m === baked) return { net: baked, islands: [] }
+  const r = await withRoutes(baked, m, base)
+  if (!r.routed) return { net: r.m, islands: null }
+  return { net: r.m, islands: (await import('./settlement-routes')).islandIds(r.m) }
 }
 
 /** M237 s3: the raw tiles round the owner's moved/added settlements (and its tent asks) are fetched, and settlement-routes.ts
  *  routes their spurs, levels their pads and tests the tents' ground on them. Any failure = the merge as it was (s2). */
-async function withRoutes(baked: Network, m: Network, root: string): Promise<{ m: Network; siteOk?: (x: number, z: number) => boolean }> {
+async function withRoutes(baked: Network, m: Network, root: string): Promise<{ m: Network; siteOk?: (x: number, z: number) => boolean; routed?: true }> {
   if (m === baked) return { m }
   try {
     const R = await import('./settlement-routes')
@@ -93,7 +102,7 @@ async function withRoutes(baked: Network, m: Network, root: string): Promise<{ m
     }))
     const g = R.groundOf(tiles)
     const nodes = have.flatMap(t => t.nodes.map(q => ({ x: q.x + t.tx * 1000, z: q.z + t.ty * 1000 })))
-    return { m: R.rerouteNetwork(baked, m, g), siteOk: R.tentSiteOk(g, nodes) }
+    return { m: R.rerouteNetwork(baked, m, g), siteOk: R.tentSiteOk(g, nodes), routed: true }
   } catch { return { m } }
 }
 
