@@ -82,8 +82,6 @@ import { play as sfx, statusOf as sfxStatus } from '../shared/sfx'
 import { BREW } from './alchemy'
 import { RINSTICKS, makeRinstick, loadTools, saveTools, rinstickName, easeOf } from './rinsticks'
 import { FOCUSES, BENCH, makeFocus, reachOf, focusName, type FocusSkill } from './focuses'
-import { EDGE, EDGE_METALS, EDGE_TOOLS, FIT_METAL, EDGE_TEXT, canTakeEdge, edgeOn, edgeLeft, fitEdge, warnAt, type EdgeFamily } from './edges'   // M134 s1
-import { METAL_RING } from '../../ui/tool-stage'
 import { TOOL_DEFS } from '../../engine/tools'
 import { isBuilding, useBuildMode, enterBuild, exitBuild, buildPoint, onBuildTap, setBuildTool, buildTool, useBuildTool, onBuildDraw, buildYaw, buildFocus, setPlanLift, setPlanInsets, viewTo } from './build-mode'
 import { cancelPlan, hasDraft, planSpot, draftKeys, builtUnderPlan } from './plan-draft'   // M138
@@ -191,10 +189,10 @@ const setPlanEdit = (v: boolean) => { if (v !== planEdit) { planEdit = v; wdEmit
 const usePlanEdit = () => useSyncExternalStore(f => { wdSubs.add(f); return () => { wdSubs.delete(f) } }, () => planEdit, () => false)
 const BUILT_FLOOR = 'That floor is built: build or cancel the plan across it first.'
 const EDIT_ONLY = 'Editing the plan: that one is built.'
-/** M144: a built piece taken down goes into the catalog's store (placeholder words, @lark) */
-const STORED_SAY = 'Stored in the catalog: a plan uses it first.'
 function wallVerdict(owned: ReadonlySet<string>, a: Corner, b: Corner, erase: boolean) {
   const w = currentWorks(), keys = runKeys(a, b), lv = getPlanLevel(), cur = levelOf(w, lv).walls
+/** M144: a built piece taken down goes into the catalog's store (placeholder words, @lark) */
+const STORED_SAY = 'Stored in the catalog: a plan uses it first.'
   if (erase) return { keys, ok: planEdit ? draftKeys(cur, keys).length > 0 : keys.some(k => !!cur[k]), why: 'No wall there to take down.' }
   const v = layOn(w, lv, keys, owned)   // a plan is drawn free: the list is paid at Build
   return { keys, ok: v.ok, why: v.ok ? '' : v.why }
@@ -756,9 +754,11 @@ function Catalog({ onPick }: { onPick: () => void }) {
       </span>
     </button>
   )
-  const kinds = Object.entries(stored ?? {}).filter(([, e]) => e.n > 0)
   return (
     <div data-catalog style={{ display: 'grid', gap: 8, padding: '10px', borderRadius: 14, background: 'rgba(255,250,235,.9)', boxShadow: '0 2px 10px rgba(0,0,0,.25)', maxHeight: '52vh', overflowY: 'auto' }}>
+  const kinds = Object.entries(stored ?? {}).filter(([, e]) => e.n > 0)
+      {(['walls', 'paint'] as const).map(t => (
+        <div key={t} style={{ display: 'grid', gap: 5 }}>
       {kinds.length > 0 && <div data-cat-group="stored" style={{ display: 'grid', gap: 5 }}>
         <div style={{ font: '700 11px system-ui', letterSpacing: '.12em', textTransform: 'uppercase', color: H.ink, opacity: 0.7 }}>Stored · taken down, a plan uses them first</div>
         {kinds.map(([k, e]) => <div key={k} data-stored={k} data-n={e.n} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 8px', borderRadius: 10, background: 'rgba(255,250,235,.96)', boxShadow: `inset 0 0 0 1px ${H.rule}` }}>
@@ -766,8 +766,6 @@ function Catalog({ onPick }: { onPick: () => void }) {
           <span data-act="break-down" data-key={k}><HearthButton small onClick={() => breakDownKind(k)}>Break down</HearthButton></span>
         </div>)}
       </div>}
-      {(['walls', 'paint'] as const).map(t => (
-        <div key={t} style={{ display: 'grid', gap: 5 }}>
           <div style={{ font: '700 11px system-ui', letterSpacing: '.12em', textTransform: 'uppercase', color: H.ink, opacity: 0.7 }}>{t === 'walls' ? 'Walls · drawn as a plan, built from the list' : 'Floors · a pattern, painted a whole room'}</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 6 }}>
             {t === 'walls' ? WALL_MAT_ORDER.map(m => {
@@ -1721,9 +1719,9 @@ function PlanBom({ slim = false }: { slim?: boolean }) {
           <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 700, minWidth: 54 }}>{Math.min(l.have, l.n)} / {l.n}</span><span>{l.name}</span>
         </div>
       ))}
-      {bom.stored > 0 && <div data-bom-stored={bom.stored} style={{ fontSize: 11.5, color: H.inkSoft }}>{bom.stored} piece{bom.stored === 1 ? '' : 's'} from the store (nothing to pay for {bom.stored === 1 ? 'it' : 'them'})</div>}
       {bom.set.length > 0 && <div data-bom-set style={{ fontSize: 11.5, color: H.inkSoft }}>{bom.set.map(c => `${c.n} x ${FURNITURE[c.id].name}`).join(' · ')}</div>}
       <div style={{ fontSize: 11.5, color: H.inkSoft }}>{edit ? 'Editing: Erase takes planned pieces out, the other tools add.' : bom.ok ? 'Everything is here.' : 'Planks: Carpentry. Bricks and panes: Stonery.'}</div>
+      {bom.stored > 0 && <div data-bom-stored={bom.stored} style={{ fontSize: 11.5, color: H.inkSoft }}>{bom.stored} piece{bom.stored === 1 ? '' : 's'} from the store (nothing to pay for {bom.stored === 1 ? 'it' : 'them'})</div>}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         {ask && planned ? askRow : <>{planActs}<span style={{ flex: 1 }} />
         <span data-act="build-plan"><HearthButton primary disabled={!bom.ok} onClick={build}>Build</HearthButton></span></>}
@@ -1874,7 +1872,6 @@ function BenchPanel({ room, onClose }: { room: Room; onClose: () => void }) {
       case 'cauldron': return cl(BREW, 'Hold a potion and click to drink.')
       case 'blades': case 'spikes': return focusSkill ? <FocusList r={r} inv={inv} skill={focusSkill} /> : null
       case 'rinsticks': return <RinstickList r={r} inv={inv} />
-      case 'edges': return <EdgeList inv={inv} />   // M134 s1
       case 'keeper': return <MoglinDuty r={r} />
       case 'filet': {   // M206: prepare a caught rinn (cooking.ts FILET); instant, like bait
         const fish = Object.keys(FILET).filter(id => benchCount(r, inv, id) > 0)
@@ -2162,55 +2159,6 @@ function FocusList({ r, inv, skill }: { r: Room; inv: ReturnType<typeof useInv>;
           )
         })}
       </div>
-    </div>
-  )
-}
-
-/** THE SMITHY'S EDGES (BETA M134 s1, edges.ts): fit a metal edge / tip on the Starwillow Pruner / Spike. One kept edge per metal
- *  (its own wear); a new one takes FIT_METAL from the bag. Words = plain labels for @lark. */
-function EdgeList({ inv }: { inv: ReturnType<typeof useInv> }) {
-  const [tools, setTools] = useState(() => loadTools())
-  useEffect(() => { const on = () => setTools(loadTools()); addEventListener('open:tools', on); return () => removeEventListener('open:tools', on) }, [])
-  return (
-    <div data-edges>
-      <div style={lab}>Edges</div>
-      <div style={{ fontSize: 12.5, color: H.inkSoft, margin: '4px 0 8px' }}>
-        An edge of any metal reaches one tier more. Venium works faster; Eurleen lasts longer and takes a little less mana. Only the edge wears; at 0 it breaks away.
-      </div>
-      {(Object.keys(EDGE_TOOLS) as EdgeFamily[]).map(fam => {
-        const cur = tools[fam], on = edgeOn(cur), top = TOOL_DEFS[EDGE_TOOLS[fam]].name
-        return (
-          <div key={fam} data-edge-family={fam} data-edge-on={on ?? ''} style={{ margin: '0 0 10px' }}>
-            <div style={{ fontSize: 13.5, color: H.ink }}>
-              {canTakeEdge(cur) ? top : `Needs a ${top}`}
-              {on && <span data-edge-left={edgeLeft(cur, on)} style={{ color: METAL_RING[on], fontWeight: 700 }}> · {EDGE[on].name} edge {edgeLeft(cur, on)} / {EDGE[on].uses}{edgeLeft(cur, on) <= warnAt(on) ? ' · wearing thin' : ''}</span>}
-              {canTakeEdge(cur) && !on && <span style={{ color: H.inkSoft, fontSize: 12 }}> · no edge</span>}
-            </div>
-            {canTakeEdge(cur) && (
-              <div style={{ display: 'grid', gap: 6, marginTop: 4 }}>
-                {EDGE_METALS.map(m => {
-                  const kept = edgeLeft(cur, m), have = inv ? countOf(inv, m) : 0, can = on !== m && (kept > 0 || have >= FIT_METAL)
-                  return (
-                    <div key={m} data-edge-metal={m} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <span style={{ width: 10, height: 10, borderRadius: 5, border: `2px solid ${METAL_RING[m]}`, flex: 'none' }} />
-                      <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: H.ink }}>
-                        {EDGE[m].name} <span style={{ color: H.inkSoft, fontSize: 12 }}>· {kept > 0 ? `kept, ${kept} / ${EDGE[m].uses} left` : `${FIT_METAL} ${EDGE[m].name} (${have}) · ${EDGE[m].uses} uses`} · XP ×{EDGE[m].xp}</span>
-                      </span>
-                      <HearthButton small disabled={!can} onClick={() => {
-                        const f = fitEdge(loadTools()[fam], m, getInv())
-                        if (!f.ok) { hudSay(f.why, 'info'); return }
-                        const next = { ...loadTools(), [fam]: f.tool }
-                        if (f.spent) setInv(f.inv)
-                        saveTools(next, true); setTools(next); hudSay(EDGE_TEXT.fitted(m), 'item')
-                      }}>{on === m ? 'On' : 'Fit'}</HearthButton>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-        )
-      })}
     </div>
   )
 }

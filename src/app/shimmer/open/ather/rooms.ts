@@ -55,8 +55,7 @@ export const ROOMS: Readonly<Record<RoomKind, RoomDef>> = {
   // M57 (Alex 11-20): alchemy is a FURNITURE SET (alchemy-set.ts), not a room. Closes when the set goes live; a room already
   // raised is taken down and paid back by retireRooms (workshop.tsx runs it once on load while ALC_LIVE).
   alchemy:    { name: 'Alchemy room', blurb: 'A cauldron that boils crystals, shards and saps into potions.', w: 8, d: 6, cost: [{ id: 'goldwood_log', n: 24 }], raiseMs: 120_000, open: !ALC_LIVE },
-  // OPEN M134 s1 (Alex 11-24): its bench fits metal edges / tips (edges.ts). Blurb = PLACEHOLDER for @lark.
-  smith:      { name: 'Smithy',     blurb: 'Fits metal edges to your Starwillow Pruner and Spike. The metal comes from the continent.', w: 8, d: 7, cost: [{ id: 'goldwood_log', n: 24 }], raiseMs: 150_000, open: true },
+  smith:      { name: 'Smithy',     blurb: 'Works metal brought over from the continent. Drawn up, not ready to build yet.', w: 8, d: 7, cost: [{ id: 'goldwood_log', n: 24 }], raiseMs: 150_000, open: false },
   carpentry:  { name: 'Carpentry room', blurb: 'Saw logs, strip bark, tap sap, and make furniture for your plot.', w: 8, d: 6, cost: [{ id: 'goldwood_log', n: 20 }], raiseMs: 120_000, open: true },
   // OPEN 11-18 (BETA M17): its bench binds Spikes (ather/focuses.ts, Magii 5626aaf); its own stonework comes later. The blurb is a
   // PLACEHOLDER for @lark (promises only what the bench does).
@@ -660,8 +659,8 @@ export function loadWorks(): Works {
       paid: adoptPaid(v.paid, adoptWalls(v.walls)),
       ...(v.tableMoved === true ? { tableMoved: true as const } : {}),   // M96: the planning table left its first spot
       ...(adoptStarter(v.starter) ? { starter: adoptStarter(v.starter) } : {}),   // M220: the starter Keepstone was moved; absent = its first spot
-      ...(Object.keys(adoptStore(v.stored)).length ? { stored: adoptStore(v.stored) } : {}),   // M144: the catalog's store of taken-down pieces
       ...(Object.keys(adoptCarry(v.wallCarry)).length ? { wallCarry: adoptCarry(v.wallCarry) } : {}),   // 11-22: exact wall refunds carry their fraction   // M37 slice 4: a save from before it has none, so every room standing counts as built
+      ...(Object.keys(adoptStore(v.stored)).length ? { stored: adoptStore(v.stored) } : {}),   // M144: the catalog's store of taken-down pieces
     }
   } catch { /* private window */ }
   return freshWorks()
