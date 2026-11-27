@@ -385,7 +385,7 @@ export const HOV_GLB_TALL: Readonly<Record<string, number>> = { voltari: 1.328, 
 // Croakarc (Storm: a SKINK, no lure (grimoire-ledger divergence note), a long curling tail, a pointed crest, dorsal spines, lightning veins,
 // a violet brow gem). Each is the BASE Croakling's sculpt + rig modules re-shaped by name (tools/croak_common.py, rig_croak.py), so the
 // base (M174, public since M226; its data lives in spirit-base-preview.ts) flows into all four on a rebuild. The line builds off
-// BASE_PREVIEW.frog (= SPIRIT_RIGS.frog); the forms are OWNER PREVIEW (not in spirit-public.ts PUBLIC_FORMS until Alex OKs). Croakarc
+// BASE_PREVIEW.frog (= SPIRIT_RIGS.frog); the forms are PUBLIC since Alex's OK 11-27 (spirit-public.ts PUBLIC_FORMS). Croakarc
 // left the frog's sculpt + rig in pass 2 (CROAKARC_RIG below). CROAK_GLB_TALL = each body's idle mean height (lure not counted).
 export const CROAK_GLB_TALL: Readonly<Record<string, number>> = { croakrill: 0.854, croakara: 0.794, croakore: 0.776, croakarc: 0.512 }
 // glbLen = her nose to haunch (tail tip) and hRig = the metres per glb unit her clips were timed at (rig metrics height_m), so her clips
@@ -410,7 +410,7 @@ function croakarc(): SpiritLook { return { ...croakForm('storm', 'croakarc', '#a
 // forks, knobbly legs, long claws), Tidemere (Water: a SEA TURTLE, a long low teardrop shell, flippers, swirl carvings). Each is the BASE
 // Shellmere's sculpt + rig modules re-shaped by name (tools/shell_common.py, rig_mere.py), the base's 18 bones and five clips timed at the
 // base's 0.464 m per glb unit, so the clips play 1:1 at the base's speeds; h = the base's x her dial. SHELL_GLB_TALL = each body's idle mean
-// height (rig metrics body_mean_top: antennae + crystal not counted; what the prod check measures). OWNER PREVIEW (not in spirit-public PUBLIC_FORMS) until Alex OKs the line.
+// height (rig metrics body_mean_top: antennae + crystal not counted; what the prod check measures). PUBLIC since Alex's OK 11-27 (spirit-public PUBLIC_FORMS).
 export const SHELL_GLB_TALL: Readonly<Record<string, number>> = { mesamere: 0.869, aurmere: 0.799, voltmere: 0.716, tidemere: 0.581 }
 const shellForm = (el: SpiritElement, name: string, emissive: string, hull: string, glbLen: number): SpiritLook => {
   const b = BASE_PREVIEW.turtle!, g = formGrow(name)

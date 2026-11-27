@@ -3,7 +3,9 @@
 //    not the gold orb: four rigged bodies, one of each species, their rigged glbs 200, the BASE_PREVIEW heights (= GROWN); Luminara hovers.
 //  B forms: beds with pot.element set: owl mana/storm/earth/water (the Athowl line redo), hummingbird the same (the Hovari line redo),
 //    axolotl mana (Aurlotl, glyph panels) = each draws her FORM glb; plus fox mana (Vulnara, not OK'd) = she keeps her base (vulnyx-rigged).
-//  0 page errors. 390x844 (default) or --desktop 900x600.   npx tsx scripts/m226-public-check.mts [--desktop] [--shots dir] [--url ..]
+//  C (M202, Alex OK 11-27): turtle + frog beds with pot.element = each draws her FORM glb (the Shellmere line: Mesamere / Aurmere /
+//    Voltmere / Tidemere; the Croakling line pass 2: Croakrill / Croakara / Croakore / Croakarc), not her base or an orb.
+//  0 page errors. 390x844 (default) or --desktop 900x600.   npx tsx scripts/m226-public-check.mts [--desktop] [--only ABC] [--shots dir] [--url ..]
 import puppeteer, { type Page } from 'puppeteer-core'
 import { mkdirSync } from 'fs'
 import { dismissStartCard } from './lib/start-card.mts'
@@ -11,7 +13,7 @@ import { BASE_PREVIEW } from '../src/app/shimmer/open/ather/spirit-base-preview'
 import { formLook, type SpiritElement } from '../src/app/shimmer/open/ather/spirit-models'
 import type { Species } from '../src/app/shimmer/spirits/spirit'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
-const url = flag('--url', 'https://ather.games'), shots = flag('--shots', ''), desk = process.argv.includes('--desktop'), tag = desk ? 'desktop' : '390'
+const url = flag('--url', 'https://ather.games'), shots = flag('--shots', ''), desk = process.argv.includes('--desktop'), tag = desk ? 'desktop' : '390', only = flag('--only', 'ABC')
 if (shots) mkdirSync(shots, { recursive: true })
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms)); let fails = 0
 const ok = (c: boolean, m: string) => { console.log(`${c ? 'PASS' : 'FAIL'} ${m}`); if (!c) fails++ }
@@ -54,7 +56,7 @@ const offs = (p: Page, n = 25) => p.evaluate(async (N: number) => { const W = wi
   return Object.values(out) }, n)
 try {
   // ── A: the four bases
-  { const A: Bed[] = (['rabbit', 'turtle', 'frog', 'firefly'] as Species[]).map(sp => ({ sp }))
+  if (only.includes('A')) { const A: Bed[] = (['rabbit', 'turtle', 'frog', 'firefly'] as Species[]).map(sp => ({ sp }))
     const { p, got } = await open(A)
     ok(await gl(p, 4), `A ${tag}: four rigged bodies (no gold orb)`); await sleep(5000)
     const R = await rigs(p)
@@ -67,7 +69,7 @@ try {
     ok(!got.some(x => / [45]\d\d$/.test(x)), `A ${tag}: every spirit glb 200 (${[...new Set(got)].join(', ')})`)
     await shot(p, 'a-bases'); await p.close() }
   // ── B: the OK'd forms public, a not-OK'd form still the owner's
-  { const EL: SpiritElement[] = ['mana', 'storm', 'earth', 'water']
+  if (only.includes('B')) { const EL: SpiritElement[] = ['mana', 'storm', 'earth', 'water']
     const B: Bed[] = [...EL.map(el => ({ sp: 'owl' as Species, el })), ...EL.map(el => ({ sp: 'hummingbird' as Species, el })), { sp: 'axolotl', el: 'mana' }, { sp: 'fox', el: 'mana' }]
     const { p, got } = await open(B)
     ok(await gl(p, B.length), `B ${tag}: ${B.length} rigged bodies`); await sleep(6000)
@@ -80,6 +82,18 @@ try {
     const hov = (await offs(p)).filter(o => o.sp === 'hummingbird')
     ok(hov.length === 4 && hov.every(o => o.off.every(a => a > 0.6)), `B ${tag}: the four Hovari forms hover (lowest body points ${hov.map(o => Math.min(...o.off).toFixed(2)).join(', ')} m)`)
     await shot(p, 'b-forms'); await p.close() }
+  // ── C: M202, the Shellmere + Croakling lines public (every form glb mounted + 200, her form's height; no base glb, no orb)
+  if (only.includes('C')) { const EL: SpiritElement[] = ['mana', 'storm', 'earth', 'water']
+    const C: Bed[] = (['turtle', 'frog'] as Species[]).flatMap(sp => EL.map(el => ({ sp, el })))
+    const { p, got } = await open(C)
+    ok(await gl(p, C.length), `C ${tag}: ${C.length} rigged bodies (no gold orb)`); await sleep(6000)
+    const urls: Record<string, number> = await p.evaluate(() => ({ ...((window as any).__spiritModel?.urls ?? {}) }))
+    const R = await rigs(p)
+    for (const b of C) { const f = formLook(b.sp, b.el)!; const file = f.url.split('/').pop()!
+      ok(!!urls[f.url] && got.includes(`${file} 200`) && R.some(r => r.sp === b.sp && Math.abs(r.h - f.h) < 1e-6), `C ${tag}: ${b.sp}/${b.el} draws ${f.name} (${file} mounted ${urls[f.url] ?? 0}, h ${f.h.toFixed(4)})`) }
+    for (const sp of ['turtle', 'frog'] as Species[]) { const L = BASE_PREVIEW[sp]!
+      ok(!urls[L.url], `C ${tag}: no ${sp} bed falls back to her base ${L.name} (${L.url.split('/').pop()} mounted ${urls[L.url] ?? 0})`) }
+    await shot(p, 'c-m202-forms'); await p.close() }
   ok(errs.length === 0, `${tag}: 0 page errors (${errs.slice(0, 3).join(' | ')})`)
 } catch (e) { ok(false, `threw: ${String(e).slice(0, 300)}`) }
 await br.close()
