@@ -253,6 +253,17 @@ const SCHEMA = `
       n          INTEGER NOT NULL,
       PRIMARY KEY (user_id, day)
     );
+    -- BETA M233 s3: the Fair's CLASH tents (fair-clash.ts; rules: ather/fair-clash-rules.ts). No board: one row per keeper per
+    -- tent per season she has WON (its whole line-up), so the tent's Marks prize pays once a season.
+    CREATE TABLE IF NOT EXISTS fair_clash (
+      season     INTEGER NOT NULL,
+      user_id    TEXT NOT NULL,
+      tent       INTEGER NOT NULL,
+      level      TEXT NOT NULL,
+      spirit     TEXT NOT NULL,
+      at         INTEGER NOT NULL,
+      PRIMARY KEY (season, user_id, tent)
+    );
 `
 
 /** Our own stable id — deliberately NOT the google sub, so a provider can change later. */
@@ -503,6 +514,7 @@ export function deleteAccount(user_id: string): boolean {
   d.prepare('DELETE FROM fair_smash_tries WHERE user_id = ?').run(user_id)
   d.prepare('DELETE FROM fair_dash WHERE user_id = ?').run(user_id)
   d.prepare('DELETE FROM fair_dash_tries WHERE user_id = ?').run(user_id)
+  d.prepare('DELETE FROM fair_clash WHERE user_id = ?').run(user_id)
   d.prepare('DELETE FROM saves WHERE user_id = ?').run(user_id)
   const res = d.prepare('DELETE FROM accounts WHERE user_id = ?').run(user_id)
   return Number(res.changes) > 0

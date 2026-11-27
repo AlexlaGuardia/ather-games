@@ -23,6 +23,9 @@ export interface PartyBattleSceneProps {
   captiveIdxs?: number[]   // stronghold reach: explicit collared-captive enemy indices (Vetch keeps two)
   keeper?: KeeperArchetype   // a Keeper support companion joins your side (AI-driven)
   onEnd: (outcome: 'win' | 'lose', reachResult?: 'freed' | 'forced' | 'fainted' | null) => void
+  /** M233 s3: a bout that is not a stronghold (the Fair's Clash) says its own opening and closing lines */
+  introText?: string
+  endText?: { win: string; lose: string }
 }
 
 type UIPhase = 'intro' | 'selectStance' | 'selectFocus' | 'animating' | 'end'
@@ -120,7 +123,7 @@ function CombatantPlate({ c, hp, isActor, isTarget, shielded, onClick }: {
 // ── Party Battle Scene ──
 
 export default function PartyBattleScene({
-  allySpirits, enemySpirits, zoneId, ai, mana, reach, captiveIdxs, keeper, onEnd,
+  allySpirits, enemySpirits, zoneId, ai, mana, reach, captiveIdxs, keeper, onEnd, introText, endText,
 }: PartyBattleSceneProps) {
   const canvasRef = useRef<HTMLDivElement>(null)
   const rendererRef = useRef<BattlePixiRenderer | null>(null)
@@ -265,7 +268,7 @@ export default function PartyBattleScene({
               : 'Your circle is overwhelmed. Steady your hearts, and try again.'
             )
           } else {
-            setText(ev.outcome === 'win' ? 'The stronghold falls. Your circle holds.' : 'Your circle is overwhelmed...')
+            setText(endText ? endText[ev.outcome === 'win' ? 'win' : 'lose'] : ev.outcome === 'win' ? 'The stronghold falls. Your circle holds.' : 'Your circle is overwhelmed...')
           }
           delay = 1400; break
         }
@@ -274,7 +277,7 @@ export default function PartyBattleScene({
       setTimeout(next, delay)
     }
     next()
-  }, [nameOf, refreshHP])
+  }, [nameOf, refreshHP, endText])
 
   const finish = useCallback(() => {
     rendererRef.current?.highlightToken(null)
@@ -332,7 +335,7 @@ export default function PartyBattleScene({
 
   // ── Intro → first directive ──
   useEffect(() => {
-    setText('The stronghold spirits bar the way!')
+    setText(introText ?? 'The stronghold spirits bar the way!')
     const t = setTimeout(() => beginRound(), 1500)
     return () => clearTimeout(t)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -458,7 +461,7 @@ export default function PartyBattleScene({
           )}
 
           {uiPhase === 'end' && (
-            <div>
+            <div data-battle-end={st.outcome}>
               <p className={`font-display text-[14px] mb-1 ${st.outcome === 'win' ? 'text-[#d4a843]' : 'text-red-400'}`}>
                 {st.outcome === 'win' ? 'Victory' : 'Defeated'}
               </p>
@@ -481,7 +484,7 @@ function StanceButton({ name, hint, accent, onClick }: {
   name: string; hint: string; accent: string; onClick: () => void
 }) {
   return (
-    <button onClick={onClick}
+    <button onClick={onClick} data-stance={name.toLowerCase()}
       className="text-left px-3 py-3 min-h-[60px] rounded-xl border hover:bg-white/[0.05] active:scale-95 transition-all"
       style={{ borderColor: `${accent}40`, background: `${accent}10` }}
     >

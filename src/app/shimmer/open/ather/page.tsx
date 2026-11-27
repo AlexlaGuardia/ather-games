@@ -136,9 +136,10 @@ import { loadIndex, makeWorld, stream, releaseTo, tileOf, zonesOf, wanted, TILE_
 import { makeVoids, FALL_LIP, type VoidField } from './wilds-voids'
 import { ensureEdits, voidEditsLive, zonesJsonLive, propsJsonLive } from './wilds-edits'   // M104: the void brush layer
 import { startFall, stepFall, type FallState } from './void-fall'
-import { loadNetwork, clearing, roadField, settlementAt, nearFair, tentAtDoor, tentsOf, tentLabel, FAIR_NAME, type Network, type Settlement } from './network'
+import { loadNetwork, clearing, roadField, settlementAt, nearFair, tentAtDoor, tentsOf, tentLabel, FAIR_NAME, type Network, type Settlement, type ClashLevel } from './network'
 import { SmashPanel } from './smash-panel'   // M233 s1
 import { DashPanel } from './dash-panel'   // M233 s2
+import { ClashPanel } from './clash-panel'   // M233 s3
 import { useFolkTalk } from './use-folk-talk'
 import { useSpiritTalk, type SpiritTalkState } from './spirit-talk'   // M109 s1: E at a garden spirit (owner + ?spirits=3d)
 import { setGardenGround } from './garden-follow'   // M126: what a following spirit may walk in the garden
@@ -253,7 +254,7 @@ type Spawn = { x: number; z: number; yaw: number }
 /** the Wilds' safe ground round the arrival: where the Glade's green stood until M67 s1b-2 (30.75 m north of Greg's waymark) */
 const WILDS_SAFE = { x: GREG_WAYMARK.x, z: GREG_WAYMARK.z - 30.75, r: 50 }
 const gregAt = gregSpot()   // at load only (gregLive's first frame); M153 s1c-1: anything later asks gregSpot(). BETA M30 part 2: where Gregory sits (Moonwell Glade); the plot keeps only its old anchor numbers (plot.ts GREG)
-type Panel = null | { kind: 'smash' } | { kind: 'dash' } | { kind: 'map'; view: 'ather' | 'athernyx'; travel: boolean } | { kind: 'greg' } | { kind: 'talk'; step: number } | { kind: 'pack'; tab: PackTab } | { kind: 'cluster' } | { kind: 'work'; near: WorkNear } | { kind: 'folk'; s: Settlement } | { kind: 'fennel'; page: number } | { kind: 'brew'; station: AlcStation } | { kind: 'friend'; c: FriendCursor } | { kind: 'gfennel'; c: FennelCursor } | { kind: 'idlemog'; c: { id: string; screen: IdleScreen } } | { kind: 'spirit'; c: SpiritTalkState } | { kind: 'shop'; id: string } | { kind: 'settler'; c: SettlerCursor | AngelicaCursor } | { kind: 'adesk' } | { kind: 'chordstone' } | { kind: 'hall'; i: number } | { kind: 'exchange'; tab: 'offers' | 'search' | 'mine' }
+type Panel = null | { kind: 'smash' } | { kind: 'dash' } | { kind: 'clash'; tier: ClashLevel; tent: number } | { kind: 'map'; view: 'ather' | 'athernyx'; travel: boolean } | { kind: 'greg' } | { kind: 'talk'; step: number } | { kind: 'pack'; tab: PackTab } | { kind: 'cluster' } | { kind: 'work'; near: WorkNear } | { kind: 'folk'; s: Settlement } | { kind: 'fennel'; page: number } | { kind: 'brew'; station: AlcStation } | { kind: 'friend'; c: FriendCursor } | { kind: 'gfennel'; c: FennelCursor } | { kind: 'idlemog'; c: { id: string; screen: IdleScreen } } | { kind: 'spirit'; c: SpiritTalkState } | { kind: 'shop'; id: string } | { kind: 'settler'; c: SettlerCursor | AngelicaCursor } | { kind: 'adesk' } | { kind: 'chordstone' } | { kind: 'hall'; i: number } | { kind: 'exchange'; tab: 'offers' | 'search' | 'mine' }
 type Near = null | { kind: 'gate' } | { kind: 'greg' } | { kind: 'friend'; f: GardenFriend } | { kind: 'fennel' } | { kind: 'gfennel' } | { kind: 'idlemog'; id: string; name: string } | { kind: 'anemonyx' } | { kind: 'work'; near: WorkNear } | { kind: 'waymark'; w: Waymark; own: boolean } | { kind: 'folk'; s: Settlement; id?: string } | { kind: 'spirit'; id: string; name: string } | { kind: 'zone'; u: ZoneUse } | { kind: 'settler'; id: SettlerId; name: string } | { kind: 'adesk' } | { kind: 'chordstone' }
 
 // ★ held until the save owner is known (shared/owner-ready.tsx: the 11-18 'rooms vanished on refresh' fix)
@@ -1868,9 +1869,10 @@ function AtherSliceGame() {
       }
       if (e.code === 'KeyE' && !n && (aimRef.current.tree || cAimRef.current.crystal) && stanceRef.current.kind === 'stowed') { workAimed(); return }
       if (e.code === 'KeyE' && !n && atFairDoor(pos.current.x, pos.current.z)) {
-        const tent = atFairDoor(pos.current.x, pos.current.z)!   // M233 s1: SMASH opens its sign-up panel; s2: so does DASH; Clash is still pitching
+        const tent = atFairDoor(pos.current.x, pos.current.z)!   // M233 s1: SMASH opens its sign-up panel; s2: so does DASH; s3: and CLASH
         if (tent.contest === 'smash') { setPanel({ kind: 'smash' }); return }
         if (tent.contest === 'dash') { setPanel({ kind: 'dash' }); return }
+        if (tent.contest === 'clash' && tent.level && netRef.current) { setPanel({ kind: 'clash', tier: tent.level, tent: tentsOf(netRef.current).filter(t => t.contest === 'clash').indexOf(tent) }); return }   // M233 s3
         hudSay(`${FAIR_NAME} · ${tentLabel(tent)} · the troupe is still pitching. The season's games, contests and market open soon.`, 'info', 6); return
       }
       if (e.code === 'KeyE' && !n && zone.kind === 'wilds' && attendantAt(pos.current.x, pos.current.z) >= 0) { setPanel({ kind: 'hall', i: attendantAt(pos.current.x, pos.current.z) }); return }   // M228 s1
@@ -2078,6 +2080,7 @@ function AtherSliceGame() {
       {panel?.kind === 'hall' && <TalkChoices node={hallNode} phone={hudSize === 'phone'} />}   {/* M228 s1 */}
       {panel?.kind === 'smash' && <SmashPanel onClose={() => setPanel(null)} />}{/* M233 s1 */}
       {panel?.kind === 'dash' && <DashPanel onClose={() => setPanel(null)} />}{/* M233 s2 */}
+      {panel?.kind === 'clash' && <ClashPanel tier={panel.tier} tent={panel.tent} ledger={ledger} setLedger={setLedger} onClose={() => setPanel(null)} />}{/* M233 s3 */}
       {panel?.kind === 'exchange' && <ExchangeHallPanel ledger={ledger} setLedger={setLedger} startTab={panel.tab} onClose={() => setPanel(null)} />}
       {panel?.kind === 'shop' && <ShopPanel id={panel.id} ledger={ledger} setLedger={setLedger} onClose={() => setPanel(null)} isTouch={isTouch} />}   {/* M114 s2: a Shop zone */}
       {panel?.kind === 'brew' && <BrewingPanel station={panel.station} onClose={() => setPanel(null)} />}
