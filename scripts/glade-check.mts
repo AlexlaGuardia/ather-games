@@ -29,6 +29,8 @@ import { GLADE_ANCHOR } from '../src/app/shimmer/open/ather/moonwell'
 import { gladeZoneGround } from '../src/app/shimmer/open/ather/glade-cluster'
 import { folkSpots } from '../src/app/shimmer/open/ather/folk-spots'
 import { aimAt } from './lib/aim.mts'
+import { setGladePeople } from '../src/app/shimmer/open/ather/glade-people'
+import { parseGladeLayer } from '../src/app/shimmer/open/ather/glade-layer'
 import { newInv, GIFT_YARROW_TAUGHT } from '../src/app/shimmer/open/shared/inventory'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), out = flag('--out', '/tmp/glade-check'), phone = process.argv.includes('--phone')
@@ -36,6 +38,9 @@ mkdirSync(out, { recursive: true })
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 let fails = 0
 const ok = (c: boolean, m: string) => { console.log(`${c ? '✓' : '✗'} ${m}`); if (!c) fails++ }
+// M153 s1c: people and houses stand where the SITE's published Glade layer puts them (Place mode `who:`/place pieces; Alex's v17,
+// e721152c, moved homes + Moglins), so the plan, the lots' solids and the routes read that layer, as the game does (fetchGladeLayer)
+setGladePeople(parseGladeLayer(await (await fetch(`${url}/shimmer/open/glade-edits`, { cache: 'no-store' })).json()).props)
 // M39: lots with Alex's blueprints (world/house-blueprints/glade-<lot>.json, the files prod reads) put their Moglin at the door
 const withBp = GLADE_LOTS.map(l => l.id).filter(l => { const f = `world/house-blueprints/glade-${l}.json`; if (!existsSync(f)) return false; setGladeBlueprint(l, parseHouse(JSON.parse(readFileSync(f, 'utf8')))); return true })
 console.log(`blueprints on: ${withBp.join(', ') || 'none'}`)
