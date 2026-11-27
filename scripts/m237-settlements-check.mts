@@ -11,6 +11,10 @@
 // s2: homes 5 + tent Dash on the moved one: the editor's COUNTER (panel, marker, every list line) = homesCount on the same merge;
 //   a fresh keeper builds exactly the counter's placed homes there, and a Dash tent stands BESIDE it (60-90 m, the baked Dash taken
 //   over: the season's tent counts unchanged) whose door says 'E · the Thistledown Fair · Dash' and E opens the Dash panel.
+// s3: PATHS + PADS follow them: on the scratch layer each fresh keeper's network joins the moved AND the added settlement to Greg's
+//   stone (the nearest waymark a fresh keeper has) by a spur with no gap (steps <= 30 m) that meets another path's point; standing
+//   there, the lots' ground is level on its pads (live ground under each footprint within 0.25 m of the pad) and the live ground meets
+//   the spur (within 0.6 m); the Dash tent beside it stands on dry ground (raw tiles from prod, settlement-routes tentSiteOk).
 //   OWNER_KEY=... npx tsx scripts/m237-settlements-check.mts [--url https://ather.games] [--out dir]
 import puppeteer, { type Page, type HTTPRequest } from 'puppeteer-core'
 import { createHash } from 'crypto'
@@ -18,9 +22,10 @@ import { readFileSync, existsSync, mkdirSync } from 'node:fs'
 import { dismissStartCard } from './lib/start-card.mts'
 import { applySettlementEdits, cleanSettlementEdits } from '../src/app/shimmer/open/ather/settlement-edits.ts'
 import { settlementLots, homesCount } from '../src/app/shimmer/open/ather/settlement-lots.ts'
-import { tentsOf, fairDoor, tentLabel, type Network, type Tent } from '../src/app/shimmer/open/ather/network.ts'
+import { tentsOf, fairDoor, tentLabel, type Network, type Tent, type Path } from '../src/app/shimmer/open/ather/network.ts'
+import { groundOf, tentSiteOk, SPUR_MIN, type TileData } from '../src/app/shimmer/open/ather/settlement-routes.ts'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
-const url = flag('--url', 'https://ather.games'), out = flag('--out', 'docs/looks/m237-s2-2026-11-27')
+const url = flag('--url', 'https://ather.games'), out = flag('--out', 'docs/looks/m237-s3-2026-11-27')
 mkdirSync(out, { recursive: true })
 const KEY = process.env.OWNER_KEY || (existsSync('.env') ? /OWNER_KEY=(.+)/.exec(readFileSync('.env', 'utf8'))?.[1]?.trim() : undefined)
 if (!KEY) { console.log('no OWNER_KEY'); process.exit(2) }
@@ -49,10 +54,18 @@ function intercept(o: Page) {
     r.continue()
   })
 }
+/** s3: prod's raw tiles round a point (settlement-routes groundOf) + their infected nodes */
+const tindex = await (await fetch(`${url}/open/wilds/tiles.json`)).json() as { tiles: { name: string; tx: number; ty: number; nodes: { x: number; z: number }[] }[] }
+async function tilesNear(x: number, z: number) {
+  const ts = tindex.tiles.filter(t => Math.abs(t.tx * 1000 - x) < 800 && Math.abs(t.ty * 1000 - z) < 800)
+  const data: TileData[] = await Promise.all(ts.map(async t => ({ tx: t.tx, ty: t.ty, meta: await (await fetch(`${url}/open/wilds/${t.name}.json`)).json(), dm: new Int16Array(await (await fetch(`${url}/open/wilds/${t.name}.bin`)).arrayBuffer()), bio: new Uint8Array(await (await fetch(`${url}/open/wilds/${t.name}.biome`)).arrayBuffer()) })))
+  return { ground: groundOf(data), nodes: ts.flatMap(t => t.nodes.map(q => ({ x: q.x + t.tx * 1000, z: q.z + t.ty * 1000 }))) }
+}
 const liveTxt = await (await fetch(`${url}/shimmer/open/wilds-edits`, { cache: 'no-store' } as any)).text()
 const bake = await (await fetch(`${url}/open/wilds/network-s1.json`, { cache: 'no-store' } as any)).json() as Network
 
-type Seen = { net: { id: string; name: string; x: number; z: number; biome?: string; homes?: number; tent?: { contest: string; level?: string } }[]; lots: Record<string, number>; tents: Tent[]; prompt: string; panel: boolean }
+type Lie = { pads: number; padDelta: number; spur: number; spurDelta: number }
+type Seen = { net: { id: string; name: string; x: number; z: number; biome?: string; homes?: number; tent?: { contest: string; level?: string } }[]; lots: Record<string, number>; tents: Tent[]; prompt: string; panel: boolean; paths: Path[]; lie: Record<string, Lie> }
 /** a fresh keeper on `layer`: the network the game holds, and (with `visit`) the lots built standing at each visited settlement */
 async function keeper(layer: string, tag: string, vp: { width: number; height: number }, visit: string[] = [], reload = false, tentOf: string | null = null): Promise<Seen> {
   const ctx = await br.createBrowserContext(), kp = await ctx.newPage(); await kp.setViewport(vp)
@@ -73,23 +86,41 @@ async function keeper(layer: string, tag: string, vp: { width: number; height: n
   if (reload) { await boot(); ok(true, `${tag}: reloaded`) }
   ok((await A('zone')) === 'wilds', `${tag}: a fresh keeper (${vp.width}x${vp.height}, no owner key) is in the Wilds`)
   const net = await kp.evaluate(() => ((window as W).__atherNet?.()?.settlements ?? []).map((s: any) => ({ id: s.id, name: s.name, x: s.x, z: s.z, biome: s.biome, homes: s.homes, tent: s.tent }))) as Seen['net']
-  const lots: Record<string, number> = {}
+  const lots: Record<string, number> = {}, lie: Record<string, Lie> = {}
   for (const id of visit) {
     const s = net.find(q => q.id === id); if (!s) continue
     await A('tp', s.x, s.z + 40, Math.PI); await sleep(3000); await dismissStartCard(kp).catch(() => {})
     let b: any = null
     for (let i = 0; i < 40; i++) { b = await kp.evaluate((i2: string) => (window as W).__settlements?.built?.().find((q: any) => q.id === i2) ?? null, id); if (b) break; await sleep(1000) }
     lots[id] = b ? b.lots.length : -1
+    // s3: the live ground under each lot's footprint vs its pad; along the spur, the live ground vs the path's own height
+    for (let i = 0; i < 20 && !(await kp.evaluate((x: number, z: number) => (window as W).__spreadMap?.()?.loaded?.(x, z), s.x, s.z)); i++) await sleep(1000)
+    lie[id] = await kp.evaluate((i2: string) => {
+      const n = (window as W).__atherNet(), sm = (window as W).__spreadMap(), st = n.settlements.find((q: any) => q.id === i2)
+      let padDelta = 0, spurDelta = 0, spur = 0
+      for (const p of st?.pads ?? []) { const sn = Math.sin(p[2]), cs = Math.cos(p[2]); for (const a of [-6, 0, 6]) for (const b of [-3.5, 0, 3.5]) { const h = sm.height(p[0] + cs * a + sn * b, p[1] - sn * a + cs * b); if (h !== null) padDelta = Math.max(padDelta, Math.abs(h - p[3])) } }
+      const sp = n.paths.find((p: any) => p.a === i2 && String(p.b).startsWith('~'))
+      for (const q of sp?.pts ?? []) if (sm.loaded(q[0], q[1])) { const h = sm.height(q[0], q[1]); if (h !== null) { spur++; spurDelta = Math.max(spurDelta, Math.abs(h - q[2])) } }
+      return { pads: st?.pads?.length ?? 0, padDelta, spur, spurDelta }
+    }, id) as Lie
     await A('look', Math.PI, -0.25); await sleep(2500)
     await kp.screenshot({ path: `${out}/${tag}-${id}.png` }).catch(() => {})
+    const sp = (await kp.evaluate((i2: string) => (window as W).__atherNet().paths.find((p: any) => p.a === i2 && String(p.b).startsWith('~'))?.pts ?? null, id)) as number[][] | null
+    if (sp && sp.length > 4) {   // on the spur ~50 m out, looking back up it at the settlement
+      const q = sp[Math.min(sp.length - 1, 3)], yaw = Math.atan2(-(s.x - q[0]), -(s.z - q[1]))
+      await A('tp', q[0], q[1], yaw); await A('look', yaw, -0.2); await sleep(3000)
+      await kp.screenshot({ path: `${out}/${tag}-${id}-path.png` }).catch(() => {})
+    }
   }
   const tents = await kp.evaluate(() => (window as W).__atherNet?.()?.tents ?? []) as Tent[]
+  const paths = await kp.evaluate(() => (window as W).__atherNet?.()?.paths ?? []) as Path[]
   let prompt = '', panel = false
   const t = tentOf ? tents.find(q => q.settlement === tentOf) : null
   if (t) {   // M237 s2: the Fair's tent beside it, the same door + sign-up panel as a baked one
     const s = net.find(q => q.id === tentOf)!
-    const far = { x: t.x + (t.x - s.x) * 0.6, z: t.z + (t.z - s.z) * 0.6 }   // past the tent, looking back over it at the settlement
-    await A('tp', far.x, far.z, Math.atan2(-(s.x - far.x), -(s.z - far.z))); await A('look', Math.atan2(-(s.x - far.x), -(s.z - far.z)), -0.3); await sleep(5000)
+    const far = { x: s.x + (t.x - s.x) * 0.25, z: s.z + (t.z - s.z) * 0.25 }   // s3: from the settlement's edge, looking out at its tent
+    const fy = Math.atan2(-(t.x - far.x), -(t.z - far.z))
+    await A('tp', far.x, far.z, fy); await A('look', fy, -0.12); await sleep(5000)
     await kp.screenshot({ path: `${out}/${tag}-tent-beside.png` }).catch(() => {})
     const d = fairDoor(t), yaw = Math.atan2(-(t.x - d.x), -(t.z - d.z))
     await A('tp', d.x, d.z, yaw); await A('look', yaw, -0.05)
@@ -99,7 +130,7 @@ async function keeper(layer: string, tag: string, vp: { width: number; height: n
     await kp.screenshot({ path: `${out}/${tag}-tent-panel.png` }).catch(() => {})
   }
   await ctx.close()
-  return { net, lots, tents, prompt, panel }
+  return { net, lots, tents, prompt, panel, paths, lie }
 }
 
 try {
@@ -204,6 +235,22 @@ try {
     ok(k.prompt.includes('E · the Thistledown Fair · Dash'), `s2 ${tag}: its door says "E · the Thistledown Fair · Dash"`)
     ok(k.panel, `s2 ${tag}: E at its door opens the Dash panel`)
     ok(k.lots[selId] === want(selId) && want(selId) <= 2 && k.lots[selId] > 0, `8. ${tag}: standing at ${D?.name}: ${k.lots[selId]} homes built (want ${want(selId)}, cap 2)`)
+    // ── s3: joined to Greg's stone by a continuous path; level pads; the ground meets the spur; the tent on dry ground ──
+    const P = k.paths, par = P.map((_, i) => i), f = (i: number): number => (par[i] === i ? i : (par[i] = f(par[i])))
+    const touch = (p: Path, q: Path) => [p.pts[0], p.pts[p.pts.length - 1]].some(e => q.pts.some(v => Math.hypot(v[0] - e[0], v[1] - e[1]) < 0.5))
+    for (let i = 0; i < P.length; i++) for (let j = 0; j < P.length; j++) if (i !== j && (touch(P[i], P[j]) || [P[i].a, P[i].b].some(x => !String(x).startsWith('~') && (x === P[j].a || x === P[j].b)))) par[f(i)] = f(j)
+    const comp = f(P.findIndex(p => p.a === 'greg' || p.b === 'greg'))
+    for (const [id, S] of [[MOVE, M], [selId, D]] as const) {
+      if (!S) continue
+      const sp = P.find(p => p.a === id && String(p.b).startsWith('~')), i = sp ? P.indexOf(sp) : -1
+      const near = Math.min(...P.filter((_, j) => f(j) === comp).flatMap(p => p.pts.map(q => Math.hypot(q[0] - S.x, q[1] - S.z))))
+      let gap = 0; for (let j = 1; j < (sp?.pts.length ?? 0); j++) gap = Math.max(gap, Math.hypot(sp!.pts[j][0] - sp!.pts[j - 1][0], sp!.pts[j][1] - sp!.pts[j - 1][1]))
+      ok((!!sp && f(i) === comp && Math.hypot(sp.pts[0][0] - S.x, sp.pts[0][1] - S.z) < 0.5 && gap <= 30) || (!sp && near < SPUR_MIN), `s3 ${tag}: ${S.name} joined to Greg's stone by a path (${sp ? `spur ${sp.pts.length} pts, worst step ${gap.toFixed(1)} m, meets ${sp.b}` : `none, ${near.toFixed(0)} m from one`})`)
+      const L = k.lie[id]
+      ok(!!L && L.pads === 5 && L.padDelta < 0.25, `s3 ${tag}: ${S.name}'s lots stand level on ${L?.pads} pads (live ground off a pad by at most ${L?.padDelta.toFixed(3)} m)`)
+      ok(!sp || (!!L && L.spur >= 3 && L.spurDelta < 0.6), `s3 ${tag}: the ground meets ${S.name}'s path (${L?.spur} loaded points, worst ${L?.spurDelta.toFixed(2)} m)`)
+    }
+    if (T) { const g = await tilesNear(T.x, T.z); ok(tentSiteOk(g.ground, g.nodes)(T.x, T.z), `s3 ${tag}: the Dash tent at (${T.x}, ${T.z}) stands on dry ground, off the Hollows' wells`) }
   }
 } catch (e) { ok(false, 'threw: ' + String(e).slice(0, 300)) }
 ok(errs.length === 0, `0 page errors${errs.length ? ': ' + errs.slice(0, 3).join(' | ') : ''}`)

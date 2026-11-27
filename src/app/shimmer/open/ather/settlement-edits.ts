@@ -5,7 +5,7 @@
 // re-bake keeps them (an edit whose baked id is gone is ignored; an ADDED settlement has its own id form and always stands).
 // Canon (Magii d2e2dca): an authored layer is the author's tool, not a canon change; the tent is the Thistledown troupe's,
 // never a town's, so the EVENT TENT here means "the Fair pitches beside it this season" (stored now, pitched in s2).
-// s1 limits: a moved or added settlement keeps no path to it (paths re-route in s3) and loses its baked lot pads (its flat disc
+// s1 limits (s3 lifted both: settlement-routes.ts routes a spur + levels new pads at load): a moved or added settlement kept no path and lost its baked lot pads (its flat disc
 // still levels the ground under it).
 //
 // ★ PURE (no fetch, no React): settlement-edits.test.ts drives it. Imports only TYPES from network.ts (network.ts imports this).

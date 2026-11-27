@@ -63,10 +63,32 @@ export async function loadNetwork(season = SEASON, base = '/open/wilds', layer =
     const r = await fetch(`${base}/network-s${season}.json`); if (!r.ok) return null
     const n = withGlade((await r.json()) as Network); if (!layer) return n
     await ensureEdits()   // never throws: no layer = the bake as it is
-    const m = pitchOwnerTents(applySettlementEdits(n, settlementEditsLive()))   // M237 s2: the Fair pitches beside a settlement
+    const rr = await withRoutes(n, applySettlementEdits(n, settlementEditsLive()), base)   // M237 s3: paths + pads follow moved/added ones
+    const m = pitchOwnerTents(rr.m, rr.siteOk)   // M237 s2: the Fair pitches beside a settlement (s3: on dry land, off the Hollows' wells)
     if (typeof window !== 'undefined') (window as unknown as { __atherNet?: () => Network }).__atherNet = () => m   // checks: READ only
     return m
   } catch { return null }
+}
+
+/** M237 s3: the raw tiles round the owner's moved/added settlements (and its tent asks) are fetched, and settlement-routes.ts
+ *  routes their spurs, levels their pads and tests the tents' ground on them. Any failure = the merge as it was (s2). */
+async function withRoutes(baked: Network, m: Network, root: string): Promise<{ m: Network; siteOk?: (x: number, z: number) => boolean }> {
+  if (m === baked) return { m }
+  try {
+    const R = await import('./settlement-routes')
+    const asks = m.settlements.filter(s => (s as { tent?: unknown }).tent).map(s => ({ x: s.x, z: s.z, r: OWNER_TENT_RINGS[OWNER_TENT_RINGS.length - 1] + 28 + R.TENT_NODE_CLEAR }))
+    const want = R.tilesFor(R.groundBoxes(baked, m, asks))
+    const idx = (await (await fetch(`${root}/tiles.json`)).json()) as { tiles: { name: string; tx: number; ty: number; nodes: { x: number; z: number }[] }[] }
+    const have = idx.tiles.filter(t => want.some(w => w.tx === t.tx && w.ty === t.ty))
+    const get = async (u: string) => { const res = await fetch(u); if (!res.ok) throw new Error(`${u} ${res.status}`); return res }
+    const tiles = await Promise.all(have.map(async t => {
+      const [meta, bin, bio] = await Promise.all([get(`${root}/${t.name}.json`).then(x => x.json()), get(`${root}/${t.name}.bin`).then(x => x.arrayBuffer()), get(`${root}/${t.name}.biome`).then(x => x.arrayBuffer())])
+      return { tx: t.tx, ty: t.ty, meta, dm: new Int16Array(bin), bio: new Uint8Array(bio) }
+    }))
+    const g = R.groundOf(tiles)
+    const nodes = have.flatMap(t => t.nodes.map(q => ({ x: q.x + t.tx * 1000, z: q.z + t.ty * 1000 })))
+    return { m: R.rerouteNetwork(baked, m, g), siteOk: R.tentSiteOk(g, nodes) }
+  } catch { return { m } }
 }
 
 /** Moonwell Glade joined every season's settlements (M30) until M67 s1b-2 (hub 11-22) took it OUT of the Wilds into the
@@ -316,7 +338,7 @@ export function ownerTentSpot(n: Network, s: Settlement, others: readonly Fair[]
   return null
 }
 /** the merged network's tents with every settlement's owner tent pitched (see the rule above). No owner tent = the same object. */
-export function pitchOwnerTents(n: Network): Network {
+export function pitchOwnerTents(n: Network, siteOk?: (x: number, z: number) => boolean): Network {
   const asks = n.settlements.filter(s => (s as { tent?: Pick<Tent, 'contest' | 'level'> }).tent) as (Settlement & { tent: Pick<Tent, 'contest' | 'level'> })[]
   if (!asks.length) return n
   const tents: Tent[] = tentsOf(n).map(t => ({ ...t })), taken = new Set<number>()
@@ -324,7 +346,7 @@ export function pitchOwnerTents(n: Network): Network {
     const want = s.tent, kind = (t: Tent) => t.contest === want.contest && (t.level ?? null) === (want.contest === 'clash' ? want.level ?? 'easy' : null)
     let slot = -1, sd = Infinity
     tents.forEach((t, i) => { if (!taken.has(i) && !t.settlement && kind(t)) { const d = Math.hypot(t.x - s.x, t.z - s.z); if (d < sd) { sd = d; slot = i } } })
-    const spot = ownerTentSpot(n, s, tents.filter((_, i) => i !== slot))
+    const spot = ownerTentSpot(n, s, tents.filter((_, i) => i !== slot), siteOk)
     if (!spot) continue   // no room beside it: the baked tent stays where it was
     const t: Tent = { ...spot, contest: want.contest, settlement: s.id, ...(want.contest === 'clash' ? { level: want.level ?? 'easy' } : {}) }
     if (slot >= 0) { tents[slot] = t; taken.add(slot) } else { taken.add(tents.push(t) - 1) }
