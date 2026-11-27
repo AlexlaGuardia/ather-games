@@ -172,7 +172,12 @@ async function main(p: Page, desk: boolean, out: string, errs: string[]) {
   }
   const run = async (tag: string) => {
     await openTent()
-    const s = await p.$(`[data-signup-spirit="${ID}"]`); if (!s) { ok(false, `${tag}: her fox at the sign-up`); return null }
+    const s = await p.$(`[data-signup-spirit="${ID}"]`)
+    if (!s) {
+      await shot(`${tag}-x-no-signup`)
+      const dbg = await p.evaluate(() => ({ zone: (window as any).__ather?.zone?.(), panel: !!document.querySelector('[data-panel="clash"]'), spirits: [...document.querySelectorAll('[data-signup-spirit]')].map(e => (e as HTMLElement).dataset.signupSpirit) }))
+      ok(false, `${tag}: her fox at the sign-up (${JSON.stringify(dbg)})`); return null
+    }
     await s.click(); await sleep(300); await (await p.$('[data-signup-enter] button'))!.click()
     await p.waitForSelector('[data-clash-ring="ring"]', { timeout: 60000 })
     const tac: Record<string, string> = {}
