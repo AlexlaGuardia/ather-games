@@ -17,6 +17,7 @@ import { HearthFrame, HearthButton, Well, H, hearthDisplay } from '../../ui/hear
 import { getInv, setInv, useInv } from '../shared/bag'
 import { countOf, itemDef, give, makeBait, BAIT_FROM, baitYield, HOTBAR, SLOTS, type Stack, type Inv } from '../shared/inventory'
 import { hudSay } from '../shared/hud-say'
+import { landContractsNow } from '../business/contracts'   // M115 s2: season-contract deliveries land in the bank
 import { GROUND_Y, squareAt, sqId, loadGarden, plotHeightAt, GREG } from './plot'
 import { forestryLevel } from './forestry'
 import { connectedPieces, extractBlueprint, fitsPad } from './plot-blueprint'
@@ -888,7 +889,15 @@ function WallTools({ owned, cat, onCat }: { owned: React.MutableRefObject<Readon
 let bank: Bank | null = null
 const SERVER_BANK: Bank = freshBank()
 const bsubs = new Set<() => void>()
-const getB = (): Bank => { if (!bank) bank = typeof window === 'undefined' ? SERVER_BANK : loadBank(); return bank }
+const getB = (): Bank => { if (!bank) { if (typeof window === 'undefined') bank = SERVER_BANK; else { bank = loadBank(); landContractsOnLoad() } } return bank }
+/** M115 s2: season-contract deliveries owed while away land in the bank on the first read (business/contracts.ts: exact, never
+ *  twice). Plain store writes, no notify, like retireAlchemy: this runs inside the first read, before anything has subscribed. */
+function landContractsOnLoad() {
+  const r = landContractsNow(bankCap(chestsStanding(ownW())))
+  if (!r) return
+  bank = r.bank
+  if (r.landed.length) setTimeout(() => hudSay(`Ather Trading Co. delivery: ${r.landed.map(x => `${itemDef(x.id).name} × ${x.n}`).join(', ')} in the garden bank.`, 'item', 6), 1800)
+}
 export function setBank(b: Bank) { bank = b; saveBank(b); bsubs.forEach(f => f()) }
 /** M68 s2: the garden bank now (the one-pedestal guard reads it outside React) */
 export const currentBank = () => getB()

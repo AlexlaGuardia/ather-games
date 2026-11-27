@@ -5,7 +5,7 @@
 // FRONT_SHOPS['trade-co'], its own name), never a newly named market.
 //   · A supplier KIND is what a zone's tag ref names (world/builder-zones.ts ZoneTag, picked in the Nyx builder). This slice has ONE
 //     kind, 'trade-co', selling the canon staples Rootbulb + Capgrain (world/cuisine.md:19-20; ather/cooking.ts STAPLES).
-//   · ONE-TIME BULK buy only (M115 way 1). The SEASON CONTRACT (M115 way 2: 'contract', never deed / standing order) is a later slice.
+//   · ONE-TIME BULK buy here (M115 way 1). The SEASON CONTRACT (M115 way 2) = business/contracts.ts (M115 s2).
 //   · This slice's lots go to the BAG (they cook at the hearth). M115's garden-bank delivery is for building materials, later.
 //   · Jin's: lot sizes + prices (the Smokehouse's scale: a contract run buys a few lots). The panel shows the zone's own tag name
 //     (default: the Trading Co.'s own name); no keeper speaks, no lines.
@@ -38,11 +38,13 @@ export const MARKET_GOODS = Object.keys(STAPLES)
 export const METAL_LOTS = ['venium', 'eurleen'] as const
 
 export type LotBuy = { ok: true; ledger: Ledger; inv: Inv } | { ok: false; why: string }
-export function buyLot(ledger: Ledger, inv: Inv, kind: string, id: string): LotBuy {
+/** `price` (M115 s2): the lot's price now (business/contracts.ts bulkPrice: 20% off while a season contract there runs) */
+export function buyLot(ledger: Ledger, inv: Inv, kind: string, id: string, price?: number): LotBuy {
   const lot = supplierKind(kind)?.lots.find(l => l.id === id)
   if (!lot) return { ok: false, why: 'Not sold here.' }
-  if (ledger.marks < lot.price) return { ok: false, why: `It costs ${lot.price.toLocaleString()} Marks. You have ${ledger.marks.toLocaleString()}.` }
+  const cost = price ?? lot.price
+  if (ledger.marks < cost) return { ok: false, why: `It costs ${cost.toLocaleString()} Marks. You have ${ledger.marks.toLocaleString()}.` }
   const g = give(inv, id, lot.n)
   if (g.left > 0) return { ok: false, why: 'No room in the bag for the lot.' }
-  return { ok: true, ledger: { ...ledger, marks: ledger.marks - lot.price }, inv: g.inv }
+  return { ok: true, ledger: { ...ledger, marks: ledger.marks - cost }, inv: g.inv }
 }
