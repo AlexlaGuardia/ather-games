@@ -34,7 +34,8 @@ p.on('pageerror', e => errs.push(`${where}: ${String(e).slice(0, 200)}`))
 await p.goto(`${url}/owner?key=${encodeURIComponent(KEY)}`, { waitUntil: 'domcontentloaded', timeout: 120000 })
 const go = async (path: string, vp = { width: 1280, height: 800 }) => {
   where = path; await p.setViewport(vp)
-  const r = await p.goto(`${url}${path}`, { waitUntil: 'networkidle2', timeout: 180000 }).catch(() => null)
+  // 'load', not networkidle2: /shimmer/dev/blueprints keeps a request open, so networkidle2 never fires there (11-27 run).
+  const r = await p.goto(`${url}${path}`, { waitUntil: 'load', timeout: 180000 }).catch(() => null)
   return r
 }
 
