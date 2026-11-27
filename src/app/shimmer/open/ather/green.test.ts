@@ -7,6 +7,7 @@ import {
   plotShape, mistWalls, STARTING_SQUARES, HOME_LANDING, LANDING_OFF, GATE, GATE_TRUNKS, GATE_TRUNK_R, GREEN_LAMPS, CHORDSTONE,
   THRESHOLD, GROUND_Y, onGreen, GATE_FACE,
 } from './plot'
+import { freeLanding } from './green-landing'
 import { clusterFrame, clusterGround, mateWalls, inMiddle } from './cluster'
 import { CHORDSTONE_R } from './chordstone'
 let fails = 0
@@ -58,7 +59,9 @@ ok(shape.solids(GATE_TRUNKS[0].x - 0.1, 0, GATE_TRUNKS[0].z - 0.1, GATE_TRUNKS[0
 const page = readFileSync(new URL('./page.tsx', import.meta.url), 'utf8')
 ok(/const goHome = useCallback\(\(\) => \{ if \(gardenOpen\(loadTut\(\)\)\) arrive\(\{ kind: 'plot' \}, HOME_LANDING\)/.test(page), 'goHome (travel home, death, a fall) lands at HOME_LANDING')
 ok(/useState<Spawn>\(HOME_LANDING\)/.test(page) && /const pos = useRef\(\{ x: HOME_LANDING\.x/.test(page), 'loading in starts at HOME_LANDING')
-ok(/if \(visitHost\) arrive\(\{ kind: 'plot' \}, HOME_LANDING\)/.test(page), 'a guest visiting lands on the host\'s Green')
+// M208 s2 moved this: a guest no longer lands on HOME_LANDING but on a free spot (freeLanding), all of which sit on the Green
+ok(['p_a', 'p_b', 'p_c', 'p_d', 'p_e', 'p_f'].every(id => { const l = freeLanding(id); return inMiddle(solo, l.x, l.z) }), 'a guest visiting lands on the host\'s Green (every free landing spot is on the Green)')
+ok(/if \(visitHost\) \{ const s = freeLanding\(selfPlayerId\(\)\).{0,120}arrive\(\{ kind: 'plot' \}, s\)/.test(page), 'the visit arrival uses that free landing')
 ok(!/arrive\(\{ kind: 'plot' \}, THRESHOLD\)/.test(page), 'no arrival lands on THRESHOLD any more')
 ok(/<GreenDressing \/>/.test(page), 'the Green is dressed on the plot')
 
