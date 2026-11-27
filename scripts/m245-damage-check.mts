@@ -67,13 +67,22 @@ async function live(gunId: string, first: boolean) {
     await p.evaluate(() => { const W = window as any, c = W.__ather.combat(); W.__tw = []; W.__gun0 = c.gun
       c.gun = { ...c.gun, pair: true, clip: 4, fireCd: 0.2, reloadTime: 2.8, damage: 99 / 8, crit: 99 / 8 * 1.25 }
       c.keeper.ammo = 4; c.keeper.reloading = 0; c.keeper.sinceShot = 99; if (c.mana) c.mana.cur = Math.max(c.mana.cur, 999)
-      const f = () => { const cc = W.__ather.combat(); for (const e of cc.events) if (e.kind === 'fired') W.__tw.push({ hand: e.hand ?? null, ammo: cc.keeper.ammo, rel: +cc.keeper.reloading.toFixed(2) }); if (!W.__twStop) requestAnimationFrame(f) }
-      requestAnimationFrame(f) })
-    for (let i = 0; i < 5; i++) { await pull(); await sleep(380) }
-    const tw = await p.evaluate(() => { const W = window as any; W.__twStop = true; const c = W.__ather.combat(); return { shots: W.__tw, reloading: +c.keeper.reloading.toFixed(2), ammo: c.keeper.ammo } })
-    const hands = tw.shots.map((s: any) => s.hand).join(',')
-    say(hands === 'left,right,left,right' && tw.shots[3].ammo === 0 && tw.shots[3].rel > 2.7 && tw.reloading > 0 && tw.reloading < 2.8,
-      `${view} twins (pair rule, live engine): 5 pulls -> ${tw.shots.length} shots [${hands}], 4th starts the reload (${tw.shots[3]?.rel} s of 2.8), 5th refused, still reloading ${tw.reloading} s`)
+      // the page swaps c.events for a fresh array mid-frame (combat-layer), so a rAF reader never sees 'fired': hook every array's push
+      const hook = (arr: any[]) => { const push = arr.push.bind(arr); arr.push = (...xs: any[]) => { for (const e of xs) if (e?.kind === 'fired' && !W.__twStop) { const r: any = { hand: e.hand ?? null, ammo: c.keeper.ammo }; W.__tw.push(r); queueMicrotask(() => { r.rel = +c.keeper.reloading.toFixed(2) }) }; return push(...xs) }; return arr }
+      let evs = hook(c.events); Object.defineProperty(c, 'events', { configurable: true, get: () => evs, set: (v: any[]) => { evs = hook(v) } })
+    })
+    // the game clock runs slow under swiftshader (a capped dt a frame), so a 0.2 s fireCd can outlast the wall gap: clear it before
+    // each pull (as shoot() below does); the reload is left alone, so the 5th pull still meets it. A slow desk frame can miss a short
+    // click outright, so pull until four have left (at most 12), then twice more into the reload
+    const count = () => p.evaluate(() => (window as any).__tw.length as number)
+    for (let i = 0; i < 12 && (await count()) < 4; i++) { await p.evaluate(() => { (window as any).__ather.combat().keeper.sinceShot = 99 }); await pull(); await sleep(380) }
+    for (let i = 0; i < 2; i++) { await p.evaluate(() => { (window as any).__ather.combat().keeper.sinceShot = 99 }); await pull(); await sleep(380) }
+    const tw = await p.evaluate(() => { const W = window as any; W.__twStop = true; const c = W.__ather.combat(); return { shots: W.__tw, reloading: c.keeper.reloading, ammo: c.keeper.ammo, now: performance.now() } })
+    const hands = tw.shots.map((s: any) => s.hand).join(','), s4 = tw.shots[3]
+    // 4 shots, no reload under the first three, the 4th empties the clip and starts the 2.8 s reload (read as the fire() returns:
+    // game time, not wall time: swiftshader runs the game clock slow; the same frame's stepCombat may already have taken one dt off), the 5th pull is refused (still reloading)
+    say(hands === 'left,right,left,right' && tw.shots.slice(0, 3).every((s: any) => s.rel === 0) && s4.ammo === 0 && s4.rel > 2.7 && s4.rel <= 2.8 && tw.reloading > 0,
+      `${view} twins (pair rule, live engine): pulls -> ${tw.shots.length} shots [${hands}], reloads ${tw.shots.map((s: any) => s.rel).join('/')} (the 4th starts the 2.8), 2 more pulls refused (reloading ${tw.reloading.toFixed(2)} s)`)
     await p.screenshot({ path: `${out}/twins-pair-${view}.png` })
     await p.evaluate(() => { const W = window as any, c = W.__ather.combat(); c.gun = W.__gun0; c.keeper.reloading = 0; c.keeper.ammo = c.gun.clip })
   }
