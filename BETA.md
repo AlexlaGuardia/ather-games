@@ -299,6 +299,8 @@ Steps (one worker each, in order; each keeps `beta-m7-saves` green):
 - **HUB chores between reviews:** prod check suite rotation; morning checkpoint 09:00 with every sheet for Alex in one batch
 
 ## Inbox (Alex's brain dump: hub writes here at once, dated, his words; triaged into rows / queue / CANON_GAPS / killed)
+- 11-27 04:5x Alex (overrides Magii 6a2f193 'Co. sells metal'): 'no i would like to venium and eurleen to be found in the ather..i think we went over the venium sadlands already no? eurleen could be found on the top right islands where veradyn is found on nyx side' -> canon amend asked (CANON_GAPS + dbr magii); then M134/M185: Venium + Eurleen = Ather mining nodes (Sadlands / NE islands), not Co. lots. Hub note: the Sadlands ruling (6069026) never named Venium; economy.md has Venium = Spine, Eurleen = Valkara (both Nyx).
+- 11-27 05:0x Magii fc33140 (Alex live): LINGSTON IS THE GRAND EXCHANGE (Benji's trade hall, Wilds market square, Moglin attendants: offers / search / orders); Citadel keeps only the Co. contract office -> new row for the hall build; GE-at-Citadel labels move; lark rewrites the clerk's 'Exchange next door' line.
 - 11-26 21:5x Alex: 'the jump has some kind of reaction where it cancels momentum instead of pushing you forward you stop and hop up' -> M222 (play, after M221). Alex to bed.
 - 11-26 21:4x Alex on the Hovari line sheet: 'its still holding onto the hovari baby body lets try to get them a bit bigger.. but still juvenile' -> M202 Hovari redo, night queue sprites B next
 - 11-26 21:2x Alex: 'for my garden a stale resource.. the gate is still there under the new design' -> M219
