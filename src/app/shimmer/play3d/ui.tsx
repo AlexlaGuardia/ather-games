@@ -35,7 +35,7 @@ export const TOOL_HUD: Record<string, { glyph: string; tint: string; label: stri
 export const GE_BUY_CURATED = [
   'mana_draught', 'shard_tonic', 'goldwood_plank', 'goldwood_bark', 'raw_mana_shard',
   'shimmeroak_plank', 'seed_shimmerwheat', 'seed_glowroot', 'seed_sunpetal',
-  'seed_violetbloom', 'seed_stormgrass', 'seed_rootvine', 'seed_tidepetal',
+  'seed_violetbloom', 'seed_stormgrass', 'seed_goldleaf', 'seed_tidepetal',
 ]
 
 // `SlotGrid` and `StationShell` left this file on 2026-09-23 (Carved Hearth): the five station menus

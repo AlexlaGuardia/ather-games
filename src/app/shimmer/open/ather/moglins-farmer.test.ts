@@ -58,7 +58,7 @@ const fullTanks = (w: Works, at: number): WaterSave => settle(settle(freshWater(
   const w = works(1, 1), water = fullTanks(w, T0)
   let f = newFarm(6)
   const g = plant(f, 0, seedId('goldleaf'), T0 - H); if (g.ok) f = g.farm          // ready (5 min crop, an hour ago)
-  const r = plant(f, 3, seedId('stormgrass'), T0); if (r.ok) f = r.farm            // growing (M204 s3: Rootvine retired)
+  const r = plant(f, 3, seedId('stormgrass'), T0); if (r.ok) f = r.farm            // growing (M204 s3: the old earth herb retired)
   const t = tick(village(farmer(5)), w, T0 + 10 * 60_000, { farm: f, water })
   ok(t.tended === 1 && t.grounds!.farm.beds[3]!.watered && !t.grounds!.farm.beds[0]!.watered, 'only the growing bed is watered')
   const t2 = tick(t.village, w, T0 + 40 * 60_000, t.grounds)

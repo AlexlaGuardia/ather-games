@@ -13,10 +13,10 @@
 //   Mana  = Fuli ground at the CRUSHER                                     -> Fuli Powder
 // "these would all just be part of recipes to add the element to the dish": a dish cooked with one is that element's meal
 // (the bar, MEALS_FOR_FORM and the form gate below are unchanged). Names = Alex's working words, canon [OPEN] (athernyx
-// CANON_GAPS 'Cooking, part 2'), for @lark. ROOTVINE IS RETIRED (Alex: "too close to rootbulb"): no tree turns it up any more.
+// CANON_GAPS 'Cooking, part 2'), for @lark. THE OLD EARTH HERB IS RETIRED (Alex: "too close to rootbulb"): no tree turns it up any more.
 // Old saves: a `<el>_spice` in a bag is RENAMED in place to its element's infusion when the bag loads (inventory.ts loadInv,
-// LEGACY_SPICE), so a keeper loses nothing. M204 s3 (canon 35c83eb): Rootvine is gone from the crop roster; a held or growing
-// Rootvine loads as Goldleaf, the earth herb, grade and count kept (farming.ts RETIRED_CROPS).
+// LEGACY_SPICE), so a keeper loses nothing. M204 s3 (canon 35c83eb): the retired herb is gone from the crop roster; a held or
+// growing one loads as Goldleaf, the earth herb, grade and count kept (farming.ts RETIRED_CROPS).
 //
 // Herb finds (M204, Jin's application of canon's herb grounds, alchemy.md 07-30): a herb is FOUND at a node the keeper
 // already works. Stormgrass feeds the Storm Broth; Tidepetal + Violetbloom stay finds (canon herbs, growable crops).

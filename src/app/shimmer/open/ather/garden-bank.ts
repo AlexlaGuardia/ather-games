@@ -114,7 +114,7 @@ export function adoptBank(v: unknown): Bank {
   const raw = (v as { v?: number; stacks?: unknown })?.stacks
   if ((v as { v?: number })?.v !== 1 || !Array.isArray(raw)) return freshBank()
   const stacks = raw.filter((s): s is Stack => !!s && typeof s.id === 'string' && Number.isFinite(s.n) && s.n >= 1).map(s => ({ id: s.id, n: Math.floor(s.n) }))
-  // M204 s3: a RETIRED crop (Rootvine, canon 35c83eb) comes back as its replacement (Goldleaf), in place, grade + count kept
+  // M204 s3: a RETIRED crop (farming.ts RETIRED_CROPS, canon 35c83eb) comes back as its replacement (Goldleaf), in place, grade + count kept
   // (renamed, never merged: a bank may hold several stacks of one id, each within its stack size, so nothing moves or spills)
   return { v: 1, stacks: stacks.some(s => renameRetired(s.id) !== s.id) ? stacks.map(s => ({ id: renameRetired(s.id), n: s.n })) : stacks }
 }

@@ -55,7 +55,8 @@ export interface PlantedLook {
 export const HERB_MAT_OF_CROP: Readonly<Record<string, number>> = {
   violetbloom: MAT.VIOLETBLOOM,
   stormgrass: MAT.STORMGRASS,
-  rootvine: MAT.ROOTVINE,
+  rootvine: MAT.ROOTVINE,   // LEGACY (retired 2026-11-26): an old save's bed still draws
+  goldleaf: MAT.GOLDLEAF,   // M204 s3b: the earth herb since canon 9a9e254, drawn as the wild herb it is (HERB_TIP gold)
   tidepetal: MAT.TIDEPETAL,
 }
 
@@ -71,7 +72,6 @@ export const SEED_CROP_LOOK: Readonly<Record<string, { body: number; head: numbe
   shimmerwheat: { body: 0xa8b86a, head: 0xf6e2a0 },   // paler, silvered grain beside atherwheat's
   glowroot:     { body: 0x6f9a4a, head: 0xd6ffb0 },   // the bulb's glow shows at the crown
   sunpetal:     { body: 0x6d8f48, head: 0xffb347 },   // sun-gold petal
-  goldleaf:     { body: 0xb9b44e, head: 0xf2dc78 },   // MATERIAL_COLOR[GOLDLEAF] + HERB_TIP, the wild plant's own two (09-17)
 }
 
 export function plantedLook(cropId: string): PlantedLook | null {

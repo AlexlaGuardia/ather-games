@@ -134,7 +134,9 @@ export const CROP_DEFS: Record<string, CropDef> = {
 
   // ── The four element herbs — the ingredient half of the infusion economy ──────────────────
   // CANON (`CANON/game/alchemy.md`, ruled 2026-07-30 · `game/shimmer-skilling.md` › Tier 2):
-  // Violetbloom (Mana) · Stormgrass (Storm) · Rootvine (Earth) · Tidepetal (Water) feed the four
+  // Violetbloom (Mana) · Stormgrass (Storm) · Goldleaf (Earth, since 2026-11-26) · Tidepetal (Water) feed the four
+  // (M204 s3b: the old earth herb's row below is LEGACY, kept so a held seed or crop in an old save still plants and sells;
+  // ELEMENT_HERBS.earth points at the tier-1 goldleaf row, which canon rules is the same herb.)
   // Infusions, and the Infusions are the ONLY road to an evolved form. Canon owns that these four
   // exist, which element each carries, and their growth times (20/20/25/20 min — Rootvine "anchors
   // deep. Heavy to harvest."). Level gates, mana cost, XP and yield counts are Jin's.
@@ -227,6 +229,6 @@ export const CROP_IDS = Object.keys(CROP_DEFS)
 export const ELEMENT_HERBS: Record<HerbElement, { cropId: string; harvestItemId: string }> = {
   mana:  { cropId: 'violetbloom', harvestItemId: 'violetbloom_petal' },
   storm: { cropId: 'stormgrass',  harvestItemId: 'stormgrass_blade' },
-  earth: { cropId: 'rootvine',    harvestItemId: 'rootvine_coil' },
+  earth: { cropId: 'goldleaf',    harvestItemId: 'goldleaf' },       // M204 s3b: canon athernyx 9a9e254, Goldleaf is the earth herb
   water: { cropId: 'tidepetal',   harvestItemId: 'tidepetal_bloom' },
 }

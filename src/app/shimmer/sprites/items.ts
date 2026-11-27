@@ -3466,6 +3466,7 @@ export const ITEM_PALETTES: Record<string, string[]> = {
   violetbloom_petal: ['#a463d8', '#6d3f96', '#d9a8f0', '#1a1a2e', '#d06040', '#50a040', '#4080c0', '#8060b0'],
   stormgrass_blade: ['#5aa8d8', '#356f9c', '#cfeaf7', '#1a1a2e', '#d06040', '#50a040', '#4080c0', '#8060b0'],
   rootvine_coil: ['#7a5a2e', '#4e3819', '#a8894f', '#1a1a2e', '#d06040', '#50a040', '#4080c0', '#8060b0'],
+  goldleaf: ['#b9b44e', '#7d7a2c', '#f2dc78', '#1a1a2e', '#d06040', '#50a040', '#4080c0', '#8060b0'],   // M204 s3b: the earth herb; MATERIAL_COLOR + HERB_TIP gold, shape placeholder
   tidepetal_bloom: ['#48c0b8', '#2b8079', '#bdf0ea', '#1a1a2e', '#d06040', '#50a040', '#4080c0', '#8060b0'],
   sunfruit: ['#1a1a2e', '#c89832', '#ae852d', '#dfe859', '#805814', '#236417'],
   moonberry: ['#64c0e8', '#58a5c6', '#4a8aa5', '#1a1a2e', '#865c2d', '#50a040', '#4080c0', '#8060b0'],
@@ -3658,6 +3659,7 @@ export const ITEM_FRAME_MAP: Record<string, string[]> = {
   water_infusion:      ['WATER_INFUSION'],
   stormgrass_blade:    ['STORMGRASS_BLADE'],
   rootvine_coil:       ['ROOTVINE_COIL'],
+  goldleaf:            ['STORMGRASS_BLADE'],
   tidepetal_bloom:     ['TIDEPETAL_BLOOM'],
   // Crop potions
   harvest_brew:        ['HARVEST_BREW'],
@@ -4141,6 +4143,7 @@ export const ITEM_ICONS: Record<string, SpriteAnim> = {
   water_infusion:      { frames: [WATER_INFUSION], rate: 1 },
   stormgrass_blade:    { frames: [STORMGRASS_BLADE], rate: 1 },
   rootvine_coil:       { frames: [ROOTVINE_COIL], rate: 1 },
+  goldleaf:            { frames: [STORMGRASS_BLADE], rate: 1 },
   tidepetal_bloom:     { frames: [TIDEPETAL_BLOOM], rate: 1 },
   // Crop potions
   harvest_brew:        { frames: [HARVEST_BREW], rate: 1 },

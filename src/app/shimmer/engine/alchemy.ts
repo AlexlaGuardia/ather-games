@@ -94,7 +94,7 @@ export const POTION_DEFS: Record<string, PotionDef> = {
   earth_infusion: {
     id: 'earth_infusion', name: 'Earth Infusion', tier: 2,
     minAlchemyLevel: 10, manaCost: 25, xpGrant: 60, resultCount: 1,
-    recipe: [{ itemId: 'earth_crystal', count: 1 }, { itemId: 'rootvine_coil', count: 2 }, { itemId: 'amber_sap', count: 1 }],
+    recipe: [{ itemId: 'earth_crystal', count: 1 }, { itemId: 'goldleaf', count: 2 }, { itemId: 'amber_sap', count: 1 }],
   },
   // ── ★ THE FIRST POTENT INFUSION — the potency axis opens (2026-09-21, world's row by dbr) ────
   // Canon: shelf fungus is *"a spirit infusion ingredient"* (`world/flora.md`) and infusion QUALITY
@@ -107,7 +107,7 @@ export const POTION_DEFS: Record<string, PotionDef> = {
   potent_earth_infusion: {
     id: 'potent_earth_infusion', name: 'Potent Earth Infusion', tier: 3,
     minAlchemyLevel: 14, manaCost: 30, xpGrant: 80, resultCount: 1,
-    recipe: [{ itemId: 'earth_crystal', count: 1 }, { itemId: 'rootvine_coil', count: 2 }, { itemId: 'amber_sap', count: 1 }, { itemId: 'shelf_slices', count: 2 }],
+    recipe: [{ itemId: 'earth_crystal', count: 1 }, { itemId: 'goldleaf', count: 2 }, { itemId: 'amber_sap', count: 1 }, { itemId: 'shelf_slices', count: 2 }],
   },
   water_infusion: {
     id: 'water_infusion', name: 'Water Infusion', tier: 2,

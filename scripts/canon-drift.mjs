@@ -603,6 +603,18 @@ function canonRetiredVocabulary() {
     // Pyramid Zero. One sense only, 4 occurrences, so a human reads them.
     pyramidzero: { mode: 'review', why: 'retired as a game/line NAME only — the location is canon (the Crucible is held inside it)' },
     gate:     { mode: 'review', why: 'retired ONLY for travel that stays inside the Ather; correct for a crossing OUT' },
+    // ── added 2026-11-27 (M204 s3b), after athernyx 9a9e254 put the old earth herb on the table (Goldleaf replaces it).
+    // `fail`: the substring is unambiguous (no English word contains it), so ANY new occurrence is drift, player text first.
+    // ⚠ `legacy` IS AN EXEMPTION THAT EXPIRES, NOT A SILENCER. Two kinds of file still have to say the word: the open/ather
+    // save MIGRATION (farming.ts RETIRED_CROPS maps the stored id; infusions.test proves an old save loads as Goldleaf), and
+    // the OLD voxel/play3d game, whose legacy crop/item/material rows stay so old saves keep loading (its earth herb already
+    // points at goldleaf). Hits there are reported as a NOTE with a count; a hit in ANY other file fails; and a listed file
+    // that no longer holds the word fails too, so the list can only shrink and never quietly outlives its reason.
+    rootvine: { mode: 'fail', why: 'the earth herb was retired 2026-11-26 (too close to Rootbulb); Goldleaf replaces it',
+      legacy: ['open/ather/farming.ts', 'open/ather/infusions.test.ts',
+        'voxel/crops.ts', 'voxel/registry.ts', 'voxel/depth.ts', 'voxel/flora.ts', 'voxel/character.ts', 'voxel/herbs.test.ts',
+        'voxel3d/brew.ts', 'voxel3d/planted-feed.ts', 'voxel3d/attrs.ts', 'voxel3d/flora-mesh.ts',
+        'voxel3d/brew.test.ts', 'voxel3d/station.test.ts', 'sprites/items.ts'] },
     rune:     { mode: 'review', why: 'retired only as a thing BOUGHT — a crafted/gifted rune is canon' },
   }
   if (!retired.length) {
@@ -642,6 +654,19 @@ function canonRetiredVocabulary() {
         hits = execSync(`grep -rni "${key}" --include=*.ts --include=*.tsx ${SRC} || true`,
           { encoding: 'utf8' }).trim().split('\n').filter(Boolean)
       } catch { hits = [] }
+      if (rule.legacy) {
+        const rel = (h) => h.split('/shimmer/')[1]?.split(':')[0]
+        const legacyHits = hits.filter((h) => rule.legacy.includes(rel(h)))
+        const stale = rule.legacy.filter((f) => !legacyHits.some((h) => rel(h) === f))
+        hits = hits.filter((h) => !rule.legacy.includes(rel(h)))
+        if (stale.length) {
+          vocabDrift++
+          add('COLLISION', 'retired-vocab', `'${r.term}': ${stale.length} legacy exemption(s) no longer hold the word: ${stale.join(' · ')}`,
+            `Good news, and the list must shrink with it: drop those paths from RULES.${key}.legacy in canon-drift.mjs. An exemption that outlives its file is the next silencer.`)
+        }
+        if (legacyHits.length) add('NOTE', 'retired-vocab', `'${r.term}' is retired (${r.retiredOn}) and still sits in ${legacyHits.length} line(s) across ${rule.legacy.length - stale.length} legacy file(s)`,
+          `${rule.why}. Exempt on purpose (save migration + the old voxel game's legacy rows); retire them there and shrink RULES.${key}.legacy.`)
+      }
       if (!hits.length) continue
       const where = hits.slice(0, 4).map((h) => h.split('/shimmer/')[1]?.split(':').slice(0, 2).join(':')).join(' · ')
       if (rule.mode === 'fail') {

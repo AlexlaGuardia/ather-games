@@ -105,7 +105,7 @@ const okBed = (b: unknown): b is Bed => !!b && typeof b === 'object' && (b as Be
 export function adoptFarm(raw: unknown): FarmSave {
   const v = raw as Partial<FarmSave> | null, f = v?.farm
   if (v?.v !== 1 || !f || !Array.isArray(f.beds)) return freshFarmSave()
-  // M204 s3: a bed growing a RETIRED crop (Rootvine) keeps growing as its replacement (Goldleaf), same grade, same planting
+  // M204 s3: a bed growing a RETIRED crop (farming.ts RETIRED_CROPS) keeps growing as its replacement (Goldleaf), same grade, same planting
   const bedsIn = f.beds.map(b => (b && typeof b === 'object' && typeof (b as Bed).crop === 'string' ? { ...(b as Bed), crop: liveCrop((b as Bed).crop) as CropId } : b))
   const beds = Array.from({ length: BEDS }, (_, i) => (okBed(bedsIn[i]) ? { crop: bedsIn[i]!.crop as CropId, grade: bedsIn[i]!.grade, plantedAt: bedsIn[i]!.plantedAt, watered: !!bedsIn[i]!.watered } : null))
   const charge = Number.isFinite(f.charge) ? Math.max(0, Math.min(CHARGE_CAP, Math.floor(f.charge as number))) : 0

@@ -333,7 +333,7 @@ export const dropGuns = (i: Inv): Inv => (i.slots.some(x => x && OPEN_ITEMS[x.id
 /** M207: an M204 spice (`<el>_spice`) in an older bag becomes its element's infusion, in place, count kept. Pure. */
 export const renameSpices = (i: Inv): Inv => (i.slots.some(x => x && x.id in LEGACY_SPICE) ? { ...i, slots: i.slots.map(x => (x && x.id in LEGACY_SPICE ? { ...x, id: LEGACY_SPICE[x.id] } : x)) } : i)
 
-/** M204 s3: a RETIRED crop (Rootvine, canon 35c83eb) in an older bag becomes its replacement (Goldleaf), in place, grade and
+/** M204 s3: a RETIRED crop (farming.ts RETIRED_CROPS, canon 35c83eb) in an older bag becomes its replacement (Goldleaf), in place, grade and
  *  count kept (farming.ts renameRetired). Pure; a bag with none is returned as is. */
 export const renameRetiredCrops = (i: Inv): Inv => (i.slots.some(x => x && renameRetired(x.id) !== x.id) ? { ...i, slots: i.slots.map(x => (x && renameRetired(x.id) !== x.id ? { ...x, id: renameRetired(x.id) } : x)) } : i)
 
@@ -351,7 +351,7 @@ export function loadInv(waymarksLeft = FREE_WAYMARKS): Inv {
       // the bait floor shipped an hour as 'forage' before canon named it MAST (11-17): rename it in place
       if (out.slots.some((x: Stack | null) => x?.id === 'forage')) out = { ...out, slots: out.slots.map((x: Stack | null) => (x?.id === 'forage' ? { ...x, id: 'mast' } : x)) }
       out = renameSpices(out)   // M207: M204's spices are now the infusions
-      out = renameRetiredCrops(out)   // M204 s3: Rootvine retired, Goldleaf in its place
+      out = renameRetiredCrops(out)   // M204 s3: a retired crop loads as its replacement (Goldleaf)
       // rinning arrived (11-15): an older bag is handed the starting bait once
       if (!(out.gifts ?? []).includes('bait1')) out = { ...give(out, 'bait', STARTING_BAIT).inv, gifts: [...(out.gifts ?? []), 'bait1'] }
       return out

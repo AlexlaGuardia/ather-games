@@ -53,19 +53,23 @@ for (const h of herbs) {
 
 chk('an ordinary crop carries no element', elementForHerbItem('shimmerwheat_grain') === null)
 
-// ── the four are peers ─────────────────────────────────────────────────────────
+// ── the tier-2 three are peers; earth's herb is canon's tier-1 Goldleaf (M204 s3b) ───────────
 // Not a style preference. A cheaper herb is a cheaper element, and the element decides which of a
 // spirit's four canon second forms it grows into — a farming dial reaching into forty ruled forms.
+// ⚠ MEANING CHANGED 2026-11-27 (canon athernyx 9a9e254): the old earth herb retired and canon made
+// GOLDLEAF the earth herb, "Same herb as the tier-1 row: it grows anywhere" (shimmer-skilling.md,
+// 5 min). So the peers rule now holds for the three tier-2 herbs, and earth is pinned to canon's own
+// tier-1 row instead. That earth is the cheapest element to farm is CANON'S call, made on purpose.
 {
-  const defs = herbs.map(h => CROP_DEFS[h.cropId])
-  const same = <T,>(f: (d: typeof defs[0]) => T) => new Set(defs.map(f)).size === 1
-  chk('same farming level', same(d => d.minFarmingLevel))
-  chk('same mana cost', same(d => d.manaCost))
-  chk('same yield count', same(d => d.yields[0].count))
-  chk('all tier 2 (canon places them in tier 2)', defs.every(d => d.tier === 2))
-  // Growth time is the one number canon prints AND Jin owns, and Rootvine is the ruled outlier
-  // ("anchors deep. Heavy to harvest."). Pinned as the shape it is, not as a magnitude.
-  chk('rootvine is the slow one', CROP_DEFS['rootvine'].growthMs > CROP_DEFS['tidepetal'].growthMs)
+  const peers = (['mana', 'storm', 'water'] as const).map(e => CROP_DEFS[ELEMENT_HERBS[e].cropId])
+  const same = <T,>(f: (d: typeof peers[0]) => T) => new Set(peers.map(f)).size === 1
+  chk('tier-2 three: same farming level', same(d => d.minFarmingLevel))
+  chk('tier-2 three: same mana cost', same(d => d.manaCost))
+  chk('same yield count (all four)', new Set(herbs.map(h => CROP_DEFS[h.cropId].yields[0].count)).size === 1)
+  chk('tier-2 three: all tier 2 (canon places them in tier 2)', peers.every(d => d.tier === 2))
+  const earth = CROP_DEFS[ELEMENT_HERBS.earth.cropId]
+  chk('earth herb is canon\'s Goldleaf, the tier-1 row', earth.id === 'goldleaf' && earth.tier === 1 && earth.name === 'Goldleaf')
+  chk('earth herb harvest is the goldleaf item', ELEMENT_HERBS.earth.harvestItemId === 'goldleaf')
 }
 
 // ── ★★ THE GROWTH CURVE — properties, never magnitudes (retuned 2026-08-22, Alex) ──────────────
