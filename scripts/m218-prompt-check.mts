@@ -57,8 +57,8 @@ try {
     await p.screenshot({ path: `${dir}/${tag}-${phone ? 'phone' : 'desk'}-${name}.png` })
     if (!box) { ok(false, `${name}: '${prompt}' never showed`); continue }
     const over = box.x < x1 && box.x + box.w > x0 && box.y < y1 && box.y + box.h > y0
-    const r = (n: number) => Math.round(n)
-    ok(!over, `${name}: prompt plate [${r(box.x)},${r(box.y)} ${r(box.w)}x${r(box.h)}] clears the centre ${SHARE * 100}% box [${r(x0)},${r(y0)}..${r(x1)},${r(y1)}] at ${VW}x${VH}`)
+    const rd = (n: number) => Math.round(n)
+    ok(!over, `${name}: prompt plate [${rd(box.x)},${rd(box.y)} ${rd(box.w)}x${rd(box.h)}] clears the centre ${SHARE * 100}% box [${rd(x0)},${rd(y0)}..${rd(x1)},${rd(y1)}] at ${VW}x${VH}`)
     ok(!/rgba\(0, 0, 0, 0\)|transparent/.test(box.bg), `${name}: on a plate (${box.bg})`)
     ok(box.x >= 0 && box.y >= 0 && box.x + box.w <= VW && box.y + box.h <= VH, `${name}: on screen`)
     res.push(`     ${name}: in the HUD template's prompt slot = ${box.slot}`)
