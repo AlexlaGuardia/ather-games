@@ -4,7 +4,9 @@
 //  - a fresh shambler / crawler / floater spawns at 150 / 120 / 100;
 //  - a live body shot takes the table's damage off a fresh shambler (single-round guns); the Lance's HEADSHOT drops a fresh 150
 //    shambler in one (216 > 150) and does NOT drop a 240 hp one (no insta-kill rule);
-//  - a woken champion rises at 270 a bar (150 x 1.8) and the newcomer's (Repeater) time-to-kill holds within 10%;
+//  - M245 s2 (Alex 11-27): a woken champion rises at 500 a bar (was 270 = 150 x 1.8; the newcomer's time-to-kill printed, no longer held);
+//  - M245 s2: the Twins' pair rule on the live engine (bench-only gun, so the held Roar is made a Twins-shaped pair in place: clip 4,
+//    0.2 s, reload 2.8, pair): four pulls fire LEFT, RIGHT, LEFT, RIGHT, the 4th starts the 2.8 s reload, a 5th pull does not fire;
 //  - 0 page errors.
 //   npx tsx scripts/m245-damage-check.mts [--url https://ather.games] [--view 390|desk] [--guns repeater,lance] [--out docs/looks/m245-2026-11-27]
 import puppeteer, { type Page } from 'puppeteer-core'
@@ -54,18 +56,33 @@ async function live(gunId: string, first: boolean) {
       return o })
     say(String(hp.shambler) === '150/150' && String(hp.crawler) === '120/120' && String(hp.floater) === '100/100', `${view}: fresh Hollows spawn at ${JSON.stringify(hp)} (150 / 120 / 100)`)
   }
-  // keep the field to ONE still shambler; the keeper cannot die
-  await p.evaluate(() => { const W = window as any; W.__keep = null; W.__hits = []
-    const f = () => { const c = W.__ather.combat(); c.keeper.hp = c.keeper.maxHp; c.keeper.reloading = 0; if (c.keeper.ammo < 1) c.keeper.ammo = 1
-      for (let i = c.hollows.length - 1; i >= 0; i--) { const h = c.hollows[i]; if (h.id !== W.__keep) c.hollows.splice(i, 1); else { h.state = 'recover'; h.t = 9; h.x = W.__at.x; h.z = W.__at.z } }
-      for (const e of c.events) if (e.kind === 'hit') W.__hits.push(e)
-      requestAnimationFrame(f) }; W.__at = { x: 0, z: 0 }; requestAnimationFrame(f) })
   const fireAt = view === 'desk' ? null : await p.evaluate(() => { const r = document.querySelector('[data-touch="fire"]')!.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 } })
   const cdp = await p.createCDPSession()
   const pull = async () => {
     if (fireAt) { await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [fireAt] }); await sleep(120); await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }) }
     else { await p.mouse.down(); await sleep(80); await p.mouse.up() }
   }
+  if (gunId === 'roar') {
+    // M245 s2: the pair rule. Run BEFORE the keep-loop below (it refills ammo / clears reloads every frame).
+    await p.evaluate(() => { const W = window as any, c = W.__ather.combat(); W.__tw = []; W.__gun0 = c.gun
+      c.gun = { ...c.gun, pair: true, clip: 4, fireCd: 0.2, reloadTime: 2.8, damage: 99 / 8, crit: 99 / 8 * 1.25 }
+      c.keeper.ammo = 4; c.keeper.reloading = 0; c.keeper.sinceShot = 99; if (c.mana) c.mana.cur = Math.max(c.mana.cur, 999)
+      const f = () => { const cc = W.__ather.combat(); for (const e of cc.events) if (e.kind === 'fired') W.__tw.push({ hand: e.hand ?? null, ammo: cc.keeper.ammo, rel: +cc.keeper.reloading.toFixed(2) }); if (!W.__twStop) requestAnimationFrame(f) }
+      requestAnimationFrame(f) })
+    for (let i = 0; i < 5; i++) { await pull(); await sleep(380) }
+    const tw = await p.evaluate(() => { const W = window as any; W.__twStop = true; const c = W.__ather.combat(); return { shots: W.__tw, reloading: +c.keeper.reloading.toFixed(2), ammo: c.keeper.ammo } })
+    const hands = tw.shots.map((s: any) => s.hand).join(',')
+    say(hands === 'left,right,left,right' && tw.shots[3].ammo === 0 && tw.shots[3].rel > 2.7 && tw.reloading > 0 && tw.reloading < 2.8,
+      `${view} twins (pair rule, live engine): 5 pulls -> ${tw.shots.length} shots [${hands}], 4th starts the reload (${tw.shots[3]?.rel} s of 2.8), 5th refused, still reloading ${tw.reloading} s`)
+    await p.screenshot({ path: `${out}/twins-pair-${view}.png` })
+    await p.evaluate(() => { const W = window as any, c = W.__ather.combat(); c.gun = W.__gun0; c.keeper.reloading = 0; c.keeper.ammo = c.gun.clip })
+  }
+  // keep the field to ONE still shambler; the keeper cannot die
+  await p.evaluate(() => { const W = window as any; W.__keep = null; W.__hits = []
+    const f = () => { const c = W.__ather.combat(); c.keeper.hp = c.keeper.maxHp; c.keeper.reloading = 0; if (c.keeper.ammo < 1) c.keeper.ammo = 1
+      for (let i = c.hollows.length - 1; i >= 0; i--) { const h = c.hollows[i]; if (h.id !== W.__keep) c.hollows.splice(i, 1); else { h.state = 'recover'; h.t = 9; h.x = W.__at.x; h.z = W.__at.z } }
+      for (const e of c.events) if (e.kind === 'hit') W.__hits.push(e)
+      requestAnimationFrame(f) }; W.__at = { x: 0, z: 0 }; requestAnimationFrame(f) })
   const shoot = async (zone: 'head' | 'body', hpSet?: number) => {
     const id = await p.evaluate((hpSet) => { const W = window as any, A = W.__ather; A.spawn(0, -3.5); const h = A.combat().hollows.at(-1)
       W.__keep = h.id; W.__at = { x: h.x, z: h.z }; if (hpSet) { h.hp = h.maxHp = hpSet } W.__hits = []; return h.id }, hpSet ?? 0)
@@ -97,8 +114,8 @@ async function live(gunId: string, first: boolean) {
     // the champion: wake one, read a bar's hp, the newcomer's time-to-kill (3 bars / the Repeater held) vs before (3 x 150 / 10 a 0.22 s)
     const ch = await p.evaluate(async () => { const A = (window as any).__ather; A.wake(0); for (let i = 0; i < 40 && !A.combat().champ; i++) await new Promise(r => setTimeout(r, 100))
       const c = A.combat().champ, g = A.combat().gun; return c ? { hp: Math.ceil(c.hp), bar: c.bar, dmg: g.damage, cd: g.fireCd } : null })
-    const ttk0 = 3 * 150 / (10 / 0.22), ttk = ch ? 3 * ch.hp / (ch.dmg / ch.cd) : NaN
-    say(!!ch && ch.bar === 0 && ch.hp === 270 && Math.abs(ttk / ttk0 - 1) <= 0.1, `${view}: a champion rises at ${ch?.hp} a bar (270); newcomer (Repeater) time-to-kill ${ttk0.toFixed(1)} -> ${ttk.toFixed(1)} s (within 10%)`)
+    const ttk270 = 3 * 270 / (ch ? ch.dmg / ch.cd : 1), ttk = ch ? 3 * ch.hp / (ch.dmg / ch.cd) : NaN
+    say(!!ch && ch.bar === 0 && ch.hp === 500, `${view}: a champion rises at ${ch?.hp} a bar (500); newcomer (Repeater, held) time-to-kill ${ttk270.toFixed(1)} -> ${ttk.toFixed(1)} s (bar 270 -> 500)`)
   }
   await p.close()
 }

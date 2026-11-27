@@ -6,7 +6,7 @@
 // halves. Shape (Alex, BETA M152): two barrels x two shots = four before the reload (early reload allowed), LEFT gun first, 0.2 s
 // apart held, huge shove point blank, nearly nothing past ~8 m, one-dump power with a low sustained rate. Numbers = build (Jin).
 import type { RangeGun } from './gunplay'
-import { RANGE_GUNS, headOf } from './gunplay'
+import { RANGE_GUNS, headOf, pairHand } from './gunplay'
 import { newCombat, spawnHollow, stepCombat, stepTrigger, heldGun, swapGun, stepAway, M151, BODY_Y, type Combat } from '../ather/combat'
 import { FLAT, SIM, championFight, packFight, summarise, type Summary } from '../ather/wilds-sim'
 import { groupPack } from '../ather/combat'
@@ -15,10 +15,14 @@ import { groupPack } from '../ather/combat'
 export const TWINS_REACH = 8.5
 /** M245: the Twins' damage a shell (all 8 pellets on) */
 export const TWINS_SHELL = 99
+/** M245 s2: the SLOW reload of both guns, seconds (Jin's pick in Alex's "slow reload", 2.6-3.0 asked; was 3.2) */
+export const TWINS_RELOAD = 2.8
 export const TWINS_GUN: RangeGun = {
   id: 'twins', name: 'DB2 TWINS', slot: 'SIDEARM', auto: false,
   // four rounds (L, R, L, R), 0.2 s apart held, then the long reload. Early reload allowed (the engine's reload on a part clip).
-  fireCd: 0.2, clip: 4, reloadTime: 3.2, reloadMana: 14,
+  // M245 s2 (Alex 11-27: "each hand has a double barrel so each hand alternates firing four shots at close with a slow reload"):
+  // 2 barrels x 2 hands = 4, hands alternate (pair: true, the 'fired' event names the hand), reload 2.8 s for both guns (was 3.2)
+  fireCd: 0.2, clip: 4, reloadTime: TWINS_RELOAD, reloadMana: 14, pair: true,
   projSpeed: 68, projLife: TWINS_REACH / 68,
   // a sawn-off cone: wide, so the pellets on a body fall away fast with range; ADS tightens it a little (no zoom)
   // M245 (Alex 11-27: "Twins 99 per slug"): 99 a shell = 8 pellets x 12.375 (was 4.2 = 33.6 a shell); head = body x HEAD_MULT (1.25x a pellet)
@@ -27,7 +31,7 @@ export const TWINS_GUN: RangeGun = {
   burst: 1, burstGap: 0, pellets: 8, shove: 0.55, color: '#a27e3c',
 }
 /** which gun of the pair fires the n-th round of a clip (0-based): LEFT first (rune 1), then right, alternating */
-export const twinsBarrel = (n: number): 'left' | 'right' => (n % 2 === 0 ? 'left' : 'right')
+export const twinsBarrel = pairHand
 
 const DT = 1 / 240
 const gunOf = (id: string): RangeGun => id === 'twins' ? TWINS_GUN : RANGE_GUNS.find(g => g.id === id)!

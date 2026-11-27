@@ -14,7 +14,7 @@
 // ★ PURE. No react, no three. The scene layer feeds it the keeper's eye and aim, and draws what it returns.
 
 import { canFire, spreadDeg, bloomAfterShot, bloomAfterRest, weaponDef, type WeaponDef } from '../../engine/weapons'
-import { RANGE_GUNS, M245_HOLLOW_SCALE } from '../shared/gunplay'
+import { RANGE_GUNS, M245_HOLLOW_SCALE, pairHand } from '../shared/gunplay'
 import { stepChampion, hitChampion, CHAMP, type Champion } from './champion'
 import { easeRemote, NET_HIT_MAX } from '../shared/fight-share'   // M28: a non-host's Hollows ease to the host's snapshot
 import { ECON, payReload } from '../shared/vitals-economy'
@@ -239,7 +239,8 @@ export type CombatEvent =
   /** #1651 (host only): a Hollow's blow or spit reached ANOTHER keeper in the party; `dmg` is RAW (their frame applies there) */
   | { kind: 'hurt-other'; id: string; dmg: number }
   | { kind: 'pickup'; amount: number }
-  | { kind: 'fired' }
+  /** M245 s2: `hand` = which gun of a pair fired (the Twins alternate, LEFT first); unset = a single gun */
+  | { kind: 'fired'; hand?: 'left' | 'right' }
   | { kind: 'reload-dry' }
   | { kind: 'down' }
   | { kind: 'champ-wake'; nodeId: string }
@@ -515,8 +516,9 @@ export function fire(c: Combat, eye: { x: number; y: number; z: number }, aim: {
     const x0 = eye.x + dx * 0.4, y0 = eye.y - 0.08 + dy * 0.4, z0 = eye.z + dz * 0.4
     c.rounds.push({ x: x0, y: y0, z: z0, vx: dx * w.projSpeed, vy: dy * w.projSpeed, vz: dz * w.projSpeed, life: w.projLife, dmg: w.damage, crit: w.crit, ...(pellets > 1 ? { shove: shell!.shove } : {}), from: { x: x0, y: y0, z: z0 }, gun: w.id })
   }
+  const hand = (w as { pair?: boolean }).pair ? pairHand(w.clip - k.ammo) : undefined   // M245 s2: a pair alternates hands (R reads it)
   k.ammo--; k.sinceShot = 0; k.bloom = bloomAfterShot(w, k.bloom)
-  c.events.push({ kind: 'fired' })
+  c.events.push(hand ? { kind: 'fired', hand } : { kind: 'fired' })
   if (k.ammo <= 0) reload(c)
   return true
 }

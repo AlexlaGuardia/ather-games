@@ -5,7 +5,7 @@ import { RANGE_GUNS, withRhythm, M195_BACKBONE_RHYTHM, M245_DEFAULT_GUN, M245_BE
 import { BENCH_GUNS, GRINDER_GUN, heldDps } from './gun-bench'
 import { TWINS_GUN } from './twins-sim'
 import { SHAMBLER, CRAWLER, FLOATER, FX } from '../ather/combat'
-import { CHAMP, WAVE_HP } from '../ather/champion'
+import { CHAMP, WAVE_HP, CHAMP_BAR_HP, CHAMP_SCALE } from '../ather/champion'
 import { FIST_DMG } from './boop'
 import { FIGHT } from './spirit-fight'
 import { CHAMP_DPS_MAX } from './fight-share'
@@ -57,15 +57,23 @@ const mbo = meanT(g => OLD_BAR * bars / heldDps(before(g))), mbn = meanT(g => CH
 const mho = meanT(g => { const b = before(g); return OLD_BAR * bars / heldDps({ ...b, damage: b.crit }) }), mhn = meanT(g => CHAMP.barHp * bars / heldDps({ ...g, damage: g.crit }))
 crows.push(`| MEAN (6 held guns) | ${mbo.toFixed(1)} -> ${mbn.toFixed(1)} (${(100 * (mbn / mbo - 1)).toFixed(1)}%) | ${mho.toFixed(1)} -> ${mhn.toFixed(1)} (${(100 * (mhn / mho - 1)).toFixed(1)}%) |`)
 if (process.env.M245_TABLE) console.log(rows.join('\n') + '\n\nchampion bar hp 150 -> ' + CHAMP.barHp + ` (x ${M245_CHAMP_SCALE.toFixed(3)}), wave adds ${JSON.stringify(WAVE_HP)}\n` + crows.join('\n'))
-// the keeper rule: the NEWCOMER's (default gun's) champion time-to-kill holds within 10% (wilds-teeth runs the fight sim itself)
-{ const g = RANGE_GUNS.find(x => x.id === M245_DEFAULT_GUN)!, b = before(g)
-  const tbo = OLD_BAR * bars / heldDps(b), tbn = CHAMP.barHp * bars / heldDps(g)
-  const tho = OLD_BAR * bars / heldDps({ ...b, damage: b.crit }), thn = CHAMP.barHp * bars / heldDps({ ...g, damage: g.crit })
-  ok(Math.abs(tbn / tbo - 1) <= 0.1, `newcomer (${g.id}) champion BODY time-to-kill within 10% (${tbo.toFixed(1)} -> ${tbn.toFixed(1)} s)`)
-  ok(Math.abs(thn / tho - 1) <= 0.1, `newcomer (${g.id}) champion HEAD time-to-kill within 10% (${tho.toFixed(1)} -> ${thn.toFixed(1)} s)`) }
-ok(M245_CHAMP_SCALE === 1.8 && CHAMP.barHp === 270, `champion bar ${CHAMP.barHp} = 150 x the default gun's ${M245_CHAMP_SCALE}`)
+// M245 s2 (meaning MOVED, Alex 11-27: "CHAMPIONS 500 HP per bar"): the champion no longer holds the newcomer's old time-to-kill
+// (M245's 'within 10%' asserts, bar 270 = 150 x M245_CHAMP_SCALE 1.8). It is Alex's 500 a bar, and its heal and wave adds keep
+// M245's ratio to the bar. Per-gun TTK at the M245 bar (270) and at 500 prints with M245_TABLE=1 (wilds-teeth runs the fight sim).
+const M245_BAR = Math.round(150 * M245_CHAMP_SCALE)
+/** seconds to land `hp` with the trigger held from a full clip, every pellet on, RELOADS INCLUDED (heldDps alone has none) */
+const ttkReload = (g: RangeGun, hp: number) => { const per = g.pellets * g.damage, gap = per / heldDps(g), n = Math.ceil(hp / per - 1e-9); return (n - 1) * gap + Math.floor((n - 1) / g.clip) * g.reloadTime }
+{ const t2: string[] = ['| gun | champion TTK body, 3 bars held: 270 -> 500 (s) | with reloads: 270 -> 500 (s) | head held (s) |', '|---|---|---|---|']
+  for (const g of [...RANGE_GUNS, TWINS_GUN, GRINDER_GUN]) { const h = { ...g, damage: g.crit }
+    t2.push(`| ${g.id} | ${(M245_BAR * bars / heldDps(g)).toFixed(1)} -> ${(CHAMP.barHp * bars / heldDps(g)).toFixed(1)} | ${ttkReload(g, M245_BAR * bars).toFixed(1)} -> ${ttkReload(g, CHAMP.barHp * bars).toFixed(1)} | ${(M245_BAR * bars / heldDps(h)).toFixed(1)} -> ${(CHAMP.barHp * bars / heldDps(h)).toFixed(1)} |`) }
+  if (process.env.M245_TABLE) console.log('\nM245 s2:\n' + t2.join('\n')) }
+ok(M245_CHAMP_SCALE === 1.8 && M245_BAR === 270, `the M245 bar was 150 x the default gun's ${M245_CHAMP_SCALE} = ${M245_BAR}`)
+ok(CHAMP_BAR_HP === 500 && CHAMP.barHp === 500, `M245 s2: champion bar ${CHAMP.barHp} (Alex: 500)`)
+ok(Math.abs(CHAMP_SCALE - 500 / 150) < 1e-12, 'the champion scale = the 500 bar over the pre-M245 150')
+// the wave adds keep M245's ratio to the bar (54 / 270 and 36 / 270), to rounding
+ok(WAVE_HP.shambler === Math.round(30 * CHAMP_SCALE) && WAVE_HP.floater === Math.round(20 * CHAMP_SCALE) && WAVE_HP.shambler === 100 && WAVE_HP.floater === 67, `wave adds ${JSON.stringify(WAVE_HP)} (54 / 36 at the 270 bar)`)
+ok(Math.abs(WAVE_HP.shambler / CHAMP.barHp - Math.round(30 * M245_CHAMP_SCALE) / M245_BAR) < 0.002 && Math.abs(WAVE_HP.floater / CHAMP.barHp - Math.round(20 * M245_CHAMP_SCALE) / M245_BAR) < 0.002, 'wave adds : bar = M245\'s ratio')
 void [mbn, mbo, mhn, mho, rb, rh]
-ok(WAVE_HP.shambler === Math.round(30 * M245_CHAMP_SCALE) && WAVE_HP.floater === Math.round(20 * M245_CHAMP_SCALE), 'wave adds scale with the champion')
 ok(gun('lance').crit < CHAMP.barHp && gun('lance').crit < CRAWLER.hp * 2, 'a Lance head does NOT drop a champion bar or a merged (mass 2) crawler')
 ok(CHAMP_DPS_MAX >= 216 * 1.3 * 2, 'the guest DPS cap fits two amped Lance heads a second')
 void M245_DAMAGE

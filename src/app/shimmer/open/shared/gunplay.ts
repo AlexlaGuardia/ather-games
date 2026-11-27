@@ -27,7 +27,12 @@ export interface RangeGun extends WeaponDef {
   charge?: number
   /** canon: a weapon that can never take a sigil (the Enchant Temple turns it away) */
   noSigil?: boolean
+  /** M245 s2 (Alex 11-27): a PAIR, one gun each hand (the DB2 Twins): rounds alternate hands, LEFT first (pairHand); the 'fired'
+   *  event / Muzzle carries which hand, for the two-gun rig (M152 s2) to read */
+  pair?: boolean
 }
+/** M245 s2: which hand fires the n-th round of a pair's clip (0-based): LEFT first (rune 1, M152), then right, alternating */
+export const pairHand = (n: number): 'left' | 'right' => (n % 2 === 0 ? 'left' : 'right')
 
 /** M148: the Backbone's damage a round (was 10.4). M245 (Alex 11-27): 24 (the Hollows went to 100-150 hp), a round AS EVERYONE FIRES
  *  IT: on its baked M195 rhythm (M195_BACKBONE_RHYTHM, fp-gun GUN_RHYTHM_BAKED), which withRhythm scales damage by to keep the
@@ -167,7 +172,7 @@ export function reloadGun(g: GunState) {
   g.reloading = g.gun.reloadTime; g.burstLeft = 0
 }
 
-export interface Muzzle { x: number; y: number; z: number; dx: number; dy: number; dz: number; gun: string }
+export interface Muzzle { x: number; y: number; z: number; dx: number; dy: number; dz: number; gun: string; hand?: 'left' | 'right' }
 
 /** One tick of the trigger. `down` = trigger held; `ads` = aiming down the sights (the tighter cone). Pushes rounds into `out`; returns the muzzle flashes it fired
  *  (one per round, not per pellet) so the host can flash, kick and play sound. */
@@ -191,8 +196,9 @@ export function stepGun(
         vx: dx * w.projSpeed, vy: dy * w.projSpeed, vz: dz * w.projSpeed, life: w.projLife, age: 0,
         dmg: w.damage, crit: w.crit, shove: w.shove, gun: w.id })
     }
+    const hand = w.pair ? pairHand(w.clip - g.ammo) : undefined   // M245 s2: a pair alternates hands
     g.ammo--; g.sinceShot = 0; g.bloom = bloomAfterShot(w, g.bloom)
-    fired.push({ x: eye.x + aim.x * 0.6, y: eye.y - 0.12 + aim.y * 0.6, z: eye.z + aim.z * 0.6, dx: aim.x, dy: aim.y, dz: aim.z, gun: w.id })
+    fired.push({ x: eye.x + aim.x * 0.6, y: eye.y - 0.12 + aim.y * 0.6, z: eye.z + aim.z * 0.6, dx: aim.x, dy: aim.y, dz: aim.z, gun: w.id, ...(hand ? { hand } : {}) })
     if (g.ammo <= 0) reloadGun(g)
   }
   // a burst in flight finishes on its own clock, trigger or not (that is what a burst IS)

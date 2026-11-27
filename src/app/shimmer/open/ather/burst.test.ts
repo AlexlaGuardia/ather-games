@@ -1,7 +1,7 @@
 // BETA M148: the Backbone's burst rhythm in the Ather (combat.ts stepTrigger) and on the range (gunplay stepGun).
 // Run: npx tsx src/app/shimmer/open/ather/burst.test.ts
 import { newCombat, stepCombat, stepTrigger, dropBurst, fire, reload, type Combat, type Terrain } from './combat'
-import { RANGE_GUNS, HEAD_MULT, RHYTHM_DIALS, burstCycle, withRhythm, holdGun, stepGun, type RangeGun, type Round } from '../shared/gunplay'
+import { RANGE_GUNS, HEAD_MULT, BACKBONE_DAMAGE, M195_BACKBONE_RHYTHM, RHYTHM_DIALS, burstCycle, withRhythm, holdGun, stepGun, type RangeGun, type Round } from '../shared/gunplay'
 import { weaponDef } from '../../engine/weapons'
 import { dialedGun, setRhythm, setGunTune, selectGunTune, resetGunTune, defaultsFor, settleAt, SETTLE_S, GUN_DEFAULTS } from '../shared/fp-gun'
 let pass = 0; const fails: string[] = []
@@ -23,7 +23,17 @@ const DPS = 3 * bb.damage / 0.63
 const rep = { ...RANGE_GUNS.find(g => g.id === 'repeater')!, fireCd: weaponDef('repeater')!.fireCd }   // M148's ceiling: the Repeater as it was (0.16 s); M151 slowed the held one
 /** held damage a second, and over clip + reload (perfect taps on the Repeater) */
 const rates = (g: RangeGun, d: number) => { const last = Math.ceil(g.clip / g.burst) - 1, cyc = g.burst > 1 ? burstCycle(g) : g.fireCd; return { hold: g.burst * d / cyc, sus: g.clip * d / (last * cyc + (g.burst - 1) * g.burstGap + g.reloadTime) } }
-for (const k of ['damage', 'crit'] as const) { const b = rates(bb, bb[k]), r = rates(rep, rep[k]); console.log(`${k}: Backbone ${b.hold.toFixed(1)} held / ${b.sus.toFixed(1)} with reloads; Repeater ${r.hold.toFixed(1)} / ${r.sus.toFixed(1)}`); ok(b.hold <= r.hold && b.sus <= r.sus, `${k}: the Backbone beats the Repeater`) }
+// M245 s2 (meaning MOVED: Alex 11-27 RETIRED M148's 'the Backbone never out-damages the old Repeater' ceiling): the Backbone's damage a
+// second IS its table value: 3 rounds of BACKBONE_DAMAGE (24 body, x HEAD_MULT head) a baked M195 cycle (0.07 x 2 + 0.6 = 0.74 s)
+// held, and that clip of 30 over its bursts + the 1.6 s reload sustained. The row carries it on the row's 0.63 s cycle.
+const BAKED = 2 * M195_BACKBONE_RHYTHM.BURST_GAP + M195_BACKBONE_RHYTHM.BURST_DELAY
+for (const k of ['damage', 'crit'] as const) {
+  const hand = withRhythm(bb, M195_BACKBONE_RHYTHM.BURST_GAP, M195_BACKBONE_RHYTHM.BURST_DELAY)   // the Backbone in hand (baked rhythm)
+  const b = rates(hand, hand[k]), row = rates(bb, bb[k]), r = rates(rep, rep[k]), body = 24 * (k === 'crit' ? 1.5 : 1)   // Alex's table (BETA M245): 24 body, head x 1.5
+  const hold = 3 * body / BAKED, sus = 30 * body / (9 * BAKED + 2 * M195_BACKBONE_RHYTHM.BURST_GAP + 1.6)
+  console.log(`${k}: Backbone ${b.hold.toFixed(1)} held / ${b.sus.toFixed(1)} with reloads (table ${hold.toFixed(1)} / ${sus.toFixed(1)}); old Repeater ${r.hold.toFixed(1)} / ${r.sus.toFixed(1)}`)
+  ok(BACKBONE_DAMAGE === 24 && near(hand[k], body, 1e-6) && near(b.hold, hold, 1e-6) && near(row.hold, hold, 1e-6), `${k}: the Backbone held = its table, 3 x ${body} a ${BAKED.toFixed(2)} s cycle (hand ${b.hold.toFixed(2)}, row ${row.hold.toFixed(2)} vs ${hold.toFixed(2)})`)
+  ok(near(b.sus, sus, 1e-6), `${k}: the Backbone sustained (clip + reload) = its table (${b.sus.toFixed(2)} vs ${sus.toFixed(2)})`) }
 ok(near(bb.crit / bb.damage, HEAD_MULT.backbone, 1e-9), 'the head shot scales with it (M245: x HEAD_MULT, was 19/12)')
 ok(bb.clip === 30 && bb.reloadTime === 1.6, 'clip and reload as they were')
 

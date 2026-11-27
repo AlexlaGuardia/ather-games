@@ -14,7 +14,6 @@
 //
 // ★ PURE, like combat.ts (which steps it and routes rounds into it).
 
-import { M245_CHAMP_SCALE } from '../shared/gunplay'
 import { spawnHollow, hurtKeeper, structFree, sees, STEER_LOOK, type Combat, type Terrain } from './combat'
 import { steer, type SteerMem } from './obstacles'
 import type { WildsNode } from './nodes'
@@ -34,9 +33,14 @@ export interface Champion {
   sm?: SteerMem                                    // M117 s3: which way round a structure it committed to
 }
 
+/** M245 s2 (Alex 11-27: "CHAMPIONS 500 HP per bar"): a bar's hp (was 270 = 150 x M245_CHAMP_SCALE) */
+export const CHAMP_BAR_HP = 500
+/** M245 s2: the champion's scale over its pre-M245 numbers (bar 150, heal 40/s, wave adds 30 / 20): the heal and the wave adds keep
+ *  M245's ratio to the bar (M245 scaled all three by M245_CHAMP_SCALE, so the ratio is the old one) */
+export const CHAMP_SCALE = CHAMP_BAR_HP / 150
 export const CHAMP = {
-  // M245: the guns were re-numbered (gunplay.ts M245_DAMAGE / HEAD_MULT); a bar's hp is scaled by M245_CHAMP_SCALE (the default gun's factor) so a newcomer's time-to-kill holds (was 150)
-  barHp: Math.round(150 * M245_CHAMP_SCALE), bars: 3, radius: 1.0, height: 3.6,
+  // M245: the guns were re-numbered (gunplay.ts M245_DAMAGE / HEAD_MULT); a bar's hp was scaled by M245_CHAMP_SCALE (270); M245 s2: Alex set it, CHAMP_BAR_HP 500 (was 150)
+  barHp: CHAMP_BAR_HP, bars: 3, radius: 1.0, height: 3.6,
   headY: 3.15, headR: 0.55, bodyY: 1.7, bodyR: 1.0,
   walk: 1.35, keepNear: 3.5, leash: 55, rise: 2.0, submerge: 3.2,
   // attacks: windup = the tell; then the act
@@ -54,7 +58,7 @@ export const PANIC_MIN_WINDUP = 0.55
 export const WAVES: [number, number][] = [[4, 0], [4, 2]]
 /** M120 (keeper rule, 09-24): the Wilds' Hollows got tougher (combat.ts SHAMBLER/FLOATER hp), but a champion's wave adds keep
  *  the pre-M120 bodies, so the first-settlement champion stays a fight a newcomer wins (wilds-sim.ts measures it). */
-export const WAVE_HP = { shambler: Math.round(30 * M245_CHAMP_SCALE), floater: Math.round(20 * M245_CHAMP_SCALE) }   // M245: x M245_CHAMP_SCALE (was 30 / 20): the default gun's shots-to-kill kept
+export const WAVE_HP = { shambler: Math.round(30 * CHAMP_SCALE), floater: Math.round(20 * CHAMP_SCALE) }   // M245: x the champion's scale (was 30 / 20; 54 / 36 at M245; 100 / 67 at M245 s2's 500 bar)
 
 const rnd = (c: Combat) => { c.seed = (c.seed * 1664525 + 1013904223) >>> 0; return c.seed / 4294967296 }
 
@@ -179,7 +183,7 @@ export function stepChampion(c: Combat, T: Terrain, me: { x: number; y: number; 
     case 'home': {
       const hx = ch.nx - ch.x, hz = ch.nz - ch.z, hd = Math.hypot(hx, hz)
       if (hd > 0.5) { ch.x += (hx / hd) * CHAMP.walk * 2 * dt; ch.z += (hz / hd) * CHAMP.walk * 2 * dt; ch.yaw = Math.atan2(hx, hz) }
-      ch.hp = Math.min(CHAMP.barHp, ch.hp + 40 * M245_CHAMP_SCALE * dt)   // M245: the heal scales with the bar
+      ch.hp = Math.min(CHAMP.barHp, ch.hp + 40 * CHAMP_SCALE * dt)   // M245: the heal scales with the bar (M245 s2: CHAMP_SCALE)
       if (hd <= 0.5 && fromNode < CHAMP.leash - 10 && alive) { ch.state = 'idle'; ch.t = 0.5 }
       // home with nobody near: it sinks back under (prod 11-15: one stuck at home blocked every other node from waking,
       // since only one champion is up at a time). It remembers the bar it reached; broken bars stay broken.
