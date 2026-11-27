@@ -112,7 +112,7 @@ export function ClashRing({ tier, title, entrants, runner = fightRunner, result,
         </Canvas>
         {/* the bout's HP bars over the ring */}
         {hud.length > 0 && (
-          <div data-clash-bout={live!.i} data-clash-keeper-bout={hasYou(bt!) ? '1' : '0'} data-clash-bonded={hasYou(bt!) && live!.play.bonded ? (b => `${b.id}:${b.twist}`)(live!.play.bonded[live!.swap ? 'b' : 'a']) : undefined} style={{ position: 'absolute', top: 10, left: 10, right: 10, display: 'flex', gap: 10, pointerEvents: 'none' }}>
+          <div data-clash-bout={live!.i} data-clash-keeper-bout={hasYou(bt!) ? '1' : '0'} data-clash-bonded={hasYou(bt!) && live!.play.bonded ? (b => `${b.id}:${b.twist}`)(live!.play.bonded.a)   /* the runner always takes her side first */ : undefined} style={{ position: 'absolute', top: 10, left: 10, right: 10, display: 'flex', gap: 10, pointerEvents: 'none' }}>
             {hud.map(h => (
               <div key={h.side} data-clash-hp={h.side} data-hp={h.hp.toFixed(2)} style={{ flex: 1, padding: '6px 10px', borderRadius: 10, background: 'rgba(255,248,232,.88)', boxShadow: '0 2px 8px rgba(0,0,0,.25)' }}>
                 <div style={{ fontSize: 13, fontWeight: 800, textAlign: h.side === 'a' ? 'left' : 'right', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
