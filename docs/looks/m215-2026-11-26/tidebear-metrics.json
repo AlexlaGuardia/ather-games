@@ -1,0 +1,53 @@
+{
+ "form": "tidebear",
+ "bones": 24,
+ "glb_bytes": 552564,
+ "shifted_y": 0.0,
+ "bind_top": 1.2117,
+ "bind_len": 0.819,
+ "idle": {
+  "dur_s": 4.8,
+  "lowest_m": 0.0,
+  "highest_low_m": 0.0,
+  "top_m": 0.848,
+  "body_h_m": 0.848,
+  "edge_stretch_p99": 1.15,
+  "edge_stretch_max": 1.73
+ },
+ "walk": {
+  "dur_s": 0.476,
+  "lowest_m": 0.0,
+  "highest_low_m": 0.0,
+  "top_m": 0.84,
+  "body_h_m": 0.84,
+  "edge_stretch_p99": 1.28,
+  "edge_stretch_max": 1.97
+ },
+ "run": {
+  "dur_s": 0.313,
+  "lowest_m": 0.0,
+  "highest_low_m": 0.0,
+  "top_m": 0.834,
+  "body_h_m": 0.834,
+  "edge_stretch_p99": 1.37,
+  "edge_stretch_max": 2.43
+ },
+ "sit": {
+  "dur_s": 5.0,
+  "lowest_m": 0.0,
+  "highest_low_m": 0.0,
+  "top_m": 0.721,
+  "body_h_m": 0.721,
+  "edge_stretch_p99": 1.63,
+  "edge_stretch_max": 6.12
+ },
+ "lie": {
+  "dur_s": 5.6,
+  "lowest_m": 0.0,
+  "highest_low_m": 0.0,
+  "top_m": 0.619,
+  "body_h_m": 0.619,
+  "edge_stretch_p99": 2.02,
+  "edge_stretch_max": 7.87
+ }
+}

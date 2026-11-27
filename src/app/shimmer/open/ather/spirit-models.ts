@@ -323,11 +323,15 @@ const cragbear = (): SpiritLook => {
 // Tidebear (Water: a tall bear-headed column, crystal crown, arms folded, splash feet). Each her own skeleton (rig_bear.py, the M132
 // quadruped plan from her own landmarks), sculpted in Cragbear's number space, so all four share her scale (1.4 x the Dewbear's).
 const bearRig = (glbLen: number): RigLook => ({ ...CRAGBEAR_RIG, glbLen })
-export const LUMEBEAR_RIG = bearRig(0.795), VOLTBEAR_RIG = bearRig(0.755), TIDEBEAR_RIG = bearRig(0.745)
+// M215 (Alex 11-26): Voltbear has NO LEGS and hovers like a thundercloud cocoon (every clip, drawn in the glb, 9 cm up standing,
+// settling low to sit / lie); Tidebear is a SLUG on one wet sole that slides (a body wave up her column, no steps). Both keep the
+// 24-bone skeleton, the leg bones weighted to nothing (docs/looks/m215-2026-11-26/tools/rig_cocoon.py). The game adds nothing for
+// it: the rig's ground keep only ever LIFTS (a hoverer is never pulled down) and Tidebear's sole rides the root (never lifts).
+export const LUMEBEAR_RIG = bearRig(0.795), VOLTBEAR_RIG = bearRig(0.755), TIDEBEAR_RIG = bearRig(0.819)
 const bearForm = (el: SpiritElement, name: string, emissive: string, hull: string, rig: RigLook): SpiritLook =>
   ({ ...secondForm('water-bear', el, name, emissive, hull), rig })
 /** each form's glb height standing (the idle clip's mean), glb units (rig metrics); the prod check sizes her by it */
-export const BEAR_GLB_TALL: Readonly<Record<string, number>> = { cragbear: CRAGBEAR_GLB_TALL, lumebear: 1.08, voltbear: 1.134, tidebear: 1.211 }
+export const BEAR_GLB_TALL: Readonly<Record<string, number>> = { cragbear: CRAGBEAR_GLB_TALL, lumebear: 1.08, voltbear: 1.054, tidebear: 1.211 }   // M215: Voltbear's = her body (legless), her hover over it
 // M202 the Noctyx line (docs/looks/m202-noctyx-line-2026-11-26): Noctarc (Storm: pale and fluffy, the biggest ears, a brow crystal,
 // small wings low at her hips, lightning veins), Noctara (Mana: a charcoal faceted hood, glowing violet eyes, the widest wings, a violet
 // egg belly with a gold flowing pattern, a wisp of a tail), Noctore (Earth: brown and stocky, two small horns + a green gem, a moss

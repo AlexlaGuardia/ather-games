@@ -1,0 +1,53 @@
+{
+ "form": "voltbear",
+ "bones": 24,
+ "glb_bytes": 860352,
+ "shifted_y": 0.08083552122116089,
+ "bind_top": 1.0539,
+ "bind_len": 0.7549,
+ "idle": {
+  "dur_s": 4.8,
+  "lowest_m": 0.0763,
+  "highest_low_m": 0.1058,
+  "top_m": 0.829,
+  "body_h_m": 0.738,
+  "edge_stretch_p99": 1.25,
+  "edge_stretch_max": 2.72
+ },
+ "walk": {
+  "dur_s": 0.714,
+  "lowest_m": 0.0764,
+  "highest_low_m": 0.0853,
+  "top_m": 0.814,
+  "body_h_m": 0.734,
+  "edge_stretch_p99": 1.25,
+  "edge_stretch_max": 4.0
+ },
+ "run": {
+  "dur_s": 0.478,
+  "lowest_m": 0.0525,
+  "highest_low_m": 0.0685,
+  "top_m": 0.79,
+  "body_h_m": 0.73,
+  "edge_stretch_p99": 1.53,
+  "edge_stretch_max": 6.18
+ },
+ "sit": {
+  "dur_s": 5.0,
+  "lowest_m": 0.0296,
+  "highest_low_m": 0.0378,
+  "top_m": 0.775,
+  "body_h_m": 0.742,
+  "edge_stretch_p99": 1.31,
+  "edge_stretch_max": 2.95
+ },
+ "lie": {
+  "dur_s": 5.6,
+  "lowest_m": 0.0107,
+  "highest_low_m": 0.0189,
+  "top_m": 0.762,
+  "body_h_m": 0.747,
+  "edge_stretch_p99": 1.5,
+  "edge_stretch_max": 3.59
+ }
+}
