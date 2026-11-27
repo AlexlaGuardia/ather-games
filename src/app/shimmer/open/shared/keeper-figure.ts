@@ -166,10 +166,19 @@ function headAndFace(g: THREE.Group, o: Look, H: number, hair: string, skin: str
   const INKC = '#1c1712', ey = hy + H * 0.02 + p.eyeLift, ez = H * 0.47, eyes = OPT.eyes[o.eyes]
   const arc = (x: number, y: number, r: number, thick: number, span: number, rotZ: number, color = INKC) => flat(g, arcGeo(thick, span), color, [x, y, ez + H * 0.03], [r, r, r], [0, 0, rotZ])
   const ball = (x: number, y: number, sx: number, sy: number, color = INKC, dz = 0.03) => flat(g, SPH, color, [x, y, ez + H * dz], [sx, sy, H * 0.03])
+  const tag = (from: number, face: string) => { for (const c of g.children.slice(from)) c.userData.face ??= face }
+  const f0 = g.children.length
   if (ch) drawCartoonFace(g, o.head, H, hair, skin, true, shape, { eye: ei, gap: p.eyeGap, y: p.eyeLift }, p.mouthLift, dress.iris)
+  tag(f0, 'cartoon')
   // M154: Tess's hood (a shell round the head, open at the face, its point at the back) + Otto's goggles up on the brow
   if (dress.hood) { const hood = put(g, HOOD, dress.hood, [0, hy + H * 0.04, -H * 0.03], [R * 1.22, H * 0.55 * 1.2, R * 1.22], [-0.25, 0, 0], true, 'hood'); put(hood, LOCK, dress.hood, [0, H * 0.42, -H * 0.42], [H * 0.3, H * 0.34, H * 0.22], [-2.0, 0, 0]) }
+  // M227 (Alex 11-27 "bonn and tess have a second set of eyes"): the goggles are dress, NOT a face: they used to sit in this
+  // face chain, so a goggled keeper skipped the classic eyes while a cartoon head without goggles (Bonn, Tess) drew its own
+  // eyes AND the classic ones. ONE face source per head now; head.userData.faces = the sources that really drew eye meshes
+  // (each source's meshes are tagged userData.face as they are added; the unit test + prod check read it).
   if (dress.goggles) { const gg = new THREE.Group(); gg.name = 'goggles'; g.add(gg); put(gg, arcGeo(0.06, Math.PI * 2), '#54321f', [0, hy + H * 0.3, 0], [R * 1.04, R * 1.04, R * 1.04], [Math.PI / 2 - 0.35, 0, 0], false); for (const s of [-1, 1]) { put(gg, arcGeo(0.32, Math.PI * 2), '#9c8a5a', [s * H * 0.15, hy + H * 0.36, H * 0.42], [H * 0.1, H * 0.1, H * 0.1], [-0.55, 0, 0]); flat(gg, SPH, '#8fb6c4', [s * H * 0.15, hy + H * 0.36, H * 0.42], [H * 0.08, H * 0.08, H * 0.02], [-0.55, 0, 0]) } }
+  const f1 = g.children.length
+  if (ch) { /* the cartoon face above is the whole face */ }
   else if (fs) drawFaceSet(g, o.face, H, hair, OPT.brows[o.brows] !== 'None', shape, { eye: ei, gap: p.eyeGap, y: p.eyeLift })
   else for (const s of [-1, 1]) {
     const ex = s * (H * 0.17 + p.eyeGap)
@@ -187,6 +196,8 @@ function headAndFace(g: THREE.Group, o: Look, H: number, hair: string, skin: str
     const brows = OPT.brows[o.brows]
     if (brows !== 'None') flat(g, BOX, hair, [ex, ey + H * 0.18, ez + H * 0.02], [H * 0.16, H * (brows === 'Bold' ? 0.045 : 0.025), H * 0.02], [0, 0, s * 0.08])
   }
+  tag(f1, fs ? 'set' : 'classic')
+  g.userData.faces = [...new Set(g.children.map(c => c.userData.face).filter(Boolean))]
   if (ch) return   // a cartoon head: NO nose (the locked sheet), its own mouth already drawn (drawCartoonFace)
   put(g, SPH, '#d9a47c', [0, hy - H * 0.08, H * 0.5 + dz(hy - H * 0.08)], [H * 0.05, H * 0.05, H * 0.05], null, false)
   const m0 = g.children.length   // M116c: the Mouth row's meshes are tagged userData.mouth (the body bench swaps them)

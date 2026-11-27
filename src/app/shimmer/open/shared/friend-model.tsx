@@ -21,7 +21,7 @@ export function FriendModel({ who, action = 'idle', seed = 0, speed = 1 }: { who
   useEffect(() => {
     // read-only probe (scripts/m154-friend-keeper-check.mts): the look record each friend on screen was built from
     const w = window as unknown as { __friendLooks?: Record<string, unknown> }
-    w.__friendLooks = { ...(w.__friendLooks ?? {}), [who]: { ...friendRecord(who), keeper: true, height: Math.round(body.height * 1000) / 1000 } }
+    w.__friendLooks = { ...(w.__friendLooks ?? {}), [who]: { ...friendRecord(who), keeper: true, height: Math.round(body.height * 1000) / 1000, faces: body.group.getObjectByName('head')?.userData.faces ?? null } }
     return () => { disposeMergedKeeper(body.group); body.group.clear() }   // the merged geometry is the figure's own; materials are shared
   }, [who, body])
   useFrame((_, dt) => { poseKeeper(body, t.current += Math.min(0.05, dt) * speed, action === 'walk' ? 0.6 : 0) })
