@@ -2,7 +2,8 @@
 // Reads the stage-2 lock ledger (discovery order) and the canon base table, so a reorder or a stray name goes red here.
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { GALLERY, DISCOVERY, dialStep, galleryNo, FORM_ART_VER } from './spirit-gallery'
+import { GALLERY, DISCOVERY, dialStep, galleryNo, FORM_ART_VER, STEEP_NONE, steepAdd, steepMeals, steepTotal } from './spirit-gallery'
+import { accentOf } from '../../open/ather/spirit-accent'
 
 let pass = 0
 const fails: string[] = []
@@ -46,6 +47,16 @@ if (existsSync(LEDGER)) {
 
 ok(galleryNo(7) === '#007' && galleryNo(50) === '#050', 'number label')
 ok(dialStep(0, -1) === 0 && dialStep(49, 3) === 49 && dialStep(10, 2) === 12, 'dial held to its ends')
+
+// M213 s2: the Steep mix preview feeds the game's own accentOf; none = no glow; the bar holds 10
+ok(steepMeals(STEEP_NONE).length === 0 && accentOf(steepMeals(STEEP_NONE)) === null, 'no meals = no glow')
+let mx = steepAdd(STEEP_NONE, 'storm', 6); mx = steepAdd(mx, 'water', 4)
+ok(steepTotal(mx) === 10 && steepMeals(mx).join() === 'storm,storm,storm,storm,storm,storm,water,water,water,water', `6 storm + 4 water = her bar (${steepMeals(mx).join()})`)
+ok(steepAdd(mx, 'mana', 1) === mx, 'a full bar takes no more')
+ok(steepAdd(STEEP_NONE, 'earth', -1) === STEEP_NONE && steepAdd(steepAdd(STEEP_NONE, 'earth', 3), 'earth', -1).earth === 2, 'never below 0, take one away')
+ok(steepAdd(steepAdd(STEEP_NONE, 'mana', 8), 'storm', 5).storm === 2, 'add is held to the room left')
+{ const a = accentOf(steepMeals(mx)), b = accentOf(steepMeals(steepAdd(STEEP_NONE, 'storm', 10)))
+  ok(!!a && a.locked && a.n === 10 && !!b && a.hex !== b.hex, `6 storm + 4 water glows its own mix (${a?.hex}) vs all storm (${b?.hex})`) }
 
 console.log(`spirit-gallery: ${pass} pass, ${fails.length} fail`)
 if (fails.length) { for (const f of fails) console.log('  FAIL', f); process.exit(1) }

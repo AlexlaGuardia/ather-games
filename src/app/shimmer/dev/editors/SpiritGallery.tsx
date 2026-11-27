@@ -7,7 +7,8 @@
 // rig, materials, form fx, glow accent), orbit + zoom, her clips; a form with no model yet shows her locked art, NOT BUILT.
 // Labels are plain functional UI words (for @lark). The grimoire look gets tuned here later; desktop first.
 import { useCallback, useEffect, useRef, useState, type PointerEvent as RPointerEvent } from 'react'
-import { GALLERY, dialStep, galleryNo, type GalleryElement, type GalleryRow } from './spirit-gallery'
+import { GALLERY, dialStep, galleryNo, STEEP_ELS, STEEP_NONE, steepAdd, steepMeals, steepTotal, type GalleryRow, type SteepMix } from './spirit-gallery'
+import { accentOf } from '../../open/ather/spirit-accent'
 import { SpiritStage } from '../../open/ather/spirit-model'
 import { formLook, spiritModelFor, type SpiritLook } from '../../open/ather/spirit-models'
 import { basePreviewFor } from '../../open/ather/spirit-base-preview'
@@ -16,7 +17,6 @@ import { ELEMENT_COLORS } from '../../spirits/spirit'
 
 const ROW = 52, SHOWN = 11, half = Math.floor(SHOWN / 2)
 const GAME = 'var(--font-game), system-ui, sans-serif'
-const ELS: GalleryElement[] = ['mana', 'storm', 'earth', 'water']
 
 // M174: a base form built but not yet OK'd by Alex shows here (this page is owner-only) via basePreviewFor
 const lookOf = (r: GalleryRow): SpiritLook | null => (r.el ? formLook(r.sp, r.el) : spiritModelFor(r.sp) ?? basePreviewFor(r.sp))
@@ -31,11 +31,12 @@ export default function SpiritGallery() {
   const [i, setI] = useState(initialIndex)
   const [clip, setClip] = useState<RigClip>('idle')
   const row = GALLERY[i], look = lookOf(row)
-  const [glow, setGlow] = useState<GalleryElement | null>(row.el)
+  // M213 s2: the glow is a STEEP MIX preview (her 10-slot bar, set by element), default none; it stays as you turn the dial
+  const [mix, setMix] = useState<SteepMix>(STEEP_NONE)
   const go = useCallback((by: number) => setI(v => dialStep(v, by)), [])
 
-  // her own element's glow by default (a base: none); the clip goes back to idle on a new spirit
-  useEffect(() => { setGlow(row.el); setClip('idle')
+  // the clip goes back to idle on a new spirit
+  useEffect(() => { setClip('idle')
     const u = new URL(window.location.href); u.searchParams.set('spirit', String(row.num)); window.history.replaceState({}, '', u.toString()) }, [row])
 
   useEffect(() => {
@@ -71,7 +72,7 @@ export default function SpiritGallery() {
     if (k >= 0 && k < GALLERY.length) setI(k) }
   const onCancel = () => { drag.current = null }
 
-  const meals = glow ? Array.from({ length: 10 }, () => glow) : undefined
+  const meals = steepMeals(mix), total = steepTotal(mix), accent = accentOf(meals)
 
   return (
     <div data-spirit-gallery style={{ display: 'flex', gap: 16, minHeight: 640, color: '#f3e6cc' }}>
@@ -125,9 +126,24 @@ export default function SpiritGallery() {
         {look && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
           <span style={{ fontFamily: GAME, fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', opacity: 0.5, width: 44 }}>Clip</span>
           {RIG_CLIPS.map(c => <Btn key={c} on={clip === c} attr={{ 'data-gallery-clip': c }} onClick={() => setClip(c)}>{c}</Btn>)}
-          <span style={{ fontFamily: GAME, fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', opacity: 0.5, marginLeft: 18, width: 44 }}>Glow</span>
-          <Btn on={!glow} attr={{ 'data-gallery-glow': 'none' }} onClick={() => setGlow(null)}>none</Btn>
-          {ELS.map(e => <Btn key={e} on={glow === e} color={ELEMENT_COLORS[e]} attr={{ 'data-gallery-glow': e }} onClick={() => setGlow(e)}>{e}</Btn>)}
+        </div>}
+        {look && <div data-gallery-steep={meals.join()} data-gallery-accent={accent?.hex ?? ''} style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+          <span style={{ fontFamily: GAME, fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', opacity: 0.5, width: 44 }}>Steep</span>
+          {STEEP_ELS.map(e => (
+            <span key={e} style={{ display: 'inline-flex', alignItems: 'center', gap: 2, marginRight: 6 }}>
+              <Btn on={false} color={ELEMENT_COLORS[e]} attr={{ 'data-gallery-steep-less': e, 'aria-label': `${e} minus one` }} onClick={() => setMix(m => steepAdd(m, e, -1))}>−</Btn>
+              <span data-gallery-steep-n={e} style={{ fontFamily: GAME, fontSize: 11, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', minWidth: 64, textAlign: 'center', color: mix[e] ? ELEMENT_COLORS[e] : '#f3e6cc', opacity: mix[e] ? 1 : 0.55 }}>{e} {mix[e]}</span>
+              <Btn on={false} color={ELEMENT_COLORS[e]} attr={{ 'data-gallery-steep-more': e, 'aria-label': `${e} plus one` }} onClick={() => setMix(m => steepAdd(m, e, 1))}>+</Btn>
+            </span>
+          ))}
+          <Btn on={total === 0} attr={{ 'data-gallery-steep-none': '' }} onClick={() => setMix(STEEP_NONE)}>none</Btn>
+          {/* her bar, slot by slot in feed order, and the glow it gives (the game's accentOf) */}
+          <span style={{ display: 'inline-flex', gap: 2, marginLeft: 10 }}>
+            {Array.from({ length: 10 }, (_, k) => <span key={k} style={{ width: 9, height: 14, borderRadius: 2, background: meals[k] ? ELEMENT_COLORS[meals[k]] : 'rgba(255,236,190,.12)', border: '1px solid rgba(245,197,66,.25)' }} />)}
+          </span>
+          <span style={{ fontFamily: GAME, fontSize: 11, letterSpacing: '0.12em', opacity: 0.7, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            {total}/10{accent && <><span style={{ width: 14, height: 14, borderRadius: 7, background: accent.hex, boxShadow: `0 0 8px ${accent.hex}` }} />{accent.hex}{accent.locked ? ' · locked' : ''}</>}
+          </span>
         </div>}
         <div style={{ fontSize: 11, opacity: 0.45 }}>{look ? 'Drag to turn, wheel to zoom. The game’s own model, rig and effects.' : 'No model yet: this is the locked art.'}</div>
       </div>

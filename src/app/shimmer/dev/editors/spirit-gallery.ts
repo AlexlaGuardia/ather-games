@@ -7,6 +7,7 @@
 // ★ PURE: no three, no React. Run: npx tsx src/app/shimmer/dev/editors/spirit-gallery.test.ts
 import { ALL_SPECIES } from '../../engine/spirit-index'
 import { SECOND_FORM_NAMES, SPECIES_NAMES, type Species } from '../../spirits/spirit'
+import { BAR_SLOTS } from '../../open/ather/infusions'
 
 export type GalleryElement = 'mana' | 'storm' | 'earth' | 'water'
 /** the 40 second forms in grimoire discovery order (ledger n = index + 1) */
@@ -46,3 +47,19 @@ export const galleryNo = (n: number) => `#${String(n).padStart(3, '0')}`
 
 /** the dial's next index after a step (wheel notch / arrow key / drag row), held to the ends */
 export const dialStep = (i: number, by: number, len = GALLERY.length) => Math.max(0, Math.min(len - 1, i + by))
+
+// M213 s2 (Alex 11-26 19:4x: "glow comes from the infusion mix, not a default element colour"): the gallery's GLOW control is a
+// STEEP MIX preview. Up to 10 meals by element (the Steep = her 10-slot bar, infusions.ts BAR_SLOTS); the meals go to the stage as
+// her bar, and the game's own accentOf (spirit-accent.ts, M204) turns them into her glow. Default: no meals = no glow.
+export type SteepMix = Readonly<Record<GalleryElement, number>>
+export const STEEP_ELS: readonly GalleryElement[] = ['mana', 'storm', 'earth', 'water']
+export const STEEP_NONE: SteepMix = { mana: 0, storm: 0, earth: 0, water: 0 }
+export const steepTotal = (m: SteepMix) => STEEP_ELS.reduce((s, e) => s + m[e], 0)
+/** add (or take away) meals of one element: never below 0, the whole bar never past BAR_SLOTS */
+export function steepAdd(m: SteepMix, el: GalleryElement, by: number): SteepMix {
+  const room = BAR_SLOTS - steepTotal(m)
+  const v = Math.max(0, m[el] + Math.min(by, room))
+  return v === m[el] ? m : { ...m, [el]: v }
+}
+/** the mix as her bar (feed order = the control's element order); empty = no glow */
+export const steepMeals = (m: SteepMix): GalleryElement[] => STEEP_ELS.flatMap(e => Array.from({ length: m[e] }, () => e)).slice(0, BAR_SLOTS)
