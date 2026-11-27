@@ -255,7 +255,25 @@ function Tent({ r, wall, peak, panels = 24 }: { r: number; wall: number; peak: n
     </group>
   )
 }
-export function BigTop({ fair, y }: { fair: Fair; y: number }) {
+/** BETA M233 s1: the contest's word on a banner board beside each tent's door (a canvas texture: no font fetch) */
+function TentSign({ word }: { word: string }) {
+  const tex = useMemo(() => {
+    if (typeof document === 'undefined') return null
+    const c = document.createElement('canvas'); c.width = 256; c.height = 96
+    const g = c.getContext('2d'); if (!g) return null
+    g.fillStyle = '#f3ecdf'; g.fillRect(0, 0, 256, 96); g.strokeStyle = '#8a5aa8'; g.lineWidth = 10; g.strokeRect(5, 5, 246, 86)
+    g.fillStyle = '#4a2a5e'; g.font = 'bold 58px Georgia, serif'; const w = g.measureText(word.toUpperCase()).width; if (w > 228) g.font = `bold ${Math.floor(58 * 228 / w)}px Georgia, serif`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(word.toUpperCase(), 128, 52)
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t
+  }, [word])
+  useEffect(() => () => tex?.dispose(), [tex])
+  return (
+    <group>
+      {[-1.5, 1.5].map(x => <mesh key={x} position={[x, 1.4, 0]}><cylinderGeometry args={[0.08, 0.1, 2.8, 5]} /><meshLambertMaterial color="#6b4a30" /></mesh>)}
+      <mesh position={[0, 2.5, 0]}><planeGeometry args={[3.4, 1.28]} /><meshBasicMaterial map={tex ?? undefined} color={tex ? '#ffffff' : '#f3ecdf'} side={THREE.DoubleSide} toneMapped={false} /></mesh>
+    </group>
+  )
+}
+export function BigTop({ fair, y, sign }: { fair: Fair; y: number; sign?: string }) {
   const bunting = useMemo(() => Array.from({ length: 16 }, (_, k) => k), [])
   const d = fairDoor(fair)
   return (
@@ -268,6 +286,7 @@ export function BigTop({ fair, y }: { fair: Fair; y: number }) {
         {/* two small tents: the trader's stall (canon: the 08-13 trader rides with the fair) and the troupe's */}
         <group position={[-19, 0, 4]}><Tent r={4} wall={2.4} peak={6.5} panels={10} /></group>
         <group position={[18, 0, -3]}><Tent r={4.5} wall={2.6} peak={7} panels={10} /></group>
+        {sign && <group position={[6.2, 0, 16.5]}><TentSign word={sign} /></group>}
         {/* bunting from the peak out to six stakes */}
         {[0, 1, 2, 3, 4, 5].map(i => {
           const a = (i / 6) * Math.PI * 2 + 0.3, sx = Math.sin(a) * 24, sz = Math.cos(a) * 24

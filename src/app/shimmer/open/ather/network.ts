@@ -28,7 +28,25 @@ export const SETTLEMENT_GATHERS: Readonly<Record<SettlementBiome, readonly strin
  *  held to a trail grade. Older bakes lack it, and then the land is not sculpted (relief.ts falls back to the M16 mask). */
 export interface Path { a: string; b: string; pts: [number, number, number?][] }
 export interface Fair { x: number; z: number; yaw: number; path: string }
-export interface Network { v: 1; season: number; settlements: Settlement[]; paths: Path[]; fair: Fair | null }
+/** BETA M233 (Alex 11-27, RULED Magii b4f51aa): the one troupe pitches SEVERAL tents a season, ONE contest each. */
+export const CONTESTS = ['clash', 'dash', 'smash'] as const
+export type Contest = typeof CONTESTS[number]
+/** the banner word on each tent (plain UI label; @lark may reword) */
+export const CONTEST_LABEL: Readonly<Record<Contest, string>> = { clash: 'Clash', dash: 'Dash', smash: 'Smash' }
+/** a Clash tent's difficulty (Alex 11-27: 2 easy, 2 average, 1 difficult a season) */
+export type ClashLevel = 'easy' | 'average' | 'difficult'
+export const CLASH_LEVEL_LABEL: Readonly<Record<ClashLevel, string>> = { easy: 'Easy', average: 'Average', difficult: 'Difficult' }
+export interface Tent extends Fair { contest: Contest; level?: ClashLevel }
+/** a tent's banner/prompt words: 'Smash', 'Clash · Easy' (plain UI labels; @lark may reword) */
+export const tentLabel = (t: Pick<Tent, 'contest' | 'level'>) => t.level ? `${CONTEST_LABEL[t.contest]} · ${CLASH_LEVEL_LABEL[t.level]}` : CONTEST_LABEL[t.contest]
+/** THE SEASON'S TENT PLAN = DATA (Alex 11-27): how many tents of each contest, and each Clash tent's difficulty.
+ *  At least five Clash (2 easy, 2 average, 1 difficult), one Dash, one Smash for now. */
+export const TENT_PLAN: readonly Pick<Tent, 'contest' | 'level'>[] = [
+  { contest: 'clash', level: 'easy' }, { contest: 'clash', level: 'easy' }, { contest: 'clash', level: 'average' },
+  { contest: 'clash', level: 'average' }, { contest: 'clash', level: 'difficult' }, { contest: 'dash' }, { contest: 'smash' },
+]
+/** `fair` = the first big top (older bakes have only it); `tents` (scripts/bake-fair-tents.mts) = every tent this season */
+export interface Network { v: 1; season: number; settlements: Settlement[]; paths: Path[]; fair: Fair | null; tents?: Tent[] }
 
 export const FAIR_NAME = 'The Thistledown Fair'
 /** how near counts as "in" a settlement (the message line names it) and "at" the fair's door */
@@ -49,7 +67,14 @@ export function settlementAt(n: Network, x: number, z: number): Settlement | nul
   for (const s of n.settlements) if (Math.hypot(s.x - x, s.z - z) < SETTLEMENT_R) return s
   return null
 }
-export const nearFair = (n: Network, x: number, z: number, r = FAIR_R) => !!n.fair && Math.hypot(n.fair.x - x, n.fair.z - z) < r
+/** every tent this season: the baked `tents`, else the lone big top (an older bake) holding SMASH */
+export const tentsOf = (n: Network): Tent[] => n.tents?.length ? n.tents : n.fair ? [{ ...n.fair, contest: 'smash' }] : []
+export const nearFair = (n: Network, x: number, z: number, r = FAIR_R) => tentsOf(n).some(t => Math.hypot(t.x - x, t.z - z) < r)
+/** the tent whose door the keeper stands at, if any */
+export function tentAtDoor(n: Network, x: number, z: number): Tent | null {
+  for (const t of tentsOf(n)) { const d = fairDoor(t); if (Math.hypot(d.x - x, d.z - z) < FAIR_DOOR_R) return t }
+  return null
+}
 /** the fair's door: in front of the big top, toward its path */
 export function fairDoor(f: Fair) { return { x: f.x + Math.sin(f.yaw) * 15, z: f.z + Math.cos(f.yaw) * 15 } }
 
@@ -144,7 +169,7 @@ export function clearing(n: Network): (x: number, z: number) => boolean {
     for (let s = 0; s <= m; s++) disc(ax + ((bx - ax) * s) / m, az + ((bz - az) * s) / m, PATH_CLEAR)
   }
   for (const s of n.settlements) disc(s.x, s.z, SETTLEMENT_CLEAR)
-  if (n.fair) disc(n.fair.x, n.fair.z, FAIR_CLEAR)
+  for (const t of tentsOf(n)) disc(t.x, t.z, FAIR_CLEAR)
   disc(LINGSTON.x, LINGSTON.z, LINGSTON_CLEAR)   // M228: Lingston's square (stand-in spot, lingston.ts)
   return (x, z) => mask.has(key(Math.floor(x / C), Math.floor(z / C)))
 }
@@ -179,7 +204,7 @@ export function roadField(n: Network, reach = 70): RoadField | null {
       for (let i = Math.floor((Math.min(ax, bx) - reach) / C); i <= Math.floor((Math.max(ax, bx) + reach) / C); i++) { const kk = key(i, j); const l = cells.get(kk); if (l) l.push(id); else cells.set(kk, [id]) }
   }
   const discs: { x: number; z: number; r: number }[] = n.settlements.map(s => ({ x: s.x, z: s.z, r: SETTLEMENT_CLEAR }))
-  if (n.fair) discs.push({ x: n.fair.x, z: n.fair.z, r: FAIR_CLEAR })
+  for (const t of tentsOf(n)) discs.push({ x: t.x, z: t.z, r: FAIR_CLEAR })
   const pads: { x: number; z: number; s: number; c: number; y: number }[] = []
   for (const st of n.settlements) for (const p of st.pads ?? []) pads.push({ x: p[0], z: p[1], s: Math.sin(p[2]), c: Math.cos(p[2]), y: p[3] })
   const padR = Math.hypot(PAD_W, PAD_D) / 2 + PAD_APRON + PAD_REACH
@@ -213,4 +238,36 @@ export function roadField(n: Network, reach = 70): RoadField | null {
       return f * f * (3 - 2 * f)
     },
   }
+}
+
+// ── THE TENTS (BETA M233 s1): where the season's contest tents pitch. Pure; the bake (scripts/bake-fair-tents.mts) hands it
+// the ground test. Same rule as the first big top (a flat meadow 38 m off a path, door facing it, 1.2 to 3 km from Greg's
+// stone, widened to 0.9..3.6 km for room); the first big top stays where it stood, and each other tent is at least
+// TENT_SPACING from every tent and clear of settlements, so the tents spread along the network. Season-seeded.
+export const TENT_SPACING = 450, TENT_SETTLEMENT_GAP = 160
+const GREG_STONE = { x: -300, z: 300 }
+export function pickTents(n: Pick<Network, 'paths' | 'settlements' | 'fair' | 'season'>, siteOk: (x: number, z: number) => boolean, plan: readonly Pick<Tent, 'contest' | 'level'>[] = TENT_PLAN): Tent[] {
+  let seed = ((n.season * 2246822519) ^ 0x9e3779b9) >>> 0
+  const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296 }
+  const spots: Fair[] = []
+  for (const p of n.paths) for (let k = 3; k < p.pts.length - 3; k += 4) {
+    const [x, z] = p.pts[k], d = Math.hypot(x - GREG_STONE.x, z - GREG_STONE.z)
+    if (d < 900 || d > 3600) continue
+    const [x1, z1] = p.pts[k + 1], tx = x1 - x, tz = z1 - z, l = Math.hypot(tx, tz) || 1
+    for (const side of [1, -1]) {
+      const cx = Math.round(x + (-tz / l) * 38 * side), cz = Math.round(z + (tx / l) * 38 * side)
+      if (n.settlements.some(s => Math.hypot(s.x - cx, s.z - cz) < TENT_SETTLEMENT_GAP)) continue
+      if (siteOk(cx, cz)) spots.push({ x: cx, z: cz, yaw: Math.atan2(x - cx, z - cz), path: `${p.a}-${p.b}` })
+    }
+  }
+  for (let k = spots.length - 1; k > 0; k--) { const r = Math.floor(rnd() * (k + 1)); [spots[k], spots[r]] = [spots[r], spots[k]] }
+  const chosen: Fair[] = n.fair ? [n.fair] : []
+  for (const s of spots) {
+    if (chosen.length >= plan.length) break
+    if (chosen.every(c => Math.hypot(c.x - s.x, c.z - s.z) >= TENT_SPACING)) chosen.push(s)
+  }
+  // which slot of the plan each spot takes is a season-seeded shuffle (so the first big top holds a different contest by season)
+  const slots = plan.map(x => ({ ...x }))
+  for (let k = slots.length - 1; k > 0; k--) { const r = Math.floor(rnd() * (k + 1)); [slots[k], slots[r]] = [slots[r], slots[k]] }
+  return chosen.map((f, i) => ({ ...f, ...slots[i] }))
 }

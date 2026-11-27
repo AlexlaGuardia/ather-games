@@ -196,6 +196,22 @@ const SCHEMA = `
       price      INTEGER NOT NULL,
       created_at INTEGER NOT NULL
     );
+    -- BETA M233 s1: the Thistledown Fair's SMASH board (fair-smash.ts; rules: ather/fair-smash-rules.ts). One row per keeper
+    -- per season (their best hit), and the day's tries per keeper.
+    CREATE TABLE IF NOT EXISTS fair_smash (
+      season     INTEGER NOT NULL,
+      user_id    TEXT NOT NULL,
+      best       INTEGER NOT NULL,
+      spirit     TEXT NOT NULL,
+      at         INTEGER NOT NULL,
+      PRIMARY KEY (season, user_id)
+    );
+    CREATE TABLE IF NOT EXISTS fair_smash_tries (
+      user_id    TEXT NOT NULL,
+      day        TEXT NOT NULL,
+      n          INTEGER NOT NULL,
+      PRIMARY KEY (user_id, day)
+    );
 `
 
 /** Our own stable id — deliberately NOT the google sub, so a provider can change later. */
@@ -441,6 +457,8 @@ export function deleteAccount(user_id: string): boolean {
   d.prepare('DELETE FROM brewing_seats WHERE user_id = ? OR brewing_id IN (SELECT brewing_id FROM brewings WHERE host_id = ?)').run(user_id, user_id)
   d.prepare('DELETE FROM brewings WHERE host_id = ?').run(user_id)
   d.prepare('DELETE FROM exchange_orders WHERE user_id = ?').run(user_id)
+  d.prepare('DELETE FROM fair_smash WHERE user_id = ?').run(user_id)
+  d.prepare('DELETE FROM fair_smash_tries WHERE user_id = ?').run(user_id)
   d.prepare('DELETE FROM saves WHERE user_id = ?').run(user_id)
   const res = d.prepare('DELETE FROM accounts WHERE user_id = ?').run(user_id)
   return Number(res.changes) > 0

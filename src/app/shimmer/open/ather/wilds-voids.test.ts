@@ -4,7 +4,7 @@
 // the same answer twice.
 import { readFileSync } from 'node:fs'
 import { makeVoids, VOID_HALF, VOID_FADE, VOID_DEPTH, FALL_W, FALL_LIP, SQ, type IndexLike } from './wilds-voids'
-import { withGlade, SETTLEMENT_CLEAR, PATH_HALF, type Network } from './network'
+import { withGlade, SETTLEMENT_CLEAR, PATH_HALF, tentsOf, type Network } from './network'
 import { GLADE, WILDS_FRONT_SHIFT, wildsFrontDist } from './relief'
 import { GREG_WAYMARK } from './waymarks'
 let pass = 0
@@ -81,7 +81,7 @@ let graphSeen = new Set<number>()
   bad = 0
   for (const [x, z] of [[GREG_WAYMARK.x, GREG_WAYMARK.z]]) for (let a = 0; a < 360; a += 10) for (let r = 0; r <= 14; r += 2) if (V.weight(x + Math.cos(a * Math.PI / 180) * r, z + Math.sin(a * Math.PI / 180) * r) > 0) bad++
   ok(bad === 0, `no void weight on Greg's waymark (${bad} bad)`)
-  if (net.fair) { bad = 0; for (let a = 0; a < 360; a += 10) for (let r = 0; r <= 34; r += 4) if (V.weight(net.fair.x + Math.cos(a * Math.PI / 180) * r, net.fair.z + Math.sin(a * Math.PI / 180) * r) > 0) bad++; ok(bad === 0, `no void weight at the fair (${bad})`) }
+  for (const t of tentsOf(net)) { bad = 0; for (let a = 0; a < 360; a += 10) for (let r = 0; r <= 34; r += 4) if (V.weight(t.x + Math.cos(a * Math.PI / 180) * r, t.z + Math.sin(a * Math.PI / 180) * r) > 0) bad++; ok(bad === 0, `no void weight at the ${t.contest} tent (${bad})`) }   // M233: every tent
   bad = 0; let samples = 0
   for (const p of net.paths) for (let k = 1; k < p.pts.length; k++) {
     const [ax, az] = p.pts[k - 1], [bx, bz] = p.pts[k], m = Math.max(1, Math.ceil(Math.hypot(bx - ax, bz - az) / 4))

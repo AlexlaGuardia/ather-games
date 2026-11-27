@@ -136,7 +136,8 @@ import { loadIndex, makeWorld, stream, releaseTo, tileOf, zonesOf, wanted, TILE_
 import { makeVoids, FALL_LIP, type VoidField } from './wilds-voids'
 import { ensureEdits, voidEditsLive, zonesJsonLive, propsJsonLive } from './wilds-edits'   // M104: the void brush layer
 import { startFall, stepFall, type FallState } from './void-fall'
-import { loadNetwork, clearing, roadField, settlementAt, nearFair, fairDoor, FAIR_NAME, FAIR_DOOR_R, type Network, type Settlement } from './network'
+import { loadNetwork, clearing, roadField, settlementAt, nearFair, tentAtDoor, tentsOf, tentLabel, FAIR_NAME, type Network, type Settlement } from './network'
+import { SmashPanel } from './smash-panel'   // M233 s1
 import { useFolkTalk } from './use-folk-talk'
 import { useSpiritTalk, type SpiritTalkState } from './spirit-talk'   // M109 s1: E at a garden spirit (owner + ?spirits=3d)
 import { setGardenGround } from './garden-follow'   // M126: what a following spirit may walk in the garden
@@ -184,8 +185,8 @@ import { morelAtNode, useMorelHints } from '../shared/morel-hints'   // BETA M33
 import { OpenOptions, useOptionsKeys, useOptionsOpen, setOptionsOpen } from '../options'
 import { useInv, setInv, getInv, hotbarEntries } from '../shared/bag'
 import { DeathPack, fallAndDrop, packLying } from './death-pack'
-import { dropLoot, lootSpots, pilesOf } from './ground-loot'   // BETA M141
 import { withDewls } from './dewl'   // M159
+import { dropLoot, lootSpots, pilesOf } from './ground-loot'   // BETA M141
 import { GroundLoot } from './ground-loot-view'
 import { WaymarkGhost } from './waymark-ghost'   // M147
 import { useOpeningChain, useChain, chainDeath, chainGateOpen, chainFlip } from '../shared/opening-chain-store'   // BETA M73: Ather to Nyx
@@ -247,7 +248,7 @@ type Spawn = { x: number; z: number; yaw: number }
 /** the Wilds' safe ground round the arrival: where the Glade's green stood until M67 s1b-2 (30.75 m north of Greg's waymark) */
 const WILDS_SAFE = { x: GREG_WAYMARK.x, z: GREG_WAYMARK.z - 30.75, r: 50 }
 const gregAt = gregSpot()   // at load only (gregLive's first frame); M153 s1c-1: anything later asks gregSpot(). BETA M30 part 2: where Gregory sits (Moonwell Glade); the plot keeps only its old anchor numbers (plot.ts GREG)
-type Panel = null | { kind: 'map'; view: 'ather' | 'athernyx'; travel: boolean } | { kind: 'greg' } | { kind: 'talk'; step: number } | { kind: 'pack'; tab: PackTab } | { kind: 'cluster' } | { kind: 'work'; near: WorkNear } | { kind: 'folk'; s: Settlement } | { kind: 'fennel'; page: number } | { kind: 'brew'; station: AlcStation } | { kind: 'friend'; c: FriendCursor } | { kind: 'gfennel'; c: FennelCursor } | { kind: 'idlemog'; c: { id: string; screen: IdleScreen } } | { kind: 'spirit'; c: SpiritTalkState } | { kind: 'shop'; id: string } | { kind: 'settler'; c: SettlerCursor | AngelicaCursor } | { kind: 'adesk' } | { kind: 'chordstone' } | { kind: 'hall'; i: number } | { kind: 'exchange'; tab: 'offers' | 'search' | 'mine' }
+type Panel = null | { kind: 'smash' } | { kind: 'map'; view: 'ather' | 'athernyx'; travel: boolean } | { kind: 'greg' } | { kind: 'talk'; step: number } | { kind: 'pack'; tab: PackTab } | { kind: 'cluster' } | { kind: 'work'; near: WorkNear } | { kind: 'folk'; s: Settlement } | { kind: 'fennel'; page: number } | { kind: 'brew'; station: AlcStation } | { kind: 'friend'; c: FriendCursor } | { kind: 'gfennel'; c: FennelCursor } | { kind: 'idlemog'; c: { id: string; screen: IdleScreen } } | { kind: 'spirit'; c: SpiritTalkState } | { kind: 'shop'; id: string } | { kind: 'settler'; c: SettlerCursor | AngelicaCursor } | { kind: 'adesk' } | { kind: 'chordstone' } | { kind: 'hall'; i: number } | { kind: 'exchange'; tab: 'offers' | 'search' | 'mine' }
 type Near = null | { kind: 'gate' } | { kind: 'greg' } | { kind: 'friend'; f: GardenFriend } | { kind: 'fennel' } | { kind: 'gfennel' } | { kind: 'idlemog'; id: string; name: string } | { kind: 'anemonyx' } | { kind: 'work'; near: WorkNear } | { kind: 'waymark'; w: Waymark; own: boolean } | { kind: 'folk'; s: Settlement; id?: string } | { kind: 'spirit'; id: string; name: string } | { kind: 'zone'; u: ZoneUse } | { kind: 'settler'; id: SettlerId; name: string } | { kind: 'adesk' } | { kind: 'chordstone' }
 
 // ★ held until the save owner is known (shared/owner-ready.tsx: the 11-18 'rooms vanished on refresh' fix)
@@ -381,7 +382,7 @@ function AtherSliceGame() {
   useEffect(() => { runVillage(true); const id = setInterval(() => runVillage(false), 60_000); return () => clearInterval(id) }, [runVillage])
   const eatQueue = useRef<number[]>([])   // meals spent, healed on the combat layer's next frame (ather/cooking.ts)
   const [net, setNet] = useState<Network | null>(null), netRef = useRef<Network | null>(null), placeRef = useRef<string | null>(null)
-  const atFairDoor = (x: number, z: number) => { const f = netRef.current?.fair; if (!f || zoneRef0.current !== 'wilds') return false; const d = fairDoor(f); return Math.hypot(d.x - x, d.z - z) < FAIR_DOOR_R }
+  const atFairDoor = (x: number, z: number) => { const n = netRef.current; return n && zoneRef0.current === 'wilds' ? tentAtDoor(n, x, z) : null }   // M233: which tent's door
   const zoneRef0 = useRef<string>('plot')
   const aimRef = useRef<Aim>({ tree: null, dist: Infinity }), fxRef = useRef<ForestryFx | null>(null)
   const cAimRef = useRef<CrystalAim>({ crystal: null, dist: Infinity }), cFxRef = useRef<ProspectFx | null>(null)
@@ -1053,7 +1054,7 @@ function AtherSliceGame() {
         : n?.kind === 'waymark' ? (n.own ? 'E · fold map · L lift this waymark' : 'E · fold map')
         : n?.kind === 'folk' ? (n.id && moglinPrompt(n.id)) || `E · talk to the folk of ${n.s.name}`
         : n?.kind === 'zone' ? zonePrompt(n.u)   // M114 s2
-        : atFairDoor(lc.px, lc.pz) ? 'E · the Thistledown Fair'
+        : atFairDoor(lc.px, lc.pz) ? `E · the Thistledown Fair · ${tentLabel(atFairDoor(lc.px, lc.pz)!)}`   // M233
         : zone.kind === 'wilds' && attendantAt(lc.px, lc.pz) >= 0 ? `E · ${HALL_TALK.name}`   // M228 s1
         : rinPrompt() ?? (cAimRef.current.crystal && cAimRef.current.dist < aimRef.current.dist ? crystalPrompt() : treePrompt())
       setPrompt(p)
@@ -1472,7 +1473,7 @@ function AtherSliceGame() {
           { x: GREG_WAYMARK.x, z: GREG_WAYMARK.z, color: '#e7c766', title: "Gregory's waymark" },
           ...(standing ? [...standing.settlements].sort((a, b) => Math.hypot(a.x - pos.current.x, a.z - pos.current.z) - Math.hypot(b.x - pos.current.x, b.z - pos.current.z)).slice(0, 4)
             .map(st => ({ x: st.x, z: st.z, color: '#d9c39a', title: st.name })) : []),
-          ...(net?.fair ? [{ x: net.fair.x, z: net.fair.z, color: '#b37fd6', title: FAIR_NAME }] : []),
+          ...(net ? tentsOf(net).map(t => ({ x: t.x, z: t.z, color: '#b37fd6', title: `${FAIR_NAME} · ${tentLabel(t)}` })) : []),   // M233: every tent
           { x: LINGSTON.x, z: LINGSTON.z, color: '#e2b552', title: `${LINGSTON_NAME} · ${EXCHANGE_NAME}` },   // M228 s1
           ...waymarks.filter(w => ww?.byName.has(w.tile)).map(w => { const o = ww!.offsetOf(w.tile); return { x: w.x + o.x, z: w.z + o.z, color: '#6fd3c4', title: 'your waymark' } }),
         ]
@@ -1805,7 +1806,9 @@ function AtherSliceGame() {
       }
       if (e.code === 'KeyE' && !n && (aimRef.current.tree || cAimRef.current.crystal) && stanceRef.current.kind === 'stowed') { workAimed(); return }
       if (e.code === 'KeyE' && !n && atFairDoor(pos.current.x, pos.current.z)) {
-        hudSay(`${FAIR_NAME} · the troupe is still pitching. The season's games, contests and market open soon.`, 'info', 6); return
+        const tent = atFairDoor(pos.current.x, pos.current.z)!   // M233 s1: SMASH opens its sign-up panel; Clash and Dash are still pitching
+        if (tent.contest === 'smash') { setPanel({ kind: 'smash' }); return }
+        hudSay(`${FAIR_NAME} · ${tentLabel(tent)} · the troupe is still pitching. The season's games, contests and market open soon.`, 'info', 6); return
       }
       if (e.code === 'KeyE' && !n && zone.kind === 'wilds' && attendantAt(pos.current.x, pos.current.z) >= 0) { setPanel({ kind: 'hall', i: attendantAt(pos.current.x, pos.current.z) }); return }   // M228 s1
       if (e.code === 'KeyE' && n) {
@@ -1915,7 +1918,7 @@ function AtherSliceGame() {
         {zone.kind === 'glade' && <GladeGreg land={gladeLand} loaded={(x, z) => { const y = gladeZoneGround(x, z); return Number.isFinite(y) ? y : null }} tour={tour} hold={panel?.kind === 'talk' || panel?.kind === 'greg'} keeper={poseRef} onArrive={onTourArrive} live={gregLive} />}
         {zone.kind === 'wilds' && ww && standing && <Settlements net={standing} loaded={(x, z) => ww.tileAtPoint(x, z) ? ww.heightAt(x, z) : null} />}
         {zone.kind === 'wilds' && ww && <FirstSettlement loaded={(x, z) => ww.tileAtPoint(x, z) ? ww.heightAt(x, z) : null} />}   {/* M70 s1 */}
-        {zone.kind === 'wilds' && ww && net?.fair && ww.tileAtPoint(net.fair.x, net.fair.z) && <BigTop fair={net.fair} y={ww.heightAt(net.fair.x, net.fair.z)} />}
+        {zone.kind === 'wilds' && ww && net && tentsOf(net).map((t, i) => ww.tileAtPoint(t.x, t.z) && <BigTop key={i} fair={t} sign={tentLabel(t)} y={ww.heightAt(t.x, t.z)} />)}{/* M233: every tent */}
         {zone.kind === 'wilds' && ww && ww.tileAtPoint(LINGSTON.x, LINGSTON.z) && <LingstonHall ground={hallGround} />}   {/* M228 s1 */}
         {panel?.kind === 'hall' && ww && (() => { const a = attendantSpots()[panel.i]; return <TalkBubble at={[a.x, ww.heightAt(a.x, a.z) + 1.7, a.z]} name={HALL_TALK.name} line={HALL_TALK.hello} /> })()}
         {terrain && (
@@ -2009,6 +2012,7 @@ function AtherSliceGame() {
       {panel?.kind === 'greg' && <GregPanel garden={{ ...garden, pages: pagesNow }} onBuy={buy} onClose={() => setPanel(null)} />}
       {panel?.kind === 'cluster' && <ClusterPanel c={cl} onClose={() => setPanel(null)} />}
       {panel?.kind === 'hall' && <TalkChoices node={hallNode} phone={hudSize === 'phone'} />}   {/* M228 s1 */}
+      {panel?.kind === 'smash' && <SmashPanel onClose={() => setPanel(null)} />}{/* M233 s1 */}
       {panel?.kind === 'exchange' && <ExchangeHallPanel ledger={ledger} setLedger={setLedger} startTab={panel.tab} onClose={() => setPanel(null)} />}
       {panel?.kind === 'shop' && <ShopPanel id={panel.id} ledger={ledger} setLedger={setLedger} onClose={() => setPanel(null)} isTouch={isTouch} />}   {/* M114 s2: a Shop zone */}
       {panel?.kind === 'brew' && <BrewingPanel station={panel.station} onClose={() => setPanel(null)} />}

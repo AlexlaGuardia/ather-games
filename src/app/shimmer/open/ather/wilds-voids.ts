@@ -14,7 +14,7 @@
 // PURE. No three, no React, no DOM, no fetch.
 
 import { wildsFrontDist, ARRIVAL } from './relief'
-import { SETTLEMENT_CLEAR, FAIR_CLEAR, pathDistance, type Network } from './network'
+import { SETTLEMENT_CLEAR, FAIR_CLEAR, pathDistance, tentsOf, type Network } from './network'
 import { voidOverrides, type VoidEdits } from './void-edits'
 
 export const SQ = 200                 // the zone grid's square, metres
@@ -166,7 +166,7 @@ export function makeVoids(index: IndexLike, net: Network | null, extra: readonly
     for (const e of extra) { if (f <= 0) return 0; f = Math.min(f, ramp(Math.hypot(x - e.x, z - e.z), PROTECT.arrival)) }
     if (f > 0 && net) {
       for (const s of net.settlements) f = Math.min(f, ramp(Math.hypot(x - s.x, z - s.z) - SETTLEMENT_CLEAR, PROTECT.settle))
-      if (net.fair) f = Math.min(f, ramp(Math.hypot(x - net.fair.x, z - net.fair.z) - FAIR_CLEAR, PROTECT.settle))
+      for (const t of tentsOf(net)) f = Math.min(f, ramp(Math.hypot(x - t.x, z - t.z) - FAIR_CLEAR, PROTECT.settle))   // M233: every tent
       if (f > 0) f = Math.min(f, ramp(pathDistance(net, x, z, PROTECT.path[1]), PROTECT.path))   // capped: the ramp is flat past its end
     }
     return f
