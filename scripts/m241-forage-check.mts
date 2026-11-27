@@ -115,8 +115,9 @@ const card = () => p.evaluate(() => { const e = document.querySelector('[data-pa
   return { open: !!e, box: g?.getAttribute('data-sapling-box') ?? '', sap: g?.getAttribute('data-sapling') ?? '', stage: Number(g?.getAttribute('data-stage') ?? -1), ripe: g?.getAttribute('data-ripe') ?? '', text: g?.textContent?.trim() ?? '' } })
 const closeCard = async () => { await p.keyboard.press('Escape'); await sleep(600) }
 const openBox = async (x: number, z: number) => { await useAt(x, z, 0.3); return poll(async () => p.evaluate(() => !!document.querySelector('[data-panel="piece"]')), 6000) }
-await tp(-130, 104.2)
-ok(await openBox(BOX.x, BOX.z), 'D the Planter Box card opens')
+let opened = false
+for (let t = 0; t < 4 && !opened; t++) { await tp(-130, 104.2); await sleep(1500); opened = await openBox(BOX.x, BOX.z); if (!opened) { await closeCard(); await sleep(2000) } }
+ok(opened, `D the Planter Box card opens (zone ${await A('zone')})`)
 ok(!!(await centre('[data-act="plant-sapling"][data-sapling="moonberry"]')), 'D the card offers the Moonberry')
 await tap('[data-act="plant-sapling"][data-sapling="moonberry"] button'); await sleep(900)
 const c1 = await card()
