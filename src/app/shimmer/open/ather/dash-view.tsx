@@ -126,7 +126,7 @@ function Stepper({ racers, states, rolls, onTick }: { racers: Entry[]; states: R
   return null
 }
 
-const COUNT_S = 3
+const COUNT_S = 3, WAIT_S = 15
 export function DashRace({ racers, seed, phone, onDone }: { racers: Entry[]; seed: number; phone: boolean; onDone: (r: RaceResult) => void }) {
   const states = useRef<RunState[]>(racers.map(() => startState()))
   const rolls = useMemo(() => racers.map((_, i) => seeded(seed + i * 7919)), [racers, seed])
@@ -146,7 +146,7 @@ export function DashRace({ racers, seed, phone, onDone }: { racers: Entry[]; see
     const S = states.current
     if (S[me].fin != null && myDone.current == null) myDone.current = 0
     if (myDone.current != null) myDone.current += dt
-    if (S.every(s => s.fin != null) || (myDone.current ?? 0) > 8) finish()
+    if (S.every(s => s.fin != null) || (myDone.current ?? 0) > WAIT_S) finish()   // the slowest get WAIT_S to come home
     if (hud.current > 0.12) { hud.current = 0; setTick(t => t + 1) }
   }
   const S = states.current, mine = S[me]
@@ -169,7 +169,7 @@ export function DashRace({ racers, seed, phone, onDone }: { racers: Entry[]; see
       <div style={{ position: 'absolute', top: 10, left: 10, right: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, pointerEvents: 'none', fontFamily: 'inherit' }}>
         <div data-dash-standings style={{ background: 'rgba(251,244,228,.88)', borderRadius: 10, padding: '6px 10px', fontSize: phone ? 12 : 13, color: H.ink, minWidth: 0 }}>
           {order.map(({ r, s }, k) => (
-            <div key={k} data-dash-racer={r.species} data-doing={s.doing} data-d={s.d.toFixed(1)} data-you={r.you ? '1' : '0'}
+            <div key={k} data-dash-racer={r.species} data-doing={s.doing} data-d={s.d.toFixed(1)} data-split={JSON.stringify(Object.fromEntries(Object.entries(s.split).map(([k, v]) => [k, Math.round((v ?? 0) * 10) / 10])))} data-you={r.you ? '1' : '0'}
               style={{ fontWeight: r.you ? 800 : 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {k + 1}. {r.name} <span style={{ color: H.inkFaint }}>· {r.you ? 'you' : r.who} · {L.doing[s.doing]}</span>
             </div>

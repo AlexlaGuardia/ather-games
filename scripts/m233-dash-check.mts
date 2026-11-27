@@ -11,6 +11,8 @@ import puppeteer from 'puppeteer-core'
 import { mkdirSync, readFileSync } from 'fs'
 import { dismissStartCard } from './lib/start-card.mts'
 import { fairDoor, tentsOf, tentLabel, type Network } from '../src/app/shimmer/open/ather/network'
+import { COURSE } from '../src/app/shimmer/open/ather/fair-dash-race'
+const BLOCKS_END = (s => s.at + s.len)(COURSE.find(s => s.kind === 'blocks')!)
 if (!process.env.ATHER_SESSION_SECRET) {
   const m = readFileSync('.env', 'utf8').match(/^ATHER_SESSION_SECRET=(.*)$/m)
   if (m) process.env.ATHER_SESSION_SECRET = m[1].trim()
@@ -101,22 +103,24 @@ try {
   ok(ch.burst === '1' && ch.cool > 0 && ch.disabled, `4. Cheer gives a burst, then a cooldown (${JSON.stringify(ch)})`)
   await p.screenshot({ path: `${out}/2-dash-cheer.png` })
   // sample the race: time each species spends in each section
-  const tally: Record<string, Record<string, number>> = {}, shot = new Set<string>()
+  const tally: Record<string, Record<string, number>> = {}, shot = new Set<string>(), splits: Record<string, Record<string, number>> = {}, dist: Record<string, number> = {}
   let racers = 0
   for (let i = 0; i < 1200 && !(await p.$('[data-dash-result]')); i++) {
-    const rows = await p.evaluate(() => [...document.querySelectorAll('[data-dash-racer]')].map(e => ({ sp: (e as HTMLElement).dataset.dashRacer!, doing: (e as HTMLElement).dataset.doing!, you: (e as HTMLElement).dataset.you === '1' })).concat([{ sp: '§', doing: (document.querySelector('[data-dash-section]') as HTMLElement | null)?.dataset.dashSection ?? '', you: false }])).catch(() => [])
+    const rows = await p.evaluate(() => [...document.querySelectorAll('[data-dash-racer]')].map(e => ({ sp: (e as HTMLElement).dataset.dashRacer!, doing: (e as HTMLElement).dataset.doing!, you: (e as HTMLElement).dataset.you === '1', split: (e as HTMLElement).dataset.split ?? '{}', d: Number((e as HTMLElement).dataset.d) })).concat([{ sp: '§', doing: (document.querySelector('[data-dash-section]') as HTMLElement | null)?.dataset.dashSection ?? '', you: false, split: '{}', d: 0 }])).catch(() => [])
     racers = Math.max(racers, rows.length - 1)
-    for (const r of rows) { const k = r.you ? `you:${r.sp}` : r.sp; (tally[k] ??= {})[r.doing] = (tally[k][r.doing] ?? 0) + 1 }
+    for (const r of rows) { const k = r.you ? `you:${r.sp}` : r.sp; (tally[k] ??= {})[r.doing] = (tally[k][r.doing] ?? 0) + 1; if (r.sp !== '§') { splits[k] = JSON.parse(r.split); dist[k] = r.d } }
     const sec = rows.find(r => r.sp === '§')?.doing
     if (sec && !shot.has(sec)) { shot.add(sec); await p.screenshot({ path: `${out}/3-race-${shot.size}-${sec}.png` }) }
     await sleep(250)
   }
   console.log('   tally', JSON.stringify(tally))
-  const n = (k: string, doing: string) => tally[k]?.[doing] ?? 0
+  console.log('   splits (race seconds per section)', JSON.stringify(splits))
+  const n = (k: string, doing: string) => tally[k]?.[doing] ?? 0, sec = (k: string, kind: string) => splits[k]?.[kind] ?? 0
   ok(racers === 5, `5. five racers ran (${racers})`)
-  ok(n('owl', 'glide') > 0 && n('you:fox', 'drop') > 0 && n('owl', 'glide') < n('you:fox', 'drop') * 0.6, `6a. the gap: the owl GLIDES it (${n('owl', 'glide')} samples) while the fox goes down and up (${n('you:fox', 'drop')})`)
-  ok(n('axolotl', 'swim') > 0 && n('axolotl', 'swim') < n('you:fox', 'swim') * 0.75, `6b. the swim: the axolotl out-swims the fox (${n('axolotl', 'swim')} vs ${n('you:fox', 'swim')})`)
-  ok(n('turtle', 'blocks') > 0 && n('turtle', 'blocks') < n('you:fox', 'blocks'), `6c. the blocks: the turtle breaks them faster (${n('turtle', 'blocks')} vs ${n('you:fox', 'blocks')})`)
+  // the race's own clock per section (sampling counts are wall-clock and a screenshot pause starves whoever is mid-section)
+  ok(n('owl', 'glide') > 0 && n('you:fox', 'drop') > 0 && sec('owl', 'glide') > 0 && sec('owl', 'glide') < sec('you:fox', 'glide') * 0.6, `6a. the gap: the owl is seen GLIDING it while the fox goes down and up; owl ${sec('owl', 'glide')} s vs fox ${sec('you:fox', 'glide')} s`)
+  ok(sec('axolotl', 'swim') > 0 && sec('axolotl', 'swim') < sec('you:fox', 'swim') * 0.75, `6b. the swim: the axolotl out-swims the fox (${sec('axolotl', 'swim')} s vs ${sec('you:fox', 'swim')} s)`)
+  ok(dist.turtle >= BLOCKS_END && sec('turtle', 'blocks') < sec('you:fox', 'blocks'), `6c. the blocks: the turtle breaks them faster (${sec('turtle', 'blocks')} s vs ${sec('you:fox', 'blocks')} s)`)
   const res = await p.evaluate(() => { const r = document.querySelector('[data-dash-result]') as HTMLElement | null; return r ? { ms: r.dataset.dashResult, place: r.dataset.dashPlace } : null })
   for (let i = 0; i < 20 && !(await p.$('[data-dash-row="dummy_m233_a"]')); i++) await sleep(500)
   const st = await p.evaluate(() => ({ best: (document.querySelector('[data-dash-best]') as HTMLElement)?.dataset.dashBest, tries: (document.querySelector('[data-dash-tries]') as HTMLElement)?.dataset.dashTries, rows: [...document.querySelectorAll('[data-dash-row]')].map(r => `${(r as HTMLElement).dataset.dashRow}:${(r as HTMLElement).dataset.ms}`) }))

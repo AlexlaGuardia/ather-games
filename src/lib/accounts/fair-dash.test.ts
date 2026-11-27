@@ -48,6 +48,8 @@ ok(cheered < plain - 2, `cheering on cooldown wins time (${plain.toFixed(1)} -> 
 let moments = 0
 for (let seed = 1; seed <= 30; seed++) { let x = startState(); const r = seeded(seed); while (x.fin == null) x = step(R('turtle'), x, 1 / 30, r); moments += x.moments; ok(x.moments <= 2, 'at most two moments a race') }
 ok(moments > 0, `she stops to sniff or trips sometimes (${moments} in 30 races)`)
+const hs = runHeadless(R('owl'), 5), sp = (() => { let x = startState(); const r = seeded(5); while (x.fin == null) x = step(R('owl'), x, 1 / 30, r); return x })()
+ok(['run', 'swim', 'climb', 'glide', 'blocks'].every(k => Math.abs((sp.split[k as 'run'] ?? 0) - hs.byKind[k as 'run']) < 0.05), 'her splits = the time she spent in each kind of section')
 ok(speedIn(R('owl'), 'swim') < speedIn(R('axolotl'), 'swim'), 'speedIn reads the species')
 const f = fillIn(['fox', 'owl'], base, 9, 4)
 ok(f.length === 4 && JSON.stringify(f) === JSON.stringify(fillIn(['fox', 'owl'], base, 9, 4)), 'fair entrants fill the heat, seeded')

@@ -48,8 +48,9 @@ export interface RunState {
   cool: number       // seconds until the next cheer
   blocks: number[]   // hp left of each block in her lane
   fin: number | null // finish time, s
+  split: Partial<Record<SectionKind, number>>   // seconds spent in each kind of section so far (stops included)
 }
-export const startState = (): RunState => ({ d: 0, t: 0, doing: 'run', stop: 0, moments: 0, burst: 0, cool: 0, blocks: BLOCKS.at.map(() => BLOCKS.hp), fin: null })
+export const startState = (): RunState => ({ d: 0, t: 0, doing: 'run', stop: 0, moments: 0, burst: 0, cool: 0, blocks: BLOCKS.at.map(() => BLOCKS.hp), fin: null, split: {} })
 
 export const sectionAt = (d: number): Section => COURSE.find(s => d < s.at + s.len) ?? COURSE[COURSE.length - 1]
 
@@ -81,7 +82,8 @@ export function cheer(s: RunState): RunState {
 /** one step of dt seconds. `rand` = this racer's own roll (seeded by the view, Math.random-free in tests) */
 export function step(r: Racer, s0: RunState, dt: number, rand: () => number): RunState {
   if (s0.fin != null) return s0
-  const s: RunState = { ...s0, blocks: s0.blocks.slice(), t: s0.t + dt, burst: Math.max(0, s0.burst - dt), cool: Math.max(0, s0.cool - dt) }
+  const k0 = sectionAt(s0.d).kind
+  const s: RunState = { ...s0, blocks: s0.blocks.slice(), t: s0.t + dt, burst: Math.max(0, s0.burst - dt), cool: Math.max(0, s0.cool - dt), split: { ...s0.split, [k0]: (s0.split[k0] ?? 0) + dt } }
   if (s.stop > 0) { s.stop = Math.max(0, s.stop - dt); if (s.stop > 0) return s }
   const sec = sectionAt(s.d)
   // a personality moment (run + climb only)
