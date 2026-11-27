@@ -8,7 +8,7 @@ import { gunzipSync } from 'node:zlib'
 import { makeRegion, type RegionMeta } from '../src/app/shimmer/open/region'
 import { doorsCached } from '../src/app/shimmer/open/business/doors'
 import { shopDoorPoint } from '../src/app/shimmer/open/towns/shop-door'
-import { SIGIL_PRICE, SIGHT_PRICES } from '../src/app/shimmer/open/business/gun-shop'
+import { SIGIL_PRICE, SIGHT_PRICES, stockOf } from '../src/app/shimmer/open/business/gun-shop'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), out = flag('--out', '/tmp/gunshop')
 mkdirSync(out, { recursive: true })
@@ -18,6 +18,11 @@ const raw = gunzipSync(readFileSync('public/open/continent.bin.gz'))
 const R = makeRegion(meta, new Int16Array(raw.buffer, raw.byteOffset, raw.byteLength / 2))
 const door = doorsCached(R, 'ashfeld').find(d => d.key === 'front:gunshop:ashfeld')
 if (!door) { console.log('FAIL: no gun shop door in Ashfeld'); process.exit(1) }
+// M178 s2: the sight rows follow Ashfeld's live stock (gun-shop GUNSHOP_STOCK), never a hard-coded list; the buy is its first Charred Rifle sight (the gun this keeper owns)
+const SIGHTS = stockOf('ashfeld').sights, SIGHT_ROWS = SIGHTS.map(x => `${x.gun}:${x.sight}`)
+const BUY = SIGHTS.find(x => x.gun === 'charred-rifle')
+if (!BUY) { console.log('FAIL: Ashfeld stocks no Charred Rifle sight'); process.exit(1) }
+const BUY_ID = `sight:${BUY.gun}:${BUY.sight}`
 const PRICE = (await import('../src/app/shimmer/open/business/gun-shop')).GUN_PRICES.spitter
 const at = shopDoorPoint(door.b)
 const br = await puppeteer.launch({ protocolTimeout: 300000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
@@ -83,11 +88,11 @@ await p.evaluate(() => document.querySelector('[data-panel="gun-shop"] [data-buy
 await p.screenshot({ path: `${out}/gunshop-sigil.png` })
 // M81 s3a: Ashfeld deals the open lens for the Charred Rifle: bought, it joins that gun's owned sights
 res.sightRows = await p.evaluate(() => [...document.querySelectorAll<HTMLElement>('[data-panel="gun-shop"] [data-sight-row]')].map(e => e.dataset.sightRow))
-res.sightBuy = await p.evaluate(() => { const bt = document.querySelector<HTMLButtonElement>('[data-panel="gun-shop"] [data-buy="sight:charred-rifle:lens"] button'); if (!bt || bt.disabled) return false; bt.click(); return true })
+res.sightBuy = await p.evaluate((id: string) => { const bt = document.querySelector<HTMLButtonElement>(`[data-panel="gun-shop"] [data-buy="${id}"] button`); if (!bt || bt.disabled) return false; bt.click(); return true }, BUY_ID)
 await sleep(1000)
 res.marksAfterSight = await purse()
 res.charredOwned = (await loadout())?.fit?.['charred-rifle']?.owned ?? null
-res.sightAgain = await p.evaluate(() => document.querySelector('[data-panel="gun-shop"] [data-buy="sight:charred-rifle:lens"] button')?.textContent ?? null)
+res.sightAgain = await p.evaluate((id: string) => document.querySelector(`[data-panel="gun-shop"] [data-buy="${id}"] button`)?.textContent ?? null, BUY_ID)
 await p.evaluate(() => document.querySelector('[data-panel="gun-shop"] [data-sight-row]')?.scrollIntoView({ block: 'center' })); await sleep(300)
 await p.screenshot({ path: `${out}/gunshop-sights.png` })
 // 3 · P: the Character tab offers the Spitter in a slot
@@ -103,7 +108,7 @@ res.mapMarks = await p.evaluate(() => document.querySelector('[data-map="base"]'
 const pass = !!res.reach && !!res.panel && res.title && /The gun shop/.test(String(res.title)) && (res.rows as string[]).length === 4 && !(res.rows as string[]).includes('charred-rifle') && !(res.rows as string[]).includes('lance')   // M81 s3a: Ashfeld's racks (gun-shop GUNSHOP_STOCK)
   && res.marksBefore === 1500 && res.buy === true && res.marksAfter === 1500 - PRICE && Array.isArray(res.guns) && (res.guns as string[]).includes('spitter')
   && (res.again as any).disabled === true && !!res.optionShown && errs.length === 0
-  && JSON.stringify(res.sightRows) === JSON.stringify(['charred-rifle:lens']) && res.sightBuy === true && res.marksAfterSight === 1500 - PRICE - SIGIL_PRICE - SIGHT_PRICES.lens
-  && Array.isArray(res.charredOwned) && (res.charredOwned as string[]).includes('lens') && res.sightAgain === 'Yours'
+  && JSON.stringify(res.sightRows) === JSON.stringify(SIGHT_ROWS) && res.sightBuy === true && res.marksAfterSight === 1500 - PRICE - SIGIL_PRICE - SIGHT_PRICES[BUY.sight]
+  && Array.isArray(res.charredOwned) && (res.charredOwned as string[]).includes(BUY.sight) && res.sightAgain === 'Yours'
   && res.sigilRow === true && res.sigilBuy === true && res.marksAfterSigil === 1500 - PRICE - SIGIL_PRICE && (res.sigilsAfter as number) === (res.sigilsBefore as number) + 1
 await done(pass, pass ? 'PASS' : 'FAIL')
