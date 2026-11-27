@@ -126,7 +126,9 @@ try {
   // 3 · a fourth chordmate (no cluster): the chord is three, so the lobby is full and the visit is refused
   const S = await open(null, 'stranger'); await load(S, `&visit=${idA}&vn=ash`)
   const vlog = () => S.evaluate(() => ((window as any).__visit?.log?.() ?? []) as string[])
-  ok(await poll(async () => (await vlog()).includes('refused:not-home'), 90000), `3. ★ a 4th chordmate's visit is refused: the chord is three (log ${JSON.stringify(await vlog())})`)
+  // a 4th swiftshader page on the box asks slowly (11-27: an empty log at 90 s, refused at once on the EliteDesk): 240 s cap
+  const t3 = Date.now(), refused = await poll(async () => (await vlog()).includes('refused:not-home'), 240000)
+  ok(refused, `3. ★ a 4th chordmate's visit is refused: the chord is three (log ${JSON.stringify(await vlog())}, ${((Date.now() - t3) / 1000).toFixed(0)} s)`)
   { const z = await mpZone(S); ok(z !== `open:plot:${idA}` && !(await vlog()).some(e => e.startsWith('start:')), `3. ...it never reaches ash's ground (${z})`) }
   await S.close()
   await sleep(3000)
