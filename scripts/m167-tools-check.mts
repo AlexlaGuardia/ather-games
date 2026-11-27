@@ -47,7 +47,9 @@ try {
     ok(!!looks && looks.forestry === want.forestry, `live rig mounts the worn pruner: ${looks?.forestry} (tree ${want.forestry})`)
     ok(!!looks && looks.prospecting === want.prospecting, `live rig mounts the worn spike: ${looks?.prospecting} (tree ${want.prospecting})`)
     const glyphs = await page.evaluate(() => Array.from(document.querySelectorAll('[data-tool-glyph]')).map(e => e.getAttribute('data-tool-glyph')))
-    ok(glyphs.includes('m167-pruner') && glyphs.includes('m167-spike'), `HUD dial glyphs are the new pruner + spike: ${JSON.stringify([...new Set(glyphs)])}`)
+    // the phone HUD (390) draws no tool dials at all (empty seats in the bar), so the glyph is a desktop assert
+    if (label === 'desktop') ok(glyphs.includes('m167-pruner') && glyphs.includes('m167-spike'), `HUD dial glyphs are the new pruner + spike: ${JSON.stringify([...new Set(glyphs)])}`)
+    else console.log(`  (390: phone HUD has no tool dials; glyphs seen ${JSON.stringify(glyphs)})`)
     for (const fam of ['forestry', 'prospecting'] as const) {
       await page.evaluate((f: string) => { (window as unknown as { __hands: { look?: string | null } }).__hands.look = f }, fam)
       await sleep(2500)
