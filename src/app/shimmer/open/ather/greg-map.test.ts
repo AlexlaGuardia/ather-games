@@ -4,7 +4,7 @@
 // tiles round Greg's waymark, regions built by the fold map's own rule), each zone ranked once, the ripple starts far from the Glade;
 // each stage's display-only regions read clear / ripple / all Hollow ground / all Unseen; the captions are the SIGNED legend words; the talk keeps its signed lines untouched.
 import { readFileSync } from 'node:fs'
-import { stageOfLine, stageState, rippleCount, buildGregArea, stageRegions, turnedAt, GREG_MAP_STAGES, RIPPLE_MS, type IndexTile } from './greg-map'
+import { stageOfLine, stageState, rippleCount, rippleNext, RIPPLE_MIN_STEPS, buildGregArea, stageRegions, turnedAt, GREG_MAP_STAGES, RIPPLE_MS, type IndexTile } from './greg-map'
 import { fuseZones, mergeRegions } from './zones'
 import { SUB, nodeRegions, type WildsNode } from './nodes'
 import { tutNode, BRANCH_LINES } from './glade-greg-talk'
@@ -40,6 +40,11 @@ ok(rippleCount(N, RIPPLE_MS) === N && rippleCount(N, RIPPLE_MS * 3) === N, 'all 
 const mid = rippleCount(N, RIPPLE_MS / 2); ok(mid > N * 0.4 && mid < N * 0.6, `half way ~ half (${mid})`)
 let prev = 0, mono = true; for (let ms = 0; ms <= RIPPLE_MS + 100; ms += 70) { const k = rippleCount(N, ms); if (k < prev) mono = false; prev = k } ok(mono, 'never falls back')
 ok(rippleCount(0, 1000) === 0, 'no zones, nothing turns')
+// s2: a slow frame slows the ripple, never jumps it: from 0, a tick 10 s late still turns at most 1/RIPPLE_MIN_STEPS
+{ const n = 64, cap = Math.ceil(n / RIPPLE_MIN_STEPS); let k = 0, steps = 0; while (k < n && steps < 100) { const nk = rippleNext(n, 10000, k); ok(nk - k <= cap && nk > k, `slow tick ${k} -> ${nk}`); k = nk; steps++ }
+  ok(k === n && steps >= RIPPLE_MIN_STEPS, `a starved ripple still shows ${steps} steps`)
+  ok(rippleNext(n, RIPPLE_MS / 2, 31) === rippleCount(n, RIPPLE_MS / 2), 'on time it is rippleCount')
+  ok(rippleNext(n, 0, 5) === 5, 'never falls back') }
 
 // s2: the real Ather Wilds map's ground round Greg's waymark (the shipped index)
 const idx = JSON.parse(readFileSync('public/open/wilds/tiles.json', 'utf8')) as { tileM: number; tiles: IndexTile[] }

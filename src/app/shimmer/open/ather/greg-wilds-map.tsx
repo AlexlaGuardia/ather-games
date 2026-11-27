@@ -7,7 +7,7 @@
 // round Greg's waymark tile, fed a DISPLAY-ONLY state per stage (greg-map.ts stageRegions) instead of the keeper's. No drawing of
 // its own: the old blocky squares are retired.
 import { useEffect, useMemo, useState } from 'react'
-import { buildGregArea, rippleCount, stageRegions, stageState, turnedAt, FADE_MS, type GregArea, type GregMapStage } from './greg-map'
+import { buildGregArea, rippleNext, stageRegions, stageState, turnedAt, FADE_MS, type GregArea, type GregMapStage } from './greg-map'
 import { STATE_WORD } from './spread-map'
 import { AreaView, SpreadLegend } from './panels'
 import { newFog, type Fog } from './explored'
@@ -26,7 +26,8 @@ export function GregWildsMap({ stage, world, tileOff }: { stage: GregMapStage; w
   useEffect(() => {
     if (stage !== 'ripple') { setTurned(turnedAt(stage, area.n)); return }
     const t0 = performance.now(); setTurned(0)
-    const id = window.setInterval(() => { const k = rippleCount(area.n, performance.now() - t0); setTurned(k); if (k >= area.n) window.clearInterval(id) }, 70)
+    let k = 0
+    const id = window.setInterval(() => { k = rippleNext(area.n, performance.now() - t0, k); setTurned(k); if (k >= area.n) window.clearInterval(id) }, 70)
     return () => window.clearInterval(id)
   }, [stage, area.n])
   // the fade: the Unseen map is laid over the Hollow one and comes up over FADE_MS (mounted at 0, raised a beat later)

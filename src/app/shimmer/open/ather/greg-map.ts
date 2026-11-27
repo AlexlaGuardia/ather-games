@@ -32,6 +32,14 @@ export function rippleCount(n: number, ms: number): number {
   return Math.min(n, Math.ceil((n * ms) / RIPPLE_MS))
 }
 
+/** the ripple's next count from `prev`: on time (rippleCount), but never more than RIPPLE_MAX_STEP of the zones in one tick, so a
+ *  slow frame (a busy phone) slows the ripple down instead of jumping it to the end (M236 s2: seen 0,2,3,64 under swiftshader) */
+export const RIPPLE_MIN_STEPS = 8
+export function rippleNext(n: number, ms: number, prev: number): number {
+  const due = rippleCount(n, ms), cap = Math.max(1, Math.ceil(n / RIPPLE_MIN_STEPS))
+  return Math.max(prev, Math.min(due, prev + cap))
+}
+
 export interface IndexTile { name: string; tx: number; ty: number; nodes: { id: string; x: number; z: number; i: number; j: number; biome: WildsNode['biome'] }[] }
 export interface GregRegion { id: string; /** tile-local metres, as the fold map's regions */ poly: Poly; /** 0 = the first to turn */ rank: number }
 export interface GregArea {
