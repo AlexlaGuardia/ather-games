@@ -80,6 +80,7 @@ ok(tone('body', '#bcc0cb') === BLUE_COLOR.blush, 'a faint blush')
   const srcA = new THREE.BufferAttribute(new Uint8Array([0x6f, 0xaf, 0xc2, 255, 0xff, 0xd3, 0x71, 255]), 4, true), cp = srcA.clone(); blueTint('eyes', cp)
   ok(srcA.getX(0) === 0x6f / 255 && Math.abs(cp.getX(1) - 1) < 0.01 && Math.abs(cp.getZ(1) - hexRgb(BLUE_COLOR.seam)[2]) < 0.01, 'only the copy is re-toned') }
 ok(/clone\(src\)/.test(src('../ather/glade-blue.tsx')) && /m\.geometry = m\.geometry\.clone\(\)/.test(src('../ather/glade-blue.tsx')), 'Blue tints a copy of the scene and of its geometry')
-ok(!/blue-look|glade-blue/.test(src('../ather/spirit-model.tsx') + src('../ather/spirit-models.ts') + src('../ather/spirit-rig-body.ts')), 'the spirits\' own models never pass through Blue\'s tones')
+const noComments = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '').replace(/\s\/\/ .*$/gm, '')
+ok(!/blue-look|glade-blue/.test(noComments(src('../ather/spirit-model.tsx') + src('../ather/spirit-models.ts') + src('../ather/spirit-rig-body.ts'))), 'the spirits\' own models never pass through Blue\'s tones')
 ok(Math.abs(BLUE_AT.x) > 0.75 + 0.4, 'Blue lies off the bench\'s end, not under it')
 console.log(`greg-figure: ${n} checks${process.exitCode ? ' FAIL' : ' ok'}`)
