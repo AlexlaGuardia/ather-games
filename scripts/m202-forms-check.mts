@@ -12,14 +12,12 @@
 // M202 Athowl line: --species owl (owner ?form=mana|storm|earth|water = Mystowl / Voltowl / Cragowl / Tideowl, sized by OWL_GLB_TALL;
 //   player ?form=storm sees her base Athowl).
 // M202 Croakling line: --species frog (owner ?form=water|mana|earth|storm = Croakrill / Croakara / Croakore / Croakarc, sized by
-//   CROAK_GLB_TALL = her body, the lure not counted; the base Croakling is itself owner-preview (M174), so a PLAYER's frog is the gold
-//   orb: player ?form=mana draws no spirit glb at all).
+//   CROAK_GLB_TALL = her body, the lure not counted; player ?form=mana sees her base Croakling, public since M226 d634c011).
 // M202 Hovari line: --species hummingbird (owner ?form=storm|mana|earth|water = Voltari / Lumari / Obsidari / Tidari, sized by
 //   HOV_GLB_TALL = her body height, the hover not counted; player ?form=mana sees her base Hovari).
 //   OWNER_KEY=... npx tsx scripts/m202-forms-check.mts [--species fox|axolotl|water-bear] [--shots dir] [--url https://ather.games]
 import puppeteer, { type Page } from 'puppeteer-core'
 import { mkdirSync } from 'fs'
-import { BASE_PREVIEW } from '../src/app/shimmer/open/ather/spirit-base-preview'
 import { CROAK_GLB_TALL, BEAR_GLB_TALL, HOV_GLB_TALL, LOTL_GLB_TALL, NOCT_GLB_TALL, OWL_GLB_TALL, SECOND_FORMS, SPIRIT_ELEMENTS, SPIRIT_RIGS, formGrow } from '../src/app/shimmer/open/ather/spirit-models'
 import { aimAt } from './lib/aim.mts'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
@@ -69,7 +67,7 @@ const measure = (p: Page) => p.evaluate(async (hover: boolean) => {
 }, SP === 'hummingbird')
 const hideCard = (p: Page) => p.evaluate(() => { const h = [...document.querySelectorAll('div')].filter(d => d.textContent?.includes('Click to play')); for (const d of h.filter(d => !h.some(o => o !== d && d.contains(o)))) (d as HTMLElement).style.visibility = 'hidden' }).catch(() => {})
 
-const base = SPIRIT_RIGS[SP] ?? BASE_PREVIEW[SP]!
+const base = SPIRIT_RIGS[SP]!
 const MID_AIM = new Set(['vulnix', 'marlotl', 'cragbear', 'aurlotl', 'arclotl', 'craglotl', 'lumebear', 'voltbear', 'tidebear', 'noctarc', 'noctara', 'noctore', 'noctix', 'mystowl', 'voltowl', 'cragowl', 'tideowl', 'voltari', 'lumari', 'obsidari', 'tidari', 'croakrill', 'croakara', 'croakore', 'croakarc'])
 const only = flag('--forms', '').split(',').filter(Boolean)
 for (const el of SPIRIT_ELEMENTS.filter(e => SECOND_FORMS[SP]?.[e] && (!only.length || only.includes(e)))) {
@@ -102,8 +100,7 @@ for (const el of SPIRIT_ELEMENTS.filter(e => SECOND_FORMS[SP]?.[e] && (!only.len
   await p.browserContext().close()
 }
 { const pel = SP === 'fox' ? 'storm' : SP === 'water-bear' ? 'earth' : SP === 'bat' ? 'mana' : SP === 'owl' ? 'storm' : SP === 'hummingbird' || SP === 'frog' ? 'mana' : 'water', { p, got } = await open(false, `&form=${pel}`); const m = await measure(p)
-  if (SP === 'frog') ok(!m && !got.length, `2 player ?form=${pel}: the gold orb (the base Croakling is owner-preview), no spirit glb (${got.join(', ')})`)
-  else ok(!!m && m.urls[base.url] === 1 && Object.keys(m.urls).length === 1, `2 player ?form=${pel}: her base ${SP} (${JSON.stringify(m?.urls)})`)
+  ok(!!m && m.urls[base.url] === 1 && Object.keys(m.urls).length === 1, `2 player ?form=${pel}: her base ${SP} (${JSON.stringify(m?.urls)})`)
   ok(!got.some(g => /(vuln(ara|arc|ore|ix)|marlotl|aurlotl|arclotl|craglotl|cragbear|lumebear|voltbear|tidebear|noct(arc|ara|ore|ix)|(myst|volt|crag|tide)owl|voltari|lumari|obsidari|tidari|croak(rill|ara|ore|arc))-/.test(g)), `2 player: no form glb asked for (${got.join(', ')})`)
   await p.browserContext().close() }
 ok(errs.length === 0, `3 page errors: ${errs.length} ${errs.slice(0, 3).join(' | ')}`)

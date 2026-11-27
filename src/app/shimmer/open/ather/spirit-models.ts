@@ -384,8 +384,8 @@ export const HOV_GLB_TALL: Readonly<Record<string, number>> = { voltari: 1.328, 
 // bud orb), Croakore (Earth: a warty toad, the heaviest, moss on crown and shoulders, slit-pupilled orange eyes, an amber orb; dial 1.5),
 // Croakarc (Storm: a SKINK, no lure (grimoire-ledger divergence note), a long curling tail, a pointed crest, dorsal spines, lightning veins,
 // a violet brow gem). Each is the BASE Croakling's sculpt + rig modules re-shaped by name (tools/croak_common.py, rig_croak.py), so the
-// base (M174, still owner-preview: spirit-base-preview.ts) flows into all four on a rebuild. The base is not in SPIRIT_RIGS yet, so the
-// line builds off BASE_PREVIEW.frog; formLook is only ever asked for an owner (the ?form= preview / an owner's evolved pot). Croakarc's
+// base (M174, public since M226; its data lives in spirit-base-preview.ts) flows into all four on a rebuild. The line builds off
+// BASE_PREVIEW.frog (= SPIRIT_RIGS.frog); the forms are OWNER PREVIEW (not in spirit-public.ts PUBLIC_FORMS until Alex OKs). Croakarc's
 // tail rides the base's three lure bones (re-seated along it). CROAK_GLB_TALL = each body's idle mean height (lure not counted).
 export const CROAK_GLB_TALL: Readonly<Record<string, number>> = { croakrill: 0.854, croakara: 0.794, croakore: 0.776, croakarc: 0.908 }
 // glbLen = her nose to haunch (tail tip) and hRig = the metres per glb unit her clips were timed at (rig metrics height_m), so her clips
