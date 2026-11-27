@@ -588,7 +588,11 @@ cmd_build() {
     echo ">> snapshot of $sha at $bdir (the shared tree is not read by this build)"
   fi
   cd "$bdir"
-  if NEXT_DIST_DIR="$target" npm run build && { [ "$bdir" = "$REPO" ] || {
+  # ── ★ A FAILED BUILD KEEPS ITS LOG (2026-11-27, serb) ───────────────────────────────────────────
+  # sprites' M202 sha 080d83b6 FAILED twice and then deployed OK on a third identical run: a flake, and
+  # nobody could say what failed, because the output only ever reached the lane's own terminal. tee keeps
+  # it (pipefail is on, so npm's exit still decides); on failure it is kept as build-fail-<ts>.log (last 10).
+  if NEXT_DIST_DIR="$target" npm run build 2>&1 | tee "$COORD_DIR/build-last.log" && { [ "$bdir" = "$REPO" ] || {
         rm -rf "$REPO/$target" && mv "$bdir/$target" "$REPO/$target" &&
         sed -i "s#$bdir#$REPO#g" "$REPO/$target"/required-server-files.json "$REPO/$target"/required-server-files.js 2>/dev/null; true; }; }; then
     cd "$REPO"; [ "$bdir" != "$REPO" ] && rm -rf "$bdir"
@@ -668,7 +672,10 @@ cmd_build() {
     fi
   else
     cd "$REPO"; [ "$bdir" != "$REPO" ] && rm -rf "$bdir"
+    _flog="$COORD_DIR/build-fail-$(date -u +%Y%m%dT%H%M%SZ)-$WIN.log"
+    cp "$COORD_DIR/build-last.log" "$_flog" 2>/dev/null && ls -t "$COORD_DIR"/build-fail-*.log 2>/dev/null | tail -n +11 | xargs -r rm -f
     echo ">> BUILD FAILED — nothing deployed; prod is still serving $live"
+    echo ">> full build output kept: $_flog"
     signal "$WIN BUILD FAILED: $msg"
     release_lock; trap - EXIT
     exit 1
