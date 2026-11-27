@@ -30,7 +30,7 @@ const PIECES = [
   { id: 'mx-check', item: 'spirit_planter', x: P.x - 2.6, z: P.z + 1.0 },
   { id: 'hd-check', item: 'goldwood_hurdle', x: P.x - 3, z: P.z + 4 },
   { id: 'ps-check', item: 'push_stone', x: P.x - 4.6, z: P.z + 1.6 },
-  { id: 'gp-check', item: 'guard_posts', x: P.x + 2.2, z: P.z + 1.8 },
+  { id: 'gp-check', item: 'guard_posts', x: P.x - 1.2, z: P.z + 6.0 },
   { id: 'rr-check', item: 'running_ring', x: P.x + 1.5, z: P.z + 5.2 },
 ].map(x => ({ ...x, q: 0, placedAt: 1 }))
 const TOYS = PIECES.filter(x => FURNITURE[x.item].train).map(x => ({ id: x.id, x: x.x, z: x.z, stat: FURNITURE[x.item].train!, kind: FURNITURE[x.item].play ?? 'leap' }))
