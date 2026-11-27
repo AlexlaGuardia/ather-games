@@ -42,7 +42,7 @@ shared_ensure() {
     flock -w 900 9 || { echo "devshared: could not take $SHARED_LOCKF in 15 min" >&2; exit 1; }
     if shared_alive; then exit 0; fi
     # A fresh `next dev` of this app grows to ~2 GB: wait for room instead of starting and being shed.
-    "$REPO/tools/coord.sh" memgate 2500 600 "shared dev server start" || exit 1
+    "$REPO/tools/coord.sh" memgate 2200 600 "shared dev server start" || exit 1
     _shared_start
   ) 9>"$SHARED_LOCKF" || return 1
   shared_wait_up

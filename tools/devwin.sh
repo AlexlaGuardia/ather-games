@@ -116,7 +116,7 @@ fi
 # per-lane server (own `.next-<lane>`, own port, ~2 GB), so it waits at the memory gate first, and its
 # record carries own=1 so it never counts as a user keeping the shared server alive.
 if [ "$OWN" = 1 ]; then
-  "$REPO/tools/coord.sh" memgate 2500 600 "own dev server for '$LANE'" || exit 1
+  "$REPO/tools/coord.sh" memgate 2200 600 "own dev server for '$LANE'" || exit 1
   DIST=".next-$LANE"
   echo ">> lane '$LANE' --own: its own next dev, dist=$DIST port=$PORT (~2 GB; the shared server is untouched)"
   env NEXT_DIST_DIR="$DIST" npx next dev -p "$PORT" &

@@ -71,26 +71,66 @@ mkdir -p "$CLAIMS_DIR" "$DEVWINS_DIR"
 # fresh shared dev server 2500 MB. It holds its lock while it waits, so the queue order stands.
 # Gives up after the wait with the numbers NAMED (exit 1), never silently. MEM_GATE=0 skips it.
 mem_avail_mb() { awk '/^MemAvailable:/{print int($2/1024)}' /proc/meminfo; }
+# ── ★★ RESERVATIONS: a gate that admits a job must hold room for what it WILL use (2026-11-27, serb) ──
+# The first gate read MemAvailable once, at start. 00:15 11-27: a typecheck passed it with ~2.2 GB free,
+# then grew to 1.9 GB beside a browser run that was ALSO still growing, next to the 2 GB shared dev
+# server: 123 MB left and mem-watcher shed the typecheck. The gate had admitted two jobs against the same
+# free memory. Now an admitted job writes `.coord/reserve/<pid>` = its expected PEAK, and the gate
+# measures `MemAvailable - (each live job's peak - what its process tree already uses)`, so memory a
+# running job is still growing into is not handed out twice. Admission is under a flock so two lanes
+# cannot both pass on the same reading. A dead pid's reservation is dropped at once.
+#   cmd_memgate <peak_mb> <max_wait_s> <what> [owner_pid]   need = peak + MEM_FLOOR (stay off the shed floor)
+MEM_FLOOR=400
+RESERVE_DIR="$COORD_DIR/reserve"
+tree_rss_mb() {
+  local all="$1" frontier="$1" kids q
+  while [ -n "$frontier" ]; do
+    kids=""; for q in $frontier; do kids="$kids $(pgrep -P "$q" 2>/dev/null | tr '\n' ' ')"; done
+    frontier="$(echo $kids)"; all="$all $frontier"
+  done
+  ps -o rss= -p "$(echo $all | tr ' ' ',')" 2>/dev/null | awk '{s+=$1} END{print int(s/1024)}'
+}
+mem_pending_mb() {   # memory admitted jobs have reserved but not yet grown into
+  local f p mb used pend=0
+  mkdir -p "$RESERVE_DIR"
+  for f in "$RESERVE_DIR"/*; do
+    [ -e "$f" ] || continue
+    p=$(basename "$f")
+    if ! kill -0 "$p" 2>/dev/null; then rm -f "$f"; continue; fi
+    mb=$(sed -n 's/^mb=//p' "$f"); used=$(tree_rss_mb "$p")
+    [ "${mb:-0}" -gt "${used:-0}" ] && pend=$((pend + mb - used))
+  done
+  echo "$pend"
+}
 cmd_memgate() {
-  local need="${1:-2500}" maxw="${2:-900}" what="${3:-heavy step}" waited=0 have said=0
+  local peak="${1:-2200}" maxw="${2:-900}" what="${3:-heavy step}" owner="${4:-}" waited=0 have pend eff said=0
+  local need=$((peak + MEM_FLOOR))
   [ "${MEM_GATE:-1}" = 0 ] && return 0
+  mkdir -p "$RESERVE_DIR"
   while :; do
-    have=$(mem_avail_mb)
-    if [ "$have" -ge "$need" ]; then
+    # check + reserve atomically: two lanes must not both pass on the same reading
+    if (
+      flock -w 30 7 || exit 1
+      have=$(mem_avail_mb); pend=$(mem_pending_mb); eff=$((have - pend))
+      [ "$eff" -ge "$need" ] || exit 1
+      [ -n "$owner" ] && printf 'mb=%s\nwhat=%s\nwin=%s\nts=%s\n' "$peak" "$what" "$WIN" "$(now_iso)" > "$RESERVE_DIR/$owner"
+      exit 0
+    ) 7>"$COORD_DIR/memgate.lock"; then
       if [ "$said" = 1 ]; then
-        echo ">> memgate: ${have} MB available, starting '$what' after ${waited}s" >&2
+        echo ">> memgate: room for '$what' after ${waited}s" >&2
         printf '%s\twait\t%s\t%ss\tok\t%s\n' "$(now_iso)" "$WIN" "$waited" "$what" >> "$COORD_DIR/waits.log"
       fi
       return 0
     fi
+    have=$(mem_avail_mb); pend=$(mem_pending_mb); eff=$((have - pend))
     if [ "$waited" -ge "$maxw" ]; then
-      echo "memgate: gave up on '$what' after ${waited}s: ${have} MB available, needs ${need} MB." >&2
+      echo "memgate: gave up on '$what' after ${waited}s: ${have} MB available, ${pend} MB reserved by running jobs, needs ${need} MB." >&2
       printf '%s\twait\t%s\t%ss\tGAVE-UP\t%s\n' "$(now_iso)" "$WIN" "$waited" "$what" >> "$COORD_DIR/waits.log"
       echo "  biggest: $(ps -eo rss,args --sort=-rss | awk 'NR>1&&NR<=4{printf "%dMB %s; ", $1/1024, substr($2,1,40)}')" >&2
       return 1
     fi
     if [ "$said" = 0 ]; then
-      echo ">> memgate: '$what' waits: ${have} MB available, needs ${need} MB (up to ${maxw}s; MEM_GATE=0 skips)" >&2
+      echo ">> memgate: '$what' waits: ${have} MB available - ${pend} MB reserved by running jobs < ${need} MB (up to ${maxw}s; MEM_GATE=0 skips)" >&2
       said=1
     fi
     sleep 15; waited=$((waited+15))
@@ -353,7 +393,7 @@ release_lock() { rm -rf "$LOCKDIR"; }
 cmd_sweep() {
   LOCK_KIND=sweep acquire_lock || exit 1
   trap release_lock EXIT
-  cmd_memgate 2500 900 "sweep" || exit 1
+  cmd_memgate 2200 900 "sweep" $$ || exit 1
   echo ">> build lock acquired by '$WIN' for a SWEEP — deploys will wait on this"
   signal "$WIN sweeping (holds the build lock)"
   cd "$REPO"
@@ -378,7 +418,7 @@ cmd_tsc() {
       flock -w 1200 8 || { echo "coord tsc: waited 20 min for the typecheck lock; giving up" >&2; printf '%s\ttsc-queue\t%s\t1200s\tGAVE-UP\t-\n' "$(now_iso)" "$WIN" >> "$COORD_DIR/waits.log"; exit 1; }
       printf '%s\ttsc-queue\t%s\t%ss\tok\t-\n' "$(now_iso)" "$WIN" "$(( $(now_epoch) - t0 ))" >> "$COORD_DIR/waits.log"
     fi
-    cmd_memgate 2200 900 "typecheck" || exit 1
+    cmd_memgate 1900 900 "typecheck" $BASHPID || exit 1
     cd "$REPO"
     npx tsc --noEmit "$@"
   ) 8>"$COORD_DIR/tsc.lock"
@@ -389,7 +429,7 @@ cmd_build() {
   acquire_lock || exit 1
   trap release_lock EXIT
   echo ">> build lock acquired by '$WIN'"
-  cmd_memgate 2500 900 "build: $msg" || exit 1
+  cmd_memgate 2200 900 "build: $msg" $$ || exit 1
   # ── ★★ THE BUILD CARRIES ITS OWN OBSERVATION, TAKEN HERE (2026-08-20, second incident) ────────
   # The post-deploy warning below tells you what you just shipped. That is one line too late by
   # design, and the fix for it is NOT "remember to run `git status` first" — the same seat DID run
@@ -684,7 +724,7 @@ cmd_status() {
     fi
   fi
   echo "--- memory ---"
-  echo "  $(mem_avail_mb) MB available (gates: build/sweep/shared start 2500, browser 1800)"
+  echo "  $(mem_avail_mb) MB available, $(mem_pending_mb) MB reserved by running jobs (peaks: build/sweep/shared 2200, tsc 1900, browser 1500; +${MEM_FLOOR} floor)"
   echo "--- build lock ---"
   if [ -d "$LOCKDIR" ]; then
     echo "  HELD — $(lock_owner_info | tr '\n' ' ')  age=$(lock_age)s"
@@ -742,7 +782,7 @@ cmd_browser() {
       [ "${1:-}" = "--" ] && shift
       if [ -z "$what" ] || [ $# -eq 0 ]; then echo 'usage: coord browser run "<what>" -- <cmd...>' >&2; return 2; fi
       cmd_browser _take "$what" || return 1
-      if ! cmd_memgate 1800 600 "browser run: $what"; then
+      if ! cmd_memgate 1500 600 "browser run: $what" $$; then
         [ "$(sed -n 's/^pid=//p' "$BROWSER_FILE" 2>/dev/null)" = "$$" ] && rm -f "$BROWSER_FILE"
         return 1
       fi
