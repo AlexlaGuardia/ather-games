@@ -213,17 +213,23 @@ function ToolSocket({ family, angleDeg, active, tools, skills }: {
  *  rinsticks→rinning, spades→farming) from `engine/tools.ts`, drawn as a simple angled stroke. */
 export function ToolGlyph({ family }: { family: 'forestry' | 'prospecting' | 'rinning' | 'farming' }) {
   switch (family) {
-    case 'forestry': // blade — angled machete stroke
-      return <>
-        <path d="M5 19 L16 8" />
-        <path d="M16 8 L20 4" />
-        <path d="M5 19 L8.5 19" />
-      </>
-    case 'prospecting': // spike — pick shape
-      return <>
-        <path d="M12 3c-3.3 0-5.5 2.2-5.5 5 0 2 1.6 3.3 3 3.3" />
-        <path d="M9.5 11.3 15 20" />
-      </>
+    // ★ M167 (Alex locked 11-25, athernyx a8b1db5): the pruner and spike as locked. Pruner = a leaf-shaped head with its
+    // midrib on a short haft with a collar; spike = one thick spike with a BLUNT flat end on a short wrapped grip and a knob.
+    case 'forestry': // pruner: leaf head + midrib, collar, haft
+      return <g data-tool-glyph="m167-pruner">
+        <path d="M11.5 12.5C11 8 14.5 4.2 20 4c-.2 5.5-4 9-8.5 8.5Z" />
+        <path d="M11.5 12.5 17 7" />
+        <path d="M10 11.8 12.2 14" />
+        <path d="M11 13 4.5 19.5" />
+      </g>
+    case 'prospecting': // spike: faceted shaft with a blunt end, wrapped grip, knob
+      return <g data-tool-glyph="m167-spike">
+        <path d="M10.6 11.4 16.8 5.2 18.8 7.2 12.6 13.4Z" />
+        <path d="M9.6 12.4 11.6 14.4" />
+        <path d="M10.6 13.4 6.4 17.6" />
+        <path d="M8 14.6 9.4 16M6.8 15.8 8.2 17.2" />
+        <circle cx="5.3" cy="18.7" r="1.6" />
+      </g>
     case 'rinning': // rinstick — rod + line
       return <>
         <path d="M6 21 14 4" />
