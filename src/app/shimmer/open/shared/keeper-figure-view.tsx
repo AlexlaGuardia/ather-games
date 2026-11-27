@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { buildKeeper, poseKeeper } from './keeper-figure'
+import { mergeKeeper, disposeMergedKeeper } from './keeper-merge'
 import { gunProp } from './held-gun-prop'   // M27 slice 4: a peer's held gun on the right hand
 import type { Look } from './keeper-look'
 import type { Proportions } from './keeper-proportions'
@@ -18,7 +19,8 @@ export function KeeperFigure({ look, drive, spin = 0, yaw = 0, gun = null, shape
   gun?: string | null
   /** BETA M156: a remote keeper's walk amount, read each frame (0 stands, 0.6 walks, 1 runs) */
   walk?: React.RefObject<number> }) {
-  const body = useMemo(() => shape ? buildKeeper(look, shape) : buildKeeper(look), [look, shape])
+  // M154 follow-up: merged after sizing (keeper-merge.ts), so the dials still drive everything and a new look / shape re-merges
+  const body = useMemo(() => mergeKeeper(shape ? buildKeeper(look, shape) : buildKeeper(look)), [look, shape])
   // the gun rides the BODY, following 'hand-r' each frame (the hand mesh is scaled to a mitten: a child would shrink with it)
   const prop = useRef<THREE.Group | null>(null)
   useEffect(() => {
@@ -29,7 +31,7 @@ export function KeeperFigure({ look, drive, spin = 0, yaw = 0, gun = null, shape
   }, [gun, body])
   const host = useRef<THREE.Group>(null)
   const t = useRef(0)
-  useEffect(() => () => { body.group.clear() }, [body])   // geometry + materials are shared caches: only the meshes go
+  useEffect(() => () => { disposeMergedKeeper(body.group); body.group.clear() }, [body])   // merged geometry is the figure's own; materials are shared
   useFrame((_, dt) => {
     t.current += Math.min(dt, 0.1)
     const h = host.current; if (!h) return
