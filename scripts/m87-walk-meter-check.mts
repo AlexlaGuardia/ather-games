@@ -134,9 +134,11 @@ try {
   ok(!!held && !inside(held) && (atFace || onTop), `3. let go: ${atFace ? 'still at the face, on the ground' : onTop ? 'on the rock\'s top (the game\'s mantle: W was still held at the face)' : 'somewhere else'} (z ${held?.z?.toFixed(2)}, feet ${held?.y?.toFixed(2)}, rock top ${box?.y1?.toFixed(2)}), never inside it`)
   await o.screenshot({ path: `${out}/d-stopped-at-rock.png` }).catch(() => {})
   ok(JSON.stringify((await T(o)).props) === draft0, '3. walking wrote nothing to the draft (pieces identical)')
+  // settle first: the mantle can still be carrying the keeper onto the top; H must be judged against where it stands WHEN pressed
+  let last = await WT(o, 'body'); for (let i = 0; i < 30; i++) { await sleep(200); const b = await WT(o, 'body'); if (b && last && Math.hypot(b.x - last.x, b.z - last.z) < 0.002) { last = b; break } last = b }
   await key(o, 'KeyH')
   const cam = await o.evaluate(() => (window as W).__builderFly.cam())
-  ok(!(await WT(o, 'walking')) && !!cam && Math.abs(cam.x - held.x) < 0.01 && Math.abs(cam.z - held.z) < 0.01 && !cam.top, `3. H again: Fly at the same spot (${cam?.x?.toFixed(2)}, ${cam?.z?.toFixed(2)}), ${(cam?.y - held.y).toFixed(1)} m up`)
+  ok(!(await WT(o, 'walking')) && !!cam && Math.abs(cam.x - last.x) < 0.01 && Math.abs(cam.z - last.z) < 0.01 && !cam.top, `3. H again: Fly at the same spot (${cam?.x?.toFixed(2)}, ${cam?.z?.toFixed(2)}) as the keeper (${last?.x?.toFixed(2)}, ${last?.z?.toFixed(2)}), ${(cam?.y - last.y).toFixed(1)} m up`)
   await sleep(1500); await o.screenshot({ path: `${out}/e-back-to-fly.png` }).catch(() => {})
 
   const after = await store(o); const h1 = hashes(after)
