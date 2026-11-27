@@ -51,6 +51,10 @@ async function run(tag: string, w: number, h: number, phone: boolean, q = '') {
   ok(a.every(y => y.h > 0 && y.h < blue.h), `${tag}: every young one smaller than Blue (${a[0].h.toFixed(3)} < ${blue.h.toFixed(3)})`)
   ok(atHome && a.every(y => Math.hypot(y.x - G.x, y.z - G.z) < GARDEN.r + 0.5), `${tag}: all seven home in the garden (a keeper 12 m off)`)
   ok(stats.drawn === 7 && stats.animated >= 1, `${tag}: drawn ${stats.drawn}, animated ${stats.animated}, hull ${stats.hull}; their loop ${stats.ms.toFixed(2)} ms/frame`)
+  // shots only: hide the start card (the DOM, never a click: a click would start play) and tip the view down at the garden
+  const hideCard = () => p.evaluate(`(() => { for (const e of document.querySelectorAll('div')) { const t = e.textContent || ''; if (t.includes('YOUR PLOT AND THE WILDS') && t.length < 900 && e.getBoundingClientRect().width < innerWidth) { e.style.display = 'none'; return true } } return false })()`)
+  const lookDown = (pitch: number) => p.evaluate((y: number, q: number) => (window as any).__ather.look?.(y, q), S.yaw, pitch)
+  await hideCard(); await lookDown(-0.35); await wait(1500)
   if (out) await p.screenshot({ path: `${out}/${tag}-garden.png` as `${string}.png` })
   await wait(4000)
   const b: Y[] = await p.evaluate(() => (window as any).__dewbears.young())
@@ -64,6 +68,7 @@ async function run(tag: string, w: number, h: number, phone: boolean, q = '') {
     c = await p.evaluate(() => (window as any).__dewbears.young()); near = c.filter(y => Math.hypot(y.x - kx, y.z - kz) < CROWD_R + 0.6).length
   }
   ok(near >= 4 && c.filter(y => y.mode === 'crowd').length >= 4, `${tag}: they crowd the keeper (${near}/7 within ${(CROWD_R + 0.6).toFixed(2)} m)`)
+  await hideCard(); await lookDown(-1.0); await wait(1500)
   if (out) await p.screenshot({ path: `${out}/${tag}-crowd.png` as `${string}.png` })
   ok(errs.length === 0, `${tag}: 0 page errors ${errs.join(' | ')}`)
   await p.close()
