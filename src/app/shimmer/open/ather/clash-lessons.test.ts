@@ -105,7 +105,7 @@ ok(f1.seconds === f0.seconds && f1.winner === f0.winner, 'an empty lesson list p
 // a crafted moment: pressKiter makes her step IN on a far kind where she would hold her range
 {
   const mk = (t: Tactic[]) => {
-    const s = createFight({ ...tentEntrant('fox', 'base', 'easy'), tactics: t }, tentEntrant('owl', 'base', 'easy'), 5)
+    const s = createFight({ ...tentEntrant('fox', 'base', 'easy'), tactics: t }, tentEntrant('owl', 'base', 'easy', { id: 'bolt_rush', twist: 0 }), 5)   // a far owl (far move: stanceOf)
     const [me, foe] = s.f
     me.x = -1.5; me.z = 0; foe.x = 1.5; foe.z = 0
     me.cd.melee = 0.5; me.cd.bonded = 5; me._.nextDecide = 0; foe._.nextDecide = 99; foe.cd.bonded = 5; foe.cd.melee = 5

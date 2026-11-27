@@ -59,8 +59,8 @@ for (const tier of ['easy', 'average'] as ClashTier[]) {
     if (w > worst) { worst = w; worstK = `${a}>${b}` }
   }
   console.log(`worst matchup ${worstK} ${Math.round(worst * 100)}% (${2 * N} fights)`)
-  const okMean = mean >= 60 && mean <= 90, okWr = worst <= MAX_WR, okMax = durs[durs.length - 1] <= 240
-  console.log(`targets: mean 60-90 ${okMean ? 'OK' : 'MISS'} · worst <= ${MAX_WR * 100}% ${okWr ? 'OK' : 'MISS'} · max <= 240 ${okMax ? 'OK' : 'MISS'}`)
+  const okMean = mean >= 60 && mean <= 90, okWr = worst <= MAX_WR, okMax = timeouts.n <= durs.length * 0.005   // the engine STOPS at 240 s, so 'max <= 240' always passed: count the capped fights (play-clash-fix)
+  console.log(`targets: mean 60-90 ${okMean ? 'OK' : 'MISS'} · worst <= ${MAX_WR * 100}% ${okWr ? 'OK' : 'MISS'} · capped at 240 <= 0.5% ${okMax ? 'OK' : 'MISS'}`)
   if (!okMean || !okWr || !okMax) bad++
 }
 if (LEARNED) {

@@ -1,6 +1,6 @@
 // ── BETA M233 CLASH v2c FIGHT MEMORY (2026-11-27, play-M233v2c) ────────────────────────────────────────────────────────
 // A test keeper (dummy_m233_v2c), her bloomed fox in a planter + party, NO lessons. Runs DESKTOP 1280 then 390:
-//   P0 garden: E on her -> Open -> her panel: 'Lessons' empty.
+//   P0 (play-clash-fix: Clash runs from a FRESH load first, as m238; the planter is seeded only for the garden loads) her pot: no lessons.
 //   C1 Clash (easy tent, ?clashseed=S1, picked offline so her bout's log hits a trigger and she learns): after the run her
 //      pot holds exactly the lesson(s) the engine predicts (clash-lessons.ts learnFrom on the same seeded bout).
 //   P1 reload the garden: her panel lists the lesson (data-spirit-lesson) = it survived the reload.
@@ -76,7 +76,7 @@ async function page(desk: boolean) {
   return p
 }
 
-async function main(p: Page, desk: boolean, out: string, errs: string[]) {
+async function main(p: Page, desk: boolean, out: string, errs: string[]): Promise<Page> {
   const shot = async (n: string) => { try { await p.screenshot({ path: `${out}/${n}.png` }) } catch { /* slow frame */ } }
   const net = await (await fetch(`${url}/open/wilds/network-s1.json`, { cache: 'no-store' })).json() as Network
   const clash = tentsOf(net).filter(x => x.contest === 'clash'), t = clash[clash.findIndex(x => x.level === 'easy')]
@@ -86,29 +86,41 @@ async function main(p: Page, desk: boolean, out: string, errs: string[]) {
   for (let s = 1; s < 400 && !S1; s++) { const r = predict([], s, lineup); if (r.have.length) { S1 = s; p1 = r } }
   for (let s = 1; s < 400 && p1 && !S2; s++) { const r = predict(p1.have, s, lineup); if (r.bouts.some(bo => p1!.have.some(l => (bo.tactics[tacOf(l)] ?? 0) >= 2))) { S2 = s; p2 = r } }
   console.log(`   tent #${clash.indexOf(t)} line-up ${lineup.map(f => f.species).join(',')} · S1 ${S1} learns ${JSON.stringify(p1?.bouts)} · S2 ${S2} ${JSON.stringify(p2?.bouts.map(b => b.tactics))}`)
-  if (!S1 || !S2) { ok(false, 'found seeds offline'); return }
+  if (!S1 || !S2) { ok(false, 'found seeds offline'); return p }
 
   await p.setCookie({ name: 'ather_session', value: mintSession(KA.id, KA.name), domain: new URL(url).hostname, path: '/', httpOnly: true })
   const TUT = { v: 1, live: true, greg: { welcome: true, moglins: true, spirits: true, wilds: true }, heard: [], gifts: ['pruner', 'spike'], b2: 'none', baitDay: null, m70: 'none', m70node: null, m70side: 'none', folded: true }
-  await p.evaluateOnNewDocument((s: any) => {
-    if (sessionStorage.getItem('m233v2c')) return; sessionStorage.setItem('m233v2c', '1')
-    localStorage.setItem('ather:shimmer:birthRune', 'star')
-    localStorage.setItem('open.tutorial.v1', JSON.stringify(s.TUT))
-    localStorage.setItem('open.rinquest.v1', JSON.stringify({ v: 1, state: 'done', step: 0 }))
-    for (const pre of ['', `u:${s.id}:`]) {
-      localStorage.setItem(`${pre}open.inv.v1`, JSON.stringify({ v: 1, slots: Array(32).fill(null), gifts: ['bait1'] }))
-      localStorage.setItem(`${pre}open.works.v1`, JSON.stringify({ v: 1, rooms: [], chests: [], pieces: [s.PL] }))
-      localStorage.setItem(`${pre}ather.grimoire.v1`, JSON.stringify({ v: 1, pages: [{ species: 'fox', stage: 'seen', at: 1 }], pots: { [s.ID]: { ...s.POT, at: s.at } }, met: [] }))
-      localStorage.setItem(`${pre}ather.spiritParty.v1`, JSON.stringify([s.ID]))
+  // seeding (play-clash-fix): the FIRST load seeds her pot + party like m238's Clash phase (no planter: a garden-first run
+  // never listed her at the tent sign-up); a garden load sets 'm233-garden' first and gets the planter that holds her.
+  const seed = async (pg: Page, POT: unknown) => pg.evaluateOnNewDocument((s: any) => {
+    const ids = ['', `u:${s.id}:`]
+    if (!sessionStorage.getItem('m233v2c')) {
+      sessionStorage.setItem('m233v2c', '1')
+      localStorage.setItem('ather:shimmer:birthRune', 'star')
+      localStorage.setItem('open.tutorial.v1', JSON.stringify(s.TUT))
+      localStorage.setItem('open.rinquest.v1', JSON.stringify({ v: 1, state: 'done', step: 0 }))
+      for (const pre of ids) {
+        localStorage.setItem(`${pre}ather.grimoire.v1`, JSON.stringify({ v: 1, pages: [{ species: 'fox', stage: 'seen', at: 1 }], pots: { [s.ID]: { ...s.POT, at: s.at } }, met: [] }))
+        localStorage.setItem(`${pre}ather.spiritParty.v1`, JSON.stringify([s.ID]))
+      }
     }
-  }, { TUT, POT: POT0, PL: PLANTER, ID, at: Date.now() - BLOOM_MS - 60000, id: KA.id } as any)
-  const pot = () => p.evaluate((pre: string, id: string) => JSON.parse(localStorage.getItem(`${pre}ather.grimoire.v1`) ?? 'null')?.pots?.[id] ?? null, `u:${KA.id}:`, ID)
+    if (sessionStorage.getItem('m233-garden')) {
+      sessionStorage.removeItem('m233-garden')
+      for (const pre of ids) {
+        localStorage.setItem(`${pre}open.inv.v1`, JSON.stringify({ v: 1, slots: Array(32).fill(null), gifts: ['bait1'] }))
+        localStorage.setItem(`${pre}open.works.v1`, JSON.stringify({ v: 1, rooms: [], chests: [], pieces: [s.PL] }))
+      }
+    }
+  }, { TUT, POT, PL: PLANTER, ID, at: Date.now() - BLOOM_MS - 60000, id: KA.id } as any)
+  await seed(p, POT0)
+  const pot = (pg: Page = p) => pg.evaluate((pre: string, id: string) => JSON.parse(localStorage.getItem(`${pre}ather.grimoire.v1`) ?? 'null')?.pots?.[id] ?? null, `u:${KA.id}:`, ID)
   const load = async (q: string) => {
     await p.goto(`${url}/shimmer/open/ather?hour=14${q}`, { waitUntil: 'load', timeout: 240000 })
     await p.waitForFunction(() => !!(window as any).__ather?.travel, { timeout: 240000, polling: 1000 }); await sleep(3000)
     try { await dismissStartCard(p) } catch { for (let i = 0; i < 3; i++) { await p.keyboard.press('Escape'); await sleep(600) }; await dismissStartCard(p).catch(() => {}) }
   }
   const garden = async () => {
+    await p.evaluate(() => sessionStorage.setItem('m233-garden', '1'))
     await load('')
     await p.evaluate((x, z) => (window as any).__ather.tp(x, z, 0), KEEP.x, KEEP.z)
     for (let i = 0; i < 60; i++) { await sleep(500); if (await p.evaluate(() => !!(window as any).__spiritModel?.trots?.fox)) break }
@@ -192,28 +204,32 @@ async function main(p: Page, desk: boolean, out: string, errs: string[]) {
     return tac
   }
 
-  // P0
-  await garden()
-  const e0 = await panel()
-  ok(e0 && e0.empty && e0.list === '', `P0 her panel: Lessons empty (${JSON.stringify(e0)})`)
-  await shot('p0-panel-empty'); await p.keyboard.press('Escape'); await sleep(500)
-  // C1
+  // C1 (from a FRESH load, as m238): her pot starts with no lessons; after the run it holds the predicted one(s)
   await load(`&clashx=20&clashseed=${S1}`)
+  const l0 = (await pot())?.lessons ?? []
+  ok(l0.length === 0, `P0 before the run her pot has no lessons (${JSON.stringify(l0)})`)
   const t1 = await run('c1')
-  const l1 = (await pot())?.lessons ?? []
+  const pot1 = await pot()
+  const l1 = pot1?.lessons ?? []
   ok(JSON.stringify(l1) === JSON.stringify(p1!.have), `C1 after the run her pot holds ${JSON.stringify(l1)} (predicted ${JSON.stringify(p1!.have)}; her bouts ${JSON.stringify(t1)})`)
-  // P1
+  // P1: reload into the garden: her panel lists the lesson
   await garden()
   const e1 = await panel()
   ok(e1 && !e1.empty && e1.list === p1!.have.join(','), `P1 reload: her panel lists ${e1?.list} (want ${p1!.have.join(',')})`)
   await shot('p1-panel-lessons'); await p.keyboard.press('Escape'); await sleep(500)
-  // C2
+  // C2: a new session carrying her pot as saved (lessons and all), a second run: her bout's log shows the learned tactic
+  const p0 = p
+  p = await page(desk); p.on('pageerror', e => errs.push(String(e).slice(0, 200)))
+  await seed(p, { ...POT0, ...(pot1 ?? {}) })
+  await p0.close().catch(() => {})
   await load(`&clashx=20&clashseed=${S2}`)
+  ok(JSON.stringify((await pot())?.lessons ?? []) === JSON.stringify(l1), 'C2 the new session reads her saved lessons')
   const t2 = await run('c2') ?? {}
   const want = p1!.have.map(tacOf)
   const shown = Object.values(t2).join(',')
   ok(want.some(w => new RegExp(`\\b${w}:`).test(shown)), `C2 her bout's log shows the learned tactic at work: ${JSON.stringify(t2)} (lessons ${p1!.have.join(',')} -> ${want.join(',')})`)
   ok(errs.length === 0, `0 page errors (${errs.join(' ; ')})`)
+  return p
 }
 
 try {
@@ -225,7 +241,7 @@ try {
     const p = await page(desk)
     const errs: string[] = []; p.on('pageerror', e => errs.push(String(e).slice(0, 200)))
     try { await main(p, desk, out, errs) } catch (e) { ok(false, `${tag} threw: ${String(e).slice(0, 200)}`) }
-    await p.close()
+    for (const c of br.browserContexts()) if (c !== br.defaultBrowserContext()) await c.close().catch(() => {})
     wipe()
   }
 } finally { await br.close(); wipe() }

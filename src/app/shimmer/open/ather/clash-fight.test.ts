@@ -144,7 +144,7 @@ ok(CLASH_SPECIES.some(sp => KIND[sp].defense === 'evade') && CLASH_SPECIES.some(
   ok(s.f.every(f => Math.hypot(f.x, f.z) <= RING.r + 1e-9), 'nobody leaves the ring')
 }
 {
-  const s = createFight(tentEntrant('owl', 'base', 'easy'), tentEntrant('water-bear', 'base', 'easy'), 3)
+  const s = createFight(tentEntrant('owl', 'base', 'easy', { id: 'bolt_rush', twist: 0 }), tentEntrant('water-bear', 'base', 'easy'), 3)   // a FAR move: a drawn near one stands her in (stanceOf)
   for (const f of s.f) { f._.read = 0; f.cd = { melee: 999, bonded: 999, defense: 999 } }
   place(s.f[0], 0); place(s.f[1], 1.1); s.f[1].act = { kind: 'guard', phase: 'recover', t: 0, dur: 99 }
   for (let i = 0; i < 20; i++) step(s)

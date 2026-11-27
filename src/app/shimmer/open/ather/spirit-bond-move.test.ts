@@ -2,7 +2,8 @@
 import { readFileSync } from 'fs'
 import { join } from 'path'
 import { knownOf, knownList, canAsk, twistOf, pickFavourite, bondedOf, parseMoves, parseFav, formOf, TWIST_DAYS, KNOWN_LEVEL } from './spirit-bond-move'
-import { knownMoves, resolveBonded, randomBonded, createFight, tentEntrant, bondSeed, TWIST_MAX } from './clash-fight'
+import { knownMoves, resolveBonded, randomBonded, createFight, tentEntrant, bondSeed, TWIST_MAX, stanceOf, STANCE } from './clash-fight'
+import { MOVE_MANA_PULSE, MOVE_SPIRIT_WARD } from '../../engine/moves'
 import { BOND_MAX } from './spirit-dishes'
 import { parseBook } from './grimoire-book'
 import type { Pot } from './spirit-seeds'
@@ -67,6 +68,12 @@ const base: Pot = { seed: 'mana_seed_fox', at: 1, bloomed: true, bond: BOND_MAX 
   for (let s = 1; s <= 200; s++) viaFight.add(resolveBonded(fx, s).id)
   ok(viaFight.size >= 2 && resolveBonded(fx, 3).twist === 0, `a fighter with none picked: random known move, not the first (${viaFight.size})`)
   ok(randomBonded(k, 42).id === randomBonded(k, 42).id, 'seeded: the same seed, the same move')
+  // play-clash-fix: the born pair is never her drawn favourite while she knows a move of her own (a drawn Mana Pulse lost
+  // far kinds their bouts and stalled guard pairs to the cap), only when she knows nothing else
+  const drawn = new Set<string>(); for (const sp of ['fox', 'owl', 'turtle', 'axolotl'] as const) for (let s = 1; s <= 200; s++) drawn.add(randomBonded(knownMoves(sp, 'base', 12), s).id)
+  ok(!drawn.has(MOVE_MANA_PULSE.id) && !drawn.has(MOVE_SPIRIT_WARD.id), `random favourite: never the born pair (${[...drawn].join(',')})`)
+  ok(randomBonded([MOVE_MANA_PULSE, MOVE_SPIRIT_WARD], 7).id === MOVE_MANA_PULSE.id, 'random favourite: born Mana Pulse when she knows nothing else')
+  ok(stanceOf(4.0, { range: 2.4, power: 55 }) === STANCE.near && stanceOf(4.0, { range: 4.5, power: 43 }) === 4.0 && stanceOf(1.4, { range: 4.5, power: 47 }) === 1.4 && stanceOf(4.0, { range: Infinity, power: 0 }) === 4.0, 'stance: a far kind with a near move stands in; else her kind\'s range')
   const e = tentEntrant('fox', 'base', 'easy')
   const f1 = createFight(e, tentEntrant('owl', 'base', 'easy'), 77), f2 = createFight(e, tentEntrant('owl', 'base', 'easy'), 77)
   ok(f1.f[0]._.bonded.id === f2.f[0]._.bonded.id && f1.f[0]._.bonded.id === resolveBonded(e, bondSeed(77, 0)).id, 'a fight\'s random favourite replays from its seed')

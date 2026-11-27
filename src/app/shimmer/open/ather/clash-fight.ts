@@ -62,16 +62,18 @@ export const MEND_FRAC = 0.14                               // a mend heals this
 // ───────────────────────────── the KIND table: per base species ─────────────────────────────
 export type Defense = 'evade' | 'guard'
 /** how she fights by kind: preferred range (m) and which defense she has. A game call from the archetypes in
- *  party-stats.ts (walls guard, the quick ones evade), not lore. */
+ *  party-stats.ts (walls guard, the quick ones evade), not lore. stamina retuned 11-27 (play-clash-fix) for the M238 random
+ *  favourite: the old spread (.9-1.2) compensated each kind's ONE fixed move; with any known move drawn it made water-bear
+ *  and hummingbird win 85-90%. */
 export const KIND: Readonly<Record<Species, { pref: number; defense: Defense; stamina: number }>> = {
-  fox:           { pref: 2.2, defense: 'evade', stamina: 0.95 },
-  axolotl:       { pref: 3.5, defense: 'guard', stamina: 0.9 },
+  fox:           { pref: 2.2, defense: 'evade', stamina: 1.02 },
+  axolotl:       { pref: 3.5, defense: 'guard', stamina: 0.97},
   owl:           { pref: 4.0, defense: 'evade', stamina: 0.98 },
-  frog:          { pref: 1.8, defense: 'evade', stamina: 1.0 },
+  frog:          { pref: 1.8, defense: 'evade', stamina: 1.04 },
   firefly:       { pref: 5.5, defense: 'evade', stamina: 0.99 },
-  rabbit:        { pref: 1.5, defense: 'guard', stamina: 0.94 },
-  'water-bear':  { pref: 1.4, defense: 'guard', stamina: 1.2 },
-  hummingbird:   { pref: 3.0, defense: 'evade', stamina: 1.18 },
+  rabbit:        { pref: 1.5, defense: 'guard', stamina: 1.0 },
+  'water-bear':  { pref: 1.4, defense: 'guard', stamina: 1.06 },
+  hummingbird:   { pref: 3.0, defense: 'evade', stamina: 1.06 },
   turtle:        { pref: 3.0, defense: 'guard', stamina: 1.1 },
   bat:           { pref: 4.5, defense: 'evade', stamina: 0.99 },
 }
@@ -143,7 +145,10 @@ export interface Bonded { id: string; twist: number }
 /** M238 (Magii ruling 4204f49): with NO favourite picked she uses a RANDOM known move, seeded (a fight replays the same).
  *  Drawn from her damaging moves (the born Spirit Ward would make a bout a ward-off); any known move if she has none. */
 export function randomBonded(k: readonly Move[], seed: number): Bonded {
-  const pool = k.filter(m => m.power > 0).length ? k.filter(m => m.power > 0) : k.length ? k : [MOVE_MANA_PULSE]
+  // the born pair is every spirit's, never her nature (as defaultBonded): a drawn Mana Pulse made far kinds lose and
+  // guard-vs-guard bouts stall to the cap (clash-sim 11-27: worst 78% -> 92%, 0 -> 263 capped). Born pair only if nothing else.
+  const own = k.filter(m => m.power > 0 && m.id !== MOVE_MANA_PULSE.id && m.id !== MOVE_SPIRIT_WARD.id)
+  const pool = own.length ? own : k.filter(m => m.power > 0).length ? k.filter(m => m.power > 0) : k.length ? k : [MOVE_MANA_PULSE]
   let t = (seed ^ 0x85ebca6b) >>> 0
   t = Math.imul(t ^ (t >>> 16), 0x7feb352d) >>> 0; t = Math.imul(t ^ (t >>> 15), 0x846ca68b) >>> 0; t = (t ^ (t >>> 16)) >>> 0
   return { id: pool[t % pool.length].id, twist: 0 }
@@ -248,7 +253,7 @@ function rnd(s: FightState): number {
 
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v))
 function mkFighter(e: Entrant, side: 0 | 1, ref: PartyStats, seed: number): Fighter {
-  const st = e.stats, kind = KIND[e.species]
+  const st = e.stats, kind = KIND[e.species], bm = bondedOfEntrant(e, seed, side)
   const rel = (v: number, r: number) => Math.max(0.2, v / Math.max(1, r))
   const x = side === 0 ? -RING.start / 2 : RING.start / 2
   return {
@@ -260,7 +265,7 @@ function mkFighter(e: Entrant, side: 0 | 1, ref: PartyStats, seed: number): Figh
     cheered: false,
     slowT: 0, rootT: 0, weakT: 0, braceT: 0, hasteT: 0, dotT: 0, iframeT: 0,
     _: {
-      stats: st, bonded: bondedOfEntrant(e, seed, side), defense: kind.defense, pref: kind.pref,
+      stats: st, bonded: bm, defense: kind.defense, pref: stanceOf(kind.pref, bm),
       speed: SPEED * Math.max(SPEED_FLOOR, Math.pow(rel(st.agi, ref.agi), STAT_EXP.speed)),
       cdMul: Math.pow(rel(ref.agi, st.agi), STAT_EXP.cd),
       dmgRef: ref.maxHp, read: 0, strafe: side === 0 ? 1 : -1, nextDecide: side, dotPerS: 0, tac: new Set(e.tactics ?? []),
@@ -268,6 +273,15 @@ function mkFighter(e: Entrant, side: 0 | 1, ref: PartyStats, seed: number): Figh
   }
 }
 
+/** her stance follows the move she throws: a far kind holding a NEAR move stands in to STANCE.near. Before M238 every
+ *  kind threw one fixed move and its pref was tuned to it; a drawn near move left a far kind standing where it never
+ *  lands (clash-sim 11-27: far kinds lost, guard pairs stalled to the cap). A near kind with a far move keeps her pref
+ *  (standing her off too made near kinds lose: sim). */
+export const STANCE = { near: 2.2 }
+export function stanceOf(pref: number, b: Pick<ClashMove, 'range' | 'power'>): number {
+  if (b.power <= 0 || !Number.isFinite(b.range)) return pref
+  return b.range > 2.5 ? pref : Math.min(pref, STANCE.near)
+}
 /** M238: the bonded move a side throws (resolveBonded on the fight seed, one draw per side), twisted */
 export const bondSeed = (seed: number, side: 0 | 1) => (seed * 2 + side + 0x238) >>> 0
 function bondedOfEntrant(e: Entrant, seed: number, side: 0 | 1): ClashMove {
