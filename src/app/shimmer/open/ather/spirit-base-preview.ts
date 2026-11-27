@@ -43,6 +43,23 @@ export const SHELLMERE_RIG: RigLook = {
   glbLen: 1.317, pivot: { x: 0, z: 0 }, clipV: { walk: 0.55 / 0.464, run: 1.9 / 0.464 }, runAt: [1.0, 0.85], hull: 0.024,
   neck: 'b_neck', head: 'b_head', lie: true, cadence: 15, avatar: { z: 0, far: 1.3 },
 }
+// Croakling (frog): spirits-species.md "Jumpy, vocal, playful ... throat puffing, eye bulging, mid-hop freeze poses"; base-forms.md section 7, the canon
+// LURE kept (its own three bones: lure, lure2, lure3 with the orb). Its rig (docs/looks/m174-croakling-2026-11-27): walk = small hops, run = long
+// bounds, idle = throat puffs + the lantern swaying and its orb swinging, sit = squats and croaks, lie = belly flat with the lantern drooped. Restless, hoppy.
+const CROAKLING_TROT: Partial<TrotDials> = {
+  speed: 0.55, dash: 2.0, turnK: 7, hopH: 0, stretch: 0, squash: 0, lean: 0, planted: 1,
+  chain: 0.85, checkS: [0.6, 1.4], legMax: 2.6,
+  beat: { look: 0.35, sniff: 0.25, sit: 0.4, tilt: 0 },
+  lookS: [1.2, 2.4], sniffS: [1.0, 2.0], sitS: [3.0, 6.0],
+  glance: 0.35, glanceHold: [0.5, 1.0], glanceMax: 0.6,
+  happyHops: 4, happyHop: 0.3, happyH: 0.06, happyWig: 0.08,
+}
+/** its glb: 1 unit = 0.40 m to the top of the lure's arch; rig metrics: idle mean top 0.999, nose to haunch 0.732 units */
+export const CROAKLING_GLB_TALL = 0.999
+export const CROAKLING_RIG: RigLook = {
+  glbLen: 0.732, pivot: { x: 0, z: 0 }, clipV: { walk: 0.55 / 0.4015, run: 2.4 / 0.4015 }, runAt: [0.9, 0.75], hull: 0.024,
+  neck: 'b_neck', head: 'b_head', lie: true, cadence: 12, avatar: { z: 0, far: 1.3 },
+}
 const NO_SWAY = { along: 'z', sign: -1, from: 2, to: 3, dir: 'x', amp: 0, ampRun: 0, hz: 1, hzRun: 1, lag: 0 } as const
 export const BASE_PREVIEW: Partial<Record<Species, SpiritLook>> = {
   rabbit: {
@@ -54,6 +71,11 @@ export const BASE_PREVIEW: Partial<Record<Species, SpiritLook>> = {
     name: 'shellmere', url: '/open/spirits/shellmere-rigged.glb', h: GROWN.turtle.height / SHELLMERE_GLB_TALL,
     skin: { emissive: '#ffd27a', emissiveI: 0.08 }, hull: { color: '#dff5d8', opacity: 0.38 },
     sway: NO_SWAY, trot: SHELLMERE_TROT, rig: SHELLMERE_RIG,
+  },
+  frog: {
+    name: 'croakling', url: '/open/spirits/croakling-rigged.glb', h: GROWN.frog.height / CROAKLING_GLB_TALL,
+    skin: { emissive: '#c8f59a', emissiveI: 0.10 }, hull: { color: '#dcfbe0', opacity: 0.38 },
+    sway: NO_SWAY, trot: CROAKLING_TROT, rig: CROAKLING_RIG,
   },
 }
 /** the owner-preview base model for a species that has none for players yet, or null */

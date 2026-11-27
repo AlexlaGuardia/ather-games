@@ -2,7 +2,7 @@
 // A built base is drawn for the owner only (gallery + own garden) until Alex OKs it: players' registries must NOT list it,
 // its glb must ship rigged with every game clip, and it must draw at its ruled full-grown size (creature-size.ts GROWN).
 import * as fs from 'fs'
-import { BASE_PREVIEW, basePreviewFor, LEPARA_GLB_TALL, SHELLMERE_GLB_TALL } from './spirit-base-preview'
+import { BASE_PREVIEW, basePreviewFor, LEPARA_GLB_TALL, SHELLMERE_GLB_TALL, CROAKLING_GLB_TALL } from './spirit-base-preview'
 import { SPIRIT_MODELS, SPIRIT_RIGS, rigLook } from './spirit-models'
 import { RIG_CLIPS } from './spirit-rig'
 import { GROWN } from '../../sprites/creature-size'
@@ -30,6 +30,12 @@ ok(Math.abs(lep.h * LEPARA_GLB_TALL - GROWN.rabbit.height) < 1e-9, `lepara: stan
 const shl = BASE_PREVIEW.turtle!
 ok(!!shl && Math.abs(shl.h * SHELLMERE_GLB_TALL - GROWN.turtle.height) < 1e-9, `shellmere: stands ${GROWN.turtle.height} m (h ${shl?.h})`)
 ok(!!shl && ['b_shell', 'b_ant_l', 'b_ant2_r'].every(n => glbJson(shl.url).nodes.some((x: { name: string }) => x.name === n)), 'shellmere: shell + antenna bones')
+// Croakling at its ruled full-grown height (0.40 m knee-high, to the top of the lure's arch), the canon lure on its own bones and moving in idle
+const crk = BASE_PREVIEW.frog!
+ok(!!crk && Math.abs(crk.h * CROAKLING_GLB_TALL - GROWN.frog.height) < 1e-9, `croakling: stands ${GROWN.frog.height} m (h ${crk?.h})`)
+const cj = crk ? glbJson(crk.url) : null, lureIx = (n: string) => cj ? cj.nodes.findIndex((x: { name: string }) => x.name === n) : -1
+ok(!!cj && ['b_lure', 'b_lure2', 'b_lure3', 'b_throat'].every(n => lureIx(n) >= 0), 'croakling: lure (3 bones) + throat bones')
+ok(!!cj && ['b_lure', 'b_lure3'].every(n => cj.animations.find((a: { name: string }) => a.name === 'idle')?.channels.some((c: { target: { node: number } }) => c.target.node === lureIx(n))), 'croakling: idle animates the lure')
 ok(basePreviewFor('fox') === null && basePreviewFor(null) === null, 'a species with a player model, or none, has no preview')
 
 console.log(`spirit-base-preview: ${pass} pass, ${fails.length} fail`)
