@@ -10,6 +10,7 @@ import { useCallback, useEffect, useRef, useState, type PointerEvent as RPointer
 import { GALLERY, dialStep, galleryNo, type GalleryElement, type GalleryRow } from './spirit-gallery'
 import { SpiritStage } from '../../open/ather/spirit-model'
 import { formLook, spiritModelFor, type SpiritLook } from '../../open/ather/spirit-models'
+import { basePreviewFor } from '../../open/ather/spirit-base-preview'
 import { RIG_CLIPS, type RigClip } from '../../open/ather/spirit-rig'
 import { ELEMENT_COLORS } from '../../spirits/spirit'
 
@@ -17,7 +18,8 @@ const ROW = 52, SHOWN = 11, half = Math.floor(SHOWN / 2)
 const GAME = 'var(--font-game), system-ui, sans-serif'
 const ELS: GalleryElement[] = ['mana', 'storm', 'earth', 'water']
 
-const lookOf = (r: GalleryRow): SpiritLook | null => (r.el ? formLook(r.sp, r.el) : spiritModelFor(r.sp))
+// M174: a base form built but not yet OK'd by Alex shows here (this page is owner-only) via basePreviewFor
+const lookOf = (r: GalleryRow): SpiritLook | null => (r.el ? formLook(r.sp, r.el) : spiritModelFor(r.sp) ?? basePreviewFor(r.sp))
 
 const initialIndex = () => {
   if (typeof window === 'undefined') return 0
