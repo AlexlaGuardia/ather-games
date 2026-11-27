@@ -15,13 +15,15 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
-import { FpGun, ScopeRing, VM, GUN_DEFAULTS, setGunTune, resetGunTune, loadGunTune, selectGunTune, defaultsFor, dialedGun, rhythmDefaultsFor, previewGunModel, setRhythm, noteCycle, type FpGunApi, type GunTune } from '../../open/shared/fp-gun'
+import { FpGun, ScopeRing, VM, GUN_DEFAULTS, setGunTune, resetGunTune, loadGunTune, selectGunTune, defaultsFor, dialedGun, rhythmDefaultsFor, previewGunModel, todayModelOf, setRhythm, noteCycle, type FpGunApi, type GunTune } from '../../open/shared/fp-gun'
 import { RANGE_GUNS, RHYTHM_DIALS, burstCycle, holdGun, stepGun, type GunState, type RangeGun } from '../../open/shared/gunplay'
 import { playShot } from '../../open/shared/gun-sound'
 import { OPTICS, viewFov, opticOf } from '../../open/shared/optics'
 import { EYE_STAND } from '../../open/shared/locomotion'
-import { V2_GUNS, V2_SIGHTS, v2Model, type V2GunId, type V2SightId } from '../../open/shared/gun-kit-v2'
+import { V2_GUNS, V2_SIGHTS, type V2GunId, type V2SightId } from '../../open/shared/gun-kit-v2'
 import { SoundBench } from './sound-bench'
+import { BUILD_DIALS, BUILD_ZERO, builtModel, hasSocket, loadBuilds, saveBuild, type GunBuild, type BuildKey } from '../../open/shared/gun-build'
+import { CompareStrip } from './compare'
 
 type Preview = 'hip' | 'aim' | 'run' | 'fire'
 const PREVIEWS: { id: Preview; label: string }[] = [{ id: 'hip', label: 'Hip' }, { id: 'aim', label: 'Aim' }, { id: 'run', label: 'Run' }, { id: 'fire', label: 'Fire' }]
@@ -107,12 +109,19 @@ export default function GunTuner() {
     if (q.get('set') === 'new') setFresh(true)
     if (q.get('sight') && q.get('sight')! in V2_SIGHTS) setPick(q.get('sight') as V2SightId)
   }, [])
-  const v2 = fresh && gunId in V2_GUNS ? V2_GUNS[gunId as V2GunId] : null, sight = v2 ? (pick && v2.sights.includes(pick) ? pick : v2.own) : null
+  const kit = gunId in V2_GUNS ? V2_GUNS[gunId as V2GunId] : null, kitSight = kit ? (pick && kit.sights.includes(pick) ? pick : kit.own) : null
+  const v2 = fresh ? kit : null, sight = v2 ? kitSight : null
+  // M150 s4: the new model's BUILD dials (gun-build.ts), this browser's, loaded after mount (no localStorage on the server)
+  const [builds, setBuilds] = useState<Partial<Record<V2GunId, GunBuild>>>({})
+  useEffect(() => { setBuilds(loadBuilds()) }, [])
+  const build = kit ? builds[kit.id] ?? BUILD_ZERO : BUILD_ZERO
+  const setBuild = (b: GunBuild | null) => { if (kit) setBuilds(saveBuild(kit.id, b)) }
+  const built = kit && kitSight ? builtModel(kit.id, kitSight, build) : null
   useEffect(() => {
-    if (!v2 || !sight) return
-    previewGunModel(v2.id, v2Model(v2.id, sight), v2.hold); bump(n => n + 1)
+    if (!v2 || !sight || !built) return
+    previewGunModel(v2.id, built, v2.hold); bump(n => n + 1)
     return () => { previewGunModel(v2.id, null); bump(n => n + 1) }
-  }, [v2, sight])
+  }, [v2, sight, built])
   const fov = preview === 'aim' && sight ? viewFov(75, OPTICS[V2_SIGHTS[sight].optic]) : 75
   const [ready, setReady] = useState(false)
   useEffect(() => { loadGunTune(); setReady(true) }, [])
@@ -120,7 +129,7 @@ export default function GunTuner() {
   const row = RANGE_GUNS.find(g => g.id === gunId) ?? RANGE_GUNS[0], gun = ready ? dialedGun(row) : rhythmDefaultsFor(row)
   // per gun (11-19): picking a gun loads ITS numbers into the sliders
   useEffect(() => { selectGunTune(gunId); bump(n => n + 1) }, [gunId])
-  const values = () => JSON.stringify({ gun: gunId, ...Object.fromEntries(Object.keys(GUN_DEFAULTS).map(k => [k, VM[k as keyof GunTune]])), ...(gun.burst > 1 ? { BURST_GAP: gun.burstGap, BURST_DELAY: gun.fireCd } : { FIRE_INTERVAL: gun.fireCd }) })
+  const values = () => JSON.stringify({ gun: gunId, ...Object.fromEntries(Object.keys(GUN_DEFAULTS).map(k => [k, VM[k as keyof GunTune]])), ...(gun.burst > 1 ? { BURST_GAP: gun.burstGap, BURST_DELAY: gun.fireCd } : { FIRE_INTERVAL: gun.fireCd }), ...(kit ? { BUILD: build } : {}) })
   const base = rhythmDefaultsFor(row)   // M197: what the dials read with nobody's moves (the row, under any baked rhythm)
   const dials = gun.burst > 1
     ? ([['BURST_GAP', 'round gap (s)', RHYTHM_DIALS.gap, gun.burstGap, base.burstGap], ['BURST_DELAY', 'burst delay (s)', RHYTHM_DIALS.delay, gun.fireCd, base.fireCd]] as const)
@@ -136,12 +145,27 @@ export default function GunTuner() {
         <select data-gun value={gunId} onChange={e => setGunId(e.target.value)} style={{ ...chip, width: '100%', marginBottom: 8 }}>
           {RANGE_GUNS.map(g => <option key={g.id} value={g.id}>{g.name} · {g.slot.toLowerCase()} · {opticOf(g).id}</option>)}
         </select>
-        {gunId in V2_GUNS && (
+        {kit && (
           <div data-v2 style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
             <button data-set="today" onClick={() => setFresh(false)} style={{ ...chip, opacity: fresh ? 0.45 : 1 }}>Today</button>
             <button data-set="new" onClick={() => setFresh(true)} style={{ ...chip, opacity: fresh ? 1 : 0.45 }}>New model</button>
-            {v2 && v2.sights.map(s => <button key={s} data-sight={s} onClick={() => setPick(s)} style={{ ...chip, opacity: s === sight ? 1 : 0.45 }}>{V2_SIGHTS[s].name}</button>)}
+            {kit.sights.map(s => <button key={s} data-sight={s} onClick={() => setPick(s)} style={{ ...chip, opacity: s === kitSight ? 1 : 0.45 }}>{V2_SIGHTS[s].name}</button>)}
           </div>
+        )}
+        {kit && (
+          <section data-build style={{ marginBottom: 12 }}>
+            <span className="gx-label" style={{ fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#c8b98a' }}>New model build</span>
+            <span style={{ fontSize: 10, color: '#8b8598', marginLeft: 6 }}>{kit.name}: saved to this browser</span>
+            {BUILD_DIALS.filter(d => !d.socket || hasSocket(kit.id)).map(d => (
+              <label key={d.k} style={{ display: 'grid', gridTemplateColumns: '92px 1fr 46px', gap: 6, alignItems: 'center', fontSize: 11, marginTop: 4 }}>
+                <span style={{ color: '#b5afc2' }}>{d.label}</span>
+                <input type="range" data-build-knob={d.k} min={d.min} max={d.max} step={d.step} value={build[d.k]}
+                  onChange={e => setBuild({ ...build, [d.k as BuildKey]: Number(e.target.value) })} />
+                <span data-build-val={d.k} style={{ fontVariantNumeric: 'tabular-nums', textAlign: 'right', color: build[d.k] === BUILD_ZERO[d.k] ? '#8b8598' : '#e8b04a' }}>{build[d.k].toFixed(3)}</span>
+              </label>
+            ))}
+            <button data-build-reset style={{ ...chip, marginTop: 6 }} onClick={() => setBuild(null)}>Reset build</button>
+          </section>
         )}
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
           {PREVIEWS.map(p => <button key={p.id} data-preview={p.id} onClick={() => setPreview(p.id)} style={{ ...chip, opacity: preview === p.id ? 1 : 0.45 }}>{p.label}</button>)}
@@ -197,6 +221,7 @@ export default function GunTuner() {
           <Driver api={api} gun={gun} preview={preview} paused={paused} />
         </Canvas>
         <ScopeRing />
+        {kit && built && <CompareStrip today={todayModelOf(row)} fresh={built} body={row.color} />}
         {/* where the HUD's mana orb + Q/X chips sit at 1100x700 (bottom right), so the gun can stay clear of them */}
         <div style={{ position: 'absolute', right: 56, bottom: 24, width: 136, height: 136, borderRadius: '50%', border: '1px dashed rgba(60,40,90,0.6)', pointerEvents: 'none' }} />
         <div style={{ position: 'absolute', right: 262, bottom: 22, width: 240, height: 34, border: '1px dashed rgba(60,40,90,0.6)', borderRadius: 6, pointerEvents: 'none' }} />

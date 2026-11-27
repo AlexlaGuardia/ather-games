@@ -181,10 +181,12 @@ function withIrons(key: string, m: Model, optic: Optic, style: IronStyle): Model
 }
 /** the body a gun is drawn with when no kit model covers it */
 const bodyOf = (g: Pick<RangeGun, 'id' | 'slot'>): [string, Model] => g.id === 'charred-rifle' ? ['charred', CHARRED] : MODELS[g.slot] ? [g.slot, MODELS[g.slot]] : ['LONGBARREL', MODELS.LONGBARREL]
-export const modelOf = (g: Pick<RangeGun, 'id' | 'slot' | 'optic'>): Model => preview[g.id] ?? fittedModel(getLoadout(), g.id) ?? (() => {
+/** M150 s4: the model the game draws for this gun today, ignoring any tuner preview (the tuner's Today / New strip shows both) */
+export const todayModelOf = (g: Pick<RangeGun, 'id' | 'slot' | 'optic'>): Model => fittedModel(getLoadout(), g.id) ?? (() => {
   const [k, m] = bodyOf(g), o = opticOf(g)
   return isIrons(o.id) ? withIrons(k, m, o, g.id === 'charred-rifle' ? 'crude' : 'clean') : m   // a gun row naming a better optic keeps the old optic build
 })()
+export const modelOf = (g: Pick<RangeGun, 'id' | 'slot' | 'optic'>): Model => preview[g.id] ?? todayModelOf(g)
 /** the optic in hand: a model that carries its own sight (a kit model) names it; else the gun's */
 const opticIn = (m: Model, g: RangeGun): Optic => (m.optic ? OPTICS[m.optic] : opticOf(g))
 

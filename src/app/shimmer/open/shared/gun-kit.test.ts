@@ -43,7 +43,7 @@ ok(modelOf({ id: 'backbone', slot: 'LONGBARREL' }) === live.backbone, 'letting g
 // M178 (Alex 11-25) adds irons to every body; the hash pins the BODIES + the pre-M178 sights (a gun naming the red dot draws the bare body)
 { const all = [...(['SIDEARM', 'SHORTBARREL', 'LONGBARREL', 'BREACHER', 'REACHER'] as const).map(slot => modelOf({ id: 'x', slot, optic: 'reddot' })), kitModel('backbone', 'scope2'), kitModel('charred-rifle', 'scope2'), ...(['backbone', 'charred-rifle'] as const).flatMap(id => [KIT_GUNS[id].own, 'lens', 'scope2'] as const).map((s, i) => kitModel(i < 3 ? 'backbone' : 'charred-rifle', s))]   // M178 s2: the M81 rail lists by name (new guns + sights must not move the pin)
   ok(createHash('sha1').update(JSON.stringify(all)).digest('hex') === 'cc8dcb4a4cf7e9942e85f4298c84102af7350861', 'every model in the game is byte-identical to before M149: ' + createHash('sha1').update(JSON.stringify(all)).digest('hex')) }
-const SLOT: Record<V2GunId, 'LONGBARREL' | 'REACHER' | 'SHORTBARREL'> = { backbone: 'LONGBARREL', 'charred-rifle': 'LONGBARREL', lance: 'REACHER', spitter: 'SHORTBARREL' }
+const SLOT: Record<V2GunId, 'LONGBARREL' | 'REACHER' | 'SHORTBARREL' | 'SIDEARM' | 'BREACHER'> = { backbone: 'LONGBARREL', 'charred-rifle': 'LONGBARREL', lance: 'REACHER', spitter: 'SHORTBARREL', repeater: 'SIDEARM', roar: 'BREACHER' }
 ok(Object.keys(V2_GUNS).includes('spitter') && V2_GUNS.spitter.own === 'iron' && V2_GUNS.spitter.parts.some(p => p.c === 'bronze'), 'M196: the Spitter is in the new family, iron by default, with bronze on it')
 for (const g of Object.values(V2_GUNS)) {
   const shipped = modelOf({ id: 'x', slot: SLOT[g.id] })

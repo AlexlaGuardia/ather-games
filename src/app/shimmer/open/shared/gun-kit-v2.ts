@@ -38,9 +38,13 @@ const lever = (z: number, y: number, w: number, c: PartColor = 'bronze'): Part[]
 /** the trigger and its guard: a bronze hoop under the receiver */
 const trigger = (z: number, y: number, c: PartColor = 'bronze', d = 0.056): Part[] => [slab(circle(z, y, d, 16), 0.009, c, 0, 0, circle(z, y, d - 0.009, 16)), { ...box([0, y + 0.004, z + 0.002], [0.006, 0.034, 0.007], c), rot: 0.35 }]
 /** THE SIGIL CORE, plugged in from below: a bronze collar, a six-sided grey crystal (blank: no letter is cut yet), a bronze tip */
-const core = (z: number, top: number, k = 1): Part[] => [
+const CORE = new WeakSet<Part>()
+/** M150 build dials: is this part one of a gun's sigil core (its socket spot moves it as one piece)? */
+export const isCorePart = (p: Part) => CORE.has(p)
+const core = (z: number, top: number, k = 1): Part[] => { const ps = [
   cyl([0, top - 0.005 * k, z], 0.052 * k, 0.01 * k, 'iron', 'y', 12), cyl([0, top - 0.018 * k, z], 0.058 * k, 0.018 * k, 'bronze', 'y', 12),
   cyl([0, top - 0.053 * k, z], 0.03 * k, 0.054 * k, 'core', 'y', 6, 0.048 * k), cyl([0, top - 0.09 * k, z], 0.013 * k, 0.022 * k, 'bronze', 'y', 10, 0.029 * k) ]
+  for (const q of ps) CORE.add(q); return ps }
 /** the slots of a fluted shroud, both sides, with a thin cast lip standing between them */
 const slots = (z0: number, n: number, step: number, y: number, h: number, w: number): Part[] => Array.from({ length: n }, (_, i) => z0 + i * step).flatMap(z => SIDES.map(x =>
   slab(cut(step * 0.5, h, step * 0.2, z, y), 0.003, 'slot', x * (w + 0.0004))))
@@ -48,7 +52,7 @@ const slots = (z0: number, n: number, step: number, y: number, h: number, w: num
 const channel = (z0: number, z1: number, y: number, w: number): Part[] => SIDES.flatMap(x => [0.005, -0.005].map(d => box([x * w, y + d, (z0 + z1) / 2], [0.003, 0.0034, z1 - z0], 'slot')))
 const bore = (z: number, y: number, d: number): Part => cyl([0, y, z], d, 0.002, 'slot', 'z', 14)
 
-export type V2GunId = 'backbone' | 'charred-rifle' | 'lance' | 'spitter'
+export type V2GunId = 'backbone' | 'charred-rifle' | 'lance' | 'spitter' | 'repeater' | 'roar'
 export interface V2Gun { id: V2GunId; name: string; parts: Part[]; grip: Model['grip']; fore: Model['fore']; railTop: number; seatZ: number; own: V2SightId; sights: V2SightId[]; hold?: Partial<GunTune> }
 const GRIP: Model['grip'] = [0, -0.06, 0.1], FORE: Model['fore'] = [0, -0.06, -0.26]
 // a gun nobody has tuned yet sits at the Backbone's size and hands here (preview only: it is under every baked and saved tune)
@@ -99,6 +103,31 @@ export const V2_GUNS: Record<V2GunId, V2Gun> = {
     ...core(-0.12, -0.05, 0.85), ...trigger(-0.044, -0.078), grip(-0.07, -0.05),
     slab([[0.095, 0.025], [0.2, 0.03], [0.2, -0.07], [0.185, -0.07], [0.12, -0.03], [0.095, -0.03]], 0.03, 'iron', 0, 0.003),
     slab([[0.199, 0.034], [0.214, 0.034], [0.214, -0.074], [0.199, -0.074]], 0.036, 'bronze', 0, 0.002),
+  ] },
+  // M150 s4 (Alex 11-27: "start working on the new gun models"): the REPEATER, the sidearm (canon: standard-issue, semi-auto, a
+  // 2-rune core). Off the locked family card: a squared iron frame with the family's chamber, lever and gauge, the slotted shroud
+  // run short ahead of it, a fat bronze muzzle cap, the core below, a raked grip with a bronze pin. grip / fore = the shipped
+  // SIDEARM anchors, so the Repeater's hand tune still lands. Off in the game until Alex tunes it in the tuner and says go.
+  repeater: { id: 'repeater', name: 'Repeater', grip: [0, -0.07, 0.01], fore: [0, -0.1, 0], railTop: 0.047, seatZ: -0.01, own: 'iron', sights: ['iron', 'holo'], parts: [
+    slab([[-0.095, 0.047], [0.062, 0.047], [0.077, 0.032], [0.077, -0.036], [-0.082, -0.036], [-0.095, -0.024]], 0.042, 'iron', 0, 0.002),
+    ...channel(0.0, 0.062, 0.03, 0.021), ...chamber(-0.047, 0.006, 0.062, 0.021), ...lever(0.006, 0.004, 0.021), ...gauge(0.046, 0.006, 0.021, 'bronze', 0.026),
+    bar([0, 0.008, -0.15], cut(0.038, 0.07, 0.007), 0.11, 'iron', 0.002), ...slots(-0.19, 4, 0.024, 0.008, 0.044, 0.019),
+    cyl([0, 0.008, -0.214], 0.02, 0.02, 'iron'), cyl([0, 0.008, -0.236], 0.038, 0.026, 'bronze', 'z', 16), bore(-0.2495, 0.008, 0.02),
+    ...core(-0.058, -0.036, 0.72), ...trigger(-0.012, -0.056, 'bronze', 0.044),
+    slab([[0.012, -0.03], [0.077, -0.03], [0.104, -0.142], [0.094, -0.152], [0.052, -0.156], [0.04, -0.148]], 0.03, 'iron', 0, 0.003),
+    cyl([0, -0.125, 0.078], 0.012, 0.032, 'bronze', 'x', 10),
+  ] },
+  // the ROAR, the breacher (canon: the standard combat shotgun, devastation, heavy knockback): one long slotted iron body with no
+  // barrel showing, a flared bronze bell at the muzzle, the family's chamber, lever and gauge, the core below, a wide iron guard,
+  // and a straight stock with no pistol grip (the hand takes the wrist). grip / fore = the shipped BREACHER anchors.
+  roar: { id: 'roar', name: 'Roar', grip: [0, -0.07, 0.1], fore: [0, -0.07, -0.36], railTop: 0.054, seatZ: -0.07, own: 'iron', sights: ['iron', 'holo'], parts: [
+    slab([[-0.14, 0.054], [0.085, 0.054], [0.11, 0.036], [0.11, -0.05], [-0.14, -0.05]], 0.06, 'iron', 0, 0.002),
+    ...channel(0.0, 0.08, 0.034, 0.03), ...chamber(-0.075, 0.004, 0.086, 0.03), ...lever(0.002, -0.002, 0.03), ...gauge(0.052, -0.002, 0.03),
+    bar([0, 0.002, -0.31], cut(0.06, 0.1, 0.01), 0.34, 'iron', 0.002), ...slots(-0.455, 7, 0.042, 0.002, 0.07, 0.03),
+    cyl([0, 0.002, -0.49], 0.05, 0.03, 'iron'), cyl([0, 0.002, -0.522], 0.092, 0.04, 'bronze', 'z', 20, 0.06), bore(-0.5425, 0.002, 0.056),
+    ...core(-0.105, -0.05), ...trigger(0.03, -0.08, 'bronze', 0.07),
+    slab([[0.11, 0.036], [0.36, 0.044], [0.36, -0.118], [0.342, -0.118], [0.2, -0.074], [0.11, -0.05]], 0.036, 'iron', 0, 0.004),
+    slab([[0.359, 0.048], [0.377, 0.048], [0.377, -0.122], [0.359, -0.122]], 0.04, 'bronze', 0, 0.002),
   ] },
 }
 
