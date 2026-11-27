@@ -1,8 +1,8 @@
 // A display rename must never move a road. Run: npx tsx src/app/shimmer/voxel3d/alchemy-road-stability.test.ts
 //
 // M234 s1 (1a24f662) renamed potions "display names only", but the voxel road was parsed from the
-// name's last word, so Mana Draught -> Mana Elixir walked the first potion grinder -> still -> cauldron
-// (was: cauldron, pour) and Starlight Tincture -> Starlight Tonic swapped its still for grinder + bowl.
+// name's last word, so mana_draught -> Mana Elixir walked the first potion grinder -> still -> cauldron
+// (was: cauldron, pour) and starlight_tincture -> Starlight Tonic swapped its still for grinder + bowl.
 // §1 pins every potion's road + job to what it was BEFORE that rename (read from 1a24f662^).
 // §2 renames every potion to every craft-word and proves road, job and pot time do not move.
 import { POTION_DEFS } from '../engine/alchemy'

@@ -160,8 +160,8 @@ export const craftWordOf = (def: PotionDef): CraftWord | null => {
 
 /**
  * The craft CLASS that shapes a potion's road, its job and its pot time, keyed by the potion's ID.
- * ⚠ It is NOT read from the display name: M234 s1 (1a24f662) renamed Mana Draught to Mana Elixir and
- * Starlight Tincture to Starlight Tonic as "display names only", and because the road used to be
+ * ⚠ It is NOT read from the display name: M234 s1 (1a24f662) renamed mana_draught to Mana Elixir and
+ * starlight_tincture to Starlight Tonic as "display names only", and because the road used to be
  * parsed from the name's last word the first potion silently grew a grinder and a still. A display
  * rename must never move a road, so the class is pinned here, at each potion's pre-rename word.
  * A new potion gets a row here (alchemy-chain.test / alchemy-road-stability.test make a miss loud).
