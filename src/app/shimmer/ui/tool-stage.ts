@@ -5,9 +5,10 @@
 // Basic / Glowfin / Moonkoi Rinstick); spikes since M185 s1: Goldwood / Shimmeroak / Starwillow Spike). Names come from TOOL_DEFS only; nothing here names a tool.
 //
 // ★ NO RING ON STEPS 1-3 (Alex 11-26, BETA 51fe8cda, supersedes M184 s1's per-stage ring): a crafted tier is TINT ONLY. The
-//   ring belongs to a fitted metal TIP / EDGE (M134, not built yet), in that metal's colour (METAL_RING), its arc the tip's
-//   wear. Until a tip exists nothing has a ring; `ringPct` / `ringColor` stay in the shape for the day M134 fills them.
-import { TOOL_DEFS, type EquippedTools } from '../engine/tools'
+//   ring belongs to a fitted metal TIP / EDGE (M134 s1, open/ather/edges.ts), in that metal's colour (METAL_RING), its arc the
+//   tip's wear. No edge fitted = no ring.
+import { TOOL_DEFS, type EquippedTools, type EquippedTool } from '../engine/tools'
+import { edgeOn, edgeLeft, EDGE } from '../open/ather/edges'
 
 export const OPEN_TOOL_FAMILIES = ['forestry', 'prospecting', 'rinning'] as const
 export type OpenToolFamily = typeof OPEN_TOOL_FAMILIES[number]
@@ -37,6 +38,7 @@ export function toolDial(tools: EquippedTools, family: string): ToolDial {
   const def = t ? TOOL_DEFS[t.toolId] : undefined
   if (!t || !def) return { held: false, toolId: null, name: null, stage: -1, ringPct: null, ringColor: null, tint: null }
   const stage = def.basic ? 0 : Math.max(1, Math.min(3, def.tier))
-  // no tip is fitted anywhere yet (M134), so no ring at any stage: steps 1-3 are tint only (Alex 11-26)
-  return { held: true, toolId: t.toolId, name: def.name, stage, ringPct: null, ringColor: null, tint: STAGE_TINT[stage] }
+  // steps 1-3 are tint only (Alex 11-26); the ring is the fitted edge / tip's (M134 s1): its metal's colour, the arc its wear left
+  const m = edgeOn(t as EquippedTool)
+  return { held: true, toolId: t.toolId, name: def.name, stage, ringPct: m ? edgeLeft(t as EquippedTool, m) / EDGE[m].uses : null, ringColor: m ? METAL_RING[m] : null, tint: STAGE_TINT[stage] }
 }

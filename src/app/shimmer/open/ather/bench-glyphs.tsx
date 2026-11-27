@@ -22,6 +22,8 @@ const P: Record<BenchTab, React.ReactNode> = {
   filet: <><path d="M3 15c3-4 8-5 13-3l4-2v6l-4-2c-5 2-10 1-13-3" /><path d="M5 7l9-3 2 2-9 3z" /></>,
   // a rod with its line
   rinsticks: <><path d="M4 20L19 4" /><path d="M19 4c1 6 0 10-2 14" /><circle cx="17" cy="19" r="1.3" /></>,
+  // M134 s1: an anvil (the Smithy's edges)
+  edges: <><path d="M4 9h13c0 3-2 4-5 4v4h4v3H7v-3h4v-4C7 13 4 12 4 9z" /><path d="M17 9l3-1" /></>,
   // a round Moglin head with ears
   keeper: <><circle cx="12" cy="13" r="6.5" /><path d="M7 8L5 3l4 3M17 8l2-5-4 3" /><circle cx="10" cy="12.5" r=".6" /><circle cx="14" cy="12.5" r=".6" /></>,
 }

@@ -195,7 +195,8 @@ import { QuestGuide } from '../quest-guide'
 import { useJournal, postEntries, questMarks } from '../shared/journal'
 import { give, take, itemDef, countOf, NO_BAIT_LINE } from '../shared/inventory'
 import { isDish, healOf } from './cooking'
-import { loadTools, easeOf, xpOf, TOOLS_EVENT } from './rinsticks'
+import { loadTools, saveTools, easeOf, xpOf, TOOLS_EVENT } from './rinsticks'
+import { edgeDial, wearEdge, EDGE_TEXT } from './edges'   // BETA M134 s1
 import { useRinQuest, fennelTalk, FENNEL_NAME } from './use-rinquest'
 import { noStickLine, hasStick, fennelHere } from './rinquest'
 import { Fennel, fennelSpot, FENNEL_HEAD } from './fennel'
@@ -1193,7 +1194,8 @@ function AtherSliceGame() {
     return () => { flush(); window.removeEventListener('pagehide', flush); document.removeEventListener('visibilitychange', flush) }
   }, [])
   const chanName = (ch: Chan) => (ch.node === 'tree' ? TREE_NAME[ch.t.kind] : CRYSTAL_NAME[ch.c.kind])
-  const treeDial = (t: Tree) => TREE_DIAL[t.kind], crystalDial = (c: Crystal) => crystalDialOf(c.kind)   // M185 s1: the gem's own dial
+  // M185 s1: the gem's own dial; M134 s1: with the fitted edge / tip (Venium faster, Eurleen cheaper)
+  const treeDial = (t: Tree) => edgeDial(TREE_DIAL[t.kind], toolsRef.current.forestry), crystalDial = (c: Crystal) => edgeDial(crystalDialOf(c.kind), toolsRef.current.prospecting)
   const atNode = (id: string) => (isKeeperNode(id) ? zoneRef0.current === 'glade' : zoneRef0.current === 'wilds')   // M153 s1b: the Glade's own nodes there, the Wilds' there
   const rung = (node: 'tree' | 'crystal') => rungOf(toolsRef.current[node === 'tree' ? 'forestry' : 'prospecting'])
   const nodeTry = (id: string, node: 'tree' | 'crystal', regrowMs: number, need: number) => ({ firstSteps: peekFirstSteps(), tutorial: isKeeperNode(id), tool: !!toolsRef.current[node === 'tree' ? 'forestry' : 'prospecting'], regrowMs, need, rung: rung(node) })   // M155 s2
@@ -1270,11 +1272,16 @@ function AtherSliceGame() {
     // M17: the focus's xpBonus on top of the node's XP (M133: tools are permanent, nothing wears)
     const extraXp = bonusXp(toolsRef.current[sk], x.xp); if (extraXp > 0) { const up2 = addOpenXp(sk, extraXp); if (up2 && !x.levelUp) x.levelUp = up2 }
     x.xp += extraXp
+    // M134 s1: only the fitted edge / tip wears, one use per finished node; it warns near the end and breaks away at 0
+    let edgeSay = ''
+    { const cur = toolsRef.current[sk]; const wr = cur ? wearEdge(cur) : null
+      if (wr && wr.event !== 'none') { toolsRef.current = { ...toolsRef.current, [sk]: wr.tool }; saveTools(toolsRef.current, true)
+        if (wr.event === 'warn') edgeSay = ` ${EDGE_TEXT.warn(wr.metal!, wr.left)}`; else if (wr.event === 'broke') edgeSay = ` ${EDGE_TEXT.broke(wr.metal!)}` } }
     const ex = ch.w.extra as { found?: string; perk?: string } | string | undefined
     const perk = typeof ex === 'string' ? ex : ex?.perk
     const egg = ch.node === 'crystal' && ch.c.kind === 'egg' && typeof ex === 'object' && ex?.found ? `It was ${CRYSTAL_NAME[ex.found as keyof typeof CRYSTAL_NAME]}! ` : ''
     if (ch.node === 'crystal') { const found = (ch.w.extra as { found: Exclude<CrystalKind, 'egg'> }).found; cFxRef.current?.burst(ch.c, { found }) }
-    stopChannel(`${egg}${perk ? `${perk}! ` : ''}+${x.xp} ${skill}${x.levelUp ? `. ${skill} ${x.levelUp}!` : ''}`)
+    stopChannel(`${egg}${perk ? `${perk}! ` : ''}+${x.xp} ${skill}${x.levelUp ? `. ${skill} ${x.levelUp}!` : ''}${edgeSay}`)
   }, [stopChannel, ww, gladeShape])
   const lootKeeper = useCallback(() => dollDrive.current, []), lootCan = useCallback(() => fadeRef.current === 0 && !sinkRef.current && !(vitalsRef.current.hp <= 0), [])   // M141
   /** what the bar shows: the node being worked, else the aimed node if it is part done (null = no bar) */

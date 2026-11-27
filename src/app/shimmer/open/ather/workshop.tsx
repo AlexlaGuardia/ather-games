@@ -82,6 +82,8 @@ import { play as sfx, statusOf as sfxStatus } from '../shared/sfx'
 import { BREW } from './alchemy'
 import { RINSTICKS, makeRinstick, loadTools, saveTools, rinstickName, easeOf } from './rinsticks'
 import { FOCUSES, BENCH, makeFocus, reachOf, focusName, type FocusSkill } from './focuses'
+import { EDGE, EDGE_METALS, EDGE_TOOLS, FIT_METAL, EDGE_TEXT, canTakeEdge, edgeOn, edgeLeft, fitEdge, warnAt, type EdgeFamily } from './edges'   // M134 s1
+import { METAL_RING } from '../../ui/tool-stage'
 import { TOOL_DEFS } from '../../engine/tools'
 import { isBuilding, useBuildMode, enterBuild, exitBuild, buildPoint, onBuildTap, setBuildTool, buildTool, useBuildTool, onBuildDraw, buildYaw, buildFocus, setPlanLift, setPlanInsets, viewTo } from './build-mode'
 import { cancelPlan, hasDraft, planSpot, draftKeys, builtUnderPlan } from './plan-draft'   // M138
@@ -1872,6 +1874,7 @@ function BenchPanel({ room, onClose }: { room: Room; onClose: () => void }) {
       case 'cauldron': return cl(BREW, 'Hold a potion and click to drink.')
       case 'blades': case 'spikes': return focusSkill ? <FocusList r={r} inv={inv} skill={focusSkill} /> : null
       case 'rinsticks': return <RinstickList r={r} inv={inv} />
+      case 'edges': return <EdgeList inv={inv} />   // M134 s1
       case 'keeper': return <MoglinDuty r={r} />
       case 'filet': {   // M206: prepare a caught rinn (cooking.ts FILET); instant, like bait
         const fish = Object.keys(FILET).filter(id => benchCount(r, inv, id) > 0)
@@ -2159,6 +2162,55 @@ function FocusList({ r, inv, skill }: { r: Room; inv: ReturnType<typeof useInv>;
           )
         })}
       </div>
+    </div>
+  )
+}
+
+/** THE SMITHY'S EDGES (BETA M134 s1, edges.ts): fit a metal edge / tip on the Starwillow Pruner / Spike. One kept edge per metal
+ *  (its own wear); a new one takes FIT_METAL from the bag. Words = plain labels for @lark. */
+function EdgeList({ inv }: { inv: ReturnType<typeof useInv> }) {
+  const [tools, setTools] = useState(() => loadTools())
+  useEffect(() => { const on = () => setTools(loadTools()); addEventListener('open:tools', on); return () => removeEventListener('open:tools', on) }, [])
+  return (
+    <div data-edges>
+      <div style={lab}>Edges</div>
+      <div style={{ fontSize: 12.5, color: H.inkSoft, margin: '4px 0 8px' }}>
+        An edge of any metal reaches one tier more. Venium works faster; Eurleen lasts longer and takes a little less mana. Only the edge wears; at 0 it breaks away.
+      </div>
+      {(Object.keys(EDGE_TOOLS) as EdgeFamily[]).map(fam => {
+        const cur = tools[fam], on = edgeOn(cur), top = TOOL_DEFS[EDGE_TOOLS[fam]].name
+        return (
+          <div key={fam} data-edge-family={fam} data-edge-on={on ?? ''} style={{ margin: '0 0 10px' }}>
+            <div style={{ fontSize: 13.5, color: H.ink }}>
+              {canTakeEdge(cur) ? top : `Needs a ${top}`}
+              {on && <span data-edge-left={edgeLeft(cur, on)} style={{ color: METAL_RING[on], fontWeight: 700 }}> · {EDGE[on].name} edge {edgeLeft(cur, on)} / {EDGE[on].uses}{edgeLeft(cur, on) <= warnAt(on) ? ' · wearing thin' : ''}</span>}
+              {canTakeEdge(cur) && !on && <span style={{ color: H.inkSoft, fontSize: 12 }}> · no edge</span>}
+            </div>
+            {canTakeEdge(cur) && (
+              <div style={{ display: 'grid', gap: 6, marginTop: 4 }}>
+                {EDGE_METALS.map(m => {
+                  const kept = edgeLeft(cur, m), have = inv ? countOf(inv, m) : 0, can = on !== m && (kept > 0 || have >= FIT_METAL)
+                  return (
+                    <div key={m} data-edge-metal={m} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span style={{ width: 10, height: 10, borderRadius: 5, border: `2px solid ${METAL_RING[m]}`, flex: 'none' }} />
+                      <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: H.ink }}>
+                        {EDGE[m].name} <span style={{ color: H.inkSoft, fontSize: 12 }}>· {kept > 0 ? `kept, ${kept} / ${EDGE[m].uses} left` : `${FIT_METAL} ${EDGE[m].name} (${have}) · ${EDGE[m].uses} uses`} · XP ×{EDGE[m].xp}</span>
+                      </span>
+                      <HearthButton small disabled={!can} onClick={() => {
+                        const f = fitEdge(loadTools()[fam], m, getInv())
+                        if (!f.ok) { hudSay(f.why, 'info'); return }
+                        const next = { ...loadTools(), [fam]: f.tool }
+                        if (f.spent) setInv(f.inv)
+                        saveTools(next, true); setTools(next); hudSay(EDGE_TEXT.fitted(m), 'item')
+                      }}>{on === m ? 'On' : 'Fit'}</HearthButton>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }

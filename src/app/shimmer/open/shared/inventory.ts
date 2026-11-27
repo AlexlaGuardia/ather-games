@@ -111,6 +111,11 @@ OPEN_ITEMS[DEWL] = { name: 'Dewl', blurb: DEWL_FIRST, icon: '/open/icons/dewl.sv
 // BUILDING PARTS (M37 slice 4, Alex 11-20: "planks and bricks that can be processed at a room"): refined at the Stonery from
 //    blankstone and a raw mana shard (ather/furniture.ts STONE_REFINE), spent by a house plan (ather/plot-bom.ts). Plain words.
 OPEN_ITEMS.stone_brick = { name: 'Stone Brick', blurb: 'A blankstone, cut square. Houses are laid from them.', icon: '', stack: 99, kind: 'material' }
+// BETA M134 s1: the Smithy's two metals (RULED athernyx 4d65536, game/economy.md: mortal-side, bought in bulk; Venium from the Spine,
+// Eurleen from the Valkara mountains). Fitted as an edge / tip at the Smithy (ather/edges.ts). No group (not a skill's yield).
+// No player source yet (s2: bought on the Nyx side). Blurbs = PLACEHOLDERS for @lark.
+OPEN_ITEMS.venium = { name: 'Venium', blurb: 'A purple metal from the continent. The Smithy fits it as an edge.', icon: '', stack: 99, kind: 'material' }
+OPEN_ITEMS.eurleen = { name: 'Eurleen', blurb: 'A gold metal from the continent. The Smithy fits it as an edge.', icon: '', stack: 99, kind: 'material' }
 OPEN_ITEMS.crystal_pane = { name: 'Crystal Pane', blurb: 'A shard of crystal cut flat and clear, for a window.', icon: '', stack: 99, kind: 'material' }
 OPEN_ITEMS.stucco = { name: 'Stucco', blurb: 'Blankstone ground and mixed to a plaster. Walls are rendered with it, and it takes any colour.', icon: '', stack: 99, kind: 'material' }
 ITEM_GROUP.stone_brick = 'prospecting'; ITEM_GROUP.crystal_pane = 'prospecting'; ITEM_GROUP.stucco = 'prospecting'

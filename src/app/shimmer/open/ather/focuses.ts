@@ -12,6 +12,7 @@
 import { TOOL_DEFS, type EquippedTool, type EquippedTools } from '../../engine/tools'
 import { countOf, take, type Inv } from '../shared/inventory'
 import { roomStore, type Works, type RoomKind } from './rooms'
+import { edgeRung, edgeXp } from './edges'
 
 export type FocusSkill = 'forestry' | 'prospecting'
 export const FOCUSES: Record<FocusSkill, readonly string[]> = {
@@ -30,12 +31,12 @@ const isSpike = (t: EquippedTool | undefined) => !!t && TOOL_DEFS[t.toolId]?.ski
 /** the focus's rung on the gather ladder (gather-dials.ts). Pruners: worn 1, then 1 / 2 / 3 (the first crafted tier only pays
  *  more XP). ★ SPIKES (M185 s1, Alex 11-26): every crafted spike is one rung over the worn one: worn 1, Goldwood 2, Shimmeroak 3,
  *  Starwillow 4, so the worn spike stays the weakest and the Goldwood spike is the one that opens Aqual + Dinloid. */
-export const rungOf = (t: EquippedTool | undefined) => (crafted(t) ? Math.max(1, TOOL_DEFS[t!.toolId]?.tier ?? 1) + (isSpike(t) ? 1 : 0) : 1)
+export const rungOf = (t: EquippedTool | undefined) => (crafted(t) ? Math.max(1, TOOL_DEFS[t!.toolId]?.tier ?? 1) + (isSpike(t) ? 1 : 0) + edgeRung(t) : 1)   // M134 s1: a fitted edge / tip of any metal = one rung more
 /** the highest node tier this focus works at the node's own mana. Trees: rung 1 opens tiers 1 and 2, each rung after one more.
  *  Crystals (M185): a node's tier IS its need, so a spike reaches its rung. */
 export const reachOf = (t: EquippedTool | undefined) => rungOf(t) + (isSpike(t) ? 0 : 1)
 /** the extra XP the focus's xpBonus adds on top of the node's own (the node's XP lands in pruneCommit / mineCommit) */
-export const bonusXp = (t: EquippedTool | undefined, xp: number) => Math.round(xp * (t?.xpBonus ?? 1)) - xp
+export const bonusXp = (t: EquippedTool | undefined, xp: number) => Math.round(xp * edgeXp(t)) - xp   // M134 s1: a fitted edge pays its metal's (best) XP
 export const focusName = (t: EquippedTool | undefined, skill: FocusSkill) => (t ? TOOL_DEFS[t.toolId]?.name ?? '' : skill === 'forestry' ? 'Worn Pruner' : 'Worn Spike')
 
 /** M133: why the bench will not make tool `id` while `cur` is in hand (tools are permanent, so a lower tier or the same one again

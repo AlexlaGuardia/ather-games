@@ -8,6 +8,7 @@
 //   still listens to the pattern (canon: asking, not tricking). PERMANENT (M133): no rinn, landed or gone, wears the stick.
 // ★ A rinstick is EQUIPPED, not a bag item: the keeper holds bait and the rinstick comes out (rinning.ts). Saved per keeper
 //   (open.tools.v1, keeper-key-specs), with the forestry/prospecting focuses riding the same record for when they upgrade.
+import { adoptEdge } from './edges'
 import { loadTut, socketLit } from './glade-tutorial'
 import { TOOL_DEFS, currentToolId, ensureBasicTools, type EquippedTool, type EquippedTools } from '../../engine/tools'
 import { keeperKey } from '@/lib/keeper-local'
@@ -55,7 +56,10 @@ export function loadTools(): EquippedTools {
     const v = JSON.parse(localStorage.getItem(keeperKey(TOOLS_KEY)) ?? 'null')
     if (v && typeof v === 'object') for (const [k, t] of Object.entries(v) as [keyof EquippedTools, EquippedTool][])
       // M185 s1: a retired spike id loads as the spike that took its tier (LEGACY_TOOL_ID)
-      if (t && TOOL_DEFS[currentToolId(t.toolId)]?.skillId === k) out[k] = { ...t, toolId: currentToolId(t.toolId), usesRemaining: TOOL_DEFS[currentToolId(t.toolId)].durability }   // M133: permanent; a part-used tool from an older save is whole
+      if (t && TOOL_DEFS[currentToolId(t.toolId)]?.skillId === k) {
+        const { edge, ...rest } = t as EquippedTool & { edge?: unknown }, e = adoptEdge(edge)   // M134 s1: the fitted edge / tip rides on the tool, cleaned
+        out[k] = { ...rest, toolId: currentToolId(t.toolId), usesRemaining: TOOL_DEFS[currentToolId(t.toolId)].durability, ...(e ? { edge: e } : {}) }   // M133: permanent; a part-used tool from an older save is whole
+      }
   } catch { /* fresh */ }
   ensureBasicTools(out)
   // M68 s3a: a live tutorial keeper's spike + pruner sockets start EMPTY (Otto / Bonn light them, glade-friend-talk.ts);

@@ -9,7 +9,7 @@ ok(benchTabs('carpentry').join() === 'refine,furniture,blades,spikes,keeper', 'c
 ok(benchTabs('stonemason').join() === 'refine,keeper', 'stonemason: refine, keeper (M185: the spike moved to the carpenter)')
 ok(benchTabs('cooking').join() === 'hearth,keeper' && benchTabs('alchemy').join() === 'cauldron,keeper', 'cooking + alchemy')
 ok(benchTabs('rinnshop').join() === 'bait,filet,rinsticks,keeper', 'rinnshop')
-ok(benchTabs('smith').join() === 'keeper', 'a room with no crafts yet still has its keeper')
+ok(benchTabs('farm').join() === 'keeper' && benchTabs('smith').join() === 'edges,keeper', 'a room with no crafts yet still has its keeper; M134 s1: the Smithy fits edges')
 for (const k of ['carpentry', 'stonemason', 'cooking', 'alchemy', 'rinnshop', 'smith', 'farm'] as const) {
   const t = benchTabs(k)
   ok(t[t.length - 1] === 'keeper' && new Set(t).size === t.length && t.every(x => !!TAB_LABEL[x]), `${k}: keeper last, no repeats, labelled`)

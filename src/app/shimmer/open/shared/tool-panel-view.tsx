@@ -54,6 +54,7 @@ export function ToolPanelView({ panel, phone, onClose }: { panel: ToolPanel; pho
                 <span><span style={{ color: t.textDim }}>Stage </span><b>{stage}</b></span>
                 <span data-panel-durability><span style={{ color: t.textDim }}>Durability </span><b>{panel.durability === null ? 'never wears' : `${panel.uses} / ${panel.durability}`}</b></span>
                 <span><span style={{ color: t.textDim }}>XP </span><b>×{panel.xpMult}</b></span>
+                {panel.edge && <span data-panel-edge={panel.edge.metal}><span style={{ color: t.textDim }}>Edge </span><b>{panel.edge.metal === 'venium' ? 'Venium' : 'Eurleen'} {panel.edge.left} / {panel.edge.uses}</b></span>}
                 {panel.ease !== null && <span data-panel-ease><span style={{ color: t.textDim }}>Ease </span><b>×{panel.ease}</b></span>}
               </div>
               {panel.rows.length > 0 && (

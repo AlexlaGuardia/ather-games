@@ -37,7 +37,10 @@ ok(KEEP_CLEAR.every(k => !canPlace(freshWorks(), owned, 'rinnshop', k.x, k.z, 0,
   ok(!canPlace(freshWorks(), owned, 'rinnshop', THRESHOLD.x, THRESHOLD.z, 0, rich).ok, 'place: built on the arrival threshold')
   for (const t of [0, 6, 12]) ok(!canPlace(freshWorks(), owned, 'rinnshop', PATH_START.x - t * Math.SQRT1_2 + 2, PATH_START.z + t * Math.SQRT1_2 - 2, 0, rich).ok, `place: built across the path's line (${t} m out from its start)`)
 }
-ok(!canPlace(freshWorks(), owned, 'smith', P.x, P.z, 0, rich).ok, 'place: a not-ready room was buildable (it is a coming-soon card)')
+// M134 s1: the Smithy OPENED (it was the coming-soon card this assert used). The rule (a closed card is never buildable) is kept
+// with a room flipped closed for the test.
+{ const def = ROOMS.smith as { open: boolean }; ok(def.open === true && canPlace(freshWorks(), owned, 'smith', P.x, P.z, 0, rich).ok, 'place: the Smithy (M134 s1) is buildable')
+  def.open = false; ok(!canPlace(freshWorks(), owned, 'smith', P.x, P.z, 0, rich).ok, 'place: a not-ready room was buildable (it is a coming-soon card)'); def.open = true }
 ok(!canPlace(freshWorks(), owned, 'rinnshop', P.x, P.z, 0, newInv(12)).ok, 'place: built without the logs')
 const placed = place(freshWorks(), owned, rich, 'rinnshop', P.x, P.z, 1, 1000)!
 ok(!!placed && countOf(placed.inv, 'goldwood_log') === 40 - ROOMS.rinnshop.cost[0].n && countOf(rich, 'goldwood_log') === 40, 'place: wrong logs taken, or it mutated its input')
