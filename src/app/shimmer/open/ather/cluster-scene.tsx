@@ -93,7 +93,11 @@ function MeadowTrees({ m, lift }: { m: Meadow; lift?: Lift | null }) {
   )
 }
 
-export function ClusterScene({ frame, lift, gate = true }: { frame: Frame; lift?: Lift | null; gate?: boolean }) {
+// ★ BETA M219 (Alex 11-26: 'the gate is still there under the new design'): a cluster has ONE Green and ONE gate. Every mate's
+// gate corner turns onto the same point (plot.ts GATE, the Green's centre), so each mate island drawing its own FoldGate stood
+// two more gold rings crossways under the M208 grown arch (and a third inside it). The viewer's own island draws the gate
+// (plot-scene.tsx) and green-view.tsx dresses it; a mate's island never does.
+export function ClusterScene({ frame, lift }: { frame: Frame; lift?: Lift | null }) {
   const m = frame.meadow
   // M83 s2b: lift = the Glade builder layer's delta (glade-layer.ts), null everywhere else
   const geo = useMemo(() => (m ? (lift ? liftGeometry(meadowGeometry(m), lift) : meadowGeometry(m)) : null), [m, lift])
@@ -112,7 +116,7 @@ export function ClusterScene({ frame, lift, gate = true }: { frame: Frame; lift?
       <mesh position={[mid.x, -34, mid.z]} rotation={[Math.PI, Math.PI / 4, 0]}><coneGeometry args={[span * 0.62, 60, 8, 2]} /><meshLambertMaterial color={P.under} flatShading /></mesh>
       {frame.mates.map((mt, n) => (
         <group key={mt.quarter} position={[mt.x, 0, mt.z]} rotation-y={mt.rot}>
-          <PlotIsland owned={new Set(mt.owned)} pages={0} lift={lift} place={lift ? places[n] : undefined} gate={gate} />
+          <PlotIsland owned={new Set(mt.owned)} pages={0} lift={lift} place={lift ? places[n] : undefined} gate={false} />
         </group>
       ))}
     </>

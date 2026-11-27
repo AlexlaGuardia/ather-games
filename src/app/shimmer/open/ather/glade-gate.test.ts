@@ -30,9 +30,9 @@ const walk = (d: string) => readdirSync(d).forEach(f => { const p = join(d, f); 
 const text = new Map(files.map(f => [f, readFileSync(f, 'utf8')])), at = (name: string) => [...text].find(([f]) => f.endsWith('/open/ather/' + name))![1]
 const off = [...text].flatMap(([f, t]) => t.split('\n').filter(l => /gate=\{/.test(l) && /<(PlotScene|PlotIsland|ClusterScene)\b/.test(l)).map(l => [f.split('/').pop()!, l.trim()]))
 ok(off.filter(([f]) => f === 'page.tsx').length === 1 && off.filter(([f]) => f === 'page.tsx').every(([, l]) => l.startsWith("{zone.kind === 'glade' &&")), 'the page turns the gold ring off in the glade zone and nowhere else')
-ok(off.some(([f, l]) => f === 'page.tsx' && l.split('gate={false}').length === 3), 'there on the keeper\'s island AND the friends\' three')
-ok(off.filter(([f]) => f !== 'page.tsx').every(([f, l]) => (f === 'plot-scene.tsx' || f === 'cluster-scene.tsx') && l.includes('gate={gate}')) && off.length === 3, `the rest pass it on: ${JSON.stringify(off)}`)
-for (const [f, c] of [['plot-scene.tsx', 2], ['cluster-scene.tsx', 1]] as const) ok(at(f).split('gate = true').length - 1 === c, `${f}: the gold ring is the default`)
+ok(off.some(([f, l]) => f === 'page.tsx' && l.split('gate={false}').length === 2 && /<PlotScene[^>]*gate=\{false\}/.test(l)), 'there on the keeper\'s island (the friends\' islands never draw one: M219)')
+ok(off.filter(([f]) => f !== 'page.tsx').every(([f, l]) => (f === 'plot-scene.tsx' && l.includes('gate={gate}')) || (f === 'cluster-scene.tsx' && l.includes('gate={false}'))) && off.length === 3, `PlotScene passes it on, a mate's island is always off (M219): ${JSON.stringify(off)}`)
+for (const [f, c] of [['plot-scene.tsx', 2], ['cluster-scene.tsx', 0]] as const) ok(at(f).split('gate = true').length - 1 === c, `${f}: the gold ring is the default`)
 ok(at('plot-scene.tsx').includes('{gate && <FoldGate />}'), 'an island draws its ring unless told not to')
 ok([...text].filter(([, t]) => /<GladeGate\b/.test(t)).map(([f]) => f.split('/').pop()).join() === 'glade-cluster-view.tsx', 'the grown gate is mounted by the Glade alone')
 ok([...text].filter(([, t]) => /<GladeCluster\b/.test(t)).every(([f, t]) => f.endsWith('page.tsx') && t.split('\n').filter(l => /<GladeCluster\b/.test(l)).every(l => l.trim().startsWith("{zone.kind === 'glade' &&"))), 'and the Glade\'s folk only in the glade zone')
