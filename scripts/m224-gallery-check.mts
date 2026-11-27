@@ -8,6 +8,7 @@
 //   OWNER_KEY=... npx tsx scripts/m224-gallery-check.mts [--url https://ather.games] [--shots dir] [--w 1440 --h 900] [--from 1]
 import puppeteer, { type Page } from 'puppeteer-core'
 import { mkdirSync } from 'fs'
+import sharp from 'sharp'
 import { GALLERY } from '../src/app/shimmer/dev/editors/spirit-gallery'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), shots = flag('--shots', ''), KEY = process.env.OWNER_KEY
@@ -26,33 +27,33 @@ await p.evaluateOnNewDocument('window.__name = (f) => f')
 await p.goto(`${url}/owner?key=${encodeURIComponent(KEY)}`, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {})
 // the owner page itself is not under test: its console noise is dropped
 await sleep(1500); errs.length = 0; cerrs.length = 0
-await p.evaluateOnNewDocument(() => { const f = window.fetch.bind(window); window.fetch = (u, i) => ((i?.method ?? 'GET').toUpperCase() !== 'GET') ? Promise.resolve(new Response('{}', { status: 200 })) : f(u, i); navigator.sendBeacon = () => true
-  // keep the stage's pixels readable (preserveDrawingBuffer) so the check can ask whether anything was drawn
-  const g = HTMLCanvasElement.prototype.getContext
-  HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement, t: string, o?: any) { return (g as any).call(this, t, /webgl/.test(t) ? { ...(o ?? {}), preserveDrawingBuffer: true } : o) } as any })
+await p.evaluateOnNewDocument(() => { const f = window.fetch.bind(window); window.fetch = (u, i) => ((i?.method ?? 'GET').toUpperCase() !== 'GET') ? Promise.resolve(new Response('{}', { status: 200 })) : f(u, i); navigator.sendBeacon = () => true })
 await p.goto(`${url}/shimmer/dev?mode=spirits&spirit=${from}`, { waitUntil: 'load', timeout: 240000 })
 await p.waitForSelector('[data-spirit-gallery]', { timeout: 120000 }); await sleep(1500)
 await p.focus('[data-gallery-dial]').catch(() => {})
 
+/** what the stage DRAWS, read off a real screenshot of it (11-27: a WebGL readback through a 2D copy came back blank on some rows
+ *  while the screen showed her): the pixels that stand off their own blur. The backdrop (a soft gradient + the floor disc) scores
+ *  0; every model drawn in frame scored 1400+ (calibrated on prod shots: the out-of-frame Hovari line + Luminara scored 0). */
+async function drawnPx() {
+  const r = await p.evaluate(() => { const e = document.querySelector('[data-gallery-state]'); if (!e) return null; const b = e.getBoundingClientRect(); return { x: b.left + 1, y: b.top + 1, width: b.width - 2, height: b.height - 2 } })
+  if (!r) return 0
+  const png = await p.screenshot({ clip: r, type: 'png' }), base = sharp(Buffer.from(png)).resize(196, 130, { fit: 'fill' }).removeAlpha()
+  const a = await base.clone().raw().toBuffer(), b = await base.clone().blur(6).raw().toBuffer()
+  let n = 0; for (let i = 0; i < a.length; i += 3) if (Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]) > 60) n++
+  return n
+}
 /** what the stage shows now: state, the model's glb + body, the drawn pixel count, the art image */
-const look = () => p.evaluate(() => {
+const look = async () => ({ ...(await p.evaluate(() => {
   const st = document.querySelector('[data-gallery-state]')?.getAttribute('data-gallery-state') ?? ''
   const title = document.querySelector('[data-gallery-title]')?.textContent ?? ''
   const sel = Number(document.querySelector('[data-gallery-row][data-selected="1"]')?.getAttribute('data-gallery-row') ?? 0)
   const art = document.querySelector('[data-gallery-art]') as HTMLImageElement | null
   const P = (window as any).__spiritModel, r = P?.rigs?.get('gallery')
   let verts = 0; try { verts = r?.body?.meshes?.body?.geometry?.getAttribute('position')?.count ?? 0 } catch { verts = 0 }
-  // drawn pixels that are NOT the floor disc: the disc (one flat colour, read off the canvas's bottom-centre pixel) fills ~4590 px of the lower half on every spirit,
-  // so a body drawn out of frame (11-27: the Hovari line + Luminara hung ~4 body-heights up) still left a full disc. Count the
-  // pixels whose colour is not the disc's (readback un-premultiplies, so the disc's soft edge keeps its colour too).
-  let drawn = 0; const cv = document.querySelector('[data-spirit-gallery] canvas') as HTMLCanvasElement | null
-  if (cv && cv.width) { const c = document.createElement('canvas'); c.width = 96; c.height = 96; const x = c.getContext('2d')!
-    x.drawImage(cv, 0, 0, 96, 96); const d = x.getImageData(0, 0, 96, 96).data
-    const b = (94 * 96 + 48) * 4, R = d[b], G = d[b + 1], B = d[b + 2]
-    for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 24 && Math.abs(d[i] - R) + Math.abs(d[i + 1] - G) + Math.abs(d[i + 2] - B) > 45) drawn++ }
   return { st, title, sel, stage: document.querySelector('[data-spirit-stage]')?.getAttribute('data-spirit-stage') ?? '', art: art ? { src: art.src, w: art.naturalWidth, done: art.complete } : null,
-    urls: P ? Object.keys(P.urls ?? {}).filter((k: string) => P.urls[k]) : [], verts, drawn }
-})
+    urls: P ? Object.keys(P.urls ?? {}).filter((k: string) => P.urls[k]) : [], verts }
+})), drawn: await drawnPx() })
 for (let k = from - 1; k < GALLERY.length; k++) {
   const row = GALLERY[k]
   if (k > from - 1) { await p.keyboard.press('ArrowDown') }
@@ -60,12 +61,12 @@ for (let k = from - 1; k < GALLERY.length; k++) {
   let s = await look(), t0 = Date.now()
   while (Date.now() - t0 < 40000) {
     s = await look()
-    if (s.sel === row.num && ((s.st === 'model' && s.verts > 0 && s.drawn > 40) || (s.st === 'art' && s.art && s.art.done && s.art.w > 0))) break
+    if (s.sel === row.num && ((s.st === 'model' && s.verts > 0 && s.drawn > 300) || (s.st === 'art' && s.art && s.art.done && s.art.w > 0))) break
     await sleep(400)
   }
   await sleep(300); s = await look()
   if (shots) await p.screenshot({ path: `${shots}/${String(row.num).padStart(2, '0')}-${row.name.toLowerCase()}.png` })
-  const shows = s.st === 'model' ? s.verts > 0 && s.drawn > 40 : s.st === 'art' ? !!s.art && s.art.w > 0 : false
+  const shows = s.st === 'model' ? s.verts > 0 && s.drawn > 300 : s.st === 'art' ? !!s.art && s.art.w > 0 : false
   ok(s.sel === row.num && s.title.toLowerCase() === row.name.toLowerCase() && shows,
     `#${row.num} ${row.name}: ${s.st}${s.st === 'model' ? ` ${s.stage} verts ${s.verts} drawn ${s.drawn}px` : ` art ${s.art ? s.art.w + 'px' : 'none'}`}${errs.length ? ` (page errors so far ${errs.length})` : ''}`)
 }
