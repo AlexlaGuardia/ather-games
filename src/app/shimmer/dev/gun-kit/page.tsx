@@ -15,6 +15,7 @@ import { FpGun, ScopeRing, loadGunTune, previewGunModel, type FpGunApi } from '.
 import { RANGE_GUNS } from '../../open/shared/gunplay'
 import { EYE_STAND } from '../../open/shared/locomotion'
 import { Family } from './family'
+import { Twins } from './twins'
 import { V2_GUNS, V2_SIGHTS, type V2GunId, type V2SightId } from '../../open/shared/gun-kit-v2'
 import { KIT_GUNS, KIT_SIGHTS, kitModel, sightsFor, type KitGunId, type KitSightId, type Model, type PartColor } from '../../open/shared/gun-kit'
 
@@ -80,6 +81,8 @@ export default function GunKit() {
   useEffect(() => { setQ(new URLSearchParams(window.location.search)) }, [])
   // M149: ?family=side|one|sights|third, the locked family's bench (off the page's own views)
   const fam = q?.get('family'), g = q?.get('gun') ?? '', s = q?.get('sight') ?? ''
+  // M152 s1: ?twins=side|top|34|core|hip|ads, the DB2 Twins' bench (off in the game)
+  const tw = q?.get('twins'); if (tw) return <div style={{ height: '100dvh' }}><Twins view={tw} /></div>
   if (fam) { const gun = (g in V2_GUNS ? g : 'backbone') as V2GunId; return <div style={{ height: '100dvh' }}><Family view={fam} gun={gun} sight={(s in V2_SIGHTS ? s : V2_GUNS[gun].own) as V2SightId} yaw={Number(q!.get('yaw') ?? Math.PI / 2)} /></div> }
   return q ? <Kit q={q} /> : <div style={{ height: '100dvh', background: '#14131a' }} />
 }

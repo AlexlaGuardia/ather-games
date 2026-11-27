@@ -24,6 +24,8 @@ function botStep(c: Combat, feet: { x: number; y: number; z: number }, t: number
   // what to shoot: adds that are close first, else the champion when it can be hurt, else the nearest Hollow
   let aimAt: { x: number; y: number; z: number } | null = near
   if (ch && champVulnerable(ch) && (!near || near.d > 9)) aimAt = { x: ch.x, y: ch.y + CHAMP.bodyY, z: ch.z }
+  // M152: a two-gun bot picks its gun for the range of what it is about to shoot (unset = the one gun, as before)
+  if (SIM.pick) SIM.pick(c, aimAt ? Math.hypot(aimAt.x - feet.x, aimAt.z - feet.z) : Infinity, DT)
   const held = heldGun(c.gun), charge = (c.gun as { charge?: number }).charge ?? 0
   // M151: a held gun is asked every frame (its trigger released when there is nothing to shoot); the rest, a tap when the finger is ready
   if (held ? aimAt || (c.keeper.burstLeft ?? 0) > 0 : aimAt && c.keeper.sinceShot >= Math.max(M151.hold.includes(c.gun.id) ? 0 : BOT.tap, charge ? c.gun.fireCd + charge : 0)) {
@@ -50,7 +52,7 @@ function botStep(c: Combat, feet: { x: number; y: number; z: number }, t: number
 
 /** M127: walk each sim fight with a trio of following spirits (the fight brain as the scene drives it); off = the newcomer alone.
  *  `ran` = the trio's totals of every fight walked since it was last cleared. */
-export const SIM: { trio: boolean; gun?: string; ran: { keeper: number; spirits: number; fights: number; worst: number; hit: number; mend: number; slow: number; nothing: number; chases: number; chaseSecs: number; chaseMin: number } } =
+export const SIM: { trio: boolean; gun?: string; pick?: (c: Combat, dist: number, dt: number) => void; ran: { keeper: number; spirits: number; fights: number; worst: number; hit: number; mend: number; slow: number; nothing: number; chases: number; chaseSecs: number; chaseMin: number } } =
   { trio: false, ran: { keeper: 0, spirits: 0, fights: 0, worst: 0, hit: 0, mend: 0, slow: 0, nothing: 0, chases: 0, chaseSecs: 0, chaseMin: Infinity } }
 const simCombat = (seed: number) => { const c = newCombat(seed); if (SIM.gun) { const g = RANGE_GUNS.find(r => r.id === SIM.gun)!; c.gun = g; c.keeper.ammo = g.clip } return c }
 function makeTrio(seed: number) {
