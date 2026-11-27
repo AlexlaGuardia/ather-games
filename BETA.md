@@ -287,6 +287,7 @@ Steps (one worker each, in order; each keeps `beta-m7-saves` green):
 - **Rules:** only rows on this list. No new systems, no lore, nothing public. Canon gate + tests before every build.
 
 ## Inbox (Alex's brain dump: hub writes here at once, dated, his words; triaged into rows / queue / CANON_GAPS / killed)
+- 11-26 21:0x Alex: Nyx ideas list ('the need for speed idea for this side'): road infrastructure before landscaping, POI roads as courses (crazy + cruising), cities flattened then fake buildings removed -> ## Nyx side: parked todo list
 - 11-26 20:5x Alex (Nyx 'getting left behind', bounce or stick?): picked 'Stay Ather for now' -> no Nyx lane; Nyx rows wait until the Ather first hour feels done
 - 11-26 22:5x Alex: 'no the athowl line need a redo so they dont look so dainty.. or simple.. im not sure what the word is' -> Athowl redo queued (heft + detail); Hovari agent warned
 - 11-26 21:4x Alex (cluster 4 seats vs chord 3): picked 'Chord holds 4' -> M217 + canon amend to Magii
@@ -477,6 +478,12 @@ Steps (one worker each, in order; each keeps `beta-m7-saves` green):
 - 11-23 10:4x Alex AMENDS M109: "the chord (instead of party) of 8 hang around the garden and three of those can join you to explore the ather wilds.. I like the idea of them helping in combat but as they please" → CHORD (8, garden) + 3 come along + combat by their own choice. To Magii (CANON_GAPS amendment).
 - 11-23 10:2x Alex: "making a party out of the three.. could the player use the grimoire to store bloomed spirits in game and manage the party from there; the party hangs around the garden (the party being 8 slots).. those 8 the player can speak to each with options like feed follow and open a panel that has the spirits avatar there a radar stat chart moves list" → row M109. Canon friction: glossary › Grimoire = roster + 'the means of calling one home', but 'NO spirit-bank, box or depot: a keeper knows spirits, never stores them' → CANON_GAPS [OPEN] for where non-party spirits are.
 - 11-23 08:4x Alex on Nyx + ships: agreed Nyx is thin; M73 opening chain next. On a flyable skyship: "I'm not on board for 3, I'm thinking it's just a gate to space maps" → DECIDED: NO flight system. A repaired ship = a GATE to space maps (board it, pick a destination, load the map; the Hask wreck is the first, its SOS = the destination-list question). Ship repair loop = canon ask to Magii.
+
+## Nyx side: parked todo list (Alex 11-26: stay Ather for now, jot Nyx ideas here; the hive does NOT work these until Alex opens Nyx)
+- 11-26 Alex: **ROAD INFRASTRUCTURE FIRST** ('i would like to get a real road infrastructure inplace before i landscape anymore'): a real road network between POIs before more landscaping
+- 11-26 Alex: **ROADS AS COURSES** ('the roads betwean poi's are really long.. made them into courses the player could take some crazier than others and some just for cruising'): the long POI-to-POI roads double as driving courses, some wild, some cruising; the side's identity = the need for speed
+- 11-26 Alex (in progress, his hands): flattening all the cities in the World Builder; LATER remove all the fake buildings
+- Already on the board, Nyx-side: M49 deeds inside shipyards/shops · M80 E = get in the car · M115 suppliers · M108 Kael's ship gate · M128 settlement infections · M58 Nyx ground layers + ribbons (opt-in)
 
 ## Alex's queue (🔒: look / feel / canon; clear it when you have a minute)
 - M145+M212 live: judge arrow + '!' look (docs/looks/m145-m212-2026-11-26/; '!' reads big up close) and pick the next 'firsts' for M145 s2 (pack, map, seeds, tools, waymark, training, party).
