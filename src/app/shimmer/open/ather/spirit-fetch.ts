@@ -57,14 +57,40 @@ export function wantRoll(spirit: string, loot: string): number {
 }
 export const whoOf = (id: string) => `spirit:${id}`
 
+// ── M141 s3 HOW EACH ONE FETCHES (Alex's OK'd list 11-24): the path / timing / height of her go and carry. Pure numbers off her
+// progress; her model adds `lift` to her height and walks to fetchSlot's point at its vMax. No new clips: the trot's run / walk /
+// sit (and a flier's flight) blend off the speed she really covers.
+//  prank  Vulnyx DASHES in (a burst), then bounces a little way off with it before bringing it
+//  hop    Croakling HOPS: an arc each HOP.len, the last one landing on the drop (and hopping back)
+//  pluck  Hovari keeps her hover height and DIPS only as she grabs it
+//  dart   Lepara darts out fast (a burst), back as fast as the walk allows
+//  swoop  Athowl WAITS where she is, rising, then dives ONCE down onto the drop
+//  echo   Noctyx flies STRAIGHT at her far drop, a flat cruise up off the ground
+//  amble  Manalotl ambles: a slow sway either side of the line
+//  tiny / pressed / patient: the plain walk at their own pace (Luminara's picking, Dewbear's 3 m and Shellmere's slowness are the table)
+// ★ NEVER FASTER THAN THE KEEPER'S WALK ON AVERAGE: a burst is a share of the walk above 1 on her way out ONLY. From the moment
+//   she claims a drop her run counts the ground she really covered (D) against the time it took (T); carrying back, her speed is
+//   the most that still lands the whole round trip at D <= FETCH_WALK x T, and she does not toss until it does (a prank teases
+//   with it a moment). So the round trip (claim to toss) never averages above the walk, whatever the burst. fetchSlot / tickFetch.
+export const FETCH_BURST: Partial<Record<FetchStyle, number>> = { prank: 1.6, dart: 1.4 }   // her way out, a share of the walk
+export const HOP = { len: 0.9, h: 0.32 } as const       // m a hop covers, m high at its top
+export const PLUCK = { dip: 0.45, from: 0.75, out: 0.4 } as const   // m she dips; from this share of the way; s to rise again
+export const SWOOP = { hold: 1.1, h: 1.5 } as const     // s she waits (rising), m high she dives from
+export const ECHO = { h: 0.7 } as const                 // m her flat cruise
+export const AMBLE = { side: 0.6, len: 1.6, ahead: 0.8 } as const   // m either side, m per sway, m ahead she aims
+export const PRANK = { off: 1.3, s: 0.9, h: 0.14, hop: 0.5 } as const   // m she bounces off, s at most, m bounce high, m a bounce
+/** her lowest speed while carrying (paying back a burst): she never stops dead with it */
+const SLOW = 0.2
 type Phase = 'go' | 'carry' | 'toss'
-interface Run { sp: Species; phase: Phase | null; loot: string; item: string; n: number; t: number; at: Spot3 | null; from: Spot3 | null }
+interface Run { sp: Species; phase: Phase | null; loot: string; item: string; n: number; t: number; at: Spot3 | null; from: Spot3 | null
+  /** M141 s3 */ o: Spot3 | null; d0: number; c0: number; D: number; T: number; lift: number; off: Spot3 | null; trace: FetchSample[] }
+export interface FetchSample { t: number; phase: Phase; x: number; z: number; lift: number; dx: number; dz: number }
 const runs = new Map<string, Run>()
 let keeperAt: Spot3 = { x: 0, y: 0, z: 0 }, seen: readonly Loot[] = []
 const d2 = (a: { x: number; z: number }, b: { x: number; z: number }) => Math.hypot(a.x - b.x, a.z - b.z)
 
 /** a following spirit (her model, while she follows) */
-export function joinFetch(id: string, sp: Species) { const r = runs.get(id); if (r) r.sp = sp; else runs.set(id, { sp, phase: null, loot: '', item: '', n: 0, t: 0, at: null, from: null }) }
+export function joinFetch(id: string, sp: Species) { const r = runs.get(id); if (r) r.sp = sp; else runs.set(id, { sp, phase: null, loot: '', item: '', n: 0, t: 0, at: null, from: null, o: null, d0: 0, c0: 0, D: 0, T: 0, lift: 0, off: null, trace: [] }) }
 /** she stops following: anything she holds is let go; in her mouth = set down where she stands */
 export function leaveFetch(id: string) { const r = runs.get(id); if (r) letGo(id, r, true); runs.delete(id) }
 /** the ground is gone (left the zone, the page): every hold let go; the save still has every drop where it lay */
@@ -72,7 +98,7 @@ export function endFetch() { for (const [id, r] of runs) letGo(id, r, false) }
 function letGo(id: string, r: Run, setDown: boolean) {
   if (r.phase && r.phase !== 'go' && setDown && r.at) moveLoot(r.loot, whoOf(id), r.at)
   if (r.phase) releaseLoot(r.loot, whoOf(id))
-  r.phase = null; r.loot = ''; r.t = 0; r.from = null
+  r.phase = null; r.loot = ''; r.t = 0; r.from = null; r.off = null
 }
 
 export interface FetchInput {
@@ -92,8 +118,10 @@ export function tickFetch(I: FetchInput): void {
   keeperAt = I.keeper; seen = I.loot
   const byId = new Map(I.loot.map(d => [d.id, d]))
   for (const [id, r] of runs) {
-    const me = whoOf(id), p = I.at(id), m = FETCH[r.sp]
+    const me = whoOf(id), p = I.at(id), m = FETCH[r.sp], last = r.at
     if (p) r.at = p
+    if (r.phase && r.phase !== 'toss' && p && last) { r.D += d2(p, last); r.T += I.dt }   // M141 s3: the round trip's ground + time
+    if (!r.phase) r.lift *= Math.exp(-I.dt * 8)
     if (!p || I.hollow || I.fighting(id)) { if (r.phase) letGo(id, r, true); continue }   // a Hollow / a fight / she is not drawn: set down where she stood
     if (!r.phase) {
       let best: Loot | null = null, bd = Infinity
@@ -103,7 +131,7 @@ export function tickFetch(I: FetchInput): void {
         if ((m.tiny && !tinyLoot(d)) || wantRoll(id, d.id) >= m.chance || !I.fits(d.item) || I.keeperTakes(d)) continue
         const dd = d2(d, p); if (dd < bd) { bd = dd; best = d }
       }
-      if (best && claimLoot(best.id, me)) Object.assign(r, { phase: 'go', loot: best.id, item: best.item, n: best.n, t: 0, from: null })
+      if (best && claimLoot(best.id, me)) Object.assign(r, { phase: 'go', loot: best.id, item: best.item, n: best.n, t: 0, from: null, o: { ...p }, d0: Math.max(0.01, bd), D: 0, T: 0, off: null, trace: [] })
       continue
     }
     const d = byId.get(r.loot)
@@ -111,25 +139,65 @@ export function tickFetch(I: FetchInput): void {
     r.t += I.dt
     if (r.phase === 'go') {
       if (I.keeperTakes(d) || d2(d, I.keeper) > m.r + FETCH_DIAL.leash || r.t > FETCH_DIAL.giveUpS) { letGo(id, r, false); continue }
-      if (d2(d, p) <= FETCH_DIAL.pickM) { r.phase = 'carry'; r.t = 0 }
+      if (d2(d, p) <= FETCH_DIAL.pickM) { r.phase = 'carry'; r.t = 0; r.c0 = Math.max(0.01, d2(p, I.keeper)); r.off = m.style === 'prank' ? bounceOff(p, I.keeper) : null }
     } else if (r.phase === 'carry') {
-      if (d2(p, I.keeper) <= FETCH_DIAL.tossM && I.can) { r.phase = 'toss'; r.t = 0; r.from = { ...p } }
+      if (r.off && (d2(p, r.off) < 0.3 || r.t > PRANK.s)) r.off = null   // the prank's bounce is done: now she brings it
+      if (!r.off && d2(p, I.keeper) <= FETCH_DIAL.tossM && I.can && r.D <= FETCH_WALK * r.T + 1e-6) { r.phase = 'toss'; r.t = 0; r.from = { ...p } }
       else if (r.t > FETCH_DIAL.carryS) letGo(id, r, true)
     } else if (r.t >= FETCH_DIAL.tossS) {
       const loot = r.loot; r.phase = null; r.loot = ''; r.from = null
       if (moveLoot(loot, me, I.keeper)) I.pay(loot, me); else releaseLoot(loot, me)
     }
+    if (r.phase) {
+      r.lift = liftOf(m.style, r, p, d, I.keeper)
+      if (r.trace.length < 600) r.trace.push({ t: r.T, phase: r.phase, x: p.x, z: p.z, lift: r.lift, dx: d.x, dz: d.z })
+    }
   }
 }
+/** the prank's bounce: a little way on past the drop, away from the keeper and a touch aside */
+function bounceOff(p: Spot3, k: Spot3): Spot3 {
+  const dk = Math.max(1e-3, d2(p, k)), ux = (p.x - k.x) / dk, uz = (p.z - k.z) / dk
+  return { x: p.x + (ux * 0.8 - uz * 0.6) * PRANK.off, y: p.y, z: p.z + (uz * 0.8 + ux * 0.6) * PRANK.off }
+}
+const smooth = (u: number) => { const c = Math.min(1, Math.max(0, u)); return c * c * (3 - 2 * c) }
+/** m above her own height this frame (pure: her style, how far along she is) */
+export function liftOf(style: FetchStyle, r: Pick<Run, 'phase' | 't' | 'd0' | 'c0' | 'D' | 'off'>, p: { x: number; z: number }, d: { x: number; z: number }, k: { x: number; z: number }): number {
+  const pk = FETCH_DIAL.pickM, s = r.phase === 'go' ? Math.min(1, Math.max(0, 1 - (d2(p, d) - pk) / Math.max(0.01, r.d0 - pk))) : Math.min(1, Math.max(0, 1 - (d2(p, k) - FETCH_DIAL.tossM * 0.6) / Math.max(0.01, r.c0 - FETCH_DIAL.tossM * 0.6)))
+  if (r.phase === 'toss') return 0
+  switch (style) {
+    case 'hop': { const n = r.phase === 'go' ? Math.max(1, Math.round((r.d0 - pk) / HOP.len)) : Math.max(1, Math.round(r.c0 / HOP.len)); return HOP.h * Math.abs(Math.sin(Math.PI * s * n)) }
+    case 'pluck': return r.phase === 'go' ? -PLUCK.dip * smooth((s - PLUCK.from) / (1 - PLUCK.from)) : -PLUCK.dip * (1 - smooth(r.t / PLUCK.out))
+    case 'swoop': return r.phase === 'go' ? (r.t < SWOOP.hold ? SWOOP.h * smooth(r.t / SWOOP.hold) : SWOOP.h * (1 - s) * (1 - s)) : 0
+    case 'echo': return ECHO.h * Math.min(1, 4 * s, 4 * (1 - s))
+    case 'prank': return r.phase === 'carry' && r.off ? PRANK.h * Math.abs(Math.sin(Math.PI * r.D / PRANK.hop)) : 0
+    default: return 0
+  }
+}
+/** M141 s3: how high her fetch lifts (or, a Hovari's grab, dips) her this frame; her model adds it to her height */
+export const fetchLift = (id: string) => runs.get(id)?.lift ?? 0
 
 /** Where her fetch walks her (null = no fetch: her skit / formation slot). `vMax` = never faster than the keeper walks. */
 export function fetchSlot(id: string, loot: readonly Loot[] = seen): { x: number; z: number; face: number; vMax: number } | null {
   const r = runs.get(id); if (!r?.phase) return null
-  const vMax = FETCH_WALK * Math.min(1, FETCH[r.sp].v), p = r.at ?? keeperAt, k = keeperAt
-  if (r.phase === 'go') { const d = loot.find(o => o.id === r.loot); return d ? { x: d.x, z: d.z, face: Math.atan2(d.x - p.x, d.z - p.z), vMax } : null }
-  if (r.phase === 'toss') return { x: p.x, z: p.z, face: Math.atan2(k.x - p.x, k.z - p.z), vMax }
+  const m = FETCH[r.sp], walk = FETCH_WALK * Math.min(1, m.v), p = r.at ?? keeperAt, k = keeperAt
+  if (r.phase === 'go') {
+    const d = loot.find(o => o.id === r.loot); if (!d) return null
+    const face = Math.atan2(d.x - p.x, d.z - p.z), vMax = FETCH_WALK * (FETCH_BURST[m.style] ?? Math.min(1, m.v))
+    if (m.style === 'swoop' && r.t < SWOOP.hold) return { x: p.x, z: p.z, face, vMax: walk }   // she waits where she is, rising
+    if (m.style === 'amble') {   // a slow sway either side of the line, aimed a little ahead of her
+      const dd = d2(p, d); if (dd > AMBLE.ahead * 1.5) {
+        const ux = (d.x - p.x) / dd, uz = (d.z - p.z) / dd, w = AMBLE.side * Math.cos(2 * Math.PI * r.D / AMBLE.len)
+        return { x: p.x + ux * AMBLE.ahead - uz * w, z: p.z + uz * AMBLE.ahead + ux * w, face, vMax } }
+    }
+    return { x: d.x, z: d.z, face, vMax }
+  }
+  if (r.phase === 'toss') return { x: p.x, z: p.z, face: Math.atan2(k.x - p.x, k.z - p.z), vMax: walk }
   const dk = d2(p, k), u = dk > 1e-3 ? FETCH_DIAL.tossM * 0.6 / dk : 0
-  return { x: k.x + (p.x - k.x) * u, z: k.z + (p.z - k.z) * u, face: Math.atan2(k.x - p.x, k.z - p.z), vMax }
+  const to = r.off ?? { x: k.x + (p.x - k.x) * u, z: k.z + (p.z - k.z) * u }
+  // ★ the round trip's cap: the most she may go and still land D <= walk x T at the toss (in debt = her slowest)
+  const R = r.off ? d2(p, r.off) + Math.max(0, d2(r.off, k) - FETCH_DIAL.tossM) : Math.max(0, dk - FETCH_DIAL.tossM), left = (r.D + R) / FETCH_WALK - r.T
+  const vAll = left > 1e-3 ? R / left : 0, vMax = Math.min(FETCH_WALK * (m.style === 'dart' ? 1.4 : Math.min(1, m.v)), Math.max(FETCH_WALK * SLOW, vAll))
+  return { x: to.x, z: to.z, face: r.off ? Math.atan2(to.x - p.x, to.z - p.z) : Math.atan2(k.x - p.x, k.z - p.z), vMax }
 }
 /** What is in a spirit's mouth or in the air now (the look draws it there instead of on the ground). `u` = the toss, 0..1. */
 export function fetchCarried(): { loot: string; spirit: string; phase: 'carry' | 'toss'; at: Spot3; from: Spot3 | null; to: Spot3; u: number }[] {
@@ -138,6 +206,8 @@ export function fetchCarried(): { loot: string; spirit: string; phase: 'carry' |
   return out
 }
 /** checks: READ only */
-export const fetchState = () => [...runs].map(([id, r]) => ({ id, sp: r.sp, phase: r.phase, loot: r.loot }))
+export const fetchState = () => [...runs].map(([id, r]) => ({ id, sp: r.sp, phase: r.phase, loot: r.loot, style: FETCH[r.sp].style, lift: +r.lift.toFixed(3), D: +r.D.toFixed(2), T: +r.T.toFixed(2) }))
+/** checks: READ only. M141 s3: her current (or last) run's samples, one a frame, claim to toss */
+export const fetchTrace = (id: string): readonly FetchSample[] => runs.get(id)?.trace ?? []
 /** Test hook. */
 export const _resetFetch = () => { endFetch(); runs.clear() }

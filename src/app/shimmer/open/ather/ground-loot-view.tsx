@@ -13,7 +13,7 @@ import { DEWL, DEWL_FIRST, markFirstDewl } from './dewl'
 import { CRYSTAL_ITEM, type CrystalKind } from './prospecting'
 import { CRYSTAL_LOOK } from './crystal-nodes'
 import { claimLoot, inPull, lootNow, payLoot, releaseLoot, type Loot, type LootPlace, type Spot3 } from './ground-loot'
-import { endFetch, fetchCarried, fetchState, tickFetch } from './spirit-fetch'   // M141 s2
+import { endFetch, fetchCarried, fetchState, fetchTrace, tickFetch } from './spirit-fetch'   // M141 s2 (s3: the trace)
 import { spiritLive } from './spirit-follow'
 import { hollowAbout } from '../shared/idle-skits'
 import { fightSlot } from '../shared/spirit-fight'
@@ -46,7 +46,7 @@ export function GroundLoot({ keeper, ground, can, place = 'wilds' }: {
   const drop = () => { for (const id of fly.current.keys()) releaseLoot(id, ME); fly.current.clear() }
   useEffect(() => {
     const g = window as unknown as { __ather?: Record<string, unknown> }
-    g.__ather = { ...(g.__ather ?? {}), loot: () => lootNow(Date.now(), place).map(d => ({ ...d })), fetch: fetchState }   // checks: READ only
+    g.__ather = { ...(g.__ather ?? {}), loot: () => lootNow(Date.now(), place).map(d => ({ ...d })), fetch: fetchState, fetchTrace }   // checks: READ only
     const f = fly.current
     return () => { for (const id of f.keys()) releaseLoot(id, ME); f.clear(); endFetch() }   // M141 s2: a spirit's hold too   // left the Wilds mid-flight: it is on the ground
   }, [place])

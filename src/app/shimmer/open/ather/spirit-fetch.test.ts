@@ -69,7 +69,7 @@ async function main() {
   run(['v'], 10, () => phase('v') === 'toss'); ok(phase('v') === 'toss' && count() === 0, 'no toss, or paid before it landed')
   run(['v'], 2, () => phase('v') === null); ok(count() === 1 && sum() === 0 && L.holderOf(d1.id) === undefined, `the keeper did not get it once (bag ${count()}, ground ${sum()})`)
   run(['v'], 2); ok(count() === 1, 'paid twice'); reload(); ok(sum() === 0, 'a fetched drop came back on a reload')
-  ok(vSeen > 0 && vSeen <= S.FETCH_WALK, `faster than walking: ${vSeen}`)
+  ok(vSeen > 0 && vSeen <= S.FETCH_WALK * Math.max(1, ...Object.values(S.FETCH_BURST) as number[]), `faster than her burst: ${vSeen}`)   // M141 s3: a dash bursts out; the round trip's average = spirit-fetch-moves.test
   // a slow one never goes faster than her share of a walk
   fresh(); S.joinFetch('s', 'turtle'); pos.set('s', { x: 1.7, y: 0, z: 0 }); vSeen = 0
   { const id = Array.from({ length: 200 }, (_, i) => `t${i}`).find(n => S.wantRoll('s', `tree:${n}:9:0`) < F.turtle.chance)!; put(id, { x: -4, y: 0, z: 0 }) }

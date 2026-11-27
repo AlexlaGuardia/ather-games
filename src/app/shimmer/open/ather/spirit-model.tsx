@@ -29,7 +29,7 @@ import { slotOf } from './spirit-seeds'   // M122: a spirit's slot in her plante
 import { fightSlot } from '../shared/spirit-fight'   // M127 s1
 import { joinFormation, leaveFormation, tickFormation, formationSlot, reportFormationPos, inFormation } from '../shared/follow-formation'   // M126 s1
 import { skitSlot } from '../shared/idle-skits'   // M126 s2
-import { fetchSlot, joinFetch, leaveFetch } from './spirit-fetch'   // M141 s2
+import { fetchLift, fetchSlot, joinFetch, leaveFetch } from './spirit-fetch'   // M141 s2 (s3: her style's lift)
 import { bodyRadius } from './obstacles'
 import { gardenFollow, gardenGround } from './garden-follow'   // M126
 import { GROUND_Y } from './plot'
@@ -269,8 +269,8 @@ function SpiritModel({ sp, look, nav, id, avatar, dev, meals, gallery, clip }: {
       if (rig?.fly) { let near = Math.hypot(keeperAt.x - ps.x, keeperAt.z - ps.z)
         for (const o of spiritLive.values()) if (o.id !== id && Date.now() - o.at < 500) near = Math.min(near, Math.hypot(o.x - ps.x, o.z - ps.z))
         step.fly = flyStep(step.fly, rig.fly, travels(step.clip, ps.mode) && step.v > rig.runAt[1], near, dt) }
-      const alt = step.fly.alt
-      v.set(ps.x, baseY + floor + ps.y + keep + alt, ps.z); par.worldToLocal(v); g.current.position.copy(v)
+      const alt = step.fly.alt, fl = id ? fetchLift(id) : 0   // M141 s3: a hop's arc, a swoop's dive, a pluck's dip
+      v.set(ps.x, baseY + floor + ps.y + keep + alt + fl, ps.z); par.worldToLocal(v); g.current.position.copy(v)
       par.getWorldQuaternion(q); e.setFromQuaternion(q)
       // a species with no head bend (none yet; the Vulnyx carries no tilt beat) would tip the whole body instead
       g.current.rotation.set(pitch, bodyYaw - e.y, roll, 'YXZ')
@@ -284,7 +284,7 @@ function SpiritModel({ sp, look, nav, id, avatar, dev, meals, gallery, clip }: {
         step.v += (travel / Math.max(dt, 1e-3) - step.v) * k; step.turn += ((fresh ? 0 : Math.abs(dyaw)) / Math.max(dt, 1e-3) - step.turn) * k
         step.x = ps.x; step.z = ps.z; step.yaw = bodyYaw
         step.clip = rigClip(ps, step.v, step.turn, step.clip, rig.runAt, rig.lie)
-        if (rig.fly) step.clip = flyClip(step.clip, alt)
+        if (rig.fly) step.clip = flyClip(step.clip, alt + Math.max(0, fl))   // M141 s3: lifted by her fetch = on the wing
         bd.step(dt, step.clip, m, look.h, { look: ps.look, sniff: ps.sniff, tilt: ps.tilt })
         if (t - step.sizeAt > 0.5 && step.clip !== 'sit' && step.clip !== 'lie' && bd.state().w.sit + bd.state().w.lie < 0.01 && !(rig.fly && bd.state().w.run > 0.01)) { step.sizeAt = t; const s = bd.size(look.h); step.hWorld = s.height; step.len = s.len }
         if (id) probe().rigs.set(id, { id, sp, h: look.h, yaw: bodyYaw, x: ps.x, y: baseY + floor + ps.y, z: ps.z, mode: ps.mode, v: step.v, alt, body: bd })
@@ -304,7 +304,7 @@ function SpiritModel({ sp, look, nav, id, avatar, dev, meals, gallery, clip }: {
       pr.trots[sp] = tp; if (sp === 'fox') pr.trot = tp
       // M109: the E pick reads it. M173 s2: a hoverer is picked (and shoots) where she hangs, not at her feet
       const hov = rig?.hover
-      if (dev && id) spiritLive.set(id, { id, sp, x: ps.x, y: baseY + floor + ps.y + alt + (hov ? hov.low * look.h : 0), z: ps.z, h: hov ? (hov.top - hov.low) * look.h : look.h, at: Date.now() })
+      if (dev && id) spiritLive.set(id, { id, sp, x: ps.x, y: baseY + floor + ps.y + alt + fl + (hov ? hov.low * look.h : 0), z: ps.z, h: hov ? (hov.top - hov.low) * look.h : look.h, at: Date.now() })
       if (id && inFormation(id)) reportFormationPos(id, ps.x, ps.z)   // M126 s1: the probe's real spacing
       return
     }
