@@ -77,7 +77,7 @@ try {
     await p.screenshot({ path: `${out}/${n}-${c}-tent.png` })
     await p.evaluate((a: any) => { const X = (window as any).__ather; X.tp(a.x, a.z, a.yaw); X.look?.(a.yaw, -0.05) }, { ...d, yaw: look(d, t) })
     let txt = ''
-    for (let i = 0; i < 20 && !txt.includes(`E · the Thistledown Fair · ${word}`); i++) { await sleep(500); txt = await body() }
+    for (let i = 0; i < 60 && !txt.includes(`E · the Thistledown Fair · ${word}`); i++)   // the first tent waits on the world's first load { await sleep(500); txt = await body() }
     ok(txt.includes(`E · the Thistledown Fair · ${word}`), `${n}a. the ${word} tent stands by its path at (${t.x}, ${t.z}); its door says "E · the Thistledown Fair · ${word}"`)
     await p.keyboard.press('KeyE'); await sleep(1500)
     if (c !== 'smash') {
