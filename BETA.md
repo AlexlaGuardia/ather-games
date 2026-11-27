@@ -504,6 +504,7 @@ Steps (one worker each, in order; each keeps `beta-m7-saves` green):
 - Already on the board, Nyx-side: M49 deeds inside shipyards/shops · M80 E = get in the car · M115 suppliers · M108 Kael's ship gate · M128 settlement infections · M58 Nyx ground layers + ribbons (opt-in)
 
 ## Alex's queue (🔒: look / feel / canon; clear it when you have a minute)
+- 🟨 **M202 Aurlotl glyph panels (11-27, LIVE owner ?form=mana, build dbac3642):** the placeholder brow sigil (ring + cross) is gone; per Magii 0d6d577 her gold marks are now infusion-marking PANELS read off her art: oval on the brow, round panel on the chest, a knot on each flank, shoulder arcs, upper-arm ovals, all one flowing knot line (no rune). docs/looks/m202-aurlotl-glyphs-2026-11-27/sheet.jpg. OK?
 - **M202 Athowl line REDO (11-27, LIVE owner ?form=mana|storm|earth|water, 🟨):** heft + layered feather rows on all 4, Mystowl's flank = gold glyph panels, Tideowl perches as low as the others. Less dainty / simple now? docs/looks/m202-athowl-redo-2026-11-27/line-sheet.jpg (old vs new). The base Athowl is untouched: it now reads plainer than her forms, say if she gets the same pass.
 - M145+M212 live: judge arrow + '!' look (docs/looks/m145-m212-2026-11-26/; '!' reads big up close) and pick the next 'firsts' for M145 s2 (pack, map, seeds, tools, waymark, training, party).
 - M205: tag a Supplier zone 'Ather Trading Co.' where it stands in the Nyx builder (panel is live, no zone tagged yet).
