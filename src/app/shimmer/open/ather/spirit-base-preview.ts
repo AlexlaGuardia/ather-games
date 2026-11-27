@@ -11,7 +11,7 @@ import type { RigLook } from './spirit-rig'
 import type { SpiritLook } from './spirit-models'
 
 // Lepara (rabbit): base-forms.md section 8, "nose twitches constantly; ears convey all emotion; nesting/grooming poses". Her rig's
-// walk is small two-footed hops, run long bounds; idle twitches the bill, swivels the ears, waves, thumps; sit grooms; lie = a loaf.
+// walk is small two-footed hops, run long bounds; idle twitches the nose (its own bone since the 11-27 snout rework: Alex wanted a soft manatee-like snout, no bill), swivels the ears, waves, thumps; sit grooms; lie = a loaf.
 const LEPARA_TROT: Partial<TrotDials> = {
   speed: 0.6, dash: 1.8, turnK: 6, hopH: 0, stretch: 0, squash: 0, lean: 0, planted: 1,
   chain: 0.9, checkS: [0.8, 1.8], legMax: 2.6,
@@ -20,10 +20,10 @@ const LEPARA_TROT: Partial<TrotDials> = {
   glance: 0.3, glanceHold: [0.6, 1.2], glanceMax: 0.6,
   happyHops: 3, happyHop: 0.35, happyH: 0.05, happyWig: 0.1,
 }
-/** her glb: 1 unit = 0.48 m standing (ear tips); rig metrics: idle mean top 0.982, nose (bill) to tail 0.777 units */
+/** her glb: 1 unit = 0.48 m standing (ear tips); rig metrics: idle mean top 0.982, nose (snout) to tail 0.765 units */
 export const LEPARA_GLB_TALL = 0.982
 export const LEPARA_RIG: RigLook = {
-  glbLen: 0.777, pivot: { x: 0, z: 0 }, clipV: { walk: 0.6 / 0.48, run: 2.8 / 0.48 }, runAt: [0.9, 0.75], hull: 0.024,
+  glbLen: 0.765, pivot: { x: 0, z: 0 }, clipV: { walk: 0.6 / 0.48, run: 2.8 / 0.48 }, runAt: [0.9, 0.75], hull: 0.024,
   neck: 'b_neck', head: 'b_head', lie: true, cadence: 12, avatar: { z: 0, far: 1.3 },
 }
 const NO_SWAY = { along: 'z', sign: -1, from: 2, to: 3, dir: 'x', amp: 0, ampRun: 0, hz: 1, hzRun: 1, lag: 0 } as const
