@@ -1,0 +1,19 @@
+ok   Ashfeld gun shop door in reach 
+ok   E opens the gun shop 
+ok   the counter sells the holo for the Backbone (and the 2x) ["charred-rifle:lens","backbone:holo","backbone:scope2"]
+ok   buy the holo: Marks drop by its price once 1500 -> 800 (price 700)
+ok   the save owns the holo for the Backbone {"backbone":{"owned":["holo"]}}
+ok   a second buy is refused (Yours), nothing more charged {"disabled":true,"text":"Yours"}
+ok   Fit at the counter: the save fits the holo on the Backbone holo
+ok   the counter now offers Take off 
+ok   drawn: the Backbone wears the holo (key backbone:reddot:sholo) "backbone:reddot:sholo"
+ok   ADS through the holo: 1x optic, full ADS, no scope ring, model up {"optic":"reddot","ring":false,"shown":true}
+ok   the holo's mark projects within 3 px of centre [0,0]
+ok   after a reload: still the holo, still owned {"key":"backbone:reddot:sholo","fit":{"owned":["holo"],"sight":"holo"}}
+ok   the fitting row offers the irons + the bought holo (pressed) [{"id":"irons","on":"false"},{"id":"hood","on":"false"},{"id":"holo","on":"true"}]
+ok   unfit: the Backbone aims down its irons again {"key":"backbone:irons-long:sirons","optic":"irons-long"}
+ok   the holo stays owned after taking it off {"owned":["holo"],"sight":"irons"}
+ok   no page errors 
+PASS: 16 checks, shots in /home/ajin/edesk-out/m178s2-shots
+EDESK_RUN=m178s2-sight-check-sprites-1127-074039-718326
+EDESK_EXIT=0
