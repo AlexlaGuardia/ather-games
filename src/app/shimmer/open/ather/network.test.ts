@@ -1,7 +1,7 @@
 // npx tsx src/app/shimmer/open/ather/network.test.ts — the season's network, against the baked file and real tiles
 import { readFileSync } from 'node:fs'
 import { parseWilds, BIOME } from './wilds'
-import { clearing, settlementAt, nearFair, fairDoor, pathDistance, pathsIn, SETTLEMENT_GATHERS, type Network } from './network'
+import { clearing, settlementAt, nearFair, fairDoor, pathDistance, pathsIn, tentsOf, SETTLEMENT_GATHERS, SETTLEMENT_CLEAR, FAIR_CLEAR, type Network } from './network'
 import { OPEN_ITEMS } from '../shared/inventory'
 let pass = 0, fail = 0
 const ok = (c: boolean, m: string) => { if (c) pass++; else { fail++; console.log('  ✗', m) } }
@@ -27,7 +27,12 @@ ok(after.trees.every(t => { const b = byId.get(t.id); return !!b && b.x === t.x 
 const cById = new Map(before.crystals.map(c => [c.id, c])), afterIds = new Set(after.crystals.map(c => c.id))
 ok(after.crystals.every(c => { const b = cById.get(c.id); return !!b && b.x === c.x && b.z === c.z }), 'clearing: a kept crystal moved or changed its id')
 const gone = before.crystals.filter(c => !afterIds.has(c.id))
-ok(gone.every(c => /:o-?\d+_-?\d+$/.test(c.id) && pathDistance(net, c.x + 0, c.z + 1000) < 30), `clearing: only outcrop crystals beside a path may go (${gone.length} gone: ${gone.map(c => c.id).slice(0, 3).join(' ')})`)
+// Since f7977116 the Fair's tent plan pitches tents too (FAIR_CLEAR ground, one on w0_1 at 172,1154), and a gone outcrop takes
+// the stone chain that walked out of it (M185 s3, ids 'o<i>_<j>s<k>'), so: an outcrop crystal (or its chain stone) beside a path,
+// a settlement or a tent may go; nothing else.
+const nearClear = (x: number, z: number) => pathDistance(net, x, z) < 30
+  || net.settlements.some(s => Math.hypot(s.x - x, s.z - z) < SETTLEMENT_CLEAR + 30) || tentsOf(net).some(t => Math.hypot(t.x - x, t.z - z) < FAIR_CLEAR + 30)
+ok(gone.every(c => /:o-?\d+_-?\d+(s\d+)?$/.test(c.id) && nearClear(c.x + 0, c.z + 1000)), `clearing: only outcrop crystals (and their stone chains) beside a path, settlement or tent may go (${gone.length} gone: ${gone.filter(c => !(/:o-?\d+_-?\d+(s\d+)?$/.test(c.id) && nearClear(c.x, c.z + 1000))).map(c => c.id).slice(0, 3).join(' ')})`)
 const off = { x: 0, z: 1000 }
 ok(after.trees.every(t => pathDistance(net, t.x + off.x, t.z + off.z) > 2.5), 'clearing: a tree still stands on the path')
 // paths cross dry ground (sampled on the loaded tile)
