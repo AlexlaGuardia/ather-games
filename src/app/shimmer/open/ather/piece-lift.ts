@@ -5,6 +5,7 @@
 // PURE: no React, no storage.
 import { pickUpPiece, type Works } from './rooms'
 import { FURNITURE } from './furniture'
+import { stowPiece } from './plot-store'
 import { carryPot, type Pots } from './spirit-seeds'
 import { carryBox, PLANTER_BOX, type Boxes } from './planter-box'
 import type { Inv } from '../shared/inventory'
@@ -22,6 +23,9 @@ export function liftPiece(works: Works, id: string, inv: Inv, pots: Pots, boxes:
     if (!c) return 'spirit'
     next = c
   }
+  // M144: a building piece (a slab, a panel: furniture.ts `build`) goes into the garden's store, never the bag, so a full bag
+  // never refuses it; Break down on the catalog gives the piece itself back
+  if (FURNITURE[p.item]?.build) return { works: { ...works, pieces: works.pieces.filter(x => x.id !== id), stored: stowPiece(works.stored, p.item) as Works['stored'] }, inv, pots: next, boxes }
   const r = pickUpPiece(works, id, inv)
   return r ? { works: r.works, inv: r.inv, pots: next, boxes: p.item === PLANTER_BOX ? carryBox(boxes, id) : boxes } : 'full'
 }

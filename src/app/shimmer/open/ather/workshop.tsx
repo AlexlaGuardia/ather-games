@@ -21,7 +21,7 @@ import { GROUND_Y, squareAt, sqId, loadGarden, plotHeightAt, GREG } from './plot
 import { forestryLevel } from './forestry'
 import { connectedPieces, extractBlueprint, fitsPad } from './plot-blueprint'
 import { LOT_W, LOT_D, GLADE_LOTS } from './moonwell-glade'
-import { snapCorner, runKeys, canLay, planRun, raze, wallBoxes, edgeRect, findRooms, roofMesh, pieceAt, roomAt, toggleDoor, toggleWindow, paintWall, paintConnected, connectedRooms, setFloor, floorOf, wallColour, paintable, isWood, isColour, WALL_MATS, WALL_MAT_ORDER, FLOOR_PATS, FLOOR_PAT_ORDER, SWATCHES, ROOF_STYLES, LOW_WALL, DOOR_H, SILL, WIN_TOP, WALL_T, RAIL_H, type Corner, type WallMat, type Walls, type RoofStyle, type PlotRoom, type Floors, type FloorPat } from './plot-walls'
+import { snapCorner, runKeys, canLay, planRun, wallBoxes, edgeRect, findRooms, roofMesh, pieceAt, roomAt, toggleDoor, toggleWindow, paintWall, paintConnected, connectedRooms, setFloor, floorOf, wallColour, paintable, isWood, isColour, WALL_MATS, WALL_MAT_ORDER, FLOOR_PATS, FLOOR_PAT_ORDER, SWATCHES, ROOF_STYLES, LOW_WALL, DOOR_H, SILL, WIN_TOP, WALL_T, RAIL_H, type Corner, type WallMat, type Walls, type RoofStyle, type PlotRoom, type Floors, type FloorPat } from './plot-walls'
 import { MoglinModel, furOf, type MoglinGarb } from '../shared/moglin-model'
 import {
   ROOMS, ROOM_ORDER, TABLE, canPlace, place, raised, progress, wallsOf, benchOf, footprint, loadWorks, saveWorks,
@@ -34,14 +34,16 @@ import {
   MAX_CHESTS, CHEST_SLOTS, bankCap, bankUsed, bankView, BANK_TABS, deposit, depositBag, withdraw, loadBank, saveBank, freshBank,
   bankCount, type Bank, type BankTab,
 } from './garden-bank'
-import { reconcile, paneFor, billOfAll, buildAll, PER_COL, STONE_BRICK } from './plot-bom'
+import { reconcile, paneFor, PER_COL, STONE_BRICK } from './plot-bom'
+import { stowWalls, stowCol, stowStair, stowDecks, breakDown, storedName, storedCount, storedWhere } from './plot-store'   // M144: taken-down pieces
+import { billWithStore, buildWithStore } from './plot-store-bill'
 import { getPlanLevel, setPlanLevel, usePlanLevel } from './plot-level'
 import { shaftKeys, shaftHoles, liveLift, cellMid, shaftBlockers, SHAFT_WHY, isLiftPiece, liftsOf, shaftTop } from './lift'
 import { LiftMesh, LiftInput } from './lift-view'
 import { levelOf, withLevel, levelCount, levelBase, canStack, floating, upperBoxes, stairRails, MAX_LEVELS, SLAB_T, type LiftLookup } from './plot-floors'
 import { floorAt, liftOf, setHouseFound, houseFoundDelta, plinthBoxes, doorSteps, roomLift, FOUND_OPTS, FOUND_NAME, type FoundH, type Lift } from './plot-found'
 import { stairBoxes, landingRails, stairCellSet, toggleStair, dirOfYaw, type Stairs, type Turn } from './plot-stairs'
-import { deckRect, planDecks, eraseDecks, deckBoxes, supported as deckSupported, builtDeckCells, DECK_T, type Decks } from './plot-decks'
+import { deckRect, planDecks, deckBoxes, supported as deckSupported, builtDeckCells, DECK_T, type Decks } from './plot-decks'
 import { colBoxes, toggleCol, colAt, paintColumn, colColour, colStandsOn, parseCol, COL_T, type Cols, trimmedRect, COL_CAP } from './plot-cols'
 import { FURNITURE, REFINE, STONE_REFINE, BENCH_JOBS, KEEPSTONES, isPiece, ALC_LIVE, WOOD_COLOR, type Job } from './furniture'
 import { buildCatalog, buildBoxes, opens, pieceSpan, type PieceBox } from './build-catalog'   // M169
@@ -80,6 +82,8 @@ import { play as sfx, statusOf as sfxStatus } from '../shared/sfx'
 import { BREW } from './alchemy'
 import { RINSTICKS, makeRinstick, loadTools, saveTools, rinstickName, easeOf } from './rinsticks'
 import { FOCUSES, BENCH, makeFocus, reachOf, focusName, type FocusSkill } from './focuses'
+import { EDGE, EDGE_METALS, EDGE_TOOLS, FIT_METAL, EDGE_TEXT, canTakeEdge, edgeOn, edgeLeft, fitEdge, warnAt, type EdgeFamily } from './edges'   // M134 s1
+import { METAL_RING } from '../../ui/tool-stage'
 import { TOOL_DEFS } from '../../engine/tools'
 import { isBuilding, useBuildMode, enterBuild, exitBuild, buildPoint, onBuildTap, setBuildTool, buildTool, useBuildTool, onBuildDraw, buildYaw, buildFocus, setPlanLift, setPlanInsets, viewTo } from './build-mode'
 import { cancelPlan, hasDraft, planSpot, draftKeys, builtUnderPlan } from './plan-draft'   // M138
@@ -187,6 +191,8 @@ const setPlanEdit = (v: boolean) => { if (v !== planEdit) { planEdit = v; wdEmit
 const usePlanEdit = () => useSyncExternalStore(f => { wdSubs.add(f); return () => { wdSubs.delete(f) } }, () => planEdit, () => false)
 const BUILT_FLOOR = 'That floor is built: build or cancel the plan across it first.'
 const EDIT_ONLY = 'Editing the plan: that one is built.'
+/** M144: a built piece taken down goes into the catalog's store (placeholder words, @lark) */
+const STORED_SAY = 'Stored in the catalog: a plan uses it first.'
 function wallVerdict(owned: ReadonlySet<string>, a: Corner, b: Corner, erase: boolean) {
   const w = currentWorks(), keys = runKeys(a, b), lv = getPlanLevel(), cur = levelOf(w, lv).walls
   if (erase) return { keys, ok: planEdit ? draftKeys(cur, keys).length > 0 : keys.some(k => !!cur[k]), why: 'No wall there to take down.' }
@@ -301,7 +307,7 @@ function columnHandler(owned: () => ReadonlySet<string>) {
       if (!r.ok) { hudSay(r.why, 'info'); return }
       const next = withLevel(w, lv, { ...L, cols: r.cols })
       if (!isNew && floating(next).length) { hudSay('Take down what stands on it first.', 'info'); return }
-      if (r.refund) { const g = give(getInv(), r.refund.id, r.refund.n); if (g.left) { hudSay('Your bag is full: no room for what the column gives back.', 'info'); return } setInv(g.inv) }
+      if (r.refund) { setWorks({ ...next, stored: stowCol(w.stored, L.cols![key]) }); hudSay(STORED_SAY, 'info'); return }   // M144: into the catalog's store, never the bag
       setWorks(next); hudSay(r.said, 'info')
     },
     cancel() { at = null },
@@ -348,10 +354,10 @@ function deckHandler(owned: () => ReadonlySet<string>) {
       if (erase) {
         const hit = planEdit ? cells.filter(([i, j]) => L.decks?.[`${i},${j}`]?.draft) : cells
         if (planEdit && !hit.length) { hudSay(EDIT_ONLY, 'info'); return }
-        const r = eraseDecks(L.decks, hit, getInv()); if (!r.up) return
+        const r = stowDecks(L.decks, hit, w.stored); if (!r.up) return   // M144: a built cell goes into the catalog's store
         const next = withLevel(w, lv, { ...L, decks: r.decks })
         if (floating(next).length) { hudSay('Take down what stands on that floor first.', 'info'); return }
-        setWorks(next); setInv(r.inv); hudSay(planEdit ? `${r.up} m² taken off the plan.` : `${r.up} m² of floor up.${r.full ? ' Your bag is full: the rest stays down.' : ''}`, 'item'); return
+        setWorks({ ...next, stored: r.store }); hudSay(planEdit ? `${r.up} m² taken off the plan.` : `${r.up} m² of floor up. ${STORED_SAY}`, 'item'); return
       }
       if (lv + 1 > MAX_LEVELS) return
       const r = planDecks(L.decks, cells, paintPat, paintCol, deckWhy(w, lv, owned()))
@@ -422,8 +428,8 @@ function stairsHandler(owned: () => ReadonlySet<string>) {
       const r = toggleStair(L.stairs, L.walls, i, j, dirOfYaw(buildYaw()), wallMat, cellOk, stairTurn)
       if (!r.ok) { hudSay(r.why, 'info'); return }
       if (planEdit && r.refund) { hudSay(EDIT_ONLY, 'info'); return }
-      if (r.refund) { const g = give(getInv(), r.refund.id, r.refund.n); if (g.left) { hudSay('Your bag is full: no room for what the stairs give back.', 'info'); return } setInv(g.inv) }
-      setWorks(withLevel(w, lv, { ...L, stairs: r.stairs })); hudSay(r.said, 'info')
+      const gone = r.refund ? Object.entries(L.stairs ?? {}).find(([k]) => !r.stairs[k])?.[1] : undefined   // M144: into the catalog's store, never the bag
+      setWorks({ ...withLevel(w, lv, { ...L, stairs: r.stairs }), ...(gone ? { stored: stowStair(w.stored, gone) } : {}) }); hudSay(gone ? STORED_SAY : r.said, 'info')
     },
     cancel() { at = null },
   }
@@ -448,11 +454,11 @@ function wallDrawHandler(owned: () => ReadonlySet<string>, erase: boolean) {
       if (erase) {
         const hit = planEdit ? draftKeys(L.walls, keys) : keys   // M138: an edit takes out the plan's own only
         if (planEdit && !hit.length && keys.some(k => L.walls[k])) { hudSay(EDIT_ONLY, 'info'); return }
-        const r = raze(L.walls, getInv(), hit, w.wallCarry); if (!r.down) return
+        const r = stowWalls(L.walls, hit, w.stored); if (!r.down) return   // M144: built pieces go into the catalog's store (Break down = the old refund)
         if (floating(withLevel(w, lv, { ...L, walls: r.walls })).length) { hudSay('Take the floor above down first: it stands on that wall.', 'info'); return }   // M47: nothing floats
-        const rc = reconcile(r.walls, L.paid, r.inv, L.floors, lv === 0)   // a built room that no longer closes gives its floor (and roof) back too
-        setWorks({ ...withLevel(w, lv, { ...L, walls: r.walls, paid: rc.paid }), wallCarry: r.carry }); setInv(rc.inv)   // 11-22: the leftover fraction rides to the next take-down
-        hudSay(planEdit ? `${r.down} m taken off the plan.` : `${r.down} m of wall down, what was built comes back to your bag.${r.full ? ' Your bag is full: the rest stays up.' : ''}`, 'item')
+        const rc = reconcile(r.walls, L.paid, getInv(), L.floors, lv === 0)   // a built room that no longer closes gives its floor (and roof) back too (M144: not a piece, so still the bag)
+        setWorks({ ...withLevel(w, lv, { ...L, walls: r.walls, paid: rc.paid }), stored: r.store }); setInv(rc.inv)
+        hudSay(planEdit ? `${r.down} m taken off the plan.` : `${r.down} m of wall down. ${STORED_SAY}`, 'item')
         return
       }
       const v = layOn(w, lv, keys, owned())
@@ -730,7 +736,14 @@ function WallGhost() {
 // a material is a LOOK, never power.
 const WOOD_GATE: Record<WallMat, number> = { goldwood: 1, shimmeroak: 4, dawnwood: 10, brick: 0, stucco: 0 }   // forestry.ts TREE_TIER gates
 function Catalog({ onPick }: { onPick: () => void }) {
-  const inv = useInv(), bank = useBank(), lvl = forestryLevel()
+  const inv = useInv(), bank = useBank(), lvl = forestryLevel(), stored = useWorks().stored
+  const sd = (sub: string, n: number) => (n ? `${n} stored · ${sub}` : sub)   // M144: 'N stored' on the card (placeholder words, @lark)
+  const breakDownKind = (k: string) => {   // M144: Break down = exactly the pre-M144 take-down refund, into the bag
+    const w = currentWorks(), r = breakDown(w.stored, k, getInv(), w.wallCarry)
+    if (!r.done) { hudSay('Your bag is full: the pieces stay stored.', 'info'); return }
+    setInv(r.inv); setWorks({ ...w, stored: r.store, wallCarry: r.carry })
+    hudSay(r.full ? `${r.done} broken down. Your bag is full: the rest stays stored.` : `${storedName(k)}: broken down into your bag.`, 'item')
+  }
   const pickPiece = (item: string) => { setBuildTool('look'); setPlanLevel(0); setPlacing({ kind: 'piece', item, q: 0, plan: true }); onPick() }   // M143
   const pick = (t: 'walls' | 'paint' | 'door' | 'window', m?: WallMat, fp?: FloorPat, rail = false) => { setPlacing(null); if (m) { wallMat = m } if (t === 'walls') wallRail = rail; if (fp) { paintPat = fp; paintCol = FLOOR_PATS[fp].color } wdEmit(); setBuildTool(t); onPick() }
   const card = (key: string, label: string, sub: string, lit: boolean, onClick: () => void, swatch?: string, icon?: React.ReactNode) => (
@@ -743,8 +756,16 @@ function Catalog({ onPick }: { onPick: () => void }) {
       </span>
     </button>
   )
+  const kinds = Object.entries(stored ?? {}).filter(([, e]) => e.n > 0)
   return (
     <div data-catalog style={{ display: 'grid', gap: 8, padding: '10px', borderRadius: 14, background: 'rgba(255,250,235,.9)', boxShadow: '0 2px 10px rgba(0,0,0,.25)', maxHeight: '52vh', overflowY: 'auto' }}>
+      {kinds.length > 0 && <div data-cat-group="stored" style={{ display: 'grid', gap: 5 }}>
+        <div style={{ font: '700 11px system-ui', letterSpacing: '.12em', textTransform: 'uppercase', color: H.ink, opacity: 0.7 }}>Stored · taken down, a plan uses them first</div>
+        {kinds.map(([k, e]) => <div key={k} data-stored={k} data-n={e.n} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 8px', borderRadius: 10, background: 'rgba(255,250,235,.96)', boxShadow: `inset 0 0 0 1px ${H.rule}` }}>
+          <span style={{ flex: 1, minWidth: 0, font: '700 12px system-ui', color: H.ink }}>{storedName(k)} <span style={{ fontWeight: 400, opacity: 0.75 }}>· {e.n} stored</span></span>
+          <span data-act="break-down" data-key={k}><HearthButton small onClick={() => breakDownKind(k)}>Break down</HearthButton></span>
+        </div>)}
+      </div>}
       {(['walls', 'paint'] as const).map(t => (
         <div key={t} style={{ display: 'grid', gap: 5 }}>
           <div style={{ font: '700 11px system-ui', letterSpacing: '.12em', textTransform: 'uppercase', color: H.ink, opacity: 0.7 }}>{t === 'walls' ? 'Walls · drawn as a plan, built from the list' : 'Floors · a pattern, painted a whole room'}</div>
@@ -752,22 +773,22 @@ function Catalog({ onPick }: { onPick: () => void }) {
             {t === 'walls' ? WALL_MAT_ORDER.map(m => {
               const have = countOf(inv, WALL_MATS[m].item), open = lvl >= WOOD_GATE[m] || have > 0
               const sub = !isWood(m) ? `${have} ${itemDef(WALL_MATS[m].item).name}${paintable(m) ? ' · any colour' : ' · set colour'}` : open ? `${have} planks · set colour` : `Forestry ${WOOD_GATE[m]} · saw at your Carpentry`
-              return card(`walls:${m}`, WALL_MATS[m].name, sub, true, () => pick('walls', m), WALL_MATS[m].color)   // a plan needs no materials to draw: the list is paid at Build
-            }) : FLOOR_PAT_ORDER.map(f => card(`paint:${f}`, FLOOR_PATS[f].name, `${countOf(inv, FLOOR_PATS[f].item)} ${itemDef(FLOOR_PATS[f].item).name} · any colour`, true, () => pick('paint', undefined, f), FLOOR_PATS[f].color))}
+              return card(`walls:${m}`, WALL_MATS[m].name, sd(sub, storedCount(stored, `wall:${m}`)), true, () => pick('walls', m), WALL_MATS[m].color)   // a plan needs no materials to draw: the list is paid at Build
+            }) : FLOOR_PAT_ORDER.map(f => card(`paint:${f}`, FLOOR_PATS[f].name, sd(`${countOf(inv, FLOOR_PATS[f].item)} ${itemDef(FLOOR_PATS[f].item).name} · any colour`, storedCount(stored, `deck:${f}`)), true, () => pick('paint', undefined, f), FLOOR_PATS[f].color))}
           </div>
         </div>
       ))}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 6 }}>
-        {card('door', 'Door', 'Tap a wall · 2 m · keeps its wood', true, () => pick('door'))}
-        {card('window', 'Window', 'Tap a wall · a crystal pane (on the list)', true, () => pick('window'))}
-        {card('railing', 'Railing', 'Drag like a wall · 1 m high · a third the cost', true, () => pick('walls', undefined, undefined, true))}
+        {card('door', 'Door', sd('Tap a wall · 2 m · keeps its wood', storedWhere(stored, k => k.startsWith('door:'))), true, () => pick('door'))}
+        {card('window', 'Window', sd('Tap a wall · a crystal pane (on the list)', storedWhere(stored, k => k.startsWith('window:'))), true, () => pick('window'))}
+        {card('railing', 'Railing', sd('Drag like a wall · 1 m high · a third the cost', storedWhere(stored, k => k.startsWith('rail:'))), true, () => pick('walls', undefined, undefined, true))}
       </div>
       <div data-cat-group="pieces" style={{ display: 'grid', gap: 5 }}>
         <div style={{ font: '700 11px system-ui', letterSpacing: '.12em', textTransform: 'uppercase', color: H.ink, opacity: 0.7 }}>Slabs and panels · set anywhere, built from the list</div>
         {buildCatalog().map(g => <div key={g.sub} data-build-sub={g.sub} style={{ display: 'grid', gap: 4 }}>
           <div style={{ font: '700 10.5px system-ui', color: H.ink, opacity: 0.6 }}>{g.sub}</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 6 }}>
-            {g.ids.map(id => card(`piece:${id}`, FURNITURE[id].name, FURNITURE[id].recipe.map(c => `${haveFor(inv, bank, c.id)} / ${c.n} ${itemDef(c.id).name}`).join(' · '), true, () => pickPiece(id), undefined, <BuildIcon id={id} size={32} />))}
+            {g.ids.map(id => card(`piece:${id}`, FURNITURE[id].name, sd(FURNITURE[id].recipe.map(c => `${haveFor(inv, bank, c.id)} / ${c.n} ${itemDef(c.id).name}`).join(' · '), storedCount(stored, `piece:${id}`)), true, () => pickPiece(id), undefined, <BuildIcon id={id} size={32} />))}
           </div>
         </div>)}
       </div>
@@ -1643,7 +1664,7 @@ function PlanBom({ slim = false }: { slim?: boolean }) {
   const w = useWorks(), inv = useInv(), bank = useBank()
   const [lift, setLift] = useState(92)
   useEffect(() => { if (slim) return; const f = () => setLift(healthClear()); f(); const t = setInterval(f, 500); return () => clearInterval(t) }, [slim])
-  const bom = useMemo(() => billOfAll(w, inv, bank), [w, inv, bank])
+  const bom = useMemo(() => billWithStore(w, inv, bank), [w, inv, bank])   // M144: stored pieces first
   // M138: Cancel plan / Edit, on both cards. Only for a plan's own pieces (a bill with none left is a room that stands unpaid)
   const planned = useMemo(() => hasDraft(w), [w]), edit = usePlanEdit(), [ask, setAsk] = useState(false)
   useEffect(() => { if (!planned) { setAsk(false); setPlanEdit(false) } }, [planned])
@@ -1666,7 +1687,7 @@ function PlanBom({ slim = false }: { slim?: boolean }) {
     <span data-act="cancel-plan-yes"><HearthButton small primary onClick={cancel}>Throw it away</HearthButton></span>
   </>
   const build = () => {
-    const c = currentWorks(), r = buildAll(c, getInv(), getB())   // M47: every level's draft
+    const c = currentWorks(), r = buildWithStore(c, getInv(), getB())   // M47: every level's draft; M144: the store's pieces first
     if (!r.ok) { hudSay(r.why, 'info'); return }
     setInv(r.inv); if (r.bank) setBank(r.bank); setWorks(r.works)
     hudSay('Built. The house stands.', 'item')
@@ -1680,7 +1701,8 @@ function PlanBom({ slim = false }: { slim?: boolean }) {
         {ask && planned ? askRow : <>
         <div style={{ flex: 1, minWidth: 0, display: 'grid', gap: 1 }}>
           <span style={{ font: '700 10px system-ui', letterSpacing: '.1em', textTransform: 'uppercase', opacity: 0.65, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Plan · {planHead(bom, false)}{bom.rooms ? ` · ${bom.rooms} room${bom.rooms > 1 ? 's' : ''}` : ''}</span>
-          <span style={{ fontSize: 12, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: short ? '#b5452c' : H.ink }}>{short ? `${Math.min(short.have, short.n)} / ${short.n} ${short.name}` : `Everything is here (${bom.lines.map(l => `${l.n} ${l.name}`).join(', ')})`}</span>
+          <span style={{ fontSize: 12, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: short ? '#b5452c' : H.ink }}>{short ? `${Math.min(short.have, short.n)} / ${short.n} ${short.name}` : !bom.lines.length ? `${bom.stored} from the store · nothing to pay` : `Everything is here (${bom.lines.map(l => `${l.n} ${l.name}`).join(', ')})${bom.stored ? ` · ${bom.stored} from the store` : ''}`}</span>
+          <span data-bom-stored={bom.stored} hidden />
           {bom.lines.map(l => <span key={l.id} data-bom-line={l.id} data-need={l.n} data-have={l.have} data-short={l.short} hidden />)}
         </div>
         <span style={{ flex: '0 0 auto', display: 'inline-flex', gap: 4 }}>{planActs}</span>
@@ -1699,6 +1721,7 @@ function PlanBom({ slim = false }: { slim?: boolean }) {
           <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 700, minWidth: 54 }}>{Math.min(l.have, l.n)} / {l.n}</span><span>{l.name}</span>
         </div>
       ))}
+      {bom.stored > 0 && <div data-bom-stored={bom.stored} style={{ fontSize: 11.5, color: H.inkSoft }}>{bom.stored} piece{bom.stored === 1 ? '' : 's'} from the store (nothing to pay for {bom.stored === 1 ? 'it' : 'them'})</div>}
       {bom.set.length > 0 && <div data-bom-set style={{ fontSize: 11.5, color: H.inkSoft }}>{bom.set.map(c => `${c.n} x ${FURNITURE[c.id].name}`).join(' · ')}</div>}
       <div style={{ fontSize: 11.5, color: H.inkSoft }}>{edit ? 'Editing: Erase takes planned pieces out, the other tools add.' : bom.ok ? 'Everything is here.' : 'Planks: Carpentry. Bricks and panes: Stonery.'}</div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1851,6 +1874,7 @@ function BenchPanel({ room, onClose }: { room: Room; onClose: () => void }) {
       case 'cauldron': return cl(BREW, 'Hold a potion and click to drink.')
       case 'blades': case 'spikes': return focusSkill ? <FocusList r={r} inv={inv} skill={focusSkill} /> : null
       case 'rinsticks': return <RinstickList r={r} inv={inv} />
+      case 'edges': return <EdgeList inv={inv} />   // M134 s1
       case 'keeper': return <MoglinDuty r={r} />
       case 'filet': {   // M206: prepare a caught rinn (cooking.ts FILET); instant, like bait
         const fish = Object.keys(FILET).filter(id => benchCount(r, inv, id) > 0)
@@ -2138,6 +2162,55 @@ function FocusList({ r, inv, skill }: { r: Room; inv: ReturnType<typeof useInv>;
           )
         })}
       </div>
+    </div>
+  )
+}
+
+/** THE SMITHY'S EDGES (BETA M134 s1, edges.ts): fit a metal edge / tip on the Starwillow Pruner / Spike. One kept edge per metal
+ *  (its own wear); a new one takes FIT_METAL from the bag. Words = plain labels for @lark. */
+function EdgeList({ inv }: { inv: ReturnType<typeof useInv> }) {
+  const [tools, setTools] = useState(() => loadTools())
+  useEffect(() => { const on = () => setTools(loadTools()); addEventListener('open:tools', on); return () => removeEventListener('open:tools', on) }, [])
+  return (
+    <div data-edges>
+      <div style={lab}>Edges</div>
+      <div style={{ fontSize: 12.5, color: H.inkSoft, margin: '4px 0 8px' }}>
+        An edge of any metal reaches one tier more. Venium works faster; Eurleen lasts longer and takes a little less mana. Only the edge wears; at 0 it breaks away.
+      </div>
+      {(Object.keys(EDGE_TOOLS) as EdgeFamily[]).map(fam => {
+        const cur = tools[fam], on = edgeOn(cur), top = TOOL_DEFS[EDGE_TOOLS[fam]].name
+        return (
+          <div key={fam} data-edge-family={fam} data-edge-on={on ?? ''} style={{ margin: '0 0 10px' }}>
+            <div style={{ fontSize: 13.5, color: H.ink }}>
+              {canTakeEdge(cur) ? top : `Needs a ${top}`}
+              {on && <span data-edge-left={edgeLeft(cur, on)} style={{ color: METAL_RING[on], fontWeight: 700 }}> · {EDGE[on].name} edge {edgeLeft(cur, on)} / {EDGE[on].uses}{edgeLeft(cur, on) <= warnAt(on) ? ' · wearing thin' : ''}</span>}
+              {canTakeEdge(cur) && !on && <span style={{ color: H.inkSoft, fontSize: 12 }}> · no edge</span>}
+            </div>
+            {canTakeEdge(cur) && (
+              <div style={{ display: 'grid', gap: 6, marginTop: 4 }}>
+                {EDGE_METALS.map(m => {
+                  const kept = edgeLeft(cur, m), have = inv ? countOf(inv, m) : 0, can = on !== m && (kept > 0 || have >= FIT_METAL)
+                  return (
+                    <div key={m} data-edge-metal={m} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span style={{ width: 10, height: 10, borderRadius: 5, border: `2px solid ${METAL_RING[m]}`, flex: 'none' }} />
+                      <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: H.ink }}>
+                        {EDGE[m].name} <span style={{ color: H.inkSoft, fontSize: 12 }}>· {kept > 0 ? `kept, ${kept} / ${EDGE[m].uses} left` : `${FIT_METAL} ${EDGE[m].name} (${have}) · ${EDGE[m].uses} uses`} · XP ×{EDGE[m].xp}</span>
+                      </span>
+                      <HearthButton small disabled={!can} onClick={() => {
+                        const f = fitEdge(loadTools()[fam], m, getInv())
+                        if (!f.ok) { hudSay(f.why, 'info'); return }
+                        const next = { ...loadTools(), [fam]: f.tool }
+                        if (f.spent) setInv(f.inv)
+                        saveTools(next, true); setTools(next); hudSay(EDGE_TEXT.fitted(m), 'item')
+                      }}>{on === m ? 'On' : 'Fit'}</HearthButton>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }
