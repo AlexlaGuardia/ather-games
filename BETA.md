@@ -287,6 +287,7 @@ Steps (one worker each, in order; each keeps `beta-m7-saves` green):
 - **Rules:** only rows on this list. No new systems, no lore, nothing public. Canon gate + tests before every build.
 
 ## Inbox (Alex's brain dump: hub writes here at once, dated, his words; triaged into rows / queue / CANON_GAPS / killed)
+- 11-26 20:5x Alex (Nyx 'getting left behind', bounce or stick?): picked 'Stay Ather for now' -> no Nyx lane; Nyx rows wait until the Ather first hour feels done
 - 11-26 22:5x Alex: 'no the athowl line need a redo so they dont look so dainty.. or simple.. im not sure what the word is' -> Athowl redo queued (heft + detail); Hovari agent warned
 - 11-26 21:4x Alex (cluster 4 seats vs chord 3): picked 'Chord holds 4' -> M217 + canon amend to Magii
 - 11-26 21:3x Alex: 'the chin taper is set to 0 but on the last set of eyes and etc it came with its own head chin taper didnt count and gives it that double chin look and then id like to try and make sure everything that gets added to the bench works in sync with the rest of the options' -> M216 s1 bench sync
