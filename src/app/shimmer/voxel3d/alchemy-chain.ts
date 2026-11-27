@@ -159,6 +159,24 @@ export const craftWordOf = (def: PotionDef): CraftWord | null => {
 }
 
 /**
+ * The craft CLASS that shapes a potion's road, its job and its pot time, keyed by the potion's ID.
+ * ⚠ It is NOT read from the display name: M234 s1 (1a24f662) renamed Mana Draught to Mana Elixir and
+ * Starlight Tincture to Starlight Tonic as "display names only", and because the road used to be
+ * parsed from the name's last word the first potion silently grew a grinder and a still. A display
+ * rename must never move a road, so the class is pinned here, at each potion's pre-rename word.
+ * A new potion gets a row here (alchemy-chain.test / alchemy-road-stability.test make a miss loud).
+ */
+export const ROAD_CLASS: Readonly<Record<string, CraftWord>> = {
+  mana_draught: 'draught', shard_tonic: 'tonic', shimmer_salve: 'salve', glowfin_brew: 'tonic',
+  crystal_elixir: 'elixir', mana_infusion: 'infusion', storm_infusion: 'infusion', earth_infusion: 'infusion',
+  potent_earth_infusion: 'infusion', water_infusion: 'infusion', starlight_tincture: 'tincture',
+  deep_essence: 'essence', ather_infusion: 'tonic', dawn_cordial: 'cordial', harvest_brew: 'brew',
+  bed_brew: 'brew', moonvine_tonic: 'tonic', dreamroot_elixir: 'elixir',
+}
+/** The class a potion's road / job / pot time follow: its pinned row, else (a new potion) its name's word. */
+export const roadClassOf = (def: PotionDef): CraftWord | null => ROAD_CLASS[def.id] ?? craftWordOf(def)
+
+/**
  * The default road for a craft-word — the shape the word suggests, before the cauldron:
  *   draught   nothing              the simplest potion: cauldron, pour
  *   brew      mortar               boiled in quantity — coarse-ground, then the pot
@@ -190,7 +208,7 @@ export const ROADS: Readonly<Record<string, readonly RoadStep[]>> = {
 /** The steps before the cauldron, for one potion. */
 export function roadOf(potionId: string): readonly RoadStep[] {
   const def = POTION_DEFS[potionId]
-  const word = def ? craftWordOf(def) : null
+  const word = def ? roadClassOf(def) : null
   if (!def || !word) return []
   return ROADS[potionId] ?? DEFAULT_ROAD[word]
 }
@@ -214,7 +232,7 @@ export const JOB_LINE: Readonly<Record<PotionJob, string>> = {
 }
 export function jobOf(potionId: string): PotionJob | null {
   const def = POTION_DEFS[potionId]
-  const word = def ? craftWordOf(def) : null
+  const word = def ? roadClassOf(def) : null
   return word ? JOB_OF_WORD[word] : null
 }
 
@@ -242,7 +260,7 @@ export interface AlchemyRecipe {
 function buildRecipes(): AlchemyRecipe[] {
   const rows: AlchemyRecipe[] = []
   for (const def of Object.values(POTION_DEFS)) {
-    const word = craftWordOf(def)
+    const word = roadClassOf(def)
     if (!word) continue                      // the test makes this loud; the runtime stays honest
     const road = roadOf(def.id)
     const raw = def.recipe.map(r => ({ itemId: r.itemId, count: r.count }))

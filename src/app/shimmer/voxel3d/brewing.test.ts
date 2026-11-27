@@ -142,8 +142,9 @@ ok(startBrewing('not_a_potion', host, 0) === null, 'an unknown potion starts not
   ok(roadLine(r1) === '⟳ still → bowl → pour', `running: ${roadLine(r1)}`)
   ok(roadLine(s1) === '✓ still → bowl → pour', `one walked: ${roadLine(s1)}`)
   ok(roadLine(lit) === '✓ still → ✓ bowl → ⟳ pour', `lit: ${roadLine(lit)}`)
-  // (was 'a draught has no road': the draught class was retired 11-27 and mana_draught is the Mana Elixir now, so it walks the elixir road)
-  ok(roadLine(startBrewing('mana_draught', host, 0, at)!) === 'mortar → still → pour', 'the Mana Elixir walks its class road, mortar then still')
+  // The first potion has no road. Its 11-27 rename (Mana Draught -> Mana Elixir) is a display name only; the road is keyed by
+  // id (alchemy-chain.ts ROAD_CLASS), so the rename does not walk it to the mortar and the still (alchemy-road-stability.test).
+  ok(roadLine(startBrewing('mana_draught', host, 0, at)!) === 'pour', 'the Mana Elixir (mana_draught) has no road — just the pour')
 
   // the save: round-trips, drops the malformed, re-derives the run's step from the stage
   const saved = JSON.parse(JSON.stringify({ [brewingKey(at)]: r1, [brewingKey(w0.at!)]: { ...lit, at: w0.at }, bad: { potionId: 'nope' }, wrongkey: { ...b0 }, [brewingKey(later.at!)]: { ...later, hands: {} } }))

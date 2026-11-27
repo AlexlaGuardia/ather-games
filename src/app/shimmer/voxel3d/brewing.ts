@@ -22,7 +22,7 @@
 // ⚖ Numbers are Jin's (the ruling says so): the yield curve, the floor of one, the step XP slice.
 
 import { POTION_DEFS } from '../engine/alchemy'
-import { roadOf, alchemyRecipe, craftWordOf, ROAD_STATION, ALCHEMY_STATIONS, ALCHEMY_RUN_MS, type RoadStep, type AlchemyStationId } from './alchemy-chain'
+import { roadOf, alchemyRecipe, roadClassOf, ROAD_STATION, ALCHEMY_STATIONS, ALCHEMY_RUN_MS, type RoadStep, type AlchemyStationId } from './alchemy-chain'
 
 // ── ★★ THE BREWING IS THE PLOT'S EVENT, AND THE STATIONS ARE ITS HANDS (2026-09-21) ──────────
 // Alex: *"a homeplot event that is started at the cauldron but triggers other workstations across
@@ -174,7 +174,7 @@ export function settle(b: Brewing, now: number): Brewing {
 /** The pot's own run once lit — a cordial ages. */
 export function brewMs(b: Brewing): number {
   const def = POTION_DEFS[b.potionId]
-  return def && craftWordOf(def) === 'cordial' ? ALCHEMY_RUN_MS.age : ALCHEMY_STATIONS.cauldron.runMs
+  return def && roadClassOf(def) === 'cordial' ? ALCHEMY_RUN_MS.age : ALCHEMY_STATIONS.cauldron.runMs
 }
 /** Lit and its run is up — the host may pour. */
 export function pourReady(b: Brewing, now: number): boolean {
