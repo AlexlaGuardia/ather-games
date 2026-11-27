@@ -72,9 +72,12 @@ try {
     await p.keyboard.press('Escape'); await sleep(500)
     const t = clash[no], d = fairDoor(t), word = tentLabel(t)
     const back = { x: t.x + Math.sin(t.yaw) * 40, z: t.z + Math.cos(t.yaw) * 40 }
-    for (let i = 0; i < 6 && !(await A('wmGoto', back.x, back.z)); i++) await sleep(2000)
-    for (let k = 0; k < 40 && (await A('zone')) !== 'wilds'; k++) await sleep(1000)
-    await sleep(6000)
+    if ((await A('zone')) === 'wilds') { await A('tp', back.x, back.z, 0); await sleep(6000) }   // already in the Wilds: walk over (a second map travel reloads the page)
+    else {
+      for (let i = 0; i < 6 && !(await A('wmGoto', back.x, back.z)); i++) await sleep(2000)
+      for (let k = 0; k < 40 && (await A('zone')) !== 'wilds'; k++) await sleep(1000)
+      await sleep(6000)
+    }
     await p.evaluate((a: any) => { const X = (window as any).__ather; X.tp(a.x, a.z, a.yaw); X.look?.(a.yaw, -0.05) }, { ...d, yaw: look(d, t) })
     let txt = ''
     for (let i = 0; i < 60 && !txt.includes(`E · the Thistledown Fair · ${word}`); i++) { await sleep(500); txt = await body() }
@@ -86,6 +89,15 @@ try {
     return { door, word, info, pitching: /still pitching/.test(await body()) }
   }
 
+  // ── the AVERAGE tent ──
+  const a1 = await openTent(avgNo)
+  ok(a1.door && a1.info?.tier === 'average' && a1.info.open === '1' && a1.info.foes.length === 3 && a1.info.foes.every(f => !f.includes(':base') && f.endsWith('/second')), `8. the average tent fields SECOND forms (${a1.info?.foes.join(' ')})`)
+  await p.screenshot({ path: `${out}/4-clash-average.png` })
+
+  // ── the DIFFICULT tent ──
+  const h1 = await openTent(hardNo)
+  ok(h1.door && h1.info?.tier === 'difficult' && h1.info.open === '0' && h1.info.held && h1.info.foes.length === 0 && !h1.info.enter, `9. the difficult tent stands pitched and shows HELD, no Enter (${JSON.stringify(h1.info)})`)
+  await p.screenshot({ path: `${out}/5-clash-difficult-held.png` })
   // ── the EASY tent ──
   const e1 = await openTent(easyNo)
   ok(e1.door, `1. the easy tent's door says "E · the Thistledown Fair · ${e1.word}"`)
@@ -123,15 +135,6 @@ try {
   const again = await (await fetch(`${url}/api/fair/clash`, { method: 'POST', headers: { 'content-type': 'application/json', cookie: `ather_session=${mintSession(KA.id, KA.name)}` }, body: JSON.stringify({ tent: easyNo, level: 'easy', spirit: 'Vulnyx' }) })).json() as { first: boolean; prize: number }
   ok(again.first === false && again.prize === 0, `7. a second win at the same tent pays nothing (${JSON.stringify(again)})`)
 
-  // ── the AVERAGE tent ──
-  const a1 = await openTent(avgNo)
-  ok(a1.door && a1.info?.tier === 'average' && a1.info.open === '1' && a1.info.foes.length === 3 && a1.info.foes.every(f => !f.includes(':base') && f.endsWith('/second')), `8. the average tent fields SECOND forms (${a1.info?.foes.join(' ')})`)
-  await p.screenshot({ path: `${out}/4-clash-average.png` })
-
-  // ── the DIFFICULT tent ──
-  const h1 = await openTent(hardNo)
-  ok(h1.door && h1.info?.tier === 'difficult' && h1.info.open === '0' && h1.info.held && h1.info.foes.length === 0 && !h1.info.enter, `9. the difficult tent stands pitched and shows HELD, no Enter (${JSON.stringify(h1.info)})`)
-  await p.screenshot({ path: `${out}/5-clash-difficult-held.png` })
   ok(errs.length === 0, `10. no page errors (${errs.slice(0, 2).join(' | ')})`)
 } finally {
   await br.close()
