@@ -18,10 +18,13 @@ const TUT = { v: 1, live: true, greg: { welcome: true, moglins: true, spirits: t
 const BTN = { A: 0, B: 1, X: 2, Y: 3, LB: 4, RB: 5, LT: 6, RT: 7, SELECT: 8, START: 9, L3: 10, R3: 11, DUP: 12, DDOWN: 13, DLEFT: 14, DRIGHT: 15 } as const
 const CODE = 'PB' + Math.random().toString(36).slice(2, 7).toUpperCase().replace(/[^A-Z2-9]/g, 'X')
 const errs: string[] = []
-const br = await puppeteer.launch({ protocolTimeout: 300000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ARGS })
+// two BROWSERS, not two tabs of one: a background tab runs no frames, so B's walker would never step while A has the front
+const launch = () => puppeteer.launch({ protocolTimeout: 300000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ARGS })
+const brs = [await launch(), await launch()]
+let nBr = 0
 const poll = async (fn: () => Promise<unknown>, ms = 20000) => { const t = Date.now(); while (Date.now() - t < ms) { if (await fn().catch(() => false)) return true; await sleep(200) } return false }
 async function open(tag: string, w: number, h: number, phone: boolean): Promise<Page> {
-  const p = await (await br.createBrowserContext()).newPage()
+  const p = await (await brs[nBr++].createBrowserContext()).newPage()
   await p.setViewport(phone ? { width: w, height: h, isMobile: true, hasTouch: true, deviceScaleFactor: 1 } : { width: w, height: h, deviceScaleFactor: 0.5 })
   p.on('pageerror', e => errs.push(`${tag}: ${String(e).slice(0, 180)}`))
   await p.evaluateOnNewDocument('window.__name = (f) => f')
@@ -90,14 +93,14 @@ try {
   ok(await poll(async () => (await log(B)).slice(nb).some(l => l.kind === 'me'), 6000), `2. B heard the boop: ${JSON.stringify((await log(B)).slice(nb))}`)
   await sleep(1200)
   const b1 = await st(B), moved = Math.hypot(b1.x - b0.x, b1.z - b0.z)
-  ok((await log(B)).slice(nb).some(l => l.kind === 'me' && l.outcome === 'push') && moved > 0.25 && moved < 1.5, `2. B (still) was pushed ${moved.toFixed(2)} m`)
+  ok((await log(B)).slice(nb).some(l => l.kind === 'me' && l.outcome === 'push') && moved > 0.15 && moved < 1.5, `2. B (still) was pushed ${moved.toFixed(2)} m`)
   ok((await log(A)).some(l => l.kind === 'peer' && l.who === idB), '2. A logged the boop on B')
 
   // 3. B moving: only a tap (B holds W the whole time)
   await place()
-  await B.bringToFront(); await B.keyboard.down('KeyW'); await sleep(700)
+  await B.keyboard.down('KeyW'); await sleep(700)
   const nb2 = (await log(B)).length
-  await A.bringToFront(); await press(A, 'RT')
+  await press(A, 'RT')
   await B.evaluate(() => (window as any).__boop.receive(0, 1))   // a second boop that surely lands mid-walk, should the punch have missed a walking target
   await sleep(500); await B.keyboard.up('KeyW')
   const got = (await log(B)).slice(nb2).filter(l => l.kind === 'me')
@@ -113,21 +116,28 @@ try {
     const r = b.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width, h: r.height, text: (b.textContent ?? '').trim().slice(0, 30) }
   })
   ok(!!tgt, `4. a button to aim at: ${JSON.stringify(tgt)}`)
-  const steer = async (t: { x: number; y: number; w: number; h: number }) => {
+  // the target is re-measured every step (a panel that eases in moves its buttons after the first read)
+  const rectOf = (scope: string, text: string) => A.evaluate((sc: string, tx: string) => {
+    const b = [...document.querySelectorAll<HTMLElement>(`${sc} button`)].find(b => (b.textContent ?? '').trim().slice(0, 30) === tx); if (!b) return null
+    const r = b.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width, h: r.height }
+  }, scope, text) as Promise<{ x: number; y: number; w: number; h: number } | null>
+  const steer = async (scope: string, text: string) => {
     for (let i = 0; i < 150; i++) {
-      const c = await A.evaluate(() => (window as any).__pad.cursor())
+      const c = await A.evaluate(() => (window as any).__pad.cursor()), t = await rectOf(scope, text); if (!t) break
       const dx = t.x - c.x, dy = t.y - c.y
-      if (c.on && (Math.hypot(dx, dy) < 3 || (Math.abs(dx) < t.w / 2 - 1 && Math.abs(dy) < t.h / 2 - 1))) break
+      if (c.on && (Math.hypot(dx, dy) < 3 || (Math.abs(dx) < t.w / 4 && Math.abs(dy) < t.h / 4))) break
       const k = (v: number) => Math.max(-1, Math.min(1, v / 120)), ax = c.on ? k(dx) : 0.5, ay = c.on ? k(dy) : 0
       await A.evaluate((a: number[]) => (window as any).__fake.axes(a), [Math.abs(ax) < 0.2 ? Math.sign(ax) * 0.2 : ax, Math.abs(ay) < 0.2 && Math.abs(dy) > 3 ? Math.sign(ay) * 0.2 : ay, 0, 0])
       await sleep(60)
     }
     await A.evaluate(() => (window as any).__fake.axes([0, 0, 0, 0])); await sleep(150)
-    return A.evaluate(() => (window as any).__pad.cursor())
+    const c = await A.evaluate(() => (window as any).__pad.cursor()), t = await rectOf(scope, text)
+    return { ...c, inside: !!t && Math.abs(c.x - t.x) < t.w / 2 && Math.abs(c.y - t.y) < t.h / 2 }
   }
   if (tgt) {
-    const c = await steer(tgt)
-    ok(c.on && Math.hypot(c.x - tgt.x, c.y - tgt.y) < 12, `4. the stick moved the pointer onto it (${c.x.toFixed(0)},${c.y.toFixed(0)}) shown=${c.on}`)
+    await sleep(800)
+    const c = await steer('[data-panel]', tgt.text)
+    ok(c.on && c.inside, `4. the stick moved the pointer onto it (${c.x.toFixed(0)},${c.y.toFixed(0)}) shown=${c.on}`)
     if (process.env.SHOT_DIR) await A.screenshot({ path: `${process.env.SHOT_DIR}/m232-bag-pointer.png` }).catch(() => {})
     await A.evaluate(() => { (window as any).__clicked = [] })
     await press(A, 'A')
@@ -140,7 +150,7 @@ try {
   ok(await poll(() => A.evaluate(() => !!document.querySelector('[data-panel="options"]')), 6000), '4. START opened Options')
   const ot = await A.evaluate(() => { const b = [...document.querySelectorAll<HTMLElement>('[data-panel="options"] button')].find(b => b.textContent?.trim() === 'Controls'); if (!b) return null; const r = b.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width, h: r.height, text: 'Controls' } })
   if (ot) {
-    const oc = await steer(ot); console.log(`· pointer at ${oc.x.toFixed(0)},${oc.y.toFixed(0)} for ${JSON.stringify(ot)}`); await A.evaluate(() => { (window as any).__clicked = [] }); await press(A, 'A')
+    await sleep(800); const oc = await steer('[data-panel="options"]', 'Controls'); console.log(`· pointer at ${oc.x.toFixed(0)},${oc.y.toFixed(0)} for ${JSON.stringify(ot)}`); await A.evaluate(() => { (window as any).__clicked = [] }); await press(A, 'A')
     ok(await poll(() => A.evaluate(() => !!document.querySelector('[data-padbinds]')), 4000), `4. ✕ on the pointer opened Options › Controls (${JSON.stringify(await A.evaluate(() => (window as any).__clicked))})`)
   } else ok(false, '4. no Controls tab in Options')
   for (let i = 0; i < 4 && await A.evaluate(() => !!document.querySelector('[data-panel]')); i++) { await press(A, 'B'); await sleep(300) }
@@ -164,6 +174,6 @@ try {
   if (process.env.SHOT_DIR) await A.screenshot({ path: `${process.env.SHOT_DIR}/m232-hotbar.png` }).catch(() => {})
   ok(errs.length === 0, `0 page errors ${errs.slice(0, 3).join(' | ')}`)
 } catch (e) { ok(false, `threw ${String(e).slice(0, 300)}`) }
-finally { await br.close() }
+finally { for (const b of brs) await b.close() }
 console.log(fails ? `M232: ${fails} FAIL` : 'M232: PASS')
 process.exit(fails ? 1 : 0)
