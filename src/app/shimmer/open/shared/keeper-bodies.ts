@@ -76,6 +76,13 @@ type Put = (g: THREE.Object3D, geo: THREE.BufferGeometry, color: string, pos: [n
 const SPH = new THREE.SphereGeometry(1, 14, 10), BOX = new THREE.BoxGeometry(1, 1, 1)
 
 /** the scarf, into the body group: ring at the torso's top, the knot on its side, the tails. Sized by tw (torso width) x sf. */
+/** BETA M154: a work apron = the SAME torso outline's front arc, stood a touch proud and stopped short of the shoulders (shares
+ *  in the unit box, so the torso's dials size it exactly as they size the torso) */
+export const APRON = { arc: 1.15, proud: 1.05, top: 0.8 } as const
+export const apronGeo = (i: number) => cached(`apron${i}`, () => {
+  const prof = (TORSO_SHAPES[i] ?? TORSO_SHAPES[0]).prof.filter(([, y]) => y > 0 && y <= APRON.top)
+  return new THREE.LatheGeometry(prof.map(([r, y]) => new THREE.Vector2(r * TORSO_R * APRON.proud, y)), 16, -APRON.arc, APRON.arc * 2)
+})
 export function drawScarf(body: THREE.Object3D, put: Put, i: number, color: string, topY: number, tw: number, sf: number) {
   const st = SCARF_STYLES[i] ?? SCARF_STYLES[0], R = SCARF.ring * tw * sf, y = topY - SCARF.drop
   put(body, ring(st.wrap === 'thin' ? SCARF.thin : SCARF.thick), color, [0, y, 0], [R, R, SCARF.rise * sf], [Math.PI / 2, 0, 0])

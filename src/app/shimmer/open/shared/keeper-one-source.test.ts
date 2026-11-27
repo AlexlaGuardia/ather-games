@@ -4,7 +4,10 @@
 // bench's try-on options. Run: npx tsx src/app/shimmer/open/shared/keeper-one-source.test.ts
 import * as THREE from 'three'
 import { DIALS, DEFAULT_PROPORTIONS, MODELS, type DialKey, type Proportions } from './keeper-proportions'
-import { buildKeeper } from './keeper-figure'
+import { buildKeeper, type KeeperDress } from './keeper-figure'
+import { FRIEND_LOOKS, friendProportions } from './friend-looks'
+import { FRIEND_IDS } from './friend-figure'
+import { APRON } from './keeper-bodies'
 import { FACE_SETS } from './keeper-faces'
 import { CARTOON_HEADS, CARTOON } from './keeper-heads'
 import { DEFAULT_LOOK, OPT, type Look } from './keeper-look'
@@ -41,8 +44,8 @@ CARTOON_HEADS.forEach((c, i) => {
 })
 
 // a part's world-space fingerprint (every vertex of every mesh under it), so a check sees size, shape AND placement
-function partSigs(look: Look, p: Proportions) {
-  const k = buildKeeper(look, p); k.group.updateMatrixWorld(true)
+function partSigs(look: Look, p: Proportions, dress: KeeperDress = {}) {
+  const k = buildKeeper(look, p, dress); k.group.updateMatrixWorld(true)
   const v = new THREE.Vector3(), out: Record<string, string> = {}
   for (const name of PARTS) {
     let sx = 0, sy = 0, sz = 0, n = 0
@@ -205,6 +208,37 @@ for (let t = 0; t < TORSO_SHAPES.length; t++) for (const [sc, be] of [[t, t % BE
 }
 // 7e. the bench's Torso picker IS the creator's row (one list), and every scarf / belt keeps the pouch + loop count
 ok(BENCH_TORSOS === OPT.torso, 'bench torso list is not the creator\'s')
+
+// ── 8. M154: THE FRIENDS' DRESS (exact colours + hood / goggles / apron / Coily hair) BRINGS NO SIZE AND NO PLACE ──
+// 8a. dressed or not, the same look + dials stand the same: crown, head, hands, feet, torso all where the dials put them
+const box = (o: THREE.Object3D) => { o.updateMatrixWorld(true); return new THREE.Box3().setFromObject(o) }
+for (const id of FRIEND_IDS) {
+  const f = FRIEND_LOOKS[id], p = friendProportions(id), bare = buildKeeper(f.look, p), worn = buildKeeper(f.look, p, f.dress)
+  ok(bare.height === worn.height && bare.headY === worn.headY, `${id}: the dress moved the crown / head (${worn.height} vs ${bare.height})`)
+  for (const n of ['head', 'hand-l', 'hand-r', 'foot-l', 'foot-r']) ok(bare.group.getObjectByName(n)!.position.equals(worn.group.getObjectByName(n)!.position), `${id}: the dress moved ${n}`)
+  const hd = worn.group.getObjectByName('head')!
+  for (const n of ['hood', 'goggles']) { const o = worn.group.getObjectByName(n); if (o) ok(o.parent === hd, `${id}: ${n} is not on the head group (the head dials would not size it)`) }
+  // 8b. the apron is the torso's own outline: every torso dial scales it exactly as it scales the torso
+  if (f.dress.apron) for (const q of [p, { ...p, torsoW: 1.2, torsoL: 0.9, torsoD: 1.3 }]) {
+    const k = buildKeeper(f.look, q, f.dress), torso = k.group.getObjectByName('body')!.children[0] as THREE.Mesh, ap = k.group.getObjectByName('apron')!.children[0] as THREE.Mesh
+    ok(ap.scale.equals(torso.scale) && k.group.getObjectByName('apron')!.position.equals(torso.position), `${id}: apron scale ${ap.scale.toArray()} / place not the torso's ${torso.scale.toArray()}`)
+    const ta = box(torso), aa = box(ap)
+    ok(Math.abs((aa.max.x - aa.min.x) / (ta.max.x - ta.min.x) - Math.sin(APRON.arc) * APRON.proud) < 0.03 && aa.max.y <= ta.max.y, `${id}: apron does not hug the torso (${(aa.max.x - aa.min.x).toFixed(3)} vs ${(ta.max.x - ta.min.x).toFixed(3)})`)
+  }
+  // 8c. every dial still moves its own part (and only its own) on each friend, dressed
+  const at0 = partSigs(f.look, DEFAULT_PROPORTIONS, f.dress).out
+  for (const d of DIALS) {
+    const v = d.def + (d.max - d.def > d.def - d.min ? (d.max - d.def) * 0.6 : -(d.def - d.min) * 0.6)
+    const moved = partSigs(f.look, { ...DEFAULT_PROPORTIONS, [d.key]: v }, f.dress).out
+    const changed = PARTS.filter(n => moved[n] !== at0[n]), main = MAIN[d.key] ?? OWN[d.key][0]
+    if (d.key === 'scarf' && f.dress.scarf === null) { ok(changed.length === 0, `${id} wears no scarf, yet the Scarf dial moved ${changed.join(', ')}`); continue }   // Bonn: no scarf, nothing for it to size
+    ok(changed.includes(main), `${id} dressed: dial ${d.key} did not move ${main}`)
+    const stray = changed.filter(n => !OWN[d.key].includes(n))
+    ok(stray.length === 0, `${id} dressed: dial ${d.key} also moved ${stray.join(', ')}`)
+  }
+  // 8d. a friend's look is the keeper's look: a Look the creator could hold, dials inside every dial's range
+  for (const [k, v] of Object.entries(p)) { const d = DIALS.find(x => x.key === k)!; ok(v >= d.min && v <= d.max, `${id}: dial ${k} ${v} outside ${d.min}..${d.max}`) }
+}
 
 console.log(`keeper-one-source: ${pass} pass, ${fails.length} fail`)
 if (fails.length) { console.log(fails.join('\n')); process.exit(1) }

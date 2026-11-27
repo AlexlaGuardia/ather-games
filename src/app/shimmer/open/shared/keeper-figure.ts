@@ -8,7 +8,26 @@ import { OPT, type Look } from './keeper-look'
 import { proportionsFor, type Proportions } from './keeper-proportions'
 import { faceSet, headShapeGeo, drawFaceSet, surf, type HeadShape } from './keeper-faces'
 import { cartoonHead, drawCartoonFace } from './keeper-heads'
-import { torsoGeo, drawScarf, drawBelt } from './keeper-bodies'
+import { torsoGeo, drawScarf, drawBelt, apronGeo } from './keeper-bodies'
+import type { CartoonHead } from './keeper-heads'
+
+/** BETA M154: a NAMED keeper's own dress over a Look (Bonn, Otto, Tess: friend-looks.ts). Exact colours off the card (the
+ *  creator's palette has no sandy-copper) and a few SHAPE-only extras the locked looks need. ★ Never a size or a place: every
+ *  extra is a shape scaled by the head / torso it sits on, and the dials move it with them (keeper-one-source.test.ts 8). */
+export type HairShape = typeof OPT.hairStyle[number] | CartoonHead['hair'] | 'Coily'
+export interface KeeperDress {
+  skin?: string; hair?: string; iris?: string; top?: string; hand?: string; foot?: string; belt?: string
+  /** a colour, or null = no scarf at all (Bonn's open neck) */
+  scarf?: string | null
+  /** a lock set over the head's own (Coily = Bonn's big coily hair) */
+  hairStyle?: HairShape
+  /** a hood over the head, open at the face, this colour (Tess) */
+  hood?: string
+  /** goggles pushed up on the brow (Otto) */
+  goggles?: boolean
+  /** a work apron over the torso's front, this colour (Otto) */
+  apron?: string
+}
 
 const grad = (() => {
   const t = new THREE.DataTexture(new Uint8Array([90, 170, 255]), 3, 1, THREE.RedFormat)
@@ -17,6 +36,8 @@ const grad = (() => {
 const SPH = new THREE.SphereGeometry(1, 20, 14), BOX = new THREE.BoxGeometry(1, 1, 1)
 const LOCK = new THREE.LatheGeometry([[0, 0], [0.5, 0.05], [0.55, 0.22], [0.45, 0.5], [0.25, 0.78], [0.08, 0.95], [0, 1]].map(([r, y]) => new THREE.Vector2(r, y)), 10)
 const CAP = new THREE.SphereGeometry(1, 24, 14, 0, Math.PI * 2, 0, Math.PI * 0.5)
+/** M154: a hood = a sphere shell with the face's opening cut out of its front (+z is phi = PI / 2 in three's sphere) */
+const HOOD = new THREE.SphereGeometry(1, 24, 14, Math.PI / 2 + 0.8, Math.PI * 2 - 1.6, 0, Math.PI * 0.88)
 /** a pointed ear: a petal (round at the root, a tip at the top); shared with the NPC rig (folk-model.tsx) */
 export const EAR = new THREE.LatheGeometry([[0, -0.5], [0.45, -0.38], [0.5, -0.1], [0.36, 0.2], [0.14, 0.42], [0, 0.5]].map(([r, y]) => new THREE.Vector2(r, y)), 10)
 /** M103 chin taper + M216 chin length: ONE head geometry for every face, from the dials only (0 + 0 = the plain sphere SPH) */
@@ -46,13 +67,14 @@ function flat(g: THREE.Object3D, geo: THREE.BufferGeometry, color: string, pos: 
 export interface KeeperBody { group: THREE.Group; height: number; headY: number }
 
 /** Build a keeper. The group's origin is between the feet; `height` is the crown, `headY` the head's centre. */
-export function buildKeeper(o: Look, p0: Proportions = proportionsFor(o)): KeeperBody {
+export function buildKeeper(o: Look, p0: Proportions = proportionsFor(o), dress: KeeperDress = {}): KeeperBody {
   const g = new THREE.Group()
   // M216: every face (Classic or a set) is sized and shaped by the model's dials ONLY: a set brings eyes + brows, never a size
   const p = p0
   const wide = [0.88, 1, 1.16][o.frame] ?? 1, tall = [0.9, 1, 1.1][o.frame] ?? 1
   const H = 0.5, B = 0.62 * tall, L = 0.55 * tall
-  const skin = OPT.skin[o.skin], hair = OPT.hair[o.hair], top = OPT.topColor[o.topColor], acc = OPT.accent[o.accent], sc = OPT.scarf[o.scarf]
+  const skin = dress.skin ?? OPT.skin[o.skin], hair = dress.hair ?? OPT.hair[o.hair], top = dress.top ?? OPT.topColor[o.topColor], acc = OPT.accent[o.accent]
+  const sc = dress.scarf === undefined ? OPT.scarf[o.scarf] : dress.scarf, handC = dress.hand ?? acc, footC = dress.foot ?? acc
   // FLOATING LIMBS (Alex's doodle 11-18): an inverted-egg torso with no arms, a scarf over the shoulders with a tail down
   // one side, mitten hands hovering out at hip height, flat pebble feet well below, a big round head floating above.
   // M103: every term below is today's body times a dial at 1 (or plus a dial at 0), so the defaults change nothing
@@ -60,24 +82,25 @@ export function buildKeeper(o: Look, p0: Proportions = proportionsFor(o)): Keepe
   const body = new THREE.Group(); body.name = 'body'; g.add(body)
   // M216 s2b: the torso is one of the six locked shapes (keeper-bodies.ts), a unit outline sized here by the dials only
   put(body, torsoGeo(o.torso), top, [0, base, 0], [tw, TB, wide * 0.8 * p.torsoD])
+  if (dress.apron) put(body, apronGeo(o.torso), dress.apron, [0, base, 0], [tw, TB, wide * 0.8 * p.torsoD], null, true, 'apron')
   for (const s of [-1, 1] as const) {
-    put(g, SPH, acc, [s * (0.29 * tw + 0.09 + p.handX), base + TB * 0.32 + p.handY, 0.03 + p.handZ], [0.075 * p.hand, 0.1 * p.hand, 0.06 * p.hand], [0, 0, -s * 0.25], true, s < 0 ? 'hand-r' : 'hand-l')
-    put(g, SPH, acc, [s * (0.17 * wide + p.footX), 0.045 * p.foot, 0.06], [0.11 * p.foot, 0.045 * p.foot, 0.15 * p.foot], [0, s * 0.25, 0], true, s < 0 ? 'foot-r' : 'foot-l')
+    put(g, SPH, handC, [s * (0.29 * tw + 0.09 + p.handX), base + TB * 0.32 + p.handY, 0.03 + p.handZ], [0.075 * p.hand, 0.1 * p.hand, 0.06 * p.hand], [0, 0, -s * 0.25], true, s < 0 ? 'hand-r' : 'hand-l')
+    put(g, SPH, footC, [s * (0.17 * wide + p.footX), 0.045 * p.foot, 0.06], [0.11 * p.foot, 0.045 * p.foot, 0.15 * p.foot], [0, s * 0.25, 0], true, s < 0 ? 'foot-r' : 'foot-l')
   }
   // M216 s2b: the scarf shape (Scarf shape row) + the belt (Belt row), each sized and placed by the dials (keeper-bodies.ts)
-  drawScarf(body, put, o.scarfStyle, sc, topY, tw, sf)
-  drawBelt(body, put, o.torso, o.belt, acc, base, TB, tw, wide * 0.8 * p.torsoD, p)
+  if (sc) drawScarf(body, put, o.scarfStyle, sc, topY, tw, sf)
+  drawBelt(body, put, o.torso, o.belt, dress.belt ?? acc, base, TB, tw, wide * 0.8 * p.torsoD, p)
   // a longer chin (the Chin length dial) is absorbed by lifting the head, so the neck gap stays the model's
   const hy = topY + Hf * 0.5 * p.headH + 0.07 + p.neck + Hf * 0.55 * p.chin * p.headH * 0.6
   const head = new THREE.Group(); head.name = 'head'; head.position.set(0, hy, 0); g.add(head)
   // head width / height scale the head group, so hair + face + ears keep their places on it
   if (p.headW !== 1 || p.headH !== 1) head.scale.set(p.headW, p.headH, p.headW)
-  headAndFace(head, o, Hf, hair, skin, p)
+  headAndFace(head, o, Hf, hair, skin, p, dress)
   return { group: g, height: hy + Hf * 0.6 * p.headH, headY: hy }
 }
 
 /** The head + hair v3 + face, built round (0,0,0) = the head's centre (the mock's hy, moved onto the head group). */
-function headAndFace(g: THREE.Group, o: Look, H: number, hair: string, skin: string, p: Proportions) {
+function headAndFace(g: THREE.Group, o: Look, H: number, hair: string, skin: string, p: Proportions, dress: KeeperDress = {}) {
   const hy = 0, ea = p.ear, ei = p.eye
   const ch = cartoonHead(o.head)   // M216 s2a: a cartoon head draws its own eyes / brows / mouth / hair shape (keeper-heads.ts)
   const fs = ch ? null : faceSet(o.face)
@@ -90,7 +113,7 @@ function headAndFace(g: THREE.Group, o: Look, H: number, hair: string, skin: str
   else for (const s of [-1, 1]) put(g, SPH, skin, [s * H * 0.5, hy, 0], [H * 0.08 * ea, H * 0.12 * ea, H * 0.06 * ea])
   // ── HAIR v3 (Alex 11-19: the cap + blobs read bald / helmet-like): LOCKS, tapered petals rooted on the scalp, standing a
   //    little proud so the outline breaks; a small cap underneath fills the gaps. A style = which locks.
-  const hs = ch ? ch.hair : OPT.hairStyle[o.hairStyle], R = H * 0.5
+  const hs: HairShape | 'Hooded' = dress.hood ? 'Hooded' : dress.hairStyle ?? (ch ? ch.hair : OPT.hairStyle[o.hairStyle]), R = H * 0.5
   put(g, CAP, hair, [0, hy + H * 0.02, -H * 0.02], [R * 1.05, H * 0.55 * 1.05, R * 1.05], [-0.4, 0, 0], true)
   const centre = new THREE.Vector3(0, hy, 0), DOWN = new THREE.Vector3(0, -1, 0)
   const lock = (a: number, p: number, len: number, wid: number, lift = 0.15, sweep = 0, grav = 0.6) => {
@@ -129,13 +152,20 @@ function headAndFace(g: THREE.Group, o: Look, H: number, hair: string, skin: str
   if (hs === 'C-F') { ring(10, 0.8, H * 0.28, H * 0.22, 0.06, 0, 0.7, 2 * Math.PI - 0.7, 0, 0.6); fringe(4, H * 0.28, 0.5, 0.7, 0.55); for (const s of [-1, 1]) lock(s * 0.85, 0.9, H * 0.7, H * 0.16, 0.1, 0, 0.9); put(g, SPH, hair, [H * 0.2, hy + H * 0.48, -H * 0.12], [H * 0.13, H * 0.13, H * 0.13]); for (const d of [-0.15, 0, 0.15]) lock(1.9 + d, 0.6, H * 0.95, H * 0.18, 0.9, 0.3, 0.35) }
   if (hs === 'D-M') { ring(11, 0.75, H * 0.38, H * 0.22, 0.25, 0, 0.6, 2 * Math.PI - 0.6, 0.3, 0.45); for (const a of [-0.4, 0.5]) lock(a, 0.15, H * 0.3, H * 0.14, 0.85, 0.2, 0); fringe(4, H * 0.32, 0.2, 0.6, 0.6, 0.2); for (const s of [-1, 1]) lock(s * 1.15, 0.8, H * 0.8, H * 0.08, 0.7, s * 0.5, 0.3) }
   if (hs === 'D-F') { ring(14, 0.95, H * 0.62, H * 0.27, 0.22, 0, 0.95, 2 * Math.PI - 0.95, 0, 0.75); fringe(6, H * 0.3, 0, 0.85, 0.8); for (const s of [-1, 1]) lock(s * 0.95, 0.95, H * 0.72, H * 0.18, 0.1, 0, 0.9) }
+  // M154: Bonn's big coily hair: a full round cloud well past the head, short curls standing out all over it, the face clear
+  if (hs === 'Coily')   { put(g, SPH, hair, [0, hy + H * 0.1, -H * 0.24], [R * 1.42, H * 0.55 * 1.2, R * 1.12]); for (const [n, ph, len] of [[18, 1.45, 0.3], [16, 1.05, 0.32], [12, 0.62, 0.3], [6, 0.25, 0.28]] as const) ring(n, ph, H * len, H * 0.24, 1, 0, ph > 1 ? 1.25 : ph > 0.5 ? 0.9 : -Math.PI, ph > 1 ? 2 * Math.PI - 1.25 : ph > 0.5 ? 2 * Math.PI - 0.9 : Math.PI, 0.25, 0) }
+  // M154: under a hood only the face-framing hair shows: a short fringe + a lock down each cheek (Tess, the sheet's bob)
+  if (hs === 'Hooded')  { fringe(5, H * 0.3, 0, 0.85, 0.7); for (const s of [-1, 1]) lock(s * 0.85, 0.95, H * 0.5, H * 0.2, 0.05, 0, 0.9) }
   if (hs === 'Tail')    { ring(10, 0.8, H * 0.28, H * 0.22, 0.06, 0, 0.7, 2 * Math.PI - 0.7, 0, 0.6); fringe(3, H * 0.24, 0, 0.8, 0.45); for (const d of [-0.2, 0, 0.2]) lock(back + d, 1.05, H * 0.8, H * 0.17, 0.15, 0, 0.9) }
 
   // ── FACE ──
   const INKC = '#1c1712', ey = hy + H * 0.02 + p.eyeLift, ez = H * 0.47, eyes = OPT.eyes[o.eyes]
   const arc = (x: number, y: number, r: number, thick: number, span: number, rotZ: number, color = INKC) => flat(g, arcGeo(thick, span), color, [x, y, ez + H * 0.03], [r, r, r], [0, 0, rotZ])
   const ball = (x: number, y: number, sx: number, sy: number, color = INKC, dz = 0.03) => flat(g, SPH, color, [x, y, ez + H * dz], [sx, sy, H * 0.03])
-  if (ch) drawCartoonFace(g, o.head, H, hair, skin, true, shape, { eye: ei, gap: p.eyeGap, y: p.eyeLift }, p.mouthLift)
+  if (ch) drawCartoonFace(g, o.head, H, hair, skin, true, shape, { eye: ei, gap: p.eyeGap, y: p.eyeLift }, p.mouthLift, dress.iris)
+  // M154: Tess's hood (a shell round the head, open at the face, its point at the back) + Otto's goggles up on the brow
+  if (dress.hood) { const hood = put(g, HOOD, dress.hood, [0, hy + H * 0.04, -H * 0.03], [R * 1.22, H * 0.55 * 1.2, R * 1.22], [-0.25, 0, 0], true, 'hood'); put(hood, LOCK, dress.hood, [0, H * 0.42, -H * 0.42], [H * 0.3, H * 0.34, H * 0.22], [-2.0, 0, 0]) }
+  if (dress.goggles) { const gg = new THREE.Group(); gg.name = 'goggles'; g.add(gg); put(gg, arcGeo(0.06, Math.PI * 2), '#54321f', [0, hy + H * 0.3, 0], [R * 1.04, R * 1.04, R * 1.04], [Math.PI / 2 - 0.35, 0, 0], false); for (const s of [-1, 1]) { put(gg, arcGeo(0.32, Math.PI * 2), '#9c8a5a', [s * H * 0.15, hy + H * 0.36, H * 0.42], [H * 0.1, H * 0.1, H * 0.1], [-0.55, 0, 0]); flat(gg, SPH, '#8fb6c4', [s * H * 0.15, hy + H * 0.36, H * 0.42], [H * 0.08, H * 0.08, H * 0.02], [-0.55, 0, 0]) } }
   else if (fs) drawFaceSet(g, o.face, H, hair, OPT.brows[o.brows] !== 'None', shape, { eye: ei, gap: p.eyeGap, y: p.eyeLift })
   else for (const s of [-1, 1]) {
     const ex = s * (H * 0.17 + p.eyeGap)

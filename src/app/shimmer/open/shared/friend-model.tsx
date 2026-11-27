@@ -1,37 +1,27 @@
 'use client'
-// <FriendModel who /> : Bonn, Otto or Tess (friend-figure.ts) on the folk rig's poses. FRIEND_CALLS draw calls a figure.
-import { useRef } from 'react'
+// <FriendModel who /> : Bonn, Otto or Tess, BUILT AS KEEPERS (BETA M154 hub call 11-27): buildKeeper on their look record
+// (friend-looks.ts: a Look + their dials + a KeeperDress), posed by poseKeeper like every keeper. `figureMats` stays here for
+// the folk / Greg / Momo figures that share the toon ramp (friend-figure.ts moulds).
+import { useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
-import { poseFolk, folkRamp, folkInk, type FolkAction } from './folk-model'
-import { friendFigure, type FriendId, type JointName } from './friend-figure'
+import { folkRamp, type FolkAction } from './folk-model'
+import type { FriendId } from './friend-figure'
+import { buildKeeper, poseKeeper } from './keeper-figure'
+import { FRIEND_LOOKS, friendProportions, friendRecord } from './friend-looks'
 
 let mats: { toon: THREE.MeshToonMaterial; flat: THREE.MeshBasicMaterial } | null = null
 export const figureMats = () => (mats ??= { toon: new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: folkRamp() }), flat: new THREE.MeshBasicMaterial({ vertexColors: true }) })
 
 export function FriendModel({ who, action = 'idle', seed = 0, speed = 1 }: { who: FriendId; action?: FolkAction; seed?: number; speed?: number }) {
-  const f = friendFigure(who), m = figureMats()
-  const j = useRef<Record<JointName | 'eyes', THREE.Object3D | null>>({ body: null, head: null, armL: null, armR: null, legL: null, legR: null, eyes: null })
-  const root = useRef<THREE.Group>(null)
+  const body = useMemo(() => buildKeeper(FRIEND_LOOKS[who].look, friendProportions(who), FRIEND_LOOKS[who].dress), [who])
   const t = useRef(seed * 1.3)
-  // the pose's bob goes to the whole figure, as on FolkModel
-  useFrame((_, dt) => {
-    poseFolk({ ...j.current, body: root.current }, action, t.current += Math.min(0.05, dt) * speed, seed)   // seed >= 0: a negative one starts with the eyes shut
-    if (who !== 'bonn') for (const l of [j.current.legL, j.current.legR]) if (l) l.rotation.x *= 0.4   // a shorter step under the apron / the coat
-  })
-  return (
-    <group ref={root} userData={{ friend: who }}>
-      {(Object.keys(f.joints) as JointName[]).map(n => {
-        const J = f.joints[n], s = n === 'armL' ? -1 : n === 'armR' ? 1 : 0
-        return (
-          <group key={n} ref={o => { j.current[n] = o }} position={J.at}>
-            <group rotation={[0, 0, s * 0.14]}>
-              <mesh geometry={J.toon} material={m.toon} /><mesh geometry={J.ink} material={folkInk()} />
-              {n === 'head' && <><mesh geometry={f.face} material={m.flat} /><mesh ref={o => { j.current.eyes = o }} geometry={f.eyes} material={m.flat} position={f.eyesAt} /></>}
-            </group>
-          </group>
-        )
-      })}
-    </group>
-  )
+  useEffect(() => {
+    // read-only probe (scripts/m154-friend-keeper-check.mts): the look record each friend on screen was built from
+    const w = window as unknown as { __friendLooks?: Record<string, unknown> }
+    w.__friendLooks = { ...(w.__friendLooks ?? {}), [who]: { ...friendRecord(who), keeper: true, height: Math.round(body.height * 1000) / 1000 } }
+    return () => { body.group.clear() }   // geometry + materials are shared caches: only the meshes go
+  }, [who, body])
+  useFrame((_, dt) => { poseKeeper(body, t.current += Math.min(0.05, dt) * speed, action === 'walk' ? 0.6 : 0) })
+  return <group userData={{ friend: who }}><primitive object={body.group} /></group>
 }

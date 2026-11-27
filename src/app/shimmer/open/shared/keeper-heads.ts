@@ -83,7 +83,7 @@ const _a = new THREE.Vector3(), _b = new THREE.Vector3()
 /** Draw cartoon head `head` (1-8)'s face on a head group centred at (0,0,0), head size H: two eye groups (eye-l / eye-r,
  *  boosted with distance like the face sets) and a mouth group ('mouth', every mesh tagged userData.mouth so the bench can
  *  swap it). `d` = the eye dials, `mouthLift` = the Mouth height dial (m), `shape` = the head's dials (decals follow it). */
-export function drawCartoonFace(g: THREE.Group, head: number, H: number, hair: string, skin: string, brows: boolean, shape: HeadShape, d: EyeDials, mouthLift: number) {
+export function drawCartoonFace(g: THREE.Group, head: number, H: number, hair: string, skin: string, brows: boolean, shape: HeadShape, d: EyeDials, mouthLift: number, iris?: string) {
   const c = cartoonHead(head); if (!c) return
   const f = { jaw: Math.round(shape.jaw * 100) / 100, chin: Math.round(shape.chin * 100) / 100 }
   const o: EyeOutline = EYE_OUTLINES[c.eyes], INK = '#1c1712'
@@ -104,7 +104,7 @@ export function drawCartoonFace(g: THREE.Group, head: number, H: number, hair: s
     }
     // iris + pupil fill the outline's open height, nudged inward (a sharp look), highlight up and out
     const ih = (ymax - ymin) * h * 0.92, iw = Math.min(ih * 0.82, w * 0.5), iy = ey + (ymax + ymin) * 0.5 * h, ix = ex - s * w * 0.06
-    decal(DISC, c.iris, ix, iy, 0.02, iw * 0.5, ih * 0.5)
+    decal(DISC, iris ?? c.iris, ix, iy, 0.02, iw * 0.5, ih * 0.5)
     decal(DISC, '#0d0907', ix, iy, 0.026, iw * 0.26, ih * 0.3)
     decal(DISC, '#ffffff', ix + s * iw * 0.2, iy + ih * 0.2, 0.032, H * 0.013, H * 0.013)
     decal(memo(`l${c.eyes}${s}|${w}|${h}`, () => bandGeo(o.top, w * 1.04, h, s, H * 0.022)), INK, ex, ey, 0.036)
