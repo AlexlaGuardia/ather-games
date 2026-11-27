@@ -15,6 +15,7 @@ const url = flag('--url', 'https://ather.games'), out = flag('--out', 'docs/look
 const gold = loneTree('goldwood', 12), W = 4.2
 const SPS = ['fox', 'frog', 'hummingbird'] as const, STYLE: Record<string, string> = { fox: 'dash', frog: 'hop', hummingbird: 'pluck' }
 let fails = 0
+const T00 = Date.now(), log = (m: string) => console.log(`  .. ${Math.round((Date.now() - T00) / 1000)}s ${m}`)
 const ok = (c: boolean, m: string) => { console.log(c ? '  ok  ' : '  FAIL', m); if (!c) fails++ }
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 const TUT = { v: 1, live: false, greg: { welcome: true, moglins: true, spirits: true, wilds: true }, heard: ['otto', 'tess', 'bonn', 'fennel'], gifts: ['grimoire', 'spike', 'pruner', 'seeds', 'bait', 'rinquest'], b2: 'accepted', baitDay: null }
@@ -51,20 +52,20 @@ try {
   const sx = gold.x + 6, sz = gold.z
   ok(await travel(sx, sz), 'at the Goldwood'); await tp(sx, sz)
   let joined = 0; for (let i = 0; i < 60 && joined < 3; i++) { await frame(); joined = ((await A<{ id: string }[] | undefined>('fetch?.()')) ?? []).filter(r => ['p0', 'p1', 'p2'].includes(r.id)).length; if (joined < 3) await sleep(500) }
-  ok(joined === 3, `the three following spirits are in the Wilds and may fetch (${joined})`)
+  log('joined'); ok(joined === 3, `the three following spirits are in the Wilds and may fetch (${joined})`)
   const traces = new Map<string, { id: string; sp: string; done: boolean; D: number; T: number; tr: Smp[] }>(), kAt = { x: sx, z: sz }
   let roll: Record<string, number> = {}
   const done = () => SPS.every((_, i) => [...traces.values()].some(r => r.id === `p${i}` && r.done))
   for (let round = 0; round < 3 && !done(); round++) {
     await tp(sx, sz)
     for (let i = 0; i < 16; i++) { await aimAt(p, gold.x, gold.z, 1); await frame(); if (await A('aim()') === gold.id) break; await sleep(400) }
-    await p.evaluate(() => (window as any).__ather.setMana(100)); await A('prune()')
+    log(`round ${round}: prune`); await p.evaluate(() => (window as any).__ather.setMana(100)); await A('prune()')
     const rec = (await ls('open.gather.v1'))?.[`tree:${gold.id}`] as { drops: { id: string; n: number }[] } | undefined
     for (let i = 0; i < 80 && await A('chan()'); i++) await frame()
     if (!rec) { if (round === 0) ok(false, 'the Goldwood worked'); break }
     if (round === 0) roll = sumOf(rec.drops.filter(d => d.n > 0).map(d => ({ item: d.id, n: d.n })))
     await tp(sx, sz); const k = await A<{ px: number; pz: number }>('state()'); kAt.x = k.px; kAt.z = k.pz
-    const t0 = Date.now(); let shots = 0
+    log('worked; watching'); const t0 = Date.now(); let shots = 0
     while (Date.now() - t0 < 200000) {
       await frame()
       const st = (await A<{ id: string; sp: string; phase: string | null; loot: string; D: number; T: number }[]>('fetch()')) ?? []
@@ -76,7 +77,7 @@ try {
       // a run whose state went back to idle: finished (its trace stays till her next claim)
       for (const [key, v] of traces) if (!v.done && !st.some(r => `${r.id}|${r.loot}` === key && r.phase)) {
         const r = st.find(q => q.id === v.id); if (r && !r.phase) { const tr = await p.evaluate((id: string) => (window as any).__ather.fetchTrace(id), v.id) as Smp[]; traces.set(key, { ...v, done: true, tr: tr.length >= v.tr.length ? tr : v.tr, D: r.D, T: r.T }) } }
-      const l = await lootOf(p)
+      const l = await lootOf(p); if (Date.now() - t0 > (shots + 1) * 20000 && shots >= 6) log(`state ${JSON.stringify(st.map(r => [r.sp, r.phase]))} drops ${l.length}`)
       if (!l.length || done()) break
       await sleep(300)
     }
