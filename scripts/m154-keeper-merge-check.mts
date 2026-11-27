@@ -3,6 +3,7 @@
 // each (before / after the deploy go side by side), and 0 page errors. Prints the numbers so a run before the deploy is the
 // baseline.   npx tsx scripts/m154-keeper-merge-check.mts <outdir> <tag> [--url https://ather.games] [--desktop]
 import puppeteer from 'puppeteer-core'
+import { dismissStartCard } from './lib/start-card.mts'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const out = process.argv[2], tag = process.argv[3] ?? 'after', url = flag('--url', 'https://ather.games'), phone = !process.argv.includes('--desktop'), view = phone ? '390' : 'desktop'
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
@@ -38,7 +39,7 @@ try {
     for (let i = 0; i < 12; i++) { c = 0; await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))); got.push(c) }
     gl.render = proto; return [...got].sort((x, y) => x - y)[got.length >> 1]
   })
-  const hide = () => p.evaluate(() => { const h = [...document.querySelectorAll('div')].filter(d => /Click to play|Tap to start/i.test(d.textContent ?? '')); for (const d of h.filter(x => !h.some(o => o !== x && x.contains(o)))) (d as HTMLElement).style.visibility = 'hidden' })
+  const hide = () => dismissStartCard(p)   // the real tap, shared helper (scripts/lib/start-card.mts)
   const ks = (await p.evaluate(() => (window as any).__glade.keepers)) as { id: string; x: number; z: number; yaw: number }[]
   const per: string[] = []
   for (const k of ks.filter(k => ['bonn', 'otto', 'tess'].includes(k.id))) {

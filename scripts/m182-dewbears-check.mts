@@ -4,6 +4,7 @@
 // frame cost: draw calls + mean frame time at the garden with them and with ?dewbears=0.
 //   npx tsx scripts/m182-dewbears-check.mts [outdir]   (URL= to point elsewhere)
 import puppeteer from 'puppeteer-core'
+import { dismissStartCard } from './lib/start-card.mts'
 import { gregSpot } from '../src/app/shimmer/open/ather/moonwell-glade'
 import { gardenCentre, YOUNG_TINTS, CROWD_R, GARDEN } from '../src/app/shimmer/open/ather/glade-dewbears'
 import { BLUE_COLOR } from '../src/app/shimmer/open/ather/blue-look'
@@ -25,7 +26,7 @@ async function run(tag: string, w: number, h: number, phone: boolean, q = '') {
   await p.waitForFunction(() => typeof (window as any).__ather?.tp === 'function', { timeout: 240000 }); await wait(2000)
   for (let i = 0; i < 40 && (await p.evaluate(() => (window as any).__ather.zone())) !== 'glade'; i++) { await p.evaluate(() => (window as any).__ather.travel({ kind: 'glade' })); await wait(4000) }
   const t0 = Date.now(); while (Date.now() - t0 < 120000 && !(await p.evaluate(() => !!(window as any).__greg))) await wait(500)
-  if (phone) { await p.touchscreen.tap(195, 530); await wait(800); await p.touchscreen.tap(195, 530); await wait(800) }   // the 'tap to start' card
+  if (phone) await dismissStartCard(p)   // the 'tap to start' card: the real tap, shared helper
   // stand 12 m out from the garden, on the green side, looking in (past CROWD_LEAVE: they are home, not crowding)
   const tp = (x: number, z: number) => p.evaluate((x: number, z: number, y: number) => (window as any).__ather.tp(x, z, y), x, z, S.yaw)   // facing the garden (walker forward = -sin/-cos yaw)
   const ax = Math.sin(S.yaw), az = Math.cos(S.yaw)
@@ -52,7 +53,8 @@ async function run(tag: string, w: number, h: number, phone: boolean, q = '') {
   ok(atHome && a.every(y => Math.hypot(y.x - G.x, y.z - G.z) < GARDEN.r + 0.5), `${tag}: all seven home in the garden (a keeper 12 m off)`)
   ok(stats.drawn === 7 && stats.animated >= 1, `${tag}: drawn ${stats.drawn}, animated ${stats.animated}, hull ${stats.hull}; their loop ${stats.ms.toFixed(2)} ms/frame`)
   // shots only: hide the start card (the DOM, never a click: a click would start play) and tip the view down at the garden
-  const hideCard = () => p.evaluate(`(() => { for (const e of document.querySelectorAll('div')) { const t = e.textContent || ''; if (t.includes('YOUR PLOT AND THE WILDS') && t.length < 900 && e.getBoundingClientRect().width < innerWidth) { e.style.display = 'none'; return true } } return false })()`)
+  const hideCard0 = () => p.evaluate(`(() => { for (const e of document.querySelectorAll('div')) { const t = e.textContent || ''; if (t.includes('YOUR PLOT AND THE WILDS') && t.length < 900 && e.getBoundingClientRect().width < innerWidth) { e.style.display = 'none'; return true } } return false })()`)
+  const hideCard = () => (phone ? dismissStartCard(p) : hideCard0())   // phone: the real tap (no-op once gone); desktop keeps the DOM hide
   const lookDown = (pitch: number) => p.evaluate((y: number, q: number) => (window as any).__ather.look?.(y, q), S.yaw, pitch)
   await hideCard(); await lookDown(-0.35); await wait(1500)
   if (out) await p.screenshot({ path: `${out}/${tag}-garden.png` as `${string}.png` })

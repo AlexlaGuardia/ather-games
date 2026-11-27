@@ -3,6 +3,7 @@
 // that a keeper figure (not the old moulded doll) stands at each friend's spot, a shot of each, and 0 page errors.
 //   npx tsx scripts/m154-friend-keeper-check.mts <outdir> [--url https://ather.games] [--desktop]
 import puppeteer from 'puppeteer-core'
+import { dismissStartCard } from './lib/start-card.mts'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const out = process.argv[2], url = flag('--url', 'https://ather.games'), phone = !process.argv.includes('--desktop'), tag = phone ? '390' : 'desktop'
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
@@ -43,7 +44,7 @@ try {
   if (Object.keys(parts).length) for (const id of Object.keys(WANT)) ok(['head', 'body', 'hand-l', 'foot-r'].every(n => parts[id]?.includes(n)), `${id}: the scene holds a keeper body (head / body / hands / feet)`)
   else console.log('· scene not exposed: the part walk skipped (the record above is the proof)')
   const ks = (await p.evaluate(() => (window as any).__glade.keepers)) as { id: string; x: number; z: number; yaw: number }[]
-  const hide = () => p.evaluate(() => { const h = [...document.querySelectorAll('div')].filter(d => /Click to play|Tap to start/i.test(d.textContent ?? '')); for (const d of h.filter(x => !h.some(o => o !== x && x.contains(o)))) (d as HTMLElement).style.visibility = 'hidden' })
+  const hide = () => dismissStartCard(p)   // the real tap, shared helper (scripts/lib/start-card.mts)
   for (const k of ks) {
     await p.evaluate((x, z, y) => (window as any).__ather.gladeAt(x, z, y), k.x + Math.sin(k.yaw) * 3, k.z + Math.cos(k.yaw) * 3, Math.atan2(Math.sin(k.yaw), Math.cos(k.yaw)))
     for (let t = 0, calm = 0; t < 40 && calm < 3; t++) { await sleep(500); calm = await p.evaluate(() => document.querySelector<HTMLElement>('[data-veil]')?.style.opacity === '0') ? calm + 1 : 0 }
