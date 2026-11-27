@@ -11,7 +11,7 @@ import type { Wilds } from './wilds'
 import { STATE_LOOK, type AreaState } from './spread-map'
 
 /** `state` = what it reads on the spread map (M121 s2: four states; Unseen is not drawn) */
-export type Region = { id: string; poly: { x: number; z: number }[]; state: AreaState }
+export type Region = { id: string; poly: { x: number; z: number }[]; state: AreaState; /** M235 s2: under threat (the fold map pulses it) */ threat?: boolean }
 
 // ── SETTLEMENTS on the maps (BETA M19): the scene hands the network's settlements over once it has them (network-scene.tsx);
 // both maps compose through here, so the minimap and the fold map show them alike. World coords; a tile draws its own.

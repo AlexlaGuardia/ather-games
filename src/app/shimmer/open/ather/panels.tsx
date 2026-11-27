@@ -173,7 +173,9 @@ export function FoldMap({ view, travel, W, fog, waymarks, infected, here, inWild
                   {regions.filter(r => r.state !== 'unseen').map(r => (   // M70 s2: Unseen areas stay the plain map
                     <polygon key={r.id} points={r.poly.map(p => `${p.x},${p.z}`).join(' ')} vectorEffect="non-scaling-stroke"
                       data-area-state={r.state} fill={STATE_LOOK[r.state].fill}
-                      stroke={STATE_LOOK[r.state].line} strokeWidth={2} strokeDasharray={STATE_LOOK[r.state].dash?.join(' ')} strokeLinejoin="round" />
+                      stroke={r.threat ? 'rgba(200,120,255,0.95)' : STATE_LOOK[r.state].line} strokeWidth={r.threat ? 4 : 2} strokeDasharray={STATE_LOOK[r.state].dash?.join(' ')} strokeLinejoin="round" data-threat={r.threat ? '1' : undefined}>
+                      {r.threat && <animate attributeName="stroke-opacity" values="1;0.15;1" dur="1.1s" repeatCount="indefinite" />}{/* M235 s2: a zone under threat pulses */}
+                    </polygon>
                   ))}
                 </svg>
               )}

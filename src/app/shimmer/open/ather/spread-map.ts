@@ -28,22 +28,30 @@ export const ZONE_RULE = {
 /** M235: the three states in the legend's order and their SIGNED words (athernyx 4b5b5d1: "Unseen · Hollow ground · Clear", word
  *  for word: lines-batch-24b.test.ts), and the one look both maps and the legend draw them with (Unseen = the plain map). */
 export const AREA_STATES = ['unseen', 'hollow', 'clear'] as const
-export type AreaState = (typeof AREA_STATES)[number]
-export const STATE_WORD: Record<AreaState, string> = { unseen: 'Unseen', hollow: 'Hollow ground', clear: 'Clear' }
+export type LegendState = (typeof AREA_STATES)[number]
+/** + 'lost' (M235 s2): a zone collapsed into the cloud for the season. Drawn as void, NOT in the legend (no signed word yet). */
+export type AreaState = LegendState | 'lost'
+export const STATE_WORD: Record<LegendState, string> = { unseen: 'Unseen', hollow: 'Hollow ground', clear: 'Clear' }
 export const STATE_LOOK: Record<AreaState, { fill: string; line: string; dash: readonly [number, number] | null }> = {
   unseen: { fill: 'rgba(12,9,24,0.92)', line: 'rgba(12,9,24,0.92)', dash: null },   // the legend's swatch only: ground never stood in lies under the fold-mist
   hollow: { fill: 'rgba(62,64,72,0.48)', line: 'rgba(235,238,242,0.9)', dash: [10, 7] },
   clear: { fill: 'rgba(96,190,70,0.22)', line: 'rgba(150,220,110,0.9)', dash: null },
+  lost: { fill: 'rgba(6,4,12,0.94)', line: 'rgba(120,96,160,0.75)', dash: [3, 4] },   // M235 s2: the cloud void (Jin's first look)
 }
 /** `seen` = zones uncovered (when); `grey` = zones the grey took BACK (when; the grow toast and a guest's view read it); `rule` is
  *  absent until startRule() ran (`day` = the last game day rolled, `since` = when it began here). `zones` = keyed by M235 zone ids
  *  (an older save is keyed by its sections until toZones() ran). */
-export interface SpreadMap { v: 1; seen: Record<string, number>; first: boolean; grey: Record<string, number>; rule?: { seed: number; day: number; since: number }; zones?: 1 }
+export interface SpreadMap { v: 1; seen: Record<string, number>; first: boolean; grey: Record<string, number>; rule?: { seed: number; day: number; since: number }; zones?: 1
+  /** M235 s2 (neglect.ts): the one zone under threat now, the zones lost this season, and the last answer (no new threat before calm + press) */
+  threat?: Threat; lost?: Record<string, Lost>; calm?: number }
+export interface Threat { id: string; by: string; at: number; until: number }
+export interface Lost { at: number; season: number }
 export const freshMap = (): SpreadMap => ({ v: 1, seen: {}, first: false, grey: {}, zones: 1 })
 export const dayOf = (t: number) => Math.floor(t / GAME_DAY_MS)
 
 /** M235: a zone the keeper has stood in is Hollow ground until its champion goes down, then Clear (until the grey takes it back) */
 export function areaState(m: SpreadMap, id: string, infected: boolean): AreaState {
+  if (m.lost?.[id]) return 'lost'
   if (m.seen[id] === undefined) return 'unseen'
   return infected ? 'hollow' : 'clear'
 }
@@ -127,7 +135,11 @@ export function parseMap(v: unknown): SpreadMap {
   const grey: Record<string, number> = {}
   if (o.grey && typeof o.grey === 'object') for (const [k, t] of Object.entries(o.grey)) if (Number.isFinite(t)) grey[k] = t as number
   const r = o.rule, rule = r && [r.seed, r.day, r.since].every(Number.isFinite) ? { seed: r.seed, day: r.day, since: r.since } : undefined
-  return { v: 1, seen, first: o.first === true, grey, ...(rule ? { rule } : {}), ...(o.zones === 1 ? { zones: 1 as const } : {}) }
+  const th = o.threat, threat = th && typeof th.id === 'string' && typeof th.by === 'string' && Number.isFinite(th.at) && Number.isFinite(th.until) ? { id: th.id, by: th.by, at: th.at, until: th.until } : undefined
+  const lost: Record<string, Lost> = {}
+  if (o.lost && typeof o.lost === 'object') for (const [k, l] of Object.entries(o.lost)) if (l && Number.isFinite(l.at) && Number.isFinite(l.season)) lost[k] = { at: l.at, season: l.season }
+  return { v: 1, seen, first: o.first === true, grey, ...(rule ? { rule } : {}), ...(o.zones === 1 ? { zones: 1 as const } : {}),
+    ...(threat ? { threat } : {}), ...(Object.keys(lost).length ? { lost } : {}), ...(Number.isFinite(o.calm) ? { calm: o.calm } : {}) }
 }
 export function loadMap(): SpreadMap { try { return parseMap(JSON.parse(localStorage.getItem(gardenKey(KEY)) ?? 'null')) } catch { return freshMap() } }
 export function saveMap(m: SpreadMap): void { try { localStorage.setItem(gardenKey(KEY), JSON.stringify(m)) } catch { /* private window */ } }

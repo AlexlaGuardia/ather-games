@@ -15,7 +15,7 @@ const ok = (c: unknown, m: string) => { if (c) pass++; else { fail++; console.lo
 const canon = readFileSync('/root/athernyx/CANON/game/shimmer-quest-glade-tutorial.md', 'utf8')
 const cl = (id: string) => canon.split('\n').find(l => l.startsWith(`- \`${id}\``))!.replace(/^- `[^`]+`\s*(\[[^\]]*\]\s*)?/, '').replace(/^[A-Z]+:\s*/, '')
 ok(LEGEND().join(' · ') === cl('spread.map.legend').replace(/\s*\*\(.*\)\*$/, '') && LEGEND().join() === 'Unseen,Hollow ground,Clear', `legend word for word, three states (${LEGEND().join(' · ')})`)
-ok(AREA_STATES.length === 3 && Object.keys(STATE_LOOK).length === 3, 'three states, three looks')
+ok(AREA_STATES.length === 3 && Object.keys(STATE_LOOK).join() === 'unseen,hollow,clear,lost', 'three legend states; M235 s2 adds a lost look outside the legend')
 ok(growLine('Mana Springs') === cl('spread.hud.grow').replace('{PLACE}', 'Mana Springs'), 'grow toast, {PLACE} filled')
 ok(clearLine() === cl('spread.hud.clear') && firstLine() === cl('spread.map.first'), 'clear toast + first-look line')
 

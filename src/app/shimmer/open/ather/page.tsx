@@ -174,6 +174,9 @@ import { canReload, type CombatEvent, type Terrain } from './combat'
 import { ownerOf, nodeRegions, GAME_DAY_MS, SUB, type WildsNode } from './nodes'
 import { clearAt, hasSpread, loadSpread, saveSpread, loadSkew, saveSkew, type SpreadState } from './spread'
 import { fuseZones, mergeRegions } from './zones'
+import { neglect, zoneNeighbours, NEGLECT_LINES, type NeglectEvent } from './neglect'   // M235 s2
+import { withLost, lostDepthAt, type LostGround } from './lost-void'   // M235 s2
+import { BlackLight, PILLAR_MS } from './black-light'   // M235 s2
 import { loadMap, saveMap, freshMap, startRule, toZones, ZONE_RULE, rollSections, areaState, uncover, tend, firstLook, changes, growLine, clearLine, firstLine, type SpreadMap, type AreaState } from './spread-map'   // M70 s2
 import { TouchControls, type TouchAction } from '../shared/touch-controls'
 import { isTouchOnly, pressKey, touch } from '../shared/touch'
@@ -418,7 +421,7 @@ function AtherSliceGame() {
     Promise.all([loadIndex(), loadNetwork()]).then(async ([idx, nw]) => {
       const w = makeWorld(idx); if (nw) { w.clear = clearing(nw); w.roads = roadField(nw); setNet(nw); netRef.current = nw }
       await ensureEdits()   // M104: the live layer BEFORE the voids (its void brush cells are applied over the generated field)
-      w.voids = voidsRef.current = makeVoids(idx, nw ?? null, [], voidEditsLive())   // M41: the cloud voids between zones, carved as each tile parses
+      w.voids = voidsRef.current = baseVoids.current = makeVoids(idx, nw ?? null, [], voidEditsLive())   // M41: the cloud voids between zones, carved as each tile parses
       await stream(w, GREG_WAYMARK.x, GREG_WAYMARK.z); setWw(w); setWrev(w.rev)
     })
       .catch(e => setToast(`The Wilds would not load: ${e.message}`))
@@ -580,7 +583,7 @@ function AtherSliceGame() {
   }, [visitHost, visitReady])
   // ── M41 CLOUD VOIDS: a fall costs time, never gore. Over the edge -> a short fade -> set down at the last crossing you used,
   // else the last waymark (Greg's stone when you hold none).
-  const voidsRef = useRef<VoidField | null>(null)
+  const voidsRef = useRef<VoidField | null>(null), baseVoids = useRef<VoidField | null>(null)   // M235 s2: base = the cloud voids alone (voidsRef adds the lost zones)
   const lastCross = useRef<{ x: number; z: number } | null>(null)
   const wwRef = useRef<WildsWorld | null>(null); wwRef.current = ww
   const wayRef = useRef<Waymark[]>([]); wayRef.current = waymarks
@@ -632,6 +635,7 @@ function AtherSliceGame() {
   const [smap, setSmapState] = useState<SpreadMap>(() => (typeof window === 'undefined' ? freshMap() : loadMap()))
   const smapRef = useRef(smap); smapRef.current = smap
   const setSmap = (m: SpreadMap) => { if (m === smapRef.current) return; smapRef.current = m; saveMap(m); setSmapState(m) }
+  const lostKey = Object.keys(smap.lost ?? {}).sort().join('|'), lostIds = useMemo(() => new Set(lostKey ? lostKey.split('|') : []), [lostKey])   // M235 s2
   const ownerAt = (x: number, z: number) => { const w = wwRef.current; if (!w) return null; const { tx, ty } = tileOf(x, z), t = w.at(tx, ty); return t ? zoneId(ownerOf(nodesByTile.get(t.name) ?? [], x, z)?.id) : null }
   // M156 s2: in a party, a guest's Wilds is the HOST's (guest-wilds.ts). `ledger` null = my own Wilds, every value below as it was.
   const ownInf = useRef<{ held: string | null; lost: readonly string[] }>({ held: null, lost: [] })
@@ -640,12 +644,28 @@ function AtherSliceGame() {
   const visited = useRef<string[]>([])   // sections stood in on this visit (shown, never saved)
   useEffect(() => { visited.current = []; smapPrev.current = null }, [guest.host])
   const viewMap = useCallback((m: SpreadMap): SpreadMap => guest.ledger ? guestMap(m, guest.ledger, visited.current) : m, [guest.ledger])
+  const neglectFirst = useRef(true)
+  const zonePlace = (id: string) => { const n = allNodes.find(x => x.id === id), w = wwRef.current; return n && w ? ZONE_NAME[zonesOf(w, n.tile)(n.i, n.j)] : 'the Wilds' }
+  const sayNeglect = (e: NeglectEvent) => {   // ★ PLACEHOLDER words (neglect.ts NEGLECT_LINES, @lark); the warning is Morel's ping
+    if (e.kind === 'warn') hudSay(NEGLECT_LINES.warn.replace('{PLACE}', zonePlace(e.id)), 'morel', 9)
+    else if (e.kind === 'answered') hudSay(NEGLECT_LINES.answered.replace('{PLACE}', zonePlace(e.id)), 'info', 5)
+    else if (e.kind === 'lost') hudSay(NEGLECT_LINES.lost.replace('{PLACE}', zonePlace(e.id)), 'info', 8)
+    else hudSay(NEGLECT_LINES.back, 'info', 6)
+  }
   const catchUp = useCallback((cur: SpreadState) => {
     const now = clock(), settled = new Set([SETTLEMENT, ...(netRef.current?.settlements ?? []), ...(zoneRef0.current === 'wilds' ? [pos.current] : [])].map(k => ownerAt(k.x, k.z)).filter((k): k is string => !!k))   // M235: never the zone the keeper stands in
     const r = netRef.current ? rollSections(smapRef.current, cur.clean, settled, now) : { m: smapRef.current, clean: cur.clean, turned: [] as string[] }   // no network read = no roll (it could not know the settlements)
-    setSmap(r.m)
-    if (spreadRef.current && !r.turned.length) return r.turned   // nothing moved: no new ledger, no re-render
-    const s = { ...cur, at: now, clean: r.clean }
+    // M235 s2 NEGLECT HAS TEETH (neglect.ts): after the slight return, an infected zone left alone threatens a cleared neighbour,
+    // and one not answered in time is lost for the season. The page's first read warns only (an old save / a long absence).
+    const nw = netRef.current, w0 = wwRef.current, wayAt = (w: Waymark) => { const o = w0?.byName.has(w.tile) ? w0.offsetOf(w.tile) : null; return o ? { x: w.x + o.x, z: w.z + o.z } : null }
+    const zs = (ps: ({ x: number; z: number } | null)[]) => new Set(ps.map(k => (k ? ownerAt(k.x, k.z) : null)).filter((k): k is string => !!k))
+    const g = nw && w0 && !guestRef.current.still() ? neglect(r.m, { now, season: nw.season, clean: r.clean, neighbours: id => zoneNeighbours(id, k => fused.members.has(k)), onLoad: neglectFirst.current,
+      standing: zs(zoneRef0.current === 'wilds' ? [pos.current] : []), never: zs([SETTLEMENT, wayAt(GREG_WAYMARK)]), home: zs([...nw.settlements, ...wayRef.current.map(wayAt)]) }) : null
+    if (g) { neglectFirst.current = false; for (const e of g.events) sayNeglect(e) }
+    const m1 = g?.m ?? r.m, clean1 = g?.clean ?? r.clean
+    setSmap(m1)
+    if (spreadRef.current && !r.turned.length && clean1.length === cur.clean.length) return r.turned   // nothing moved: no new ledger, no re-render
+    const s = { ...cur, at: now, clean: clean1 }
     saveSpread(s); spreadRef.current = s; setSpread(s)
     return r.turned
   }, [nodesByTile]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -671,7 +691,22 @@ function AtherSliceGame() {
     const turned = catchUp(cur), s = spreadRef.current!
     hudSay(`Day ${Math.floor((clock() - s.epoch) / GAME_DAY_MS)} · ${allNodes.length - s.clean.length}/${allNodes.length} infected${turned.length ? ` · +${turned.length} spread` : ''}`, 'info', 5)
   }, [allNodes, catchUp]) // eslint-disable-line react-hooks/exhaustive-deps
-  const ownNodes = useMemo(() => spread ? allNodes.filter(n => !spread.clean.includes(n.id)) : [], [allNodes, spread])
+  const ownNodes = useMemo(() => spread ? allNodes.filter(n => !spread.clean.includes(n.id) && !lostIds.has(n.id)) : [], [allNodes, spread, lostIds])   // M235 s2: a lost zone has no champion (it is void)
+  // M235 s2: a LOST zone is void in the world (lost-void.ts): the field the tiles carve with, and the loaded tiles it touches re-parse
+  const lostGround = useMemo<LostGround>(() => ({ tileAt: (x, z) => { const w = wwRef.current; if (!w) return null; const { tx, ty } = tileOf(x, z), t = w.at(tx, ty); if (!t) return null; const cx = tx * TILE_M, cz = ty * TILE_M; return { sections: nodesByTile.get(t.name) ?? [], x0: cx - TILE_M / 2, z0: cz - TILE_M / 2, x1: cx + TILE_M / 2, z1: cz + TILE_M / 2 } }, zoneOf: id => fused.zoneOf.get(id) ?? id, lost: lostIds }), [nodesByTile, fused, lostIds]) // eslint-disable-line react-hooks/exhaustive-deps
+  const lostGroundRef = useRef(lostGround); lostGroundRef.current = lostGround
+  const lostApplied = useRef(''), lostSafe = useRef<{ x: number; z: number } | null>(null)
+  useEffect(() => {
+    const w = wwRef.current; if (!ww || !w || !baseVoids.current || lostApplied.current === lostKey) return
+    const was = new Set(lostApplied.current ? lostApplied.current.split('|') : []); lostApplied.current = lostKey
+    w.voids = voidsRef.current = withLost(baseVoids.current, lostGround) ?? baseVoids.current
+    const touched = new Set<string>()
+    for (const z of [...was, ...lostIds]) if (was.has(z) !== lostIds.has(z)) for (const sec of fused.members.get(z) ?? []) touched.add(sec.slice(0, sec.lastIndexOf(':')))
+    let drop = false; for (const name of touched) if (w.loaded.delete(name)) drop = true
+    if (drop) { const p = zoneRef0.current === 'wilds' ? pos.current : GREG_WAYMARK; stream(w, p.x, p.z).then(() => setWrev(w.rev)) }
+  }, [ww, lostKey, lostGround]) // eslint-disable-line react-hooks/exhaustive-deps
+  /** the black light over the zone lost last (one game day); BlackLight puts it on the horizon when far or from the garden */
+  const pillar = useMemo(() => { let b: { id: string; x: number; z: number; at: number } | null = null; for (const [id, l] of Object.entries(smap.lost ?? {})) { const n = allNodes.find(x => x.id === id); if (n && clock() - l.at < PILLAR_MS && (!b || l.at > b.at)) b = { id, x: n.x, z: n.z, at: l.at } } return b }, [lostKey, allNodes]) // eslint-disable-line react-hooks/exhaustive-deps
   const nodes = useMemo(() => { if (!guest.ledger) return ownNodes; const c = new Set(guest.ledger.clean); return allNodes.filter(n => !c.has(n.id)) }, [allNodes, ownNodes, guest.ledger])
   // ownership is per tile (a node owns the nearest ground in ITS tile), the same rule the tile's borders are drawn with
   const nodeOwner = useMemo(() => ww && allNodes.length ? (x: number, z: number) => {
@@ -692,7 +727,7 @@ function AtherSliceGame() {
   const infAll = useMemo(() => net && ww ? infectNodes(infectionRef.current.state, net.settlements, p => championSpot(p, builtFolkSpots(p, folkOf(p, net.season), net.season), (x, z) => ww.walkable(x, z)), (x, z) => { const { tx, ty } = tileOf(x, z); return ww.at(tx, ty)?.name ?? '' }, BIOME.meadow) : NO_NODES, [net, ww, wrev, infKey]) // eslint-disable-line react-hooks/exhaustive-deps
   const infNodes = infAll
   /** the settlements that stand (a lost one is gone until the season purge) */
-  const standing = useMemo(() => net && infection.lost.length ? { ...net, settlements: net.settlements.filter(p => !infection.lost.includes(p.id)) } : net, [net, infKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  const standing = useMemo(() => net && (infection.lost.length || lostIds.size) ? { ...net, settlements: net.settlements.filter(p => !infection.lost.includes(p.id) && !lostIds.has(ownerAt(p.x, p.z) ?? '')) } : net, [net, infKey, lostIds]) // eslint-disable-line react-hooks/exhaustive-deps   // M235 s2: a lost zone takes its settlement
   const standingRef = useRef(standing); standingRef.current = standing
   const fightNodes = useMemo(() => { if (!infNodes.length) return nearNodes; const p = pos.current; return [...nearNodes, ...infNodes.filter(n => Math.abs(n.x - p.x) < 450 && Math.abs(n.z - p.z) < 450)] }, [nearNodes, infNodes])
   const groundOwner = useMemo(() => !nodeOwner || !infNodes.length || !net ? nodeOwner : (x: number, z: number) => infectedGround(infectionRef.current.state, net.settlements, x, z) ?? nodeOwner(x, z), [nodeOwner, infNodes, net])
@@ -706,12 +741,12 @@ function AtherSliceGame() {
   const nodesRef0 = useRef<WildsNode[]>([]); nodesRef0.current = ownNodes   // M70 s1: Chamomile's ask aims at the nearest
   // each loaded tile's borders in its LOCAL coords (the minimap composes per tile; the fold map shows the tile you are in)
   const regionsByTile = useMemo(() => {
-    const m = new Map<string, { id: string; poly: { x: number; z: number }[]; state: AreaState }[]>()
+    const m = new Map<string, { id: string; poly: { x: number; z: number }[]; state: AreaState; threat?: boolean }[]>()
     if (!ww) return m
     for (const name of ww.loaded.keys()) {
       const t = ww.byName.get(name)!, ox = t.tx * TILE_M, oz = t.ty * TILE_M
       const local = (nodesByTile.get(name) ?? []).map(n => ({ ...n, x: n.x - ox, z: n.z - oz }))
-      m.set(name, mergeRegions(nodeRegions(local, TILE_M, TILE_M), id => fused.zoneOf.get(id) ?? id).map(r => ({ ...r, state: areaState(viewMap(smap), r.id, infectedSet.has(r.id)) })))   // M70 s2, M235: one outline + one of three states per zone
+      m.set(name, mergeRegions(nodeRegions(local, TILE_M, TILE_M), id => fused.zoneOf.get(id) ?? id).map(r => ({ ...r, state: areaState(viewMap(smap), r.id, infectedSet.has(r.id)), threat: !guest.ledger && smap.threat?.id === r.id })))   // M70 s2, M235 (+ s2 threat): one outline + one of three states per zone
       for (const n of infNodes) { const st = n.tile === name && net?.settlements.find(p => infectId(p.id) === n.id); if (st) m.get(name)!.push({ id: n.id, state: 'hollow', poly: Array.from({ length: 24 }, (_, k) => ({ x: st.x - ox + Math.cos(k * Math.PI / 12) * INFECT_R, z: st.z - oz + Math.sin(k * Math.PI / 12) * INFECT_R })) }) }   // M128
     }
     return m
@@ -733,7 +768,15 @@ function AtherSliceGame() {
     ;(window as unknown as { __spreadMap?: unknown }).__spreadMap = () => ({ first: smapRef.current.first, seen: Object.keys(smapRef.current.seen), here: nodeOwner(pos.current.x, pos.current.z) ?? null,
       state: (id: string) => areaState(viewMap(smapRef.current), id, infectedSet.has(id)), place: placeOf, grey: () => Object.keys(viewMap(smapRef.current).grey), rule: smapRef.current.rule ?? null,
       infected: (id: string) => infectedSet.has(id), zones: allNodes.length, sections: rawNodes.length, zoneOf: (id: string) => fused.zoneOf.get(id) ?? null,
-      members: (id: string) => fused.members.get(id) ?? [], clean: () => [...(spreadRef.current?.clean ?? [])], exempt: () => ZONE_RULE })   // checks read it (m70-spread-check, m235-zones-check)
+      members: (id: string) => fused.members.get(id) ?? [], clean: () => [...(spreadRef.current?.clean ?? [])], exempt: () => ZONE_RULE,
+      // M235 s2 (m235-lost-check): read the neglect state; CHECK-ONLY seed: zone c cleared + zone i uncovered infected `ago` game days back
+      neglect: () => ({ threat: smapRef.current.threat ?? null, lost: smapRef.current.lost ?? {}, calm: smapRef.current.calm ?? null, season: netRef.current?.season ?? null }),
+      lostDepth: (x: number, z: number) => lostDepthAt(lostGroundRef.current, x, z), height: (x: number, z: number) => wwRef.current?.heightAt(x, z) ?? null, loaded: (x: number, z: number) => !!wwRef.current?.tileAtPoint(x, z),
+      neglectTick: () => { const c = spreadRef.current; if (c) catchUp(c); return smapRef.current.threat ?? null },
+      seedNeglect: (c: string, i: string, ago: number) => { const cur = spreadRef.current; if (!cur) return false; const t = clock() - ago * GAME_DAY_MS, m0 = smapRef.current, { threat: _t, calm: _c, ...m } = m0; void _t; void _c
+        const grey = { ...m.grey }; delete grey[c]; delete grey[i]
+        setSmap({ ...m, seen: { ...m.seen, [c]: t, [i]: t }, grey, ...(m.rule ? { rule: { ...m.rule, since: Math.min(m.rule.since, t - 7 * GAME_DAY_MS) } } : {}) })
+        const s = { ...cur, clean: [...cur.clean.filter(k => k !== i && k !== c), c] }; saveSpread(s); spreadRef.current = s; setSpread(s); return true } })   // checks read it (m70-spread-check, m235-zones-check)
     tick(); const id = setInterval(tick, 4000); return () => clearInterval(id)
   }, [zone.kind, ww, nodeOwner, infectedSet, allNodes, viewMap]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {   // M70 s2: spread.map.first, Chamomile's line the first time the spread map is opened with ground uncovered (once)
@@ -942,6 +985,11 @@ function AtherSliceGame() {
   const gateStepRef = useRef<(lc: Loco, yaw: number, dt: number, g: (x: number, z: number) => number) => void>(() => {})
   const onTick = useCallback((lc: Loco, yaw: number, dt: number) => {
     pos.current = { x: lc.px, z: lc.pz, grounded: !lc.airborne, swimming: lc.swimming }
+    { const G = lostGroundRef.current   // M235 s2: a lost zone is a HARD edge: the keeper stops on its border, never falls in
+      if (G.lost.size && zoneRef0.current === 'wilds' && !sinkRef.current) {
+        if (lostDepthAt(G, lc.px, lc.pz) > 0) { const k = lostSafe.current; if (k) { lc.px = k.x; lc.pz = k.z; lc.hvx = 0; lc.hvz = 0; pos.current = { ...pos.current, x: k.x, z: k.z } } }
+        else lostSafe.current = { x: lc.px, z: lc.pz }
+      } }
     { const v = voidsRef.current   // M41: on a crossing = the place to come back to; in a void = over the edge
       if (v && zoneRef0.current === 'wilds') {
         if (sinkRef.current) return   // falling: the sink owns the body (void v2)
@@ -1928,6 +1976,7 @@ function AtherSliceGame() {
         {ww && <DeathPack active={zone.kind === 'wilds'} />}
         {zone.kind === 'wilds' && ww && held === 'waymark' && !panel && <WaymarkGhost pose={plantPose} height={ww.heightAt} verdict={(x, z) => plantVerdict({ x, z })} onWhy={setWmWhy} />}
         {zone.kind === 'wilds' && ww && <GroundLoot keeper={lootKeeper} ground={ground} can={lootCan} />}
+        {pillar && <BlackLight key={pillar.id} at={pillar} since={pillar.at} home={zone.kind === 'wilds' ? null : GREG_WAYMARK} keeper={zone.kind === 'wilds' ? pos : poseRef} now={clock} />}   {/* M235 s2: the lost zone's black light */}
         {zone.kind === 'wilds' && ww && <><CloudReefs layout={reefLayout} /><CloudDeck squares={deckLayout} size={TILE_M} y={WILDS_WATER_Y - 0.1} /><HorizonRing y={WILDS_WATER_Y} /></>}   {/* M24: the sea turns to cloud past the map */}
         {zone.kind === 'glade' && <><MoonwellPool ground={ground} stowed={() => stanceRef.current.kind === 'stowed'} /><GladeLots ground={gladeLand} /></>}   {/* M67 s1b-2: the Glade's backdrop in Greg's garden */}
         {zone.kind === 'glade' && <GladeGreg land={gladeLand} loaded={(x, z) => { const y = gladeZoneGround(x, z); return Number.isFinite(y) ? y : null }} tour={tour} hold={panel?.kind === 'talk' || panel?.kind === 'greg'} keeper={poseRef} onArrive={onTourArrive} live={gregLive} />}
