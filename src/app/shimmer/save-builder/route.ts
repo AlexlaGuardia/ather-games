@@ -1,6 +1,6 @@
 // BETA M83 p1 s1a: THE WORLD BUILDER STORE's IO (the plan is pure: world/builder.ts). Owner only: the proxy 403s /shimmer/save-*
 // for every method, GET included, so a draft is never readable by the public.
-//   GET  ?map=wilds|glade|nyx                     -> { draft, draftAt, live, index, state }
+//   GET  ?map=wilds|glade|nyx|dash                   -> { draft, draftAt, live, index, state }
 //   POST { map, action: 'draft', layer }   -> autosave / Save: REPLACES the draft (data/builder/<map>/draft.json, runtime, never built)
 //   POST { map, action: 'publish', note? } -> the draft becomes a new version + the live layer (M104: 409 if its voids seal a zone)
 //   POST { map, action: 'rollback', v }    -> version v becomes a new version + the live layer + the draft
@@ -21,6 +21,7 @@ const LIVE: Record<BuilderMap, string> = {
   wilds: join(ROOT, 'src/app/shimmer/world/wilds-edits.json'),
   glade: join(ROOT, 'src/app/shimmer/world/glade-edits.json'),   // M83 s2a: read by GET /shimmer/open/glade-edits (the game applies it in s2b)
   nyx: join(ROOT, 'src/app/shimmer/world/nyx-edits.json'),       // M83 s3: read by GET /shimmer/open/nyx-edits (continent/nyx-layer.ts applies it)
+  dash: join(ROOT, 'src/app/shimmer/world/dash-edits.json'),     // M247 s1: the Dash tent's course (`course`); s2's race reads it
 }
 const draftPath = (m: BuilderMap) => join(ROOT, 'data/builder', m, 'draft.json')
 const versionsDir = (m: BuilderMap) => join(ROOT, 'src/app/shimmer/world/builder', m)

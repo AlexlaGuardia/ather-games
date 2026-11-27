@@ -80,5 +80,16 @@ ok(cleanIndex(null, 'wilds').live === null && cleanIndex('garbage', 'wilds').ver
 ok(savedAgo(null, 0) === 'not saved yet' && savedAgo(1000, 13_400) === 'saved 12 s ago' && savedAgo(0, 185_000) === 'saved 3 min ago' && savedAgo(0, 7_300_000) === 'saved 2 h ago', 'saved-ago label')
 ok(layerSize(EMPTY_LAYER).verts === 0, 'empty layer size')
 
+// M247 s1: the Dash course map: its layer carries `course`, cleaned, compared and counted like the other parts
+{
+  ok(isBuilderMap('dash'), 'M247: dash is a builder map')
+  const co = { v: 1, width: 5, strokes: [[[0, 0], [10, 0], [10, 10]]], marks: [{ x: 10, z: 0, kind: 'swim' }], start: [0, 0], finish: [10, 10] }
+  const dl = cleanLayer({ tiles: {}, course: co })
+  ok(!!dl.course && dl.course.width === 5 && dl.course.marks[0].kind === 'swim', 'M247: cleanLayer keeps the course')
+  ok(cleanLayer({ tiles: {} }).course === undefined && !('course' in cleanLayer({ course: { strokes: [] } })), 'M247: no course = the key is absent (old layers byte-identical)')
+  ok(!sameLayer(dl, EMPTY_LAYER) && sameLayer(dl, cleanLayer(JSON.parse(JSON.stringify(dl)))), 'M247: a course makes the layer differ; round-trips equal')
+  ok(!sameLayer(dl, cleanLayer({ course: { ...co, width: 6 } })), 'M247: a width change is an unpublished change')
+  ok(layerSize(dl).course === 3, 'M247: layerSize counts the course points')
+}
 console.log(fails ? `\n${fails} FAILED` : '\nall pass')
 process.exit(fails ? 1 : 0)

@@ -22,14 +22,16 @@ import { cleanVoids, type VoidEdits } from '../open/ather/void-edits'
 import { cleanZones, type Zone } from './builder-zones'
 import { cleanNodeZones, nodeZonesCanon, type NodeZones } from '../open/ather/node-zones'   // M86
 import { cleanSettlementEdits, settlementEditsCanon, type SettlementEdits } from '../open/ather/settlement-edits'   // M237
+import { cleanCourse, courseCanon, type DashCourse } from '../open/ather/dash-course'   // M247: the Dash course (map 'dash')
 
-export const BUILDER_MAPS = ['wilds', 'glade', 'nyx'] as const   // s2a the Glade (world/glade-builder.ts: one virtual tile), s3 the Nyx continent (world/nyx-builder.ts: virtual 1 km tiles)
+export const BUILDER_MAPS = ['wilds', 'glade', 'nyx', 'dash'] as const   // M247 s1: 'dash' = the Dash tent's floor (its layer carries only `course`)
+//   // s2a the Glade (world/glade-builder.ts: one virtual tile), s3 the Nyx continent (world/nyx-builder.ts: virtual 1 km tiles)
 export type BuilderMap = typeof BUILDER_MAPS[number]
 export const isBuilderMap = (m: unknown): m is BuilderMap => typeof m === 'string' && (BUILDER_MAPS as readonly string[]).includes(m)
 
 /** a map's edit layer, the same shape as world/wilds-edits.json. `voids` (M104, the Wilds' void brush: void-edits.ts) is only
  *  present when it holds a cell, so a layer without void edits is byte-identical to the pre-M104 file */
-export interface Layer { v: 1; tiles: Edits; water: Record<string, WaterMap>; falls: Record<string, FallMap>; voids?: VoidEdits; /** M84 s1: building zones (builder-zones.ts), only present when there is one; the game reads only `tiles` (the flatten is baked there) */ zones?: Zone[]; /** M153 s1a: placed scenery (builder-props.ts), only present when there is some */ props?: Prop[]; /** M86: node zones (node-zones.ts), only present when a cell is painted */ nodes?: NodeZones; /** M237: settlement edits (settlement-edits.ts), only present when there is one; the game's loadNetwork applies them over the bake */ settlements?: SettlementEdits }
+export interface Layer { v: 1; tiles: Edits; water: Record<string, WaterMap>; falls: Record<string, FallMap>; voids?: VoidEdits; /** M84 s1: building zones (builder-zones.ts), only present when there is one; the game reads only `tiles` (the flatten is baked there) */ zones?: Zone[]; /** M153 s1a: placed scenery (builder-props.ts), only present when there is some */ props?: Prop[]; /** M86: node zones (node-zones.ts), only present when a cell is painted */ nodes?: NodeZones; /** M237: settlement edits (settlement-edits.ts), only present when there is one; the game's loadNetwork applies them over the bake */ settlements?: SettlementEdits; /** M247 s1: the Dash course (dash-course.ts), only present when painted; map 'dash' */ course?: DashCourse }
 export const EMPTY_LAYER: Layer = { v: 1, tiles: {}, water: {}, falls: {} }
 /** junk-proof: anything that is not a valid sparse map is dropped (the same cleaners the game uses) */
 export const cleanLayer = (j: unknown): Layer => {
@@ -39,16 +41,18 @@ export const cleanLayer = (j: unknown): Layer => {
   const pr = cleanProps(j); if (pr.length) L.props = pr
   const nz = cleanNodeZones(j); if (Object.keys(nz).length) L.nodes = nz
   const se = cleanSettlementEdits(j); if (se.length) L.settlements = se
+  const co = cleanCourse(j); if (co) L.course = co
   return L
 }
 export const layerSize = (l: Layer) => {
   const n = (m: Record<string, Record<string, number>>) => Object.values(m).reduce((a, d) => a + Object.keys(d).length, 0)
-  const s: { tiles: number; verts: number; water: number; falls: number; voids?: number; zones?: number; props?: number; nodes?: number; settlements?: number } = { tiles: Object.keys(l.tiles).length, verts: n(l.tiles), water: n(l.water), falls: n(l.falls) }
+  const s: { tiles: number; verts: number; water: number; falls: number; voids?: number; zones?: number; props?: number; nodes?: number; settlements?: number; course?: number } = { tiles: Object.keys(l.tiles).length, verts: n(l.tiles), water: n(l.water), falls: n(l.falls) }
   const v = Object.keys(l.voids ?? {}).length; if (v) s.voids = v
   if (l.zones?.length) s.zones = l.zones.length
   if (l.props?.length) s.props = l.props.length
   const nn = Object.keys(l.nodes ?? {}).length; if (nn) s.nodes = nn
   if (l.settlements?.length) s.settlements = l.settlements.length
+  if (l.course) s.course = l.course.strokes.reduce((a, k) => a + k.length, 0)
   return s
 }
 /** order-independent equality (JSON key order must not make two equal layers differ) */
@@ -56,7 +60,7 @@ export function sameLayer(a: Layer, b: Layer): boolean {
   const canon = (l: Layer) => JSON.stringify([...['tiles', 'water', 'falls'].map(p => {
     const m = l[p as 'tiles'] as Record<string, Record<string, number>>
     return Object.keys(m).sort().map(t => [t, Object.keys(m[t]).sort((x, y) => +x - +y).map(k => [k, m[t][k]])])
-  }), Object.keys(l.voids ?? {}).sort().map(k => [k, l.voids![k]]), [...(l.zones ?? [])].sort((a, b) => a.id < b.id ? -1 : 1).map(z => [z.id, z.x0, z.z0, z.x1, z.z1, z.h, z.tag?.kind ?? null, z.tag?.ref ?? null, z.tag?.name ?? null, z.tag?.front ?? null, (z.build ?? []).map(p => [p.id, p.item, p.x, p.z, p.q])]), propsCanon(l.props), ...(l.nodes && Object.keys(l.nodes).length ? [nodeZonesCanon(l.nodes)] : []), ...(l.settlements?.length ? [settlementEditsCanon(l.settlements)] : [])] as unknown[])
+  }), Object.keys(l.voids ?? {}).sort().map(k => [k, l.voids![k]]), [...(l.zones ?? [])].sort((a, b) => a.id < b.id ? -1 : 1).map(z => [z.id, z.x0, z.z0, z.x1, z.z1, z.h, z.tag?.kind ?? null, z.tag?.ref ?? null, z.tag?.name ?? null, z.tag?.front ?? null, (z.build ?? []).map(p => [p.id, p.item, p.x, p.z, p.q])]), propsCanon(l.props), ...(l.nodes && Object.keys(l.nodes).length ? [nodeZonesCanon(l.nodes)] : []), ...(l.settlements?.length ? [settlementEditsCanon(l.settlements)] : []), ...(l.course ? [courseCanon(l.course)] : [])] as unknown[])
   return canon(a) === canon(b)
 }
 

@@ -60,8 +60,10 @@ interface BSnap { draft: Layer; draftAt: number | null; index: Index; state: 'un
 // M83 s2a: which map. The Wilds = its exported tiles (pick one, the 3x3 ring parses); the Glade = ONE virtual tile sampled from
 // its ground function (world/glade-builder.ts), so everything below works on it unchanged.
 // M83 s3: the Nyx continent = virtual 1 km tiles cut from its one exported region (world/nyx-builder.ts), on the Wilds' tile grid.
-const MAP_NAME: Record<BuilderMap, string> = { wilds: 'the Wilds', glade: 'Moonwell Glade', nyx: 'Nyx continent' }
-const LOAD_NAME: Record<BuilderMap, string> = { wilds: 'Wilds', glade: 'Glade', nyx: 'continent' }
+const MAP_NAME: Record<BuilderMap, string> = { wilds: 'the Wilds', glade: 'Moonwell Glade', nyx: 'Nyx continent', dash: 'Dash course' }
+const LOAD_NAME: Record<BuilderMap, string> = { wilds: 'Wilds', glade: 'Glade', nyx: 'continent', dash: 'Dash course' }
+// M247 s1: the Dash course workspace (its own editor: a flat tent floor, the spray can, the dash-cam preview), same store + Publish
+const DashCourseEditor = dynamic(() => import('./DashCourseEditor'), { ssr: false })
 /** the tile picker / ring's view of a tiled map (a WildsWorld has these; the Nyx continent builds its own) */
 type Grid = { at(tx: number, ty: number): { name: string; tx: number; ty: number } | undefined; byName: Map<string, { name: string; tx: number; ty: number }> }
 const GLADE_FOCUS = { x: -100, z: 110 }   // Fly opens over Greg's garden (the tile's centre is void, between the islands)
@@ -113,12 +115,12 @@ export default function TerrainEditor() {
   // read ?map= after mount (reading window in the state initialiser made the server render the Wilds and the client the Glade:
   // a hydration error, caught by builder-glade-check)
   const [map, setMap] = useState<BuilderMap | null>(null)
-  useEffect(() => { try { const q = new URLSearchParams(window.location.search).get('map'); setMap(q === 'glade' || q === 'nyx' ? q : 'wilds') } catch { setMap('wilds') } }, [])
+  useEffect(() => { try { const q = new URLSearchParams(window.location.search).get('map'); setMap(q === 'glade' || q === 'nyx' || q === 'dash' ? q : 'wilds') } catch { setMap('wilds') } }, [])
   const pick = (m: BuilderMap) => {
     setMap(m)
     try { const u = new URL(window.location.href); u.searchParams.set('map', m); window.history.replaceState(null, '', u) } catch { /* */ }
   }
-  return map ? <MapEditor key={map} map={map} onMap={pick} /> : <div className="text-xs font-mono text-white/50">loading…</div>
+  return map === 'dash' ? <DashCourseEditor onMap={pick} /> : map ? <MapEditor key={map} map={map} onMap={pick} /> : <div className="text-xs font-mono text-white/50">loading…</div>
 }
 
 function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => void }) {
@@ -773,7 +775,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
     <div className="flex flex-col lg:flex-row gap-4 text-white/85">
       <div className="flex flex-col gap-2 w-full max-w-[760px]">
       <div className="flex flex-wrap gap-1 items-center">{/* M83 s2b: wraps (the map buttons crowded the row) */}
-        {(['wilds', 'glade', 'nyx'] as const).map(m => <button key={m} className={`${btn} ${map === m ? on : off}`} onClick={() => map !== m && onMap(m)} data-testid={`map-${m}`}>{MAP_NAME[m]}</button>)}
+        {(['wilds', 'glade', 'nyx', 'dash'] as const).map(m => <button key={m} className={`${btn} ${map === m ? on : off}`} onClick={() => map !== m && onMap(m)} data-testid={`map-${m}`}>{MAP_NAME[m]}</button>)}
         <span className="w-3" />
         {(['2d', 'fly'] as const).map(v => <button key={v} className={`${btn} ${view === v ? on : off}`} onClick={() => setView(v)} data-testid={`view-${v}`}>{v === '2d' ? 'Map (top-down)' : 'Fly (3D)'}</button>)}
         <button className={`${btn} ${showOv ? on : off}`} onClick={() => setShowOv(v => !v)} data-testid="overlay-toggle" title="POIs + roads, where the game puts them (read-only)">POIs + roads (O)</button>
