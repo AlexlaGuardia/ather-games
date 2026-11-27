@@ -62,7 +62,7 @@ for (const period of [2, 3, 5, 9, 38]) { const n = drive(mk(), 5, 1 / 60, t => M
 { const g = holdGun(bb), out: Round[] = []; let n = 0; for (let i = 0; i < 180; i++) n += stepGun(g, 1 / 60, true, eye, aim, Math.random, out).length; ok(n === 15, `the range: hold 3 s fires ${n}`) }
 
 // every other gun: rows untouched, and fire() still one round per call
-const ROWS = { repeater: [0.22, 10, 16, 1, 0], spitter: [0.11, 7, 11, 1, 0], roar: [0.8, 7, 9, 1, 0], lance: [0.5, 22, 34, 1, 0], 'charred-rifle': [0.9, 34, 55, 1, 0] } as Record<string, number[]>
+const ROWS = { repeater: [0.22, 10, 16, 1, 0], spitter: [0.11, 7, 11, 1, 0], roar: [0.8, 7, 9, 1, 0], lance: [0.5, 22, 34, 1, 0], 'charred-rifle': [0.9, 22, 55, 1, 0] } as Record<string, number[]>
 // M197 (meaning moved): a single gun now HAS a rhythm, its fire interval; undialled it is the row, and `gap` never touches it
 for (const [id, r] of Object.entries(ROWS)) { const g = RANGE_GUNS.find(x => x.id === id)!; ok(JSON.stringify([g.fireCd, g.damage, g.crit, g.burst, g.burstGap]) === JSON.stringify(r), `${id} changed`); ok(dialedGun(g) === g && withRhythm(g, 0.1) === g && withRhythm(g, 0.1, g.fireCd) === g, `${id}: undialled = the row`) }
 { const c = mk(RANGE_GUNS.find(g => g.id === 'lance')!); ok(fire(c, eye, aim) && !fire(c, eye, aim) && c.keeper.ammo === c.gun.clip - 1, 'Lance: one round a call') }

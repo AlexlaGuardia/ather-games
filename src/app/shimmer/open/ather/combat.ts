@@ -73,7 +73,9 @@ export interface Round { x: number; y: number; z: number; vx: number; vy: number
   /** M151: metres a hit shoves the body (a breacher's pellet, behind M151.shell) */
   shove?: number
   /** M177: where it left and whose it is (the streak grows out of the barrel, drawn as that gun's): look only */
-  from?: { x: number; y: number; z: number }; gun?: string }
+  from?: { x: number; y: number; z: number }; gun?: string
+  /** M150 s5: a headshot on a Hollow takes all it has (the Lance, gunplay RangeGun.headKill) */
+  headKill?: boolean }
 export interface Drop { id: number; x: number; y: number; z: number; amount: number; age: number }
 
 export interface Keeper {
@@ -148,6 +150,8 @@ export const weightOf = (h: Hollow) => h.kind === 'crawler' ? Math.max(1, h.mass
 /** grey matter a dispersed Hollow leaves */
 const dropOf = (c: Combat, h: Hollow) => (h.kind === 'floater' ? 2 : h.kind === 'crawler' ? Math.min(8, Math.max(1, h.mass ?? 1)) : 1) + Math.floor(rnd(c) * 3)
 export const HEAD_Y = 1.55, HEAD_R = 0.26, BODY_Y = 0.85, BODY_R = 0.44
+/** M150 s5: what a headKill round's head hit takes from a Hollow: all it has left (0 for any other round) */
+export const headKillOf = (r: Pick<Round, 'headKill'>, h: Pick<Hollow, 'hp'>) => (r.headKill ? Math.max(0, h.hp) : 0)
 /** M163: the Walker's heavy legs and the ends of its hanging arms count (they were drawn under the body sphere's 0.29 m and a round went through them),
  *  and the body ball is drawn in to the slimmer skin (1.6 -> 1.4). Newcomer Roar vs the champion, 600 fights: 80 -> 66 lost (noise). */
 export const LEG_Y = 0.3, LEG_R = 0.36, BODY_FIT = 1.4
@@ -510,7 +514,7 @@ export function fire(c: Combat, eye: { x: number; y: number; z: number }, aim: {
     let dz = aim.z + (pz * Math.cos(th) + qz * Math.sin(th)) * r
     const dl = Math.hypot(dx, dy, dz); dx /= dl; dy /= dl; dz /= dl
     const x0 = eye.x + dx * 0.4, y0 = eye.y - 0.08 + dy * 0.4, z0 = eye.z + dz * 0.4
-    c.rounds.push({ x: x0, y: y0, z: z0, vx: dx * w.projSpeed, vy: dy * w.projSpeed, vz: dz * w.projSpeed, life: w.projLife, dmg: w.damage, crit: w.crit, ...(pellets > 1 ? { shove: shell!.shove } : {}), from: { x: x0, y: y0, z: z0 }, gun: w.id })
+    c.rounds.push({ x: x0, y: y0, z: z0, vx: dx * w.projSpeed, vy: dy * w.projSpeed, vz: dz * w.projSpeed, life: w.projLife, dmg: w.damage, crit: w.crit, ...(pellets > 1 ? { shove: shell!.shove } : {}), ...((w as { headKill?: boolean }).headKill ? { headKill: true } : {}), from: { x: x0, y: y0, z: z0 }, gun: w.id })
   }
   k.ammo--; k.sinceShot = 0; k.bloom = bloomAfterShot(w, k.bloom)
   c.events.push({ kind: 'fired' })
@@ -663,7 +667,7 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
       if (segDist2(ox, oy, oz, r.x, r.y, r.z, h.x, h.y + BODY_Y, h.z) < BODY_R * BODY_R * BODY_FIT || segDist2(ox, oy, oz, r.x, r.y, r.z, h.x, h.y + LEG_Y, h.z) < LEG_R * LEG_R) best = { h, head: false }
     }
     if (best && c.remote) {   // M28: a non-host's round: feedback now, the host decides the damage (slice 3)
-      const h = best.h, dmg = (best.head ? r.crit : r.dmg) * ((k.ampUntil ?? 0) > (c.clock ?? 0) ? AMP_MULT : 1)
+      const h = best.h, dmg = Math.max((best.head ? r.crit : r.dmg) * ((k.ampUntil ?? 0) > (c.clock ?? 0) ? AMP_MULT : 1), best.head ? headKillOf(r, h) : 0)
       h.hitFlash = 0.12; r.life = 0
       ;(c.netHits ??= []).push({ id: h.id, dmg, head: best.head })
       c.events.push({ kind: 'hit', id: h.id, head: best.head, killed: false })
@@ -672,7 +676,7 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
     if (best) {
       const h = best.h
       const mult = (fxOn(h, 'vulnerable') ? FX.vulnerableMult : 1) * ((k.ampUntil ?? 0) > (c.clock ?? 0) ? AMP_MULT : 1)
-      h.hp -= (best.head ? r.crit : r.dmg) * mult; h.hitFlash = 0.12; r.life = 0
+      h.hp -= Math.max((best.head ? r.crit : r.dmg) * mult, best.head ? headKillOf(r, h) : 0); h.hitFlash = 0.12; r.life = 0
       if (h.state !== 'lunge' && h.state !== 'charge') { h.state = 'stagger'; h.t = h.kind === 'floater' ? SHAMBLER.stagger : walkerOf(h).stagger }
       shoveBody(c, T, h, r)
       const killed = h.hp <= 0

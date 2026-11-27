@@ -27,6 +27,9 @@ export interface RangeGun extends WeaponDef {
   charge?: number
   /** canon: a weapon that can never take a sigil (the Enchant Temple turns it away) */
   noSigil?: boolean
+  /** M150 s5 (Alex 11-27: "the reacher I'd like to one shot hollows with headshots"): a HEADSHOT on a Hollow takes all it has left,
+   *  whatever its hp (the rhythm dials scale crit, so this is a rule, not a number). A body shot keeps the gun's damage. Hollows only. */
+  headKill?: boolean
 }
 
 /** M148: the Backbone's damage a round. 10.4 = 49.5 a second held, 41.9 with reloads: never past the engine Repeater's (0.16 s) 62.5 / 42.0. */
@@ -65,13 +68,14 @@ export const RANGE_GUNS: RangeGun[] = ([
     bloomDecay: 6, adsBloomScale: 0, kickPitch: 0.04, kickYaw: 0.012,
     converge: 14, headR: 0.05, trailR: 0.04, hipMove: 0.78, adsMove: 0.6,
     burst: 1, burstGap: 0, pellets: 9, shove: 0.35, color: '#d0503c' },
-  { ...base('lance'), burst: 1, burstGap: 0, pellets: 1, shove: 0.12, color: '#a070d8' },
+  { ...base('lance'), burst: 1, burstGap: 0, pellets: 1, shove: 0.12, color: '#a070d8', headKill: true },   // M150 s5: one head = one Hollow
   // ★ THE CHARRED RIFLE (canon RULED 11-15, CANON_GAPS › "Kael leaves the Charred Rifle at the shipyard"; Alex: "its single
   // fire with a short charge up but packs a punch"). Kael's retired Prototype, left to the keeper with the shipyard; it can
   // NEVER take a sigil (world/manalic-weapons.md). A primary: one heavy round per pull after a 0.35 s charge. Numbers = build.
   { id: 'charred-rifle', name: 'CHARRED RIFLE', slot: 'LONGBARREL', auto: false,
     fireCd: 0.9, projSpeed: 70, projLife: 2.2,
-    damage: 34, crit: 55, clip: 5, reloadTime: 2.0, reloadMana: 12,
+    // M150 s5 (Alex 11-27: "the charred rifle I'd like it get the reacher's damage"): its damage a round = the Lance's (was 34)
+    damage: base('lance').damage, crit: 55, clip: 5, reloadTime: 2.0, reloadMana: 12,
     hipSpread: 0.5, adsSpread: 0.06, bloomPerShot: 0, bloomMax: 0,
     bloomDecay: 6, adsBloomScale: 0, kickPitch: 0.03, kickYaw: 0.006,
     converge: 60, headR: 0.09, trailR: 0.07, hipMove: 0.85, adsMove: 0.55,
