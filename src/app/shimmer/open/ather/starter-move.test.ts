@@ -16,14 +16,14 @@ const look = (x: number, z: number, tx: number, ty: number, tz: number): [[numbe
 // ── punch: the starter is a target, the hit lands, the count never reaches the break ──
 { const S = STARTER_CHEST, [o, d] = look(S.x, S.z + 1.6, S.x, GROUND_Y + 0.6, S.z), t = meleeTarget(freshWorks(), o, d)
   ok(t?.kind === 'chest' && t.id === STARTER_ID, `punch: aiming at the starter Keepstone lands on it (${JSON.stringify(t)})`) }
-{ let h = null as ReturnType<typeof strike>['hits'], broke = false, ns: number[] = []
-  for (let i = 0; i < 8; i++) { const r = strike(h, STARTER_ID, 1000 + i * 500); h = r.hits; ns.push(r.n); broke ||= r.broke }
-  ok(!broke, `punch: eight hits never break the starter (${ns.join(',')})`)
-  ok(ns[0] === 1 && ns[1] === 2 && ns.every(n => n >= 1 && n < MELEE_HITS), `punch: each hit counts (lands) and stays under ${MELEE_HITS} (${ns.join(',')})`) }
+// M231 (Alex 11-27) REVERSED M220's 'never breaks': the starter now pops on the third hit like any Keepstone (keepstone-pop.test.ts
+// holds the full set: bag, bank intact, re-place, old saves). Kept here: the third hit breaks it, and its pick-up is the bag item.
+{ let h = null as ReturnType<typeof strike>['hits'], ns: number[] = [], broke = false
+  for (let i = 0; i < MELEE_HITS; i++) { const r = strike(h, STARTER_ID, 1000 + i * 500); h = r.hits; ns.push(r.n); broke = r.broke }
+  ok(broke && ns.join(',') === '1,2,3', `punch (M231): the starter breaks on hit ${MELEE_HITS} (${ns.join(',')})`) }
 { const r = strike({ id: 'k1', n: 2, at: 0 }, 'k1', 100); ok(r.broke, 'punch: a placed Keepstone still breaks on the third') }
-{ const inv = newInv(), b = breakTarget(freshWorks(), { kind: 'chest', id: STARTER_ID }, inv, {})
-  ok(b === null && countOf(inv, 'keepstone') === 0, 'punch: even a forced break never puts the starter in the bag') }
-ok(pickUpChest(freshWorks(), STARTER_ID, newInv()) === null, 'pick up: the starter never goes into the bag')
+{ const b = breakTarget(freshWorks(), { kind: 'chest', id: STARTER_ID }, newInv(), {})
+  ok(!!b && b !== 'spirit' && countOf(b.inv, 'keepstone') === 1 && b.works.starterOut === true, 'punch (M231): the break puts the starter in the bag') }
 
 // ── move: a good spot moves it; the cap / count do not change; bad spots refuse ──
 const fresh = freshWorks()

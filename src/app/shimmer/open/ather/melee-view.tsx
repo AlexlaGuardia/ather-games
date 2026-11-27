@@ -17,6 +17,8 @@ import { BLOOMED_SPIRIT_LINE } from './planter-lines'
 import { itemDef } from '../shared/inventory'
 import { isBuilding } from './build-mode'
 import { FURNITURE, keepstoneFor } from './furniture'
+import { noBankDoor } from './rooms'
+import { BANK_DOOR_HINT } from './bank-door'
 import { pickSwing, strikeMs, swingPool, type HandAction } from '../shared/fp-actions'   // M82: the punch pool
 
 const live = { target: null as Target | null, hits: null as Hits | null, last: -1e9, hitAt: new Map<string, number>(), subs: new Set<() => void>(),
@@ -65,7 +67,7 @@ function land(t: Target, now: number): 'hit' | 'broke' | 'full' | 'miss' {
   if (!b) { hudSay('Your bag is full.', 'info'); return 'full' }
   const carried = b.pots !== getPots(), sap = b.boxes !== getBoxes()
   setWorks(b.works); setInv(b.inv); setPots(b.pots); setBoxes(b.boxes); live.target = null; emit()
-  hudSay(carried ? `${name} · back in your bag. Its seed goes with it.` : sap ? `${name} · back in your bag. Its sapling goes with it.` : `${name} · back in your bag`, 'item')
+  hudSay(carried ? `${name} · back in your bag. Its seed goes with it.` : sap ? `${name} · back in your bag. Its sapling goes with it.` : t.kind === 'chest' && noBankDoor(b.works) ? `${name} · back in your bag. ${BANK_DOOR_HINT}` : `${name} · back in your bag`, 'item', t.kind === 'chest' ? 6 : undefined)   // M231: the last door up says where the bank opens
   return 'broke'
 }
 

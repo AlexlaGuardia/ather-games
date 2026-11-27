@@ -13,6 +13,8 @@ import { JournalBody } from './journal-panel'
 import { CharacterBody } from './character-panel'
 import { SkillsBody } from './skills-panel'
 import { setOptionsOpen } from './options'
+import { loadWorks, noBankDoor } from './ather/rooms'
+import { BANK_DOOR_HINT } from './ather/bank-door'
 
 export type PackTab = 'journal' | 'bag' | 'character' | 'skills'
 // skills (BETA M64, 11-22): a fourth tab, read-only, U opens it
@@ -92,10 +94,12 @@ export function PackMenu({ tab, onTab, onClose, sel, isTouch }: {
       {side(next, 'right')}
     </div>
   )
-  const hint = tab === 'bag' ? bagHint(isTouch) : tab === 'journal' ? (isTouch ? 'Tap a line to open it.' : 'Click a line to open it') : tab === 'skills' ? 'Each skill, its level, xp to the next.' : (isTouch ? 'Tap a slot to change it.' : 'Click a slot to change what you carry')
+  // M231: no Keepstone stands on the keeper's own plot (the first one was punched up): the bag says where the bank opens
+  const noDoor = tab === 'bag' && noBankDoor(loadWorks())
+  const hint = tab === 'bag' ? (noDoor ? BANK_DOOR_HINT : bagHint(isTouch)) : tab === 'journal' ? (isTouch ? 'Tap a line to open it.' : 'Click a line to open it') : tab === 'skills' ? 'Each skill, its level, xp to the next.' : (isTouch ? 'Tap a slot to change it.' : 'Click a slot to change what you carry')
   return (
     <HearthFrame title={NAME[tab]} maxWidth={tab === 'bag' ? 560 : 520} onClose={onClose} fixed dataPanel={`pack-${tab}`} head={head} bodyClass={tab === 'character' ? 'snap-y snap-mandatory' : ''}
-      footer={<span className="text-[12px]" style={hearthDisplay}>{hint}{isTouch ? '' : ' · ← → switch tabs · I J P U'}</span>}>
+      footer={<span className="text-[12px]" style={hearthDisplay} {...(noDoor ? { 'data-bank-door-hint': '' } : {})}>{hint}{isTouch ? '' : ' · ← → switch tabs · I J P U'}</span>}>
       {tab === 'bag' ? <BagBody sel={sel} /> : tab === 'journal' ? <JournalBody /> : tab === 'skills' ? <SkillsBody /> : <CharacterBody />}
     </HearthFrame>
   )
