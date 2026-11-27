@@ -15,6 +15,7 @@ import type * as THREE from 'three'
 import type { FolkAction } from '../shared/folk-model'
 import { GregModel } from '../shared/greg-model'
 import { Blue } from './glade-blue'
+import { YoungDewbears } from './glade-dewbears-view'
 import { BLUE_AT } from './blue-look'
 import { stepWalk, startWalk, faceYaw, turnToward, TURN_RATE, type Walk, type Pt } from '../shared/folk-path'
 import { gregSpot } from './moonwell-glade'
@@ -99,6 +100,8 @@ export function GladeGreg({ loaded, land, tour = null, hold = false, keeper, onA
       {/* M166: Blue, his old Dewbear, at the bench's end (he keeps it while Greg tours) */}
       <group position={[BLUE_AT.x, 0, BLUE_AT.z]} rotation-y={BLUE_AT.yaw}><Blue /></group>
     </group>
+    {/* M182: the seven young meadow Dewbears who stayed, roaming the garden in front of the bench (glade-dewbears.ts) */}
+    <YoungDewbears bench={s} loaded={loaded} keeper={keeper} />
     <group ref={g} position={[s.x, y, s.z]} rotation-y={s.yaw}>
       <GregModel pose={mode === 'sit' ? 'sit' : 'stand'} action={mode === 'sit' ? 'idle' : mode} />
     </group>
