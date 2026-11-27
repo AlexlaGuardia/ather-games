@@ -9,6 +9,7 @@
 import type { TalkNode } from '../shared/npc-talk'
 import { ANSWERS } from './greg-talk'
 import { line } from './glade-tutorial-lines'
+import { stageOfLine, type GregMapStage } from './greg-map'   // M236
 import { answerGate, firstStepsOn, gregScreen, heardWelcome, heardMoglins, heardSpirits, heardWilds, type Tut } from './glade-tutorial'
 
 /** M146: Beat 2 (greg.b2): the gate favour, its two answers */
@@ -61,8 +62,12 @@ function hubOptions(t: Tut, act: TutActs) {
   ]
 }
 
-/** The node at cursor `c`. */
-export function tutNode(t: Tut, c: TutCursor, act: TutActs): TalkNode {
+/** The node at cursor `c`. M236: a Wilds line also names the map stage it shows (greg-map.ts; the page draws it). */
+export function tutNode(t: Tut, c: TutCursor, act: TutActs): TalkNode & { mapStage?: GregMapStage } {
+  const node = tutNode0(t, c, act), st = stageOfLine(c.b, c.i)
+  return st ? { ...node, mapStage: st } : node
+}
+function tutNode0(t: Tut, c: TutCursor, act: TutActs): TalkNode {
   if (c.b === 'hub') return { line: line('greg.b1.hub.back'), options: hubOptions(t, act) }
   if (c.b === 'go' || c.b === 'wait') return { line: line(`greg.b2.${c.b}`), options: [{ label: ANSWERS.bye, pick: () => act.go(null) }] }
   if (c.b === 'ask') {

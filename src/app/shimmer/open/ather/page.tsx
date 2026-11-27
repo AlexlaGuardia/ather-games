@@ -120,6 +120,7 @@ import { tourStops, giveGloveWord, TABLE_STOP, TABLE_KEEPER, GLOVE_GIVE, TOUR_NE
 import { GregModel } from '../shared/greg-model'
 import { getLoadout, setLoadout } from '../shared/loadout'
 import { TalkBubble, TalkChoices, type TalkNode } from '../shared/npc-talk'
+import { withGregMap } from './greg-wilds-map'   // M236: Greg's Wilds talk plays the map
 import { gemsGiven, markGemsGiven, stageOf, gregsGems, errandEntries, birthSeat } from '../business/errand'
 import { skillPointerEntries } from '../business/skill-pointers'
 import { SEATS } from '../business/letters'
@@ -1625,7 +1626,7 @@ function AtherSliceGame() {
   const talkStep = panel?.kind === 'talk' ? panel.step : -1
   const talkNode = useMemo(() => {
     if (talkStep < 0) return null
-    if (tut && tutC) return tutNode(tut, tutC, {
+    if (tut && tutC) return withGregMap(tutNode(tut, tutC, {
       set: setTut,
       go: c => { setTutC(c); if (!c) setPanel(null) },
       grimoire: () => {
@@ -1638,7 +1639,7 @@ function AtherSliceGame() {
         }
         setTut(tutGift(tut, 'grimoire').t); return true
       },
-    })
+    }), ww)
     if (tut && foldC) return foldNode(tut, foldC, {
       grey: () => gardenRef.current.grey,
       pay: (t, grey) => { const g = { ...gardenRef.current, grey }; setGarden(g); saveGarden(g); setTut(t); hudSay(FOLD_TEXT.folded(grey), 'item') },   // garden first, then the flag
@@ -1661,7 +1662,7 @@ function AtherSliceGame() {
       buy: tut && open ? { label: FOLD_TEXT.buyAsk, pick: () => buyPick(tut, { grey: () => gardenRef.current.grey, pay: () => {}, go: s => { setFoldC(s); if (!s) setPanel(null) }, home: () => goHome(), buy: grey => buyWaymark(grey) }) } : undefined,
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [talkStep, errandStage, birth, given, tut, tutC, foldC, spiritsDev, gregSaid])
+  }, [talkStep, errandStage, birth, given, tut, tutC, foldC, spiritsDev, gregSaid, ww])
   // M68 s3a: Otto, Tess, Bonn (glade-friend-talk.ts). Greet + gift once Greg has sent you; their bark otherwise.
   // M155: and the tour's Moglins. A friend names the tutorial node beside them only where one stands (Place mode, the owner's).
   const openFriend = (f: Talker) => { const t = loadTut(), at = gladeTalkerAt(f); setTutState(t); setPanel({ kind: 'friend', c: friendStart(t, f, !!at && nodeBeside(f, at, gladeOwnNodes)) }) }
