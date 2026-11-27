@@ -81,11 +81,9 @@ async function bench(w: number, h: number, phone: boolean) {
   const v3 = await view()
   ok(Math.abs(v3[1] - v2[1]) > 0.2, `${vt}: a ${phone ? 'one-finger' : 'mouse'} drag turns the view round the keeper (${v2[1]?.toFixed(2)} -> ${v3[1]?.toFixed(2)} rad)`)
   await p.screenshot({ path: `${DIR}/${tag}-${vt}-dragged.png` })
-  if (!phone) {   // drag back, so the head shots below face the camera
-    await p.mouse.move(cx + 150, cy); await p.mouse.down()
-    for (let i = 1; i <= 12; i++) { await p.mouse.move(cx + 150 - i * 25, cy); await sleep(30) }
-    await p.mouse.up(); await sleep(1500)
-    ok(Math.abs((await view())[1] - v2[1]) < 0.15, `desk: dragging back faces the keeper again (${(await view())[1]?.toFixed(2)})`)
+  if (!phone) {   // reload, so the head shots below face the camera (a drag back lands wherever the damping lets it)
+    await p.reload({ waitUntil: 'load', timeout: 240000 }); await p.waitForSelector('[data-pick="head-0"]', { timeout: 240000 })
+    await p.waitForFunction(() => !/loading/.test(document.querySelector('[data-status]')?.textContent ?? ''), { timeout: 60000 }); await sleep(2500)
   }
   // 6. a cartoon head picked = the CLASSIC head shape: chin taper 0.00 + chin length 0.00, its mouth on (desk only)
   if (!phone) {
@@ -123,8 +121,12 @@ async function creator() {
   ok(await poll(() => p.evaluate(() => !!(window as unknown as { __creatorOrbit?: () => number[] }).__creatorOrbit?.().length), 40000), 'creator: the preview is up')
   await sleep(1500)
   const view = () => p.evaluate(() => (window as unknown as { __creatorOrbit: () => number[] }).__creatorOrbit())
+  // the controls' first reading can lag their target prop by a few slow (swiftshader) frames: wait for one steady second first
+  const v0 = await view(); let settled = false
+  for (let i = 0; i < 20 && !settled; i++) { const x = await view(); await sleep(1000); const y = await view(); settled = x.every((n, j) => Math.abs(n - y[j]) < 1e-4) }
+  ok(settled && Math.abs((await view())[0] - v0[0]) < 1e-4, `creator: the view settles with no turn round the keeper (azimuth ${v0[0]?.toFixed(4)} -> ${(await view())[0]?.toFixed(4)})`)
   const v1 = await view(); await sleep(3000); const v2 = await view()
-  ok(v1.every((n, i) => Math.abs(n - v2[i]) < 1e-4), `creator: preview still over 3 s idle (${v1[0]?.toFixed(3)} -> ${v2[0]?.toFixed(3)})`)
+  ok(v1.length === 3 && v1.every((n, i) => Math.abs(n - v2[i]) < 1e-4), `creator: preview still over 3 s idle (view ${v1.map(n => n.toFixed(4)).join('/')} -> ${v2.map(n => n.toFixed(4)).join('/')})`)
   const box = await p.$eval('[data-creator-preview]', e => { const r = e.getBoundingClientRect(); return [r.x, r.y, r.width, r.height] })
   await p.screenshot({ path: `${DIR}/${tag}-creator-still.png` })
   const cx = box[0] + box[2] / 2, cy = box[1] + box[3] / 2
@@ -138,8 +140,7 @@ async function creator() {
 }
 
 try {
-  await bench(1440, 900, false)
-  await bench(390, 844, true)
+  if (!process.argv.includes('--only-creator')) { await bench(1440, 900, false); await bench(390, 844, true) }
   if (!process.argv.includes('--no-creator')) await creator()
 } catch (e) { ok(false, `run threw: ${String(e).slice(0, 300)}`) }
 ok(errs.length === 0, `0 page errors (${errs.join(' | ')})`)
