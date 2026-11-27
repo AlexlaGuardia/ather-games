@@ -2,7 +2,7 @@
 // A built base is drawn for the owner only (gallery + own garden) until Alex OKs it: players' registries must NOT list it,
 // its glb must ship rigged with every game clip, and it must draw at its ruled full-grown size (creature-size.ts GROWN).
 import * as fs from 'fs'
-import { BASE_PREVIEW, basePreviewFor, LEPARA_GLB_TALL } from './spirit-base-preview'
+import { BASE_PREVIEW, basePreviewFor, LEPARA_GLB_TALL, SHELLMERE_GLB_TALL } from './spirit-base-preview'
 import { SPIRIT_MODELS, SPIRIT_RIGS, rigLook } from './spirit-models'
 import { RIG_CLIPS } from './spirit-rig'
 import { GROWN } from '../../sprites/creature-size'
@@ -26,6 +26,10 @@ for (const [sp, L] of Object.entries(BASE_PREVIEW) as [Species, NonNullable<(typ
 // Lepara at her ruled full-grown height (0.48 m to the ear tips standing)
 const lep = BASE_PREVIEW.rabbit!
 ok(Math.abs(lep.h * LEPARA_GLB_TALL - GROWN.rabbit.height) < 1e-9, `lepara: stands ${GROWN.rabbit.height} m (h ${lep.h})`)
+// Shellmere at his ruled full-grown height (0.45 m to the antenna bulbs standing), rigged with his antennae
+const shl = BASE_PREVIEW.turtle!
+ok(!!shl && Math.abs(shl.h * SHELLMERE_GLB_TALL - GROWN.turtle.height) < 1e-9, `shellmere: stands ${GROWN.turtle.height} m (h ${shl?.h})`)
+ok(!!shl && ['b_shell', 'b_ant_l', 'b_ant2_r'].every(n => glbJson(shl.url).nodes.some((x: { name: string }) => x.name === n)), 'shellmere: shell + antenna bones')
 ok(basePreviewFor('fox') === null && basePreviewFor(null) === null, 'a species with a player model, or none, has no preview')
 
 console.log(`spirit-base-preview: ${pass} pass, ${fails.length} fail`)
