@@ -100,7 +100,9 @@ async function keeper(layer: string, tag: string, vp: { width: number; height: n
       let padDelta = 0, spurDelta = 0, spur = 0
       for (const p of st?.pads ?? []) { const sn = Math.sin(p[2]), cs = Math.cos(p[2]); for (const a of [-6, 0, 6]) for (const b of [-3.5, 0, 3.5]) { const h = sm.height(p[0] + cs * a + sn * b, p[1] - sn * a + cs * b); if (h !== null) padDelta = Math.max(padDelta, Math.abs(h - p[3])) } }
       const sp = n.paths.find((p: any) => p.a === i2 && String(p.b).startsWith('~'))
-      for (const q of sp?.pts ?? []) if (sm.loaded(q[0], q[1])) { const h = sm.height(q[0], q[1]); if (h !== null) { spur++; spurDelta = Math.max(spurDelta, Math.abs(h - q[2])) } }
+      // a lot pad holds the ground within its reach (relief.ts padGround wins over the path there, the bake's rule): measure past it
+      const padR = Math.hypot(13.5, 8.5) / 2 + 4.5 + 20
+      for (const q of sp?.pts ?? []) if (sm.loaded(q[0], q[1]) && !(st?.pads ?? []).some((p: number[]) => Math.hypot(p[0] - q[0], p[1] - q[1]) < padR)) { const h = sm.height(q[0], q[1]); if (h !== null) { spur++; spurDelta = Math.max(spurDelta, Math.abs(h - q[2])) } }
       return { pads: st?.pads?.length ?? 0, padDelta, spur, spurDelta }
     }, id) as Lie
     await A('look', Math.PI, -0.25); await sleep(2500)
@@ -248,7 +250,7 @@ try {
       ok((!!sp && f(i) === comp && Math.hypot(sp.pts[0][0] - S.x, sp.pts[0][1] - S.z) < 0.5 && gap <= 30) || (!sp && near < SPUR_MIN), `s3 ${tag}: ${S.name} joined to Greg's stone by a path (${sp ? `spur ${sp.pts.length} pts, worst step ${gap.toFixed(1)} m, meets ${sp.b}` : `none, ${near.toFixed(0)} m from one`})`)
       const L = k.lie[id]
       ok(!!L && L.pads === 5 && L.padDelta < 0.25, `s3 ${tag}: ${S.name}'s lots stand level on ${L?.pads} pads (live ground off a pad by at most ${L?.padDelta.toFixed(3)} m)`)
-      ok(!sp || (!!L && L.spur >= 3 && L.spurDelta < 0.6), `s3 ${tag}: the ground meets ${S.name}'s path (${L?.spur} loaded points, worst ${L?.spurDelta.toFixed(2)} m)`)
+      ok(!sp || (!!L && (L.spur >= 3 || sp.pts.length <= 4) && L.spurDelta < 0.6), `s3 ${tag}: the ground meets ${S.name}'s path past its pads (${L?.spur} loaded points, worst ${L?.spurDelta.toFixed(2)} m)`)
     }
     if (T) { const g = await tilesNear(T.x, T.z); ok(tentSiteOk(g.ground, g.nodes)(T.x, T.z), `s3 ${tag}: the Dash tent at (${T.x}, ${T.z}) stands on dry ground, off the Hollows' wells`) }
   }
