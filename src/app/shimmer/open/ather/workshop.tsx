@@ -53,11 +53,12 @@ import { BuildIcon } from './build-icon'
 import { AlchemyPanel } from './alchemy-panel'
 import { useWideLayout, GAP, GUTTER } from './wide-panel'   // M199
 import { loadAssign, mayUse } from './train-assign'   // M118 s2: the keeper's assign-a-piece gate
-import { leanFor, PIECE_USE } from './training-use'   // M239: which pieces she is drawn to
+import { loadStats, trainedOn } from './spirit-stats'   // M239b: one session a game day
+import { dailyPiece, PIECE_USE } from './training-use'   // M239: the shared occupancy; M239b: today's piece
 import { PlanterPanel, GrimoirePanel, getPots, setPots, settlePlanter, useBook, type BankStore } from './spirit-panels'
 import { liftPiece } from './piece-lift'
 import { getBoxes, setBoxes, settleSaplingBox, PottedSapling, SaplingBoxSection } from './planter-box-view'   // M113 s1
-import { BLOOM_MS, speciesOf, homeOf, growingIn, spiritsAt, shownAt } from './spirit-seeds'
+import { BLOOM_MS, speciesOf, homeOf, growingIn, spiritsAt, shownAt, gameDay } from './spirit-seeds'
 import { partyIds, calledIds, subscribeParty } from './spirit-party'   // M124 s1: who is drawn at a bed
 import { followIds, subscribeFollow } from './spirit-follow'
 import { BLOOMED_SPIRIT_LINE, planterBoxHint } from './planter-lines'
@@ -65,7 +66,7 @@ import { SpiritOnPlanter, useFormPreview, useSpiritsDev } from './spirit-model'
 import { formLook, spiritModelFor } from './spirit-models'
 import { basePreviewFor } from './spirit-base-preview'
 import { keeperFormLook } from './spirit-public'   // M226: the OK'd forms for every keeper
-import { plotFootprints, footDist, footBlocked, bodyRadius, type Foot, type PieceFoot } from './obstacles'   // M117 s1
+import { plotFootprints, footDist, footBlocked, bodyRadius, playSize, type Foot, type PieceFoot } from './obstacles'   // M117 s1
 import { GROWN } from '../../sprites/creature-size'
 import type { Species } from '../../spirits/spirit'
 import type { SpiritNav } from './spirit-trot'
@@ -1365,10 +1366,12 @@ function planterNav(id: string, dev = false, r = 0.3, lean?: Readonly<Record<str
   }
   const rMin = Math.max(0.9, FURNITURE.spirit_planter.w / 2 + r + 0.08)
   // M110 s1: the training pieces on her floor; she plays ACROSS a piece's depth (its local z, turned with the piece)
-  const toys = () => getW().pieces.filter(t => FURNITURE[t.item]?.train && Math.abs(pieceFloor(getW(), t) - floor0) < 0.02)
+  // M239b: its measure sized from HER body radius (obstacles.ts playSize), so every species can play every piece; null = she does not fit it
+  const toys = () => getW().pieces.filter(t => FURNITURE[t.item]?.train && Math.abs(pieceFloor(getW(), t) - floor0) < 0.02 && playSize(t.item, r) !== null)
     .map(t => { const a = -t.q * Math.PI / 2, f = FURNITURE[t.item], kind = f.play ?? 'leap'   // M110 s2: how she plays at it, and its measure
-      return { id: t.id, x: t.x, z: t.z, ax: Math.sin(a), az: Math.cos(a), stat: f.train!, kind, size: kind === 'shove' ? f.d / 2 : kind === 'guard' ? f.w / 2 - 0.3 : kind === 'laps' ? f.w / 2 - 0.15 : undefined } })
-  return { home, rMin, rMax: rMin + 0.6, roam: { maxLeg: 4.5, away: 3 }, lean, occ: PIECE_USE, toys: dev ? () => { const a = loadAssign(); return toys().filter(t => mayUse(a, t.id, id)) } : undefined,   // M118 s2: only the pieces the keeper assigned her
+      return { id: t.id, x: t.x, z: t.z, ax: Math.sin(a), az: Math.cos(a), stat: f.train!, kind, size: playSize(t.item, r) ?? undefined } })
+  return { home, rMin, rMax: rMin + 0.6, roam: { maxLeg: 4.5, away: 3 }, lean, occ: PIECE_USE, toys: dev ? () => { const a = loadAssign(), day = gameDay(Date.now()); if (trainedOn(loadStats()[id], day)) return []   // M239b: her session today is spent
+      const mine = toys().filter(t => mayUse(a, t.id, id)), pick = dailyPiece(mine.map(t => t.id), id, day); return mine.filter(t => t.id === pick) } : undefined,   // M239b: ONE allowed piece a day, a seeded random pick   // M118 s2: only the pieces the keeper assigned her
      blocked: (x, z, toy) => {
     const sq = squareAt(x, z); if (!sq || !owned.has(sqId(sq.i, sq.j))) return true
     if (!(Math.abs(plotHeightAt(x, z) - GROUND_Y) < 0.05) || Math.abs(pieceFloor(getW(), { item: pc.item, x, z }) - floor0) > 0.02) return true
@@ -1410,7 +1413,7 @@ function PlanterSpirit({ id }: { id: string }) {
   // M204: the form models are owner-only while they are redone: a player's evolved spirit (element set) keeps her base look
   // M226: ...except the forms Alex OK'd (spirit-public.ts PUBLIC_FORMS), which every keeper's evolved spirit draws
   const owner = useOwner(), preview = useFormPreview(), sp = p?.bloomed ? speciesOf(p.seed) : null, look = keeperFormLook(sp, p?.element, owner) ?? formLook(sp, preview) ?? spiritModelFor(sp) ?? (owner ? basePreviewFor(sp) : null)   // M174: built bases, owner only until Alex OKs; M226: the OK'd forms + bases for every keeper
-  const nav = useMemo(() => (look && sp ? planterNav(id, dev, spiritBodyR(sp), leanFor(sp, look.trot?.toyLean)) : null), [look, id, dev, sp])   // M239: her lean at the training pieces   // M107: she roams the garden
+  const nav = useMemo(() => (look && sp ? planterNav(id, dev, spiritBodyR(sp)) : null), [look, id, dev, sp])   // M239: her lean at the training pieces   // M107: she roams the garden
   useFrame(({ clock }) => { if (orb.current) orb.current.position.y = 1.0 + Math.sin(clock.elapsedTime * 1.6) * 0.06 })
   const orbMesh = <mesh ref={orb} position-y={1.0}><sphereGeometry args={[0.16, 14, 10]} /><meshBasicMaterial color={f.glow} transparent opacity={0.85} /></mesh>
   if (!sp) return null

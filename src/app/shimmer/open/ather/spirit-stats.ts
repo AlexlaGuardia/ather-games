@@ -18,6 +18,8 @@ import { gardenKey } from '@/lib/keeper-local'
 import type { Species } from '../../spirits/spirit'
 import { grownStat, withExp, type BaseStat } from './spirit-growth'
 import { loadAssign, mayUse } from './train-assign'   // M118 s2: the keeper's assign-a-piece gate
+import { GAME_DAY_MS } from './nodes'
+const gameDay = (t: number) => Math.floor(t / GAME_DAY_MS)   // the calendar spirit-seeds.ts gameDay counts
 
 /** the four stats a training piece can lean to (canon: PWR / GRD / AGI / VIG) */
 export const TRAIN_STATS = ['pwr', 'grd', 'agi', 'vig'] as const
@@ -28,7 +30,9 @@ const FORMS: readonly Form[] = ['base', 'second', 'awakened']
 /** DIALS (Jin's): stat points one play adds (= points it spends); a spirit's whole training pool; the most one stat may take */
 export const TRAIN = { gain: 1, pool: 40, cap: 20 }
 
-export type StatRec = { form: Form; g: Partial<Record<TrainStat, number>>; plays: number; xp?: number; grown?: number }
+export type StatRec = { form: Form; g: Partial<Record<TrainStat, number>>; plays: number; xp?: number; grown?: number
+  /** M239b (Alex 11-27): the game day of her last training session (one a day) */
+  day?: number }
 export type StatBook = Record<string, StatRec>
 
 /** M200: what one training point is worth, as a fraction of her grown stat (1 point = 1%) */
@@ -60,12 +64,15 @@ export function previewPlay(rec: StatRec | undefined, sp: Species, stat: TrainSt
   return { stat, spend, from: tenth(valueWith(sp, rec, stat, pts)), to: tenth(valueWith(sp, rec, stat, pts + spend)), left: left0 - spend, why: spend > 0 ? 'ok' : byCap <= 0 ? 'cap' : 'pool' }
 }
 /** pure: the book after spirit `id` played at a piece leaning to `stat`. `rose` = what the stat gained = previewPlay().spend. */
-export function withPlay(b: StatBook, id: string, sp: Species, stat: TrainStat, gain = TRAIN.gain): { book: StatBook; rose: number } {
+export function withPlay(b: StatBook, id: string, sp: Species, stat: TrainStat, gain = TRAIN.gain, day?: number): { book: StatBook; rose: number; refused?: boolean } {
   const rec: StatRec = b[id] ?? blank()
+  if (day !== undefined && rec.day === day) return { book: b, rose: 0, refused: true }   // M239b: one session a game day; a second is refused
   const rose = previewPlay(rec, sp, stat, gain).spend
-  const next: StatRec = { ...rec, g: { ...rec.g, ...(rose > 0 ? { [stat]: (rec.g[stat] ?? 0) + rose } : {}) }, plays: rec.plays + 1 }
+  const next: StatRec = { ...rec, g: { ...rec.g, ...(rose > 0 ? { [stat]: (rec.g[stat] ?? 0) + rose } : {}) }, plays: rec.plays + 1, ...(day !== undefined ? { day } : {}) }
   return { book: { ...b, [id]: next }, rose }
 }
+/** M239b: has she had her training session on game day `day`? */
+export const trainedOn = (rec: StatRec | undefined, day: number) => rec?.day === day
 /** pure: spirits `ids` earned `exp` fighting beside the keeper. `grew` = the ids whose bar filled (each may grow more than once). */
 export function withFight(b: StatBook, ids: readonly string[], exp: number): { book: StatBook; grew: string[] } {
   const book = { ...b }, grew: string[] = []
@@ -84,7 +91,7 @@ export function parseRec(r: unknown): StatRec | null {
   for (const k of TRAIN_STATS) { const n = Number(gin[k]); if (n > 0) g[k] = Math.min(TRAIN.cap, n) }
   const num = (v: unknown) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? n : 0 }
   const form = FORMS.includes(o.form as Form) ? o.form as Form : 'base'
-  return { form, g, plays: Math.floor(num(o.plays)), xp: num(o.xp), grown: Math.floor(num(o.grown)) }
+  return { form, g, plays: Math.floor(num(o.plays)), xp: num(o.xp), grown: Math.floor(num(o.grown)), ...(Number.isInteger(o.day) && (o.day as number) >= 0 ? { day: o.day as number } : {}) }
 }
 
 const KEY = 'ather.spiritStats.v1'
@@ -105,9 +112,10 @@ export function saveStats(b: StatBook) {
 export const subscribeStats = (f: () => void) => { subs.add(f); return () => { subs.delete(f) } }
 /** a play finished at piece `pieceId`: if the keeper assigned her there, spend from her pool and tell the panel. Returns
  *  what the stat rose by (0 = not assigned / nothing left to spend). */
-export function trainPlay(id: string, sp: Species, stat: TrainStat, pieceId: string): number {
+export function trainPlay(id: string, sp: Species, stat: TrainStat, pieceId: string, day = gameDay(Date.now())): number {
   if (!mayUse(loadAssign(), pieceId, id)) return 0
-  const r = withPlay(loadStats(), id, sp, stat); saveStats(r.book); return r.rose
+  const r = withPlay(loadStats(), id, sp, stat, TRAIN.gain, day); if (r.refused) return 0   // M239b: her session today is spent
+  saveStats(r.book); return r.rose
 }
 /** M118 s1: a Hollow went down with spirits `ids` beside the keeper: their bars fill. Returns the ids that grew stronger. */
 export function fightExp(ids: readonly string[], exp: number): string[] {

@@ -20,7 +20,9 @@ for (const sp of SPS) { const L = SPIRIT_RIGS[sp]!, M = spiritModelFor(sp)!
   ok(M.h === GROWN[sp].height && L.rig!.lie === true && !!L.rig!.fly && L.trot.planted === 1 && L.trot.hopH === 0, `${sp}: dials`)
   ok(fs.readFileSync(`${__dirname}/../../../../../public${L.url}`).equals(fs.readFileSync(`${__dirname}/../../../../../docs/looks/${NAME[sp]}-2026-11-24/${NAME[sp]}-rigged.glb`)), `${sp}: the approved glb, byte for byte`) }
 ok(!SPIRIT_RIGS.fox!.rig!.fly && !SPIRIT_RIGS.axolotl!.rig!.fly, 'the Vulnyx and the Manalotl walk')
-ok(spiritModelFor('rabbit') === null, 'a species with no model keeps the orb')
+// M239b: was `spiritModelFor('rabbit') === null`; stale since M226 (d634c011) gave the Lepara (rabbit) her public model, and every
+// species has one now. The orb path is still the fallback for a pot with no species (an unbloomed one), so that is what is pinned.
+ok(spiritModelFor(null) === null && spiritModelFor(undefined) === null, 'no species (an unbloomed pot) keeps the orb')
 { const o = SPIRIT_RIGS.owl!.rig!.fly!, b = SPIRIT_RIGS.bat!.rig!.fly!, to = SPIRIT_RIGS.owl!.trot, tb = SPIRIT_RIGS.bat!.trot
   ok(o.flap[1] < b.flap[1] && o.up < b.up && to.lookS![0] > tb.lookS![1] && to.glance! > tb.glance! * 2 && to.dash! < tb.dash!, 'Athowl calm, Noctyx quick') }
 

@@ -128,6 +128,19 @@ export function plotFootprints(pieces: readonly PlotPiece[]): PieceFoot[] {
   }
   return out
 }
+/** M239b: a training piece's play measure (the trot Toy `size`) for a body of radius r, sized so her whole BODY stays clear of
+ *  the piece's own parts (plotFootprints above) all through the play: guard = half the sidestep between the posts, laps = the
+ *  ring she runs inside the stakes, shove = half the stone's depth plus what her body needs to touch it, not sink in. A sidestep
+ *  sized for old 0.3 m bodies put the 0.42 m Vulnyx's sides on the posts (11-24 resize). undefined = leap (PLAY.side) or not a
+ *  training piece; null = her body does not fit the piece at all (it is not hers to play). */
+export function playSize(item: string, r: number): number | null | undefined {
+  const f = FURNITURE[item]; if (!f?.train) return undefined
+  const kind = f.play ?? 'leap', gap = 0.01
+  if (kind === 'guard') { const s = Math.min(f.w / 2 - 0.3, f.w / 2 - 0.1 - 0.11 - r - gap); return s >= 0.02 ? s : null }   // posts' inner edge: w/2 - 0.1 - 0.22/2
+  if (kind === 'laps') { const s = Math.min(f.w / 2 - 0.15, f.w / 2 - 0.05 - 0.035 - r - 2 * gap); return s >= 0.3 ? s : null }   // stakes' inner edge: w/2 - 0.05 - 0.07/2
+  if (kind === 'shove') return f.d / 2 + Math.max(0, r + gap - 0.12)   // the trot puts her lunge end at size + 0.12 from the centre
+  return f.w / 2 - 0.1 >= r + gap ? undefined : null   // leap: she bounds across between the posts
+}
 /** distance in xz from (x, z) to a rect (0 inside) */
 export const footDist = (b: Foot, x: number, z: number) => Math.hypot(Math.max(b.x0 - x, 0, x - b.x1), Math.max(b.z0 - z, 0, z - b.z1))
 const inside = (b: Foot, x: number, z: number) => x > b.x0 && x < b.x1 && z > b.z0 && z < b.z1

@@ -1,13 +1,13 @@
-// ── BETA M239 SPIRITS USE THE TRAINING PIECES (2026-11-27, sprites-M239) ────────────────────────────────────────────────────
+// ── BETA M239 SPIRITS USE THE TRAINING PIECES (2026-11-27, sprites-M239; M239b once a day + body-sized pieces) ─────────────────
 // SETUP (stated): the Vulnyx and the Manalotl bloomed on two placed planters, BOTH in the party; ALL FOUR training pieces placed
-// through the save (Goldwood Hurdle AGI, Push Stone PWR, Guard Posts GRD, Running Ring VIG), and the keeper has allowed BOTH
-// spirits at every piece (ather.trainAssign.v1: the M118 s2 gate is the keeper's choice, seeded). The Vulnyx's AGI is already
-// at the per-stat cap (TRAIN.cap) so the cap is exercised. The keeper stands by; nothing is clicked. Owner + ?spirits=3d.
-// Run once at 390x844 and once at 1280x800 (--desktop). Watch up to WATCH s:
-//  1. on their own they visit pieces; every piece kind is played by someone (a visible play: mode 'play', at the piece);
-//     a shot per kind (docs/looks/m239-2026-11-27/).
+// through the save (Goldwood Hurdle AGI, Push Stone PWR, Guard Posts GRD, Running Ring VIG). The keeper ALLOWS them first
+// (ather.trainAssign.v1, the M118 s2 opt-in gate, seeded): the Vulnyx on the Guard Posts only (her 0.42 m body is the one the
+// old sidestep left out), the Manalotl on all four (her piece = a seeded random pick per spirit + game day, training-use.ts
+// dailyPiece). Nothing is clicked. Owner + ?spirits=3d. Run once at 390x844 and once at 1280x800 (--desktop). Watch up to WATCH s:
+//  1. each spirit goes on her own to TODAY'S piece (the Vulnyx: the Guard Posts) and plays it visibly (mode 'play', at it); shot.
 //  2. NEVER two spirits on one piece in the same sample.
-//  3. every finished play: +1 point to THAT piece's stat (spirit-stats.ts withPlay), except at the cap (AGI stays TRAIN.cap).
+//  3. ONE session a game day (Alex 11-27): her play gives +1 to that piece's stat (0 at the cap), the record is stamped with
+//     today, and for 60 s after it she plays nothing more (trot plays and record plays stay 1).
 //  4. her panel radar reads the record (round(base x (1 + g%))).   5. 0 page errors.
 //   npx tsx scripts/m239-training-use-check.mts [--desktop] [--url http://localhost:3210]   (OWNER_KEY from env or .env; on the box)
 import puppeteer from 'puppeteer-core'
@@ -16,6 +16,9 @@ import { BLOOM_MS } from '../src/app/shimmer/open/ather/spirit-seeds'
 import { FURNITURE } from '../src/app/shimmer/open/ather/furniture'
 import { SPECIES_BASE } from '../src/app/shimmer/open/ather/spirit-growth'
 import { TRAIN } from '../src/app/shimmer/open/ather/spirit-stats'
+import { dailyPiece } from '../src/app/shimmer/open/ather/training-use'
+import { gameDay } from '../src/app/shimmer/open/ather/spirit-seeds'
+import { GAME_DAY_MS } from '../src/app/shimmer/open/ather/nodes'
 import { aimAt } from './lib/aim.mts'
 import { dismissStartCard } from './lib/start-card.mts'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
@@ -34,13 +37,18 @@ const PIECES = [
   { id: 'rr-check', item: 'running_ring', x: P.x + 1.5, z: P.z + 5.2 },
 ].map(x => ({ ...x, q: 0, placedAt: 1 }))
 const TOYS = PIECES.filter(x => FURNITURE[x.item].train).map(x => ({ id: x.id, x: x.x, z: x.z, stat: FURNITURE[x.item].train!, kind: FURNITURE[x.item].play ?? 'leap' }))
-const ALL = ['vx-check', 'mx-check'], ASSIGN = Object.fromEntries(TOYS.map(t => [t.id, ALL]))
+const ALL = ['vx-check', 'mx-check'], ASSIGN = Object.fromEntries(TOYS.map(t => [t.id, t.id === 'gp-check' ? ALL : ['mx-check']]))
+const ALLOWED = (id: string) => TOYS.filter(t => ASSIGN[t.id].includes(id)).map(t => t.id)
 const SPOF: Record<string, 'fox' | 'axolotl'> = { 'vx-check': 'fox', 'mx-check': 'axolotl' }
 const POTS = (at: number) => ({ 'vx-check': { seed: 'mana_seed_fox', at, bloomed: true }, 'mx-check': { seed: 'mana_seed_axolotl', at: at + 1, bloomed: true } })
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 let fails = 0
 const ok = (c: boolean, m: string) => { console.log(`${c ? 'PASS' : 'FAIL'} [${tag}] ${m}`); if (!c) fails++ }
-type Rec = { form?: string; g: Record<string, number>; plays: number }
+type Rec = { form?: string; g: Record<string, number>; plays: number; day?: number }
+// a game day is 64 min: never let the watch straddle a day boundary (the pick and the session are per day)
+{ const left = GAME_DAY_MS - Date.now() % GAME_DAY_MS, need = (WATCH + 180) * 1000; if (left < need) { console.log(`waiting ${(left / 1000 + 5).toFixed(0)} s for the next game day`); await sleep(left + 5000) } }
+const DAY = gameDay(Date.now()), TODAY: Record<string, string> = Object.fromEntries(ALL.map(id => [id, dailyPiece(ALLOWED(id), id, DAY)!]))
+console.log(`game day ${DAY}: today's pieces Vulnyx ${TODAY['vx-check']} / Manalotl ${TODAY['mx-check']}`)
 const br = await puppeteer.launch({ protocolTimeout: 600000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
 try {
   const p = await (await br.createBrowserContext()).newPage(); await p.setViewport(VW)
@@ -71,11 +79,12 @@ try {
 
   // 1-3. watch
   type S = { x: number; z: number; mode: string; playing: string | null; plays: number }
-  const kinds = new Map<string, string>()          // kind -> who played it first
   const visits: Record<string, Set<string>> = { 'vx-check': new Set(), 'mx-check': new Set() }
-  const last: Record<string, { playing: string | null; plays: number; rec: Rec | null }> = {}
-  let both = 0, notAt = 0, samples = 0, checked = 0, badPlays: string[] = [], capHeld = true
-  let b0 = await book()
+  const shown: Record<string, boolean> = {}, doneAt: Record<string, number> = {}
+  const maxPlays: Record<string, number> = { 'vx-check': 0, 'mx-check': 0 }
+  let both = 0, notAt = 0, samples = 0
+  const b0 = await book()
+  const g0 = Object.fromEntries(ALL.map(id => [id, { ...(b0[id]?.g ?? {}) }])) as Record<string, Record<string, number>>
   const t0 = Date.now()
   while (Date.now() - t0 < WATCH * 1000) {
     const s = await p.evaluate(() => { const t = (window as any).__spiritModel?.trots ?? {}
@@ -87,39 +96,37 @@ try {
     const bk = await book()
     for (const id of ALL) {
       const q = s[id]; if (!q) continue
+      maxPlays[id] = Math.max(maxPlays[id], q.plays)
       if (q.playing) {
         const toy = TOYS.find(t => t.id === q.playing)
         if (toy) {
           visits[id].add(toy.id)
           if (q.mode === 'play') {
             if (Math.hypot(q.x - toy.x, q.z - toy.z) > 2.2) notAt++
-            if (!kinds.has(toy.kind)) { kinds.set(toy.kind, SPOF[id]); await p.screenshot({ path: `${SHOTS}/${tag}-${toy.kind}-${SPOF[id]}.png` }) }
+            if (!shown[id]) { shown[id] = true; await p.screenshot({ path: `${SHOTS}/${tag}-${toy.kind}-${SPOF[id]}.png` }) }
           }
         }
       }
-      const L = last[id]
-      if (L && q.plays > L.plays && L.playing) {   // one play finished: the piece she was on just before
-        const toy = TOYS.find(t => t.id === L.playing)!, before = b0[id]?.g ?? {}, after = bk[id]?.g ?? {}
-        const d = Object.fromEntries(['pwr', 'grd', 'agi', 'vig'].map(k => [k, (after[k] ?? 0) - (before[k] ?? 0)]))
-        const atCap = (before[toy.stat] ?? 0) >= TRAIN.cap
-        const want = Object.fromEntries(['pwr', 'grd', 'agi', 'vig'].map(k => [k, k === toy.stat && !atCap ? TRAIN.gain : 0]))
-        if (q.plays - L.plays === 1) { checked++; if (JSON.stringify(d) !== JSON.stringify(want)) badPlays.push(`${SPOF[id]}@${toy.kind}: ${JSON.stringify(d)} want ${JSON.stringify(want)}`) }
-        if ((after.agi ?? 0) > TRAIN.cap) capHeld = false
-      }
-      last[id] = { playing: q.playing, plays: q.plays, rec: bk[id] ?? null }
+      if (doneAt[id] === undefined && (bk[id]?.plays ?? 0) > 0 && bk[id]?.day === DAY) doneAt[id] = Date.now()
     }
-    b0 = bk
-    if (kinds.size === 4 && checked >= 4 && Date.now() - t0 > 90000) break
+    const fin = ALL.every(id => doneAt[id] !== undefined)
+    if (fin && Date.now() - Math.max(...ALL.map(id => doneAt[id])) > 60000) break
     await sleep(150)
   }
-  const secs = ((Date.now() - t0) / 1000).toFixed(0)
-  ok(visits['vx-check'].size > 0 && visits['mx-check'].size > 0, `1 both go to pieces on their own in ${secs} s: Vulnyx ${[...visits['vx-check']].join(',')} / Manalotl ${[...visits['mx-check']].join(',')}`)
-  ok(kinds.size === 4, `1 every piece kind played visibly (mode 'play'): ${[...kinds].map(([k, w]) => `${k} by ${w}`).join(', ')}`)
+  const secs = ((Date.now() - t0) / 1000).toFixed(0), fin = await book()
+  for (const id of ALL) {
+    const want = TODAY[id], toy = TOYS.find(t => t.id === want)!, sp = SPOF[id]
+    ok([...visits[id]].every(v => v === want) && visits[id].has(want) && !!shown[id], `1 ${sp} goes to today's piece ${want} (${toy.kind}) and plays it, in ${secs} s (visited ${[...visits[id]].join(',') || 'none'})`)
+    const d = Object.fromEntries(['pwr', 'grd', 'agi', 'vig'].map(k => [k, (fin[id]?.g[k] ?? 0) - (g0[id][k] ?? 0)]))
+    const atCap = (g0[id][toy.stat] ?? 0) >= TRAIN.cap
+    const wantD = Object.fromEntries(['pwr', 'grd', 'agi', 'vig'].map(k => [k, k === toy.stat && !atCap ? TRAIN.gain : 0]))
+    ok(JSON.stringify(d) === JSON.stringify(wantD), `3 ${sp}: her session = +${TRAIN.gain} ${toy.stat} (${JSON.stringify(d)} want ${JSON.stringify(wantD)})`)
+    const quiet = doneAt[id] !== undefined ? ((Date.now() - doneAt[id]) / 1000).toFixed(0) : '-'
+    ok(fin[id]?.day === DAY && fin[id]?.plays === 1 && maxPlays[id] === 1 && doneAt[id] !== undefined && Date.now() - doneAt[id] >= 60000,
+      `3 ${sp}: ONE session today (record day ${fin[id]?.day} = ${DAY}, record plays ${fin[id]?.plays}, trot plays ${maxPlays[id]}, ${quiet} s quiet after it)`)
+  }
   ok(notAt === 0, `1 while playing she is at her piece (${notAt} samples off it)`)
   ok(both === 0, `2 never two spirits on one piece (${both} of ${samples} samples)`)
-  ok(checked >= 3 && badPlays.length === 0, `3 every finished play = +${TRAIN.gain} to that piece's stat, 0 at the cap (${checked} plays checked) ${badPlays.join(' | ')}`)
-  const fin = await book()
-  ok(capHeld && (fin['vx-check']?.g.agi ?? 0) === TRAIN.cap, `3 the Vulnyx's AGI stays at the cap ${TRAIN.cap} (${fin['vx-check']?.g.agi}; she may still play the hurdle)`)
   // 4. her panel radar reads the record
   const panelAxes = async (sp: 'fox' | 'axolotl') => {
     for (let k = 0; k < 10; k++) {

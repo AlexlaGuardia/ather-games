@@ -67,3 +67,21 @@ export function makeOccupancy(lease = USE.lease, clock: () => number = wallClock
 }
 /** the garden's one shared table (every spirit on the plot reads the same pieces) */
 export const PIECE_USE = makeOccupancy()
+
+// M239b (Alex 11-27, ruling on M239): ONE SESSION A GAME DAY. The Allow gate stays (opt-in per spirit, train-assign.ts). A spirit
+// active in the garden goes to ONE allowed piece a game day, plays, gets her point, and that is her session for the day (the
+// refusal lives in spirit-stats.ts withPlay). Allowed on several: she picks one at RANDOM, seeded per spirit + day (this replaces
+// the signature-stat lean above for the garden). None allowed: she never trains.
+/** pure: a 32-bit FNV-1a hash, the per-spirit-per-day seed */
+function seedOf(s: string): number {
+  let h = 0x811c9dc5
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0 }
+  return h
+}
+/** pure: today's piece for spirit `spirit` among the pieces she is allowed on (ids, any order), or null (none allowed).
+ *  The same spirit + day always picks the same piece, whatever order the list comes in. */
+export function dailyPiece(allowed: readonly string[], spirit: string, day: number): string | null {
+  if (!allowed.length) return null
+  const l = [...new Set(allowed)].sort()
+  return l[seedOf(`${spirit}|${day}`) % l.length]
+}
