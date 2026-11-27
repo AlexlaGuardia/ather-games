@@ -38,6 +38,8 @@ export const isSpiritDish = (id: string | null | undefined): id is string => !!d
 /** every spirit dish id, in the order her panel lists them: the grill, the meals, then the roasts */
 export const SPIRIT_DISH_IDS: readonly string[] = [...Object.keys(GRILLED), ...['mana', 'storm', 'earth', 'water'].map(el => `${el}_meal`), ...Object.keys(DISHES)]
 
+/** M244: her lifetime meals eaten (Pot.mealsEaten; unset or bad = 0). Hidden: a future awakening feat's condition. */
+export const mealsEatenOf = (p: Pot | undefined) => Math.max(0, Math.floor(Number(p?.mealsEaten) || 0))
 export const bondOf = (p: Pot | undefined) => Math.max(0, Math.min(BOND_MAX, Math.floor(Number(p?.bond) || 0)))
 /** bond already gained today (a pot last fed on another day = 0) */
 export const bondToday = (p: Pot | undefined, day: number) => (p && p.bondDay === day ? Math.max(0, Math.floor(Number(p.bondToday) || 0)) : 0)
@@ -63,6 +65,7 @@ export function feedDish(pot: Pot, sp: Species, id: string, statOf: StatOf, day:
     next = r.pot; evolved = r.evolved; formName = r.formName
   }
   if (bond > 0) next = { ...next, bond: bondOf(pot) + bond, bondDay: day, bondToday: bondToday(pot, day) + bond }
+  next = { ...next, mealsEaten: mealsEatenOf(pot) + 1 }   // M244: she ate it (meal, dish or snack)
   return { ok: true, pot: next, steep, bond, evolved, formName, locked: mealsOf(next).length >= BAR_SLOTS, snack: room <= 0 }
 }
 

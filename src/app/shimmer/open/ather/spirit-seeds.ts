@@ -41,6 +41,9 @@ export type Pot = { seed: SeedId; at: number; bloomed?: true; v?: 2; tends?: num
   meals?: ('mana' | 'storm' | 'earth' | 'water')[]
   /** M234 s2: her BOND from dishes (spirit-dishes.ts), and the game day + amount gained that day (the daily cap) */
   bond?: number; bondDay?: number; bondToday?: number
+  /** M244 (Magii a5ad0b0): her LIFETIME meals eaten (spirit-dishes.ts feedDish: +1 on every dish/meal/snack she takes;
+   *  a refused one is not eaten). Hidden: the condition of a future awakening feat. Unset = 0 (an old save). */
+  mealsEaten?: number
   /** M238: her KNOWN move ids (spirit-bond-move.ts), and her FAVOURITE (bonded) move: id, the form she picked it in, the
    *  game day of her first pick (the twist grows from it) */
   moves?: string[]; fav?: { id: string; form: 'base' | 'mana' | 'storm' | 'earth' | 'water'; day: number }
