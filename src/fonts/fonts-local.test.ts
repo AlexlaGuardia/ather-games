@@ -30,6 +30,9 @@ const dirs = new Set<string>()
 for (const f of users) {
   const paths = [...readFileSync(f, 'utf8').matchAll(/path:\s*'([^']+\.woff2)'/g)].map((m) => m[1])
   ok(paths.length > 0, `${f} names woff2 files`)
+  // 11-27: a `font-family` declaration renames the @font-face, but Turbopack still names the class and
+  // the CSS variable after the JS const, so every face stopped matching and prod fell back to Georgia.
+  ok(!/prop:\s*['"]font-family['"]/.test(readFileSync(f, 'utf8')), `${f}: no font-family declaration (Turbopack keeps the const name)`)
   for (const p of paths) {
     const abs = resolve(dirname(f), p)
     ok(existsSync(abs), `${f}: ${p} exists`)
