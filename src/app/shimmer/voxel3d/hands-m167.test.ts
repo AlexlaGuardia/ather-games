@@ -39,6 +39,15 @@ ok(S.filter(m => hexOf(m) === M167.cordDeep).length >= 6, 'spike grip: a cross w
 ok(S.some(m => hexOf(m) === M167.knob && m.geometry instanceof THREE.SphereGeometry), 'spike: the wooden knob')
 ok(S.every(m => (m.material as THREE.Material) instanceof THREE.MeshLambertMaterial), 'plain steel by colour, never a metal material')
 
+// the harness pin: `look` holds a focus up even when the host names none this frame
+{
+  const cam = new THREE.PerspectiveCamera(); cam.updateMatrixWorld()
+  h.sig.family = null; h.sig.look = 'prospecting'; h.tick(cam, 0, 1 / 60)
+  ok(!!sp?.visible && !pr?.visible, 'look pins the spike in the fist over a null family')
+  h.sig.look = null; h.sig.family = null; h.tick(cam, 1 / 60, 1 / 60)
+  ok(!sp?.visible, 'look cleared: the host rules again')
+}
+
 // ── the icons ──
 const ink = (id: string) => { const f = ITEM_ICONS[id]?.frames[0]; const n = new Map<number, number>(); f?.forEach(v => n.set(v, (n.get(v) ?? 0) + 1)); return n }
 const b = ink('worn_blade'), s = ink('worn_spike')

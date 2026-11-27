@@ -162,6 +162,8 @@ export interface HandsSignal {
   hidden: boolean
   /** M167: the focus models this rig built, as `name/meshes` per family (a readout for the prod check). */
   looks?: Record<string, string>
+  /** M167: a harness pins this focus in the fist over whatever the host named (null / absent = the host's). */
+  look?: SkillId | null
   /** The last pose applied — a readout for the harness and the doctor, written every tick. */
   last?: HandsPose
 }
@@ -428,6 +430,7 @@ export function createHands(): Hands {
     }
     if (speed > 40 || Math.abs(vy) > 40) { speed = 0; vy = 0 }   // a teleport is not a sprint
     last.copy(camera.position)
+    if (sig.look) sig.family = sig.look   // M167: a check / look sheet pins a focus in the fist (the host never writes `look`)
     const pv = handsTune.preview
     const showHeld = (!sig.family && !!sig.held) || pv === 'present'
     if (pv === 'cast' && performance.now() - sig.castAt > 900) sig.castAt = performance.now()   // a cast every 0.9 s
