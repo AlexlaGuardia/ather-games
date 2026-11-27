@@ -30,10 +30,19 @@ try {
     const errors: string[] = []
     page.on('pageerror', e => errors.push(String(e)))
     await page.setViewport(vp)
+    await page.evaluateOnNewDocument(() => {   // a keeper who has been born (the brewing-check set): no birth screen
+      localStorage.setItem('ather:epoch', '2')
+      localStorage.setItem('ather:shimmer:birthRune', 'freeze')
+      localStorage.setItem('ather:shimmer:runes', JSON.stringify(['freeze']))
+    })
     await page.goto(`${new URL(PAGE).origin}/owner?key=${encodeURIComponent(KEY)}`, { waitUntil: 'networkidle2', timeout: 30_000 })
     await page.goto(PAGE, { waitUntil: 'networkidle2', timeout: 90_000 })
     await sleep(SETTLE * 1000)
     await page.waitForFunction(() => !!(window as unknown as { __hands?: unknown }).__hands, { timeout: 60_000 }).catch(() => {})
+    if (!(await page.evaluate(() => !!(window as unknown as { __hands?: unknown }).__hands))) {
+      console.log('  no __hands yet at', page.url(), '::', (await page.evaluate(() => document.body.innerText.slice(0, 300))).replace(/\s+/g, ' '))
+      await page.screenshot({ path: `${SHOTS}/debug-${label}.png` })
+    }
     const looks = await page.evaluate(() => (window as unknown as { __hands?: { looks?: Record<string, string> } }).__hands?.looks ?? null)
     ok(!!looks && looks.forestry === want.forestry, `live rig mounts the worn pruner: ${looks?.forestry} (tree ${want.forestry})`)
     ok(!!looks && looks.prospecting === want.prospecting, `live rig mounts the worn spike: ${looks?.prospecting} (tree ${want.prospecting})`)
