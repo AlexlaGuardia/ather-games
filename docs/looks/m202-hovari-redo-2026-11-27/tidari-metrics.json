@@ -1,0 +1,126 @@
+{
+ "bones": 24,
+ "glb_bytes": 325784,
+ "tris": {
+  "body": 4988,
+  "eyes": 1050,
+  "shimmer": 144
+ },
+ "unit_m": 0.219,
+ "hover_m": 0.9,
+ "beak_tip_to_tail_tip_m": 0.379,
+ "idle": {
+  "dur_s": 2.4,
+  "lowest_m": 0.787,
+  "top_m": 1.159,
+  "edge_stretch_p99": 1.26,
+  "edge_stretch_max": 3.17,
+  "worst_edge_at": [
+   "arm_l",
+   0.24,
+   0.73,
+   -0.07
+  ],
+  "span_m": 0.355,
+  "length_m": 0.281
+ },
+ "walk": {
+  "dur_s": 0.72,
+  "lowest_m": 0.857,
+  "top_m": 1.158,
+  "edge_stretch_p99": 1.27,
+  "edge_stretch_max": 3.38,
+  "worst_edge_at": [
+   "arm_l",
+   0.24,
+   0.73,
+   -0.07
+  ],
+  "span_m": 0.356,
+  "length_m": 0.355,
+  "stride_m": 0.576,
+  "plays_1to1_at_mps": 0.8,
+  "beats_per_cycle": 6,
+  "wing_hz_at_1to1": 8.3,
+  "cadence_at_mps": {
+   "0.55": 0.95,
+   "1.15": 2.0,
+   "1.92": 3.33,
+   "2.8": 4.86,
+   "4.2": 7.29,
+   "6.5": 11.28
+  }
+ },
+ "run": {
+  "dur_s": 0.48,
+  "lowest_m": 0.93,
+  "top_m": 1.124,
+  "edge_stretch_p99": 1.44,
+  "edge_stretch_max": 3.7,
+  "worst_edge_at": [
+   "arm_l",
+   0.24,
+   0.73,
+   -0.07
+  ],
+  "span_m": 0.352,
+  "length_m": 0.396,
+  "stride_m": 1.92,
+  "plays_1to1_at_mps": 4.0,
+  "beats_per_cycle": 5,
+  "wing_hz_at_1to1": 10.4,
+  "cadence_at_mps": {
+   "0.55": 0.29,
+   "1.15": 0.6,
+   "1.92": 1.0,
+   "2.8": 1.46,
+   "4.2": 2.19,
+   "6.5": 3.39
+  }
+ },
+ "sit": {
+  "dur_s": 3.0,
+  "lowest_m": 0.701,
+  "top_m": 1.061,
+  "edge_stretch_p99": 1.43,
+  "edge_stretch_max": 3.53,
+  "worst_edge_at": [
+   "arm_l",
+   0.24,
+   0.73,
+   -0.07
+  ],
+  "span_m": 0.356,
+  "length_m": 0.241
+ },
+ "lie": {
+  "dur_s": 4.4,
+  "lowest_m": 0.664,
+  "top_m": 0.993,
+  "edge_stretch_p99": 1.51,
+  "edge_stretch_max": 6.54,
+  "worst_edge_at": [
+   "arm_l",
+   0.24,
+   0.73,
+   -0.07
+  ],
+  "span_m": 0.182,
+  "length_m": 0.255
+ },
+ "glance": {
+  "dur_s": 1.92,
+  "lowest_m": 0.786,
+  "top_m": 1.159,
+  "edge_stretch_p99": 1.31,
+  "edge_stretch_max": 3.27,
+  "worst_edge_at": [
+   "arm_l",
+   0.24,
+   0.73,
+   -0.07
+  ],
+  "span_m": 0.358,
+  "length_m": 0.292
+ }
+}

@@ -1,0 +1,126 @@
+{
+ "bones": 24,
+ "glb_bytes": 309456,
+ "tris": {
+  "body": 4634,
+  "eyes": 970,
+  "shimmer": 144
+ },
+ "unit_m": 0.219,
+ "hover_m": 0.9,
+ "beak_tip_to_tail_tip_m": 0.317,
+ "idle": {
+  "dur_s": 2.4,
+  "lowest_m": 0.837,
+  "top_m": 1.161,
+  "edge_stretch_p99": 1.34,
+  "edge_stretch_max": 3.06,
+  "worst_edge_at": [
+   "arm_l",
+   0.22,
+   0.73,
+   -0.07
+  ],
+  "span_m": 0.353,
+  "length_m": 0.252
+ },
+ "walk": {
+  "dur_s": 0.72,
+  "lowest_m": 0.886,
+  "top_m": 1.158,
+  "edge_stretch_p99": 1.32,
+  "edge_stretch_max": 3.31,
+  "worst_edge_at": [
+   "pelvis",
+   -0.23,
+   0.44,
+   -0.06
+  ],
+  "span_m": 0.351,
+  "length_m": 0.307,
+  "stride_m": 0.576,
+  "plays_1to1_at_mps": 0.8,
+  "beats_per_cycle": 6,
+  "wing_hz_at_1to1": 8.3,
+  "cadence_at_mps": {
+   "0.55": 0.95,
+   "1.15": 2.0,
+   "1.92": 3.33,
+   "2.8": 4.86,
+   "4.2": 7.29,
+   "6.5": 11.28
+  }
+ },
+ "run": {
+  "dur_s": 0.48,
+  "lowest_m": 0.917,
+  "top_m": 1.118,
+  "edge_stretch_p99": 1.56,
+  "edge_stretch_max": 3.45,
+  "worst_edge_at": [
+   "pelvis",
+   -0.23,
+   0.44,
+   -0.06
+  ],
+  "span_m": 0.347,
+  "length_m": 0.356,
+  "stride_m": 1.92,
+  "plays_1to1_at_mps": 4.0,
+  "beats_per_cycle": 5,
+  "wing_hz_at_1to1": 10.4,
+  "cadence_at_mps": {
+   "0.55": 0.29,
+   "1.15": 0.6,
+   "1.92": 1.0,
+   "2.8": 1.46,
+   "4.2": 2.19,
+   "6.5": 3.39
+  }
+ },
+ "sit": {
+  "dur_s": 3.0,
+  "lowest_m": 0.756,
+  "top_m": 1.06,
+  "edge_stretch_p99": 1.44,
+  "edge_stretch_max": 3.27,
+  "worst_edge_at": [
+   "arm_l",
+   0.22,
+   0.73,
+   -0.07
+  ],
+  "span_m": 0.35,
+  "length_m": 0.229
+ },
+ "lie": {
+  "dur_s": 4.4,
+  "lowest_m": 0.722,
+  "top_m": 1.013,
+  "edge_stretch_p99": 1.73,
+  "edge_stretch_max": 5.63,
+  "worst_edge_at": [
+   "pelvis",
+   -0.23,
+   0.44,
+   -0.06
+  ],
+  "span_m": 0.181,
+  "length_m": 0.266
+ },
+ "glance": {
+  "dur_s": 1.92,
+  "lowest_m": 0.837,
+  "top_m": 1.161,
+  "edge_stretch_p99": 1.42,
+  "edge_stretch_max": 3.27,
+  "worst_edge_at": [
+   "arm_l",
+   0.22,
+   0.73,
+   -0.07
+  ],
+  "span_m": 0.353,
+  "length_m": 0.29
+ }
+}

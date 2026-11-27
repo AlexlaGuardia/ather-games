@@ -1,0 +1,126 @@
+{
+ "bones": 24,
+ "glb_bytes": 321144,
+ "tris": {
+  "body": 4954,
+  "eyes": 970,
+  "shimmer": 144
+ },
+ "unit_m": 0.219,
+ "hover_m": 0.9,
+ "beak_tip_to_tail_tip_m": 0.387,
+ "idle": {
+  "dur_s": 2.4,
+  "lowest_m": 0.813,
+  "top_m": 1.17,
+  "edge_stretch_p99": 1.42,
+  "edge_stretch_max": 4.64,
+  "worst_edge_at": [
+   "pelvis",
+   0.25,
+   0.41,
+   -0.07
+  ],
+  "span_m": 0.412,
+  "length_m": 0.301
+ },
+ "walk": {
+  "dur_s": 0.72,
+  "lowest_m": 0.864,
+  "top_m": 1.17,
+  "edge_stretch_p99": 1.36,
+  "edge_stretch_max": 5.01,
+  "worst_edge_at": [
+   "pelvis",
+   0.25,
+   0.41,
+   -0.07
+  ],
+  "span_m": 0.413,
+  "length_m": 0.367,
+  "stride_m": 0.576,
+  "plays_1to1_at_mps": 0.8,
+  "beats_per_cycle": 6,
+  "wing_hz_at_1to1": 8.3,
+  "cadence_at_mps": {
+   "0.55": 0.95,
+   "1.15": 2.0,
+   "1.92": 3.33,
+   "2.8": 4.86,
+   "4.2": 7.29,
+   "6.5": 11.28
+  }
+ },
+ "run": {
+  "dur_s": 0.48,
+  "lowest_m": 0.912,
+  "top_m": 1.138,
+  "edge_stretch_p99": 1.64,
+  "edge_stretch_max": 5.55,
+  "worst_edge_at": [
+   "pelvis",
+   0.25,
+   0.41,
+   -0.07
+  ],
+  "span_m": 0.407,
+  "length_m": 0.427,
+  "stride_m": 1.92,
+  "plays_1to1_at_mps": 4.0,
+  "beats_per_cycle": 5,
+  "wing_hz_at_1to1": 10.4,
+  "cadence_at_mps": {
+   "0.55": 0.29,
+   "1.15": 0.6,
+   "1.92": 1.0,
+   "2.8": 1.46,
+   "4.2": 2.19,
+   "6.5": 3.39
+  }
+ },
+ "sit": {
+  "dur_s": 3.0,
+  "lowest_m": 0.732,
+  "top_m": 1.057,
+  "edge_stretch_p99": 1.52,
+  "edge_stretch_max": 4.72,
+  "worst_edge_at": [
+   "pelvis",
+   0.25,
+   0.41,
+   -0.07
+  ],
+  "span_m": 0.411,
+  "length_m": 0.291
+ },
+ "lie": {
+  "dur_s": 4.4,
+  "lowest_m": 0.7,
+  "top_m": 1.002,
+  "edge_stretch_p99": 1.98,
+  "edge_stretch_max": 8.67,
+  "worst_edge_at": [
+   "pelvis",
+   0.25,
+   0.41,
+   -0.07
+  ],
+  "span_m": 0.187,
+  "length_m": 0.325
+ },
+ "glance": {
+  "dur_s": 1.92,
+  "lowest_m": 0.812,
+  "top_m": 1.171,
+  "edge_stretch_p99": 1.49,
+  "edge_stretch_max": 4.74,
+  "worst_edge_at": [
+   "pelvis",
+   0.25,
+   0.41,
+   -0.07
+  ],
+  "span_m": 0.414,
+  "length_m": 0.349
+ }
+}

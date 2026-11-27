@@ -222,7 +222,7 @@ for (const [el, name, rig] of HOVS) {
   const L = formLook('hummingbird', el)!, b = SPIRIT_RIGS.hummingbird!
   ok(!!L && L.name === name && L.url === `/open/spirits/${name}-rigged.glb` && L.form === el, `hummingbird ${el}: ${name} ${L?.url}`)
   ok(L.rig === rig && rig !== b.rig && !!rig.hover && rig.hover === HOVARI_RIG.hover && rig.neck === HOVARI_RIG.neck, `hummingbird ${el}: her own rig, still a hoverer`)
-  ok(formGrow(name) === 1.4 && Math.abs(L.h / b.h - 1.4) < 1e-9, `hummingbird ${el}: size dial ${formGrow(name)}`)
+  ok(formGrow(name) === 1.5 && Math.abs(L.h / b.h - 1.5) < 1e-9, `hummingbird ${el}: size dial ${formGrow(name)} (redo 11-27: a bit bigger)`)
   ok(L.glow?.part === 'shimmer' && L.glow.emissive !== b.glow?.emissive, `hummingbird ${el}: her own shimmer glow ${L.glow?.emissive}`)
   ok(fs.existsSync('public' + L.url), `hummingbird ${el}: ${L.url} shipped`)
   const { j, col, n } = glb(L.url), names = (j.nodes as { name: string }[]).map(x => x.name), clips = (j.animations as { name: string }[]).map(a => a.name)

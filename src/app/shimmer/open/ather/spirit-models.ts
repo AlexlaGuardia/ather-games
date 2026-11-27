@@ -272,7 +272,7 @@ export const FORM_GROW = 1.2
 // sisters; her floor + hull are deeper than s1's so she keeps the art's teal (Vulnarc read paler than her art).
 // Marlotl (Manalotl's Water form, the first of the Manalotl line; her own body: webbed gill fins, a dorsal crest, a tall paddle
 // tail fin, a long slim trunk on sprawled legs; docs/looks/m202-marlotl-2026-11-26) 1.4 x the Manalotl's 0.90 m nose to tail.
-export const FORM_GROW_BY: Readonly<Record<string, number>> = { vulnore: 1.4, vulnara: 1.4, vulnarc: 1.4, vulnix: 1.4, marlotl: 1.4, cragbear: 1.4, aurlotl: 1.4, arclotl: 1.4, craglotl: 1.4, lumebear: 1.4, voltbear: 1.4, tidebear: 1.4, noctarc: 1.4, noctara: 1.4, noctore: 1.4, noctix: 1.4, mystowl: 1.4, voltowl: 1.4, cragowl: 1.4, tideowl: 1.4, voltari: 1.4, lumari: 1.4, obsidari: 1.4, tidari: 1.4 }
+export const FORM_GROW_BY: Readonly<Record<string, number>> = { vulnore: 1.4, vulnara: 1.4, vulnarc: 1.4, vulnix: 1.4, marlotl: 1.4, cragbear: 1.4, aurlotl: 1.4, arclotl: 1.4, craglotl: 1.4, lumebear: 1.4, voltbear: 1.4, tidebear: 1.4, noctarc: 1.4, noctara: 1.4, noctore: 1.4, noctix: 1.4, mystowl: 1.4, voltowl: 1.4, cragowl: 1.4, tideowl: 1.4, voltari: 1.5, lumari: 1.5, obsidari: 1.5, tidari: 1.5 }
 export const formGrow = (name: string): number => FORM_GROW_BY[name] ?? FORM_GROW
 const secondForm = (sp: Species, form: SpiritElement, name: string, emissive: string, hull: string): SpiritLook => {
   const b = SPIRIT_RIGS[sp]!, g = formGrow(name)
@@ -356,20 +356,22 @@ const owlForm = (el: SpiritElement, name: string, emissive: string, hull: string
   ({ ...secondForm('owl', el, name, emissive, hull), rig })
 /** each form's glb height standing (the idle clip's mean: tufts, raised wings, antlers), glb units (three-check); the prod check sizes her by it */
 export const OWL_GLB_TALL: Readonly<Record<string, number>> = { mystowl: 1.02, voltowl: 0.912, cragowl: 1.156, tideowl: 0.916 }
-// M202 the Hovari line (docs/looks/m202-hovari-line-2026-11-26): Voltari (Storm: slim slate-blue, the longest pale ragged wings, a
+// M202 the Hovari line (docs/looks/m202-hovari-line-2026-11-26, redone in docs/looks/m202-hovari-redo-2026-11-27): Voltari (Storm: slim slate-blue, the longest pale ragged wings, a
 // long ragged tail, a crown crystal, lightning veins), Lumari (Mana: the plumpest, the longest beak, broad violet wings, three long tail
 // feathers, a gold flowing pattern), Obsidari (Earth: stocky amber stone chips, the biggest head, a green gem collar, flank stones in
 // moss, short leaf wings raised high), Tidari (Water: the sleekest, a crown water drop, a short beak, narrow wings swept high, the
 // longest narrow tail, ripple rings). Each her own sculpt from her locked art on the base Hovari's 24-bone hover plan (tools/rig_hov.py),
-// in the base's number space, so each draws the base's glb scale x her dial 1.4, hovers on the base's dial and beats her own shimmer.
+// in the base's number space, so each draws the base's glb scale x her dial, hovers on the base's dial and beats her own shimmer.
+// REDO 11-27 (docs/looks/m202-hovari-redo-2026-11-27, Alex: 'still holding onto the hovari baby body ... a bit bigger.. but still
+// juvenile'): fledgling proportions (smaller head for the body, longer trunk, wings and tail, thicker legs) and her dial 1.4 -> 1.5.
 const hovRig = (glbLen: number): RigLook => ({ ...HOVARI_RIG, glbLen })
-export const VOLTARI_RIG = hovRig(1.205), LUMARI_RIG = hovRig(1.233), OBSIDARI_RIG = hovRig(1.023), TIDARI_RIG = hovRig(1.073)
+export const VOLTARI_RIG = hovRig(1.352), LUMARI_RIG = hovRig(1.344), OBSIDARI_RIG = hovRig(1.126), TIDARI_RIG = hovRig(1.229)     // redo: x her grown beak-to-tail
 const hovForm = (el: SpiritElement, name: string, emissive: string, hull: string, shimmer: string, rig: RigLook): SpiritLook => {
   const L = secondForm('hummingbird', el, name, emissive, hull)
   return { ...L, rig, glow: { ...L.glow!, emissive: shimmer } }
 }
 /** each form's body height at rest (wing tip to tail tip, the hover not counted), glb units; the prod check sizes her by it */
-export const HOV_GLB_TALL: Readonly<Record<string, number>> = { voltari: 1.128, lumari: 1.124, obsidari: 1.098, tidari: 1.212 }
+export const HOV_GLB_TALL: Readonly<Record<string, number>> = { voltari: 1.299, lumari: 1.316, obsidari: 1.243, tidari: 1.402 }
 export const SECOND_FORMS: Partial<Record<Species, Partial<Record<SpiritElement, SpiritLook>>>> = {
   axolotl: {
     water: marlotl(),
