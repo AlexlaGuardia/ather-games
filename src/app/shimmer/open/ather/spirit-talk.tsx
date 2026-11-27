@@ -1,5 +1,6 @@
 'use client'
 // M109 s2: Feed is real (spirit-feed.ts): one spirit food from the bag, her happy beat, a fed record. Care, not a leash.
+// M240 (Alex 11-27): Feed is no longer a talk answer: a dish in hand + E at her feeds it (page.tsx -> feedSpirit, here).
 // M109 s1 (sprites, 2026-11-23, owner + ?spirits=3d only): E AT A GARDEN SPIRIT. The game's own talk (shared/npc-talk.tsx,
 // M13): her name plate + bubble over her, the keeper's answers on the HUD. Three answers, Alex's words: Feed (s2: greyed,
 // 'soon'), Follow (she walks with the keeper; the answer reads Stay while she does), Open (the SPIRIT PANEL). Stores nothing
@@ -33,9 +34,9 @@ import { SPECIES_NAMES } from '../../spirits/spirit'
 import { hudSay } from '../shared/hud-say'
 import { getInv, setInv, useInv } from '../shared/bag'
 import { itemDef, take } from '../shared/inventory'
-import { feed, foodIn, loadFed, saveFed, spiritCheer, withFed } from './spirit-feed'
+import { loadFed, saveFed, spiritCheer, withFed } from './spirit-feed'
 import { askAlong, inParty } from './spirit-party'
-import { FEED_NONE, fedLine, followRefuseLine, talkLine } from './party-spirit-lines'   // M109: the SIGNED lines (canon script, word for word)
+import { followRefuseLine, talkLine } from './party-spirit-lines'   // M109: the SIGNED lines (canon script, word for word)
 import { PARTY_FULL_LINE } from './spirit-roster'
 
 
@@ -46,7 +47,6 @@ export function useSpiritTalk(st: SpiritTalkState | null, set: (s: SpiritTalkSta
   // where she stood when the talk opened (she stands still while talked to: spiritHeld), and her species
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const live = useMemo(() => (st ? spiritLive.get(st.id) ?? null : null), [st?.id])
-  const food = foodIn(useInv())   // what Feed would give (shown as the answer's tag), or null
   useEffect(() => { spiritHeld.id = st && live ? st.id : null; return () => { spiritHeld.id = null } }, [st, live])
   useEffect(() => { if (st && !live) set(null) }, [st, live, set])
   // M109 signed: E on a PARTY spirit draws one line (generic five + her species' pair) per talk. A garden spirit not in the
@@ -59,12 +59,8 @@ export function useSpiritTalk(st: SpiritTalkState | null, set: (s: SpiritTalkSta
     return {
       line: said,
       options: [
-        { label: 'Feed', tag: food ? itemDef(food).name : undefined, pick: () => {
-          const r = feed(getInv(), loadFed(), id, Date.now())
-          if (!r) { hudSay(FEED_NONE, 'info', 4); set(null); return }   // nothing taken
-          setInv(r.inv); saveFed(r.book); spiritCheer.add(id)
-          hudSay(fedLine(live.sp, itemDef(r.item).name), 'item', 4); set(null)
-        } },
+        // M240 (Alex 11-27): Feed left the talk; she is fed BY HAND (a dish in hand, the crosshair on her, E: feedSpirit below).
+        // Its old place stays empty for now (M238's bonded-move ask goes there).
         following ? { label: 'Stay', pick: () => { setFollowing(id, false); set(null) } } : { label: 'Follow', pick: () => {
           // M109 s3: the ones who come along are from the party (up to 3 of the 8): Follow asks her along first
           if (!askAlong(id)) hudSay(PARTY_FULL_LINE, 'info', 4)
@@ -73,13 +69,28 @@ export function useSpiritTalk(st: SpiritTalkState | null, set: (s: SpiritTalkSta
         { label: 'Open', pick: () => set({ id, screen: 'panel' }) },
       ],
     }
-  }, [st, live, following, set, food, said])
+  }, [st, live, following, set, said])
   const panel = st && st.screen === 'panel' && live ? <SpiritPanel sp={live.sp} id={live.id} phone={phone} onClose={() => set(null)} /> : null
   return {
     node, panel,
     name: live ? SPECIES_NAMES[live.sp] : '',
     head: live ? { x: live.x, y: live.y + live.h, z: live.z } : null,
   }
+}
+
+/** M234 s2 -> M240: feed her one dish `mid` from the bag (her panel's buttons, and the hand: E with a dish in hand, aimed at
+ *  her). feedDish's rules; the dish leaves the bag only when she took it. A full Steep = a snack (bond only), said so. */
+export function feedSpirit(id: string, sp: Parameters<typeof feedDish>[1], mid: string): ReturnType<typeof feedDish> | null {
+  const pot = getPots()[id]
+  if (!pot) return null
+  const r = feedDish(pot, sp, mid, recStatOf(sp, loadStats()[id]), gameDay(Date.now()))
+  if (!r.ok) { hudSay(r.why === 'full' ? DISH_UI.full : MEAL_UI.locked, 'info', 4); return r }
+  const bag = take(getInv(), mid, 1)
+  if (!bag) return null
+  setInv(bag); setPots({ ...getPots(), [id]: r.pot }); saveFed(withFed(loadFed(), id, mid, Date.now())); spiritCheer.add(id)
+  const steep = r.steep.length ? `${r.steep.map(el => ELEMENT_LABEL[el]).join(' + ')} · ${MEAL_UI.steep(mealsOf(r.pot).length)}` : ''
+  hudSay(r.evolved && r.formName ? MEAL_UI.evolved(r.formName) : r.snack ? `${DISH_UI.fed(itemDef(mid).name, r.bond, '')} · ${DISH_UI.snack}` : DISH_UI.fed(itemDef(mid).name, r.bond, steep), 'item', 5)
+  return r
 }
 
 export function SpiritPanel({ sp, id, phone, onClose }: { sp: Parameters<typeof spiritSheet>[0]; /** M110: her planter id (the stat record) */ id?: string; phone: boolean; onClose: () => void }) {
@@ -108,16 +119,7 @@ export function SpiritPanel({ sp, id, phone, onClose }: { sp: Parameters<typeof 
   // M204 -> M234 s2: every spirit dish in the bag (the grill, the element meals, the roasts), one row each
   const mealRows = useMemo(() => SPIRIT_DISH_IDS.map(did => ({ id: did, d: dishOf(did)!, n: countOf(inv, did) })).filter(r => r.n > 0), [inv])
   const day = gameDay(Date.now()), bond = bondOf(pot), today = bondToday(pot, day)
-  const feedOne = (mid: string) => {
-    if (!id || !pot) return
-    const r = feedDish(pot, sp, mid, recStatOf(sp, loadStats()[id]), gameDay(Date.now()))
-    if (!r.ok) { hudSay(r.why === 'full' ? DISH_UI.full : MEAL_UI.locked, 'info', 4); return }
-    const bag = take(getInv(), mid, 1)
-    if (!bag) return
-    setInv(bag); setPots({ ...getPots(), [id]: r.pot }); saveFed(withFed(loadFed(), id, mid, Date.now())); spiritCheer.add(id)
-    const steep = r.steep.length ? `${r.steep.map(el => ELEMENT_LABEL[el]).join(' + ')} · ${MEAL_UI.steep(mealsOf(r.pot).length)}` : ''
-    hudSay(r.evolved && r.formName ? MEAL_UI.evolved(r.formName) : DISH_UI.fed(itemDef(mid).name, r.bond, steep), 'item', 5)
-  }
+  const feedOne = (mid: string) => { if (id) feedSpirit(id, sp, mid) }
   const lean = mealLean(meals)
   const ink = { label: H.inkSoft, ring: 'rgba(58,39,22,.2)', spoke: 'rgba(58,39,22,.16)' }
   return (

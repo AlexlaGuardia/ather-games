@@ -142,9 +142,9 @@ import { SmashPanel } from './smash-panel'   // M233 s1
 import { DashPanel } from './dash-panel'   // M233 s2
 import { ClashPanel } from './clash-panel'   // M233 s3
 import { useFolkTalk } from './use-folk-talk'
-import { useSpiritTalk, type SpiritTalkState } from './spirit-talk'   // M109 s1: E at a garden spirit (owner + ?spirits=3d)
+import { useSpiritTalk, feedSpirit, type SpiritTalkState } from './spirit-talk'   // M109 s1: E at a garden spirit (owner + ?spirits=3d)
 import { setGardenGround } from './garden-follow'   // M126: what a following spirit may walk in the garden
-import { liveSpirits, setKeeperAt, followIds, spiritPickR } from './spirit-follow'
+import { liveSpirits, spiritLive, setKeeperAt, followIds, spiritPickR } from './spirit-follow'
 import { inParty } from './spirit-party'   // M118 s1: party spirits walking with the keeper grow from her fights
 import { fightExp } from './spirit-stats'
 import { GROWTH, grownLine } from './spirit-growth'
@@ -208,7 +208,7 @@ import { QuestGuide } from '../quest-guide'
 import { useJournal, postEntries, questMarks } from '../shared/journal'
 import { give, take, itemDef, countOf, NO_BAIT_LINE } from '../shared/inventory'
 import { isDish } from './cooking'
-import { DISH_UI } from './spirit-dishes'   // M234 s2: food feeds spirits, potions heal keepers
+import { DISH_UI, handFeedOf } from './spirit-dishes'   // M234 s2: food feeds spirits, potions heal keepers
 import { loadTools, saveTools, easeOf, xpOf, TOOLS_EVENT } from './rinsticks'
 import { edgeDial, wearEdge, EDGE_TEXT } from './edges'   // BETA M134 s1
 import { useRinQuest, fennelTalk, FENNEL_NAME } from './use-rinquest'
@@ -1111,6 +1111,7 @@ function AtherSliceGame() {
         : n?.kind === 'chordstone' ? 'E · the Chordstone'   // M188 s2
         : n?.kind === 'greg' ? 'E · Gregory (buy ground)'
         : n?.kind === 'gfennel' ? moglinPrompt('fennel') : n?.kind === 'fennel' ? 'E · Fennel'
+        : n?.kind === 'spirit' && handFeedOf(heldRef.current, n) ? DISH_UI.handFeed(itemDef(heldRef.current!).name)   // M240: a dish in hand feeds her
         : n?.kind === 'idlemog' || n?.kind === 'spirit' || n?.kind === 'settler' ? `E · ${n.name}`
         : n?.kind === 'friend' ? `E · ${FRIEND_NAME[n.f]}`
         : n?.kind === 'anemonyx' ? 'E · the Anemonyx'
@@ -1881,6 +1882,7 @@ function AtherSliceGame() {
         else if (n.kind === 'adesk') setPanel({ kind: 'adesk' })   // M70 s3
         else if (n.kind === 'chordstone') setPanel({ kind: 'chordstone' })   // M188 s2
         else if (n.kind === 'idlemog') setPanel({ kind: 'idlemog', c: { id: n.id, screen: 'hello' } })   // P1: the go-home talk
+        else if (n.kind === 'spirit' && handFeedOf(heldRef.current, n)) { const sp = spiritLive.get(n.id)?.sp; if (sp) feedSpirit(n.id, sp, heldRef.current!) }   // M240: fed by hand
         else if (n.kind === 'spirit') setPanel({ kind: 'spirit', c: { id: n.id, screen: 'talk' } })   // M109 s1
         else if (n.kind === 'anemonyx') meetToday(clock())   // M76 s2
         else if (n.kind === 'work' && n.near.kind === 'piece' && currentWorks().pieces.some(x => x.id === (n.near as { id: string }).id && x.item === 'lift') && callNearest()) return   // M61 s3: a guest calls a mate's lift too (a local ride, never saved)
