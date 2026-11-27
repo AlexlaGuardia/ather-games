@@ -2,7 +2,7 @@
 // Reads the stage-2 lock ledger (discovery order) and the canon base table, so a reorder or a stray name goes red here.
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { GALLERY, DISCOVERY, dialStep, galleryNo } from './spirit-gallery'
+import { GALLERY, DISCOVERY, dialStep, galleryNo, FORM_ART_VER } from './spirit-gallery'
 
 let pass = 0
 const fails: string[] = []
@@ -30,7 +30,19 @@ if (existsSync(CANON)) {
   ok(names.length === 10, `canon base table has 10 rows (got ${names.length})`)
   names.forEach((n, i) => ok(GALLERY[i]?.name === n, `base #${String(i + 1).padStart(3, '0')} = canon ${n} (got ${GALLERY[i]?.name})`))
 }
-for (const r of GALLERY) ok(existsSync(join(process.cwd(), 'public', r.icon)), `${r.name}'s art exists: public${r.icon}`)
+const iconFile = (icon: string) => join(process.cwd(), 'public', icon.split('?')[0])
+for (const r of GALLERY) ok(existsSync(iconFile(r.icon)), `${r.name}'s art exists: public${r.icon}`)
+// M202 (11-27): each form's public art IS its locked stage-2 picture, byte for byte (the old copies were other pictures),
+// and its URL carries the version that busts the year-long immutable cache.
+if (existsSync(LEDGER)) {
+  const locks = JSON.parse(readFileSync(LEDGER, 'utf8')).locks as { name: string; file: string }[]
+  for (const r of GALLERY.slice(10)) {
+    const l = locks.find(x => x.name === r.name)
+    const src = l && join('/root/athernyx/assets/stage2', l.file)
+    ok(!!src && existsSync(src) && existsSync(iconFile(r.icon)) && readFileSync(src).equals(readFileSync(iconFile(r.icon))), `${r.name}'s public art is the locked ${l?.file}`)
+    ok(r.icon.endsWith(`?v=${FORM_ART_VER}`), `${r.name}'s art url carries the cache version (${r.icon})`)
+  }
+}
 
 ok(galleryNo(7) === '#007' && galleryNo(50) === '#050', 'number label')
 ok(dialStep(0, -1) === 0 && dialStep(49, 3) === 49 && dialStep(10, 2) === 12, 'dial held to its ends')

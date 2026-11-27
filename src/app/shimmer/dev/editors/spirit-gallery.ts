@@ -32,9 +32,14 @@ export type GalleryRow = {
 /** public/ files keep the tardigrade as `waterbear` */
 const artKey = (sp: Species) => (sp === 'water-bear' ? 'waterbear' : sp)
 
+/** M202 (11-27): public/spirits/forms/*.png were older pictures until they were swapped for the LOCKED stage-2 art.
+ *  Those files are served `immutable` for a year (browser + Cloudflare), so the form art URL carries a version:
+ *  bump it whenever the form files change, or players keep the old pictures. */
+export const FORM_ART_VER = 'locked1'
+
 export const GALLERY: readonly GalleryRow[] = [
   ...ALL_SPECIES.map((sp, i): GalleryRow => ({ num: i + 1, name: SPECIES_NAMES[sp], sp, el: null, icon: `/spirits/${artKey(sp)}.png` })),
-  ...DISCOVERY.map(([sp, el], i): GalleryRow => ({ num: ALL_SPECIES.length + i + 1, name: SECOND_FORM_NAMES[sp][el], sp, el, icon: `/spirits/forms/${artKey(sp)}_${el}.png` })),
+  ...DISCOVERY.map(([sp, el], i): GalleryRow => ({ num: ALL_SPECIES.length + i + 1, name: SECOND_FORM_NAMES[sp][el], sp, el, icon: `/spirits/forms/${artKey(sp)}_${el}.png?v=${FORM_ART_VER}` })),
 ]
 
 export const galleryNo = (n: number) => `#${String(n).padStart(3, '0')}`
