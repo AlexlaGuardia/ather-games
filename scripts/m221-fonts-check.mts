@@ -31,7 +31,7 @@ for (const [path] of CASES) {
   const p = await (await br.createBrowserContext()).newPage(); await p.setViewport({ width: 390, height: 844, isMobile: true })
   const r: string[] = []; reqs.set(path, r); p.on('request', q => r.push(q.url()))
   await p.evaluateOnNewDocument(() => { try { localStorage.setItem('ather:shimmer:birthRune', 'star') } catch {} })
-  await p.goto(`${origin}${path}`, { waitUntil: 'load', timeout: 240000 }); await sleep(path.includes('shimmer') ? 12000 : 4000)
+  await p.goto(`${origin}${path}`, { waitUntil: 'load', timeout: 240000 }); await sleep(path.includes('shimmer') ? 12000 : 8000)
   await p.evaluate('globalThis.__name = (f) => f')   // tsx keepNames wraps inner functions in __name
   pages.set(path, p)
   const google = r.filter(u => /fonts\.(googleapis|gstatic)\.com/.test(u))
@@ -62,7 +62,7 @@ for (const [path, v, sel, label] of CASES) {
     const srcs: string[] = []
     for (const s of Array.from(document.styleSheets)) { let rules: CSSRuleList; try { rules = s.cssRules } catch { continue }
       for (const ru of Array.from(rules)) if (ru instanceof CSSFontFaceRule && norm(ru.style.getPropertyValue('font-family')) === first)
-        for (const m of ru.style.getPropertyValue('src').matchAll(/url\(["']?([^"')]+)/g)) srcs.push(new URL(m[1], location.href).href) }
+        for (const m of ru.style.getPropertyValue('src').matchAll(/url\(["']?([^"')]+)/g)) srcs.push(new URL(m[1], s.href ?? location.href).href) }
     const media = performance.getEntriesByType('resource').map(e => e.name).filter(n => /\.(woff2?|ttf|otf)(\?|$)/.test(n))
     return { srcs: [...new Set(srcs)], fam, first, tag: el ? `${el.tagName.toLowerCase()}${el.id ? '#' + el.id : ''} "${(el.textContent ?? '').trim().slice(0, 24)}"` : '(none)', cf, w, loaded, media }
   }, v, sel)

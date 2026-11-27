@@ -15,6 +15,7 @@ export const hearthDisplay = localFont({
     { path: '../../../fonts/fraunces/fraunces-latin-700-italic.woff2', weight: '700', style: 'italic' },
   ],
   variable: '--font-hearth-display',
+  declarations: [{ prop: 'font-family', value: "'Fraunces'" }],   // keep the family name Google gave it
   display: 'swap',
   adjustFontFallback: 'Times New Roman',
   fallback: ['Georgia', 'serif'],
@@ -27,6 +28,7 @@ export const hearthBody = localFont({
     { path: '../../../fonts/nunito/nunito-latin-800-normal.woff2', weight: '800', style: 'normal' },
   ],
   variable: '--font-hearth-body',
+  declarations: [{ prop: 'font-family', value: "'Nunito'" }],   // keep the family name Google gave it
   display: 'swap',
   fallback: ['system-ui', 'sans-serif'],
 })

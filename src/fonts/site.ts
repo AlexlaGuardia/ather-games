@@ -11,6 +11,7 @@ export const cormorant = localFont({
     { path: './cormorant-garamond/cormorant-garamond-latin-700-normal.woff2', weight: '700', style: 'normal' },
   ],
   variable: '--font-display',
+  declarations: [{ prop: 'font-family', value: "'Cormorant Garamond'" }],   // keep the family name Google gave it
   display: 'swap',
   adjustFontFallback: 'Times New Roman',
   fallback: ['Georgia', 'serif'],
@@ -20,6 +21,7 @@ export const cormorant = localFont({
 export const inter = localFont({
   src: [{ path: './inter/inter-latin-wght-normal.woff2', weight: '100 900', style: 'normal' }],
   variable: '--font-body',
+  declarations: [{ prop: 'font-family', value: "'Inter'" }],   // keep the family name Google gave it
   display: 'swap',
   fallback: ['system-ui', 'sans-serif'],
 })
