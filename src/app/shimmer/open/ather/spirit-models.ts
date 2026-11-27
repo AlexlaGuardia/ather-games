@@ -272,7 +272,7 @@ export const FORM_GROW = 1.2
 // sisters; her floor + hull are deeper than s1's so she keeps the art's teal (Vulnarc read paler than her art).
 // Marlotl (Manalotl's Water form, the first of the Manalotl line; her own body: webbed gill fins, a dorsal crest, a tall paddle
 // tail fin, a long slim trunk on sprawled legs; docs/looks/m202-marlotl-2026-11-26) 1.4 x the Manalotl's 0.90 m nose to tail.
-export const FORM_GROW_BY: Readonly<Record<string, number>> = { vulnore: 1.4, vulnara: 1.4, vulnarc: 1.4, vulnix: 1.4, marlotl: 1.4, cragbear: 1.4, aurlotl: 1.4, arclotl: 1.4, craglotl: 1.4, lumebear: 1.4, voltbear: 1.4, tidebear: 1.4, noctarc: 1.4, noctara: 1.4, noctore: 1.4, noctix: 1.4 }
+export const FORM_GROW_BY: Readonly<Record<string, number>> = { vulnore: 1.4, vulnara: 1.4, vulnarc: 1.4, vulnix: 1.4, marlotl: 1.4, cragbear: 1.4, aurlotl: 1.4, arclotl: 1.4, craglotl: 1.4, lumebear: 1.4, voltbear: 1.4, tidebear: 1.4, noctarc: 1.4, noctara: 1.4, noctore: 1.4, noctix: 1.4, mystowl: 1.4, voltowl: 1.4, cragowl: 1.4, tideowl: 1.4 }
 export const formGrow = (name: string): number => FORM_GROW_BY[name] ?? FORM_GROW
 const secondForm = (sp: Species, form: SpiritElement, name: string, emissive: string, hull: string): SpiritLook => {
   const b = SPIRIT_RIGS[sp]!, g = formGrow(name)
@@ -344,6 +344,18 @@ const noctForm = (el: SpiritElement, name: string, emissive: string, hull: strin
   ({ ...secondForm('bat', el, name, emissive, hull), rig })
 /** each form's glb height standing (the idle clip's mean), glb units (three-check); the prod check sizes her by it */
 export const NOCT_GLB_TALL: Readonly<Record<string, number>> = { noctarc: 1.051, noctara: 1.042, noctore: 1.0, noctix: 0.978 }
+// M202 the Athowl line (docs/looks/m202-athowl-line-2026-11-26): Mystowl (Mana: a tall bottom-heavy egg, huge grey eye discs, ragged
+// tufts, a gold third eye, a gold flowing flank pattern), Voltowl (Storm: small and round, pale blue, her wings raised open in a V at
+// rest, frowning brows, a brow crystal), Cragowl (Earth: a stocky shaggy barrel, branching antlers, a cheek ruff, moss, an amber gem),
+// Tideowl (Water: a sleek forward-leaning teardrop, a long tail, no tufts, a pale heart face, a crown water gem, legs that show). Each
+// her own sculpt from her locked art on the base Athowl's 25-bone flier plan (tools/rig_owl.py), in the base's number space, so each
+// draws the base's glb scale x her dial 1.4 and reads at true relative size; her own RigLook only for her nose-to-tail.
+const owlRig = (glbLen: number): RigLook => ({ ...ATHOWL_RIG, glbLen })
+export const MYSTOWL_RIG = owlRig(0.694), VOLTOWL_RIG = owlRig(0.522), CRAGOWL_RIG = owlRig(0.724), TIDEOWL_RIG = owlRig(0.86)
+const owlForm = (el: SpiritElement, name: string, emissive: string, hull: string, rig: RigLook): SpiritLook =>
+  ({ ...secondForm('owl', el, name, emissive, hull), rig })
+/** each form's glb height standing (the idle clip's mean: tufts, raised wings, antlers), glb units (three-check); the prod check sizes her by it */
+export const OWL_GLB_TALL: Readonly<Record<string, number>> = { mystowl: 1.02, voltowl: 0.912, cragowl: 1.156, tideowl: 0.916 }
 export const SECOND_FORMS: Partial<Record<Species, Partial<Record<SpiritElement, SpiritLook>>>> = {
   axolotl: {
     water: marlotl(),
@@ -362,6 +374,12 @@ export const SECOND_FORMS: Partial<Record<Species, Partial<Record<SpiritElement,
     mana: noctForm('mana', 'noctara', '#b49cff', '#e8dcff', NOCTARA_RIG),
     earth: noctForm('earth', 'noctore', '#ffae4a', '#ffe2b4', NOCTORE_RIG),
     water: noctForm('water', 'noctix', '#3fc4c0', '#b4f0ea', NOCTIX_RIG),
+  },
+  owl: {
+    mana: owlForm('mana', 'mystowl', '#b49cff', '#e8dcff', MYSTOWL_RIG),
+    storm: owlForm('storm', 'voltowl', '#a8d2ff', '#dcecff', VOLTOWL_RIG),
+    earth: owlForm('earth', 'cragowl', '#ffae4a', '#ffe2b4', CRAGOWL_RIG),
+    water: owlForm('water', 'tideowl', '#3fc4c0', '#b4f0ea', TIDEOWL_RIG),
   },
   fox: {
     mana: secondForm('fox', 'mana', 'vulnara', '#b49cff', '#e8dcff'),

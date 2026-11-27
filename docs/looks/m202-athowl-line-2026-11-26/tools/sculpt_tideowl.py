@@ -30,7 +30,7 @@ BOUNDS = ((-.40, -.03, -.66), (.40, .97, .36))
 LM = dict(pelvis=(0, .25, -.04), chest=(0, .40, 0), leg=(.085, .20, .03), shin=(.092, .12, .05), foot=(.095, .05, .07), lids=(0, .70, .16),
           tail1=(0, .25, -.24), tail2=(0, .18, -.40), tailtip=(0, .15, -.54), tuft=((.15, .82, .05), (.18, .86, .03)),
           tuftmask=lambda A: (A[:, 0] > .99), tailmask=lambda V: (V[:, 2] < -.25) & (V[:, 1] < .32), leg_ymax=.19,
-          core=lambda A: ell(A, *DROP), wing_x0=.17, wing_x1=.23)
+          core=lambda A: ell(A, *DROP), wing_x0=.17, wing_x1=.23, drop_max=.040)
 
 TEAL, DEEP, PALE, BEAK, TOE = map(C8, ('#3fb8c4', '#23808e', '#bdf0f0', '#4a4a50', '#e8e4dc'))
 COAT = (C8('#2a9aaa'), C8('#7fdce0')); COAT_KEY = C8('#7fdce0')

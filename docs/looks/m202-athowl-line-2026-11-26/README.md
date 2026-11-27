@@ -1,10 +1,10 @@
-# M202: the Athowl line, WORK IN PROGRESS (2026-11-27, sprites B agent assets-M202-Athowl). NOT wired in game.
+# M202: the Athowl line (2026-11-27; sculpted by assets-M202-Athowl, finished + wired by sprites-M202-Athowl). LIVE for the owner: ?form=mana|storm|earth|water on a bloomed Athowl.
 Each form is her own creature sculpted from her locked art (no patching of the base sculpt). Shared = tools only:
 `tools/owl_common.py` (SDF helpers, wing-blade frame, hidden neck groove, eye caps, colour cut, export) and `tools/rig_owl.py`
 (the base Athowl rig.py plan, 25 bones, fitted from each form's `LM` landmarks; Voltowl's spread-wing rest = `up0`).
-- `sculpt_mystowl.py`: tall bottom-heavy egg, huge grey eye discs + violet irises, ragged tufts, gold third eye, gold flowing flank pattern. three-check ALL PASS.
+- `sculpt_mystowl.py`: tall bottom-heavy egg, huge grey eye discs + violet irises, ragged tufts, gold third eye, gold flowing flank pattern. three-check ALL PASS. Finish: neck-groove shadow light (GROOVE_SHADE .2, was the boxy join), wing ends a darker violet so they show.
 - `sculpt_voltowl.py`: small round pale-blue body, big wings raised open in a V (rest pose), frowning brows, violet brow crystal, tail fan, breast veins. three-check ALL PASS.
-- `sculpt_tideowl.py`: sleek forward-leaning teardrop, long tail, no tufts, pale heart face, crown water gem, visible legs. three-check: one FAIL, idle/sit blends dip 2.8 mm (limit 2.5).
-- `sculpt_cragowl.py`: stocky barrel, antlers, moss, amber gem. Does NOT build yet: the antler/cheek-ruff union has 2 handles (euler -2), so decimation never closes.
+- `sculpt_tideowl.py`: sleek forward-leaning teardrop, long tail, no tufts, pale heart face, crown water gem, visible legs. three-check ALL PASS. Fix: her long legs folded deep for the perch (drop .094) and the idle/sit blend dipped 2.8 mm; `drop_max=.04` (rig_owl LM knob) perches her higher, blends now -0.8 mm.
+- `sculpt_cragowl.py`: stocky barrel, antlers, moss, amber gem. three-check ALL PASS. Fixes: the two handles were (1) the lowest cheek-ruff tuft crossing the neck groove (moved above it) and (2) the wing hung straight down ran inside the barrel and out again (tip flared to x .35); antlers + ruff kept. Decimation then closed only with flipped faces at agg 3 (thin tines): owl_common's fallback now tries agg 3/5/4/6 with the winding repaired. Claw tips raised 7 mm (the landing blend dipped them 3 mm).
 Rebuild: `cd tools; uv run --no-project --with numpy,scipy,trimesh,fast_simplification,networkx python sculpt_<form>.py ../<form>.glb`,
 `python3 rig_owl.py <form> ../<form>.glb ../<form>-rigged.glb ../<form>-metrics.json`, `npx tsx tools/three-check.mts <rigged glb>`.

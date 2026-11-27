@@ -32,8 +32,10 @@ LM = dict(pelvis=(0, .22, -.02), chest=(0, .38, 0), leg=(.13, .16, .02), shin=(.
           tuftmask=lambda A: (A[:, 0] > .17) & (A[:, 1] > .85), tailmask=lambda V: (V[:, 2] < -.27) & (V[:, 1] < .22), leg_ymax=.11,
           core=lambda A: ell(A, *EGG), wing_x0=.24, wing_x1=.30)
 
-VIOLET, DEEP, LAV, DISC, GOLD, BEAK, TOE = map(C8, ('#9a7cd0', '#6c4fa8', '#c3b0ea', '#c9c2d6', '#e8c25a', '#3a3340', '#4a4452'))
+VIOLET, DEEP, LAV, DISC, GOLD, BEAK, TOE = map(C8, ('#9a7cd0', '#46297c', '#c3b0ea', '#c9c2d6', '#e8c25a', '#3a3340', '#4a4452'))
 COAT = (C8('#6f55a6'), C8('#a78bdc')); COAT_KEY = C8('#a78bdc')
+GROOVE_SHADE = .2      # the neck groove's painted shadow, light on her: at the shared .7 her head/body join read as a hard box edge
+# DEEP darker than her coat's own shade (#6f55a6): at #6c4fa8 her scalloped wing ends did not show
 def classes(V, o):
     x, y, z = V.T; A = np.abs(x); M = np.c_[A, y, z]; on, t, w, n = o.wingmask(V); out = []
     out.append(np.where(on, (t - .50 - .14 * zig(w / .2 + .3, 5)) * WING.WL, -.05))                          # deep violet scalloped wing ends

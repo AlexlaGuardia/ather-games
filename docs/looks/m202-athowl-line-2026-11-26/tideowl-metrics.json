@@ -92,8 +92,8 @@
  },
  "sit": {
   "dur_s": 6.0,
-  "lowest_m": -0.0006,
-  "edge_stretch_p99": 2.04,
+  "lowest_m": 0.0025,
+  "edge_stretch_p99": 1.89,
   "edge_stretch_max": 7.61,
   "worst_edge_at": [
    "head",
@@ -101,25 +101,25 @@
    0.5899999737739563,
    -0.07999999821186066
   ],
-  "leg_reach_ratio_max": 0.46,
+  "leg_reach_ratio_max": 0.77,
   "span_m": 0.336,
   "length_m": 0.449,
-  "top_m": 0.41
+  "top_m": 0.438
  },
  "lie": {
   "dur_s": 4.2,
-  "lowest_m": 0.0009,
-  "edge_stretch_p99": 1.53,
-  "edge_stretch_max": 3.52,
+  "lowest_m": 0.0025,
+  "edge_stretch_p99": 1.43,
+  "edge_stretch_max": 2.93,
   "worst_edge_at": [
-   "leg_r",
-   -0.11999999731779099,
+   "head",
    0.15000000596046448,
-   0.029999999329447746
+   0.5899999737739563,
+   -0.07999999821186066
   ],
-  "leg_reach_ratio_max": 0.46,
+  "leg_reach_ratio_max": 0.78,
   "span_m": 0.331,
   "length_m": 0.455,
-  "top_m": 0.407
+  "top_m": 0.434
  }
 }

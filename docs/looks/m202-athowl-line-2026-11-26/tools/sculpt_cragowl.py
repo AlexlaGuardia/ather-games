@@ -8,7 +8,7 @@ from owl_common import Owl, Wing, cone, ell, su, ss, V3, C8, zig, yrot, mirror
 
 NECK_Y, NECK_R, GROOVE, LID = .540, (.15, .33), .355, .075
 WING_YMAX = .58; WING_CUT = ((.28, .48, .0), .09); SHOULDER = ((.19, .48, .0), (.31, .49, .01), .065, .045)
-WING = Wing((.315, .510, .020), (.315, .085, .035), .45, [(.40, 0, .46, .130, 0), (.78, .060, .30, .050, 1), (.80, .005, .30, .055, 1), (.74, -.055, .30, .055, 1), (.62, .095, .26, .040, 1)], bow=.055)
+WING = Wing((.315, .510, .020), (.350, .085, .035), .45, [(.40, 0, .46, .130, 0), (.78, .060, .30, .050, 1), (.80, .005, .30, .055, 1), (.74, -.055, .30, .055, 1), (.62, .095, .26, .040, 1)], bow=.055)
 BARREL = ((0, .305, .0), (.320, .275, .290))
 def trunk(P, M):
     b = ell(M, *BARREL); b = su(b, ell(M, (0, .46, .0), (.28, .16, .26)), .10)
@@ -21,7 +21,7 @@ def head(M):
     d = ell(M, (0, .72, -.01), (.32, .21, .28))
     d = su(d, ell(M, DC, (.125, .122, .095), yrot(.30)), .035)
     d = ss(d, ell(M, V3(*DC) + V3(0, 0, .115) @ yrot(.30).T, (.105, .103, .035), yrot(.30)), .010)
-    for x, y in ((.27, .62), (.30, .70), (.22, .56)): d = su(d, cone(M, (x - .06, y, .12), (x + .05, y - .05, .10), .05, .006), .03)     # shaggy cheek ruff
+    for x, y in ((.27, .62), (.30, .70), (.24, .60)): d = su(d, cone(M, (x - .06, y, .12), (x + .05, y - .05, .10), .05, .006), .03)     # shaggy cheek ruff (the lowest tuft kept above the neck groove: across it, it closed a loop)
     for a, b, ra, rb in (((.17, .86, .03), (.23, 1.00, .0), .036, .026), ((.23, 1.00, .0), (.27, 1.14, -.02), .026, .013),    # antlers: a beam and two tines
                          ((.225, .985, .0), (.12, 1.07, .03), .020, .011), ((.245, 1.05, -.008), (.35, 1.10, -.01), .018, .010)):
         d = su(d, cone(M, a, b, ra, rb), .016)
@@ -37,6 +37,7 @@ LM = dict(pelvis=(0, .21, -.02), chest=(0, .37, 0), leg=(.125, .16, .02), shin=(
           tuftmask=lambda A: (A[:, 1] > .90), tailmask=lambda V: (V[:, 2] < -.27) & (V[:, 1] < .22), leg_ymax=.11,
           core=lambda A: ell(A, *BARREL), wing_x0=.25, wing_x1=.31)
 
+# the wing tip flares out to 0.35: hung straight down (0.315) the blade ran inside the barrel and came out again = a handle
 BROWN, DARK, TAN, MOSS, ANTLER, BEAK, TOE = map(C8, ('#8a5a2c', '#5a3818', '#c99a5a', '#6f9a3a', '#a07a4a', '#2e2620', '#3a2e24'))
 COAT = (C8('#6e4520'), C8('#b07a3c')); COAT_KEY = C8('#b07a3c')
 def classes(V, o):
@@ -54,7 +55,7 @@ EYE = dict(c=DC, yaw=.30, r=.084, dome=.022, rings=[(.084, (60, 34, 10)), (.075,
            lid=(150, 104, 60), lidline=(70, 44, 20))
 def decals(o, parts):
     GY = .845; o.put(parts, [(0, GY + .040), (.024, GY), (0, GY - .034), (-.024, GY), (0, GY)], [(4, 0, 1), (4, 1, 2), (4, 2, 3), (4, 3, 0)], (250, 190, 60), .007)   # amber gem
-    for x, z in ((-.065, .125), (0, .145), (.065, .125)): o.claw(parts, (.13 + x * 1.1, .038, z + .022), (.13 + x * 1.15, .006, z + .052), .017, (40, 32, 26))
+    for x, z in ((-.065, .125), (0, .145), (.065, .125)): o.claw(parts, (.13 + x * 1.1, .038, z + .022), (.13 + x * 1.15, .013, z + .046), .017, (40, 32, 26))   # tips 13 mm up: lower, the landing (run>walk) blend dipped them 3 mm
 
 if __name__ == '__main__':
     Owl(sys.modules[__name__]).run(sys.argv[1], int(sys.argv[2]) if len(sys.argv) > 2 else 4600)

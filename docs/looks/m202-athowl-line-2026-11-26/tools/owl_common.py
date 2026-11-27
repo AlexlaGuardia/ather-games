@@ -116,7 +116,7 @@ class Owl:
         cols = np.array([F.PAL[k] if k >= 0 else F.COAT_KEY for k in lab]); key, inv = np.unique(np.c_[F_.ravel(), np.repeat(cols, 3, 0)], axis=0, return_inverse=True)
         VV, NN, CC = V[key[:, 0]], N[key[:, 0]], np.c_[key[:, 1:], np.full(len(key), 255)]; FF = inv.reshape(-1, 3)
         g = (key[:, 1:] == F.COAT_KEY).all(1); y = VV[:, 1]; sh = np.clip(.55 + .45 * NN[:, 1], 0, 1) * np.where(y < .5, np.clip((y - .02) / .36, .0, 1) * .55 + .45, 1)
-        gr = np.clip(1 - np.abs(y - F.NECK_Y) / .03, 0, 1) * (np.hypot(VV[:, 0], VV[:, 2]) < F.GROOVE - .07); sh = np.clip(sh - .7 * gr, 0, 1)[:, None]
+        gr = np.clip(1 - np.abs(y - F.NECK_Y) / .03, 0, 1) * (np.hypot(VV[:, 0], VV[:, 2]) < F.GROOVE - .07); sh = np.clip(sh - getattr(F, 'GROOVE_SHADE', .7) * gr, 0, 1)[:, None]
         CC[g, :3] = F.COAT[0] * (1 - sh[g]) + F.COAT[1] * sh[g]                                       # darker underneath, light on top
         eV, eF, eC = eye; glb(path, dict(body=(VV, FF, CC, NN), eyes=(eV, eF, eC, normals(eV, eF)))); print('body tris', len(FF), 'verts', len(VV), 'eyes tris', len(eF))
     def run(s, out, tris=4200, h=.0068):
@@ -127,7 +127,9 @@ class Owl:
         try: t = decimate(k.vertices, k.faces, tris)
         except SystemExit:                                   # thin wing lobes flip a few faces: same quadric pass, winding repaired after
             import fast_simplification as fs
-            v, f = fs.simplify(np.asarray(k.vertices, np.float32), np.asarray(k.faces, np.int32), target_count=tris, agg=3); t = trimesh.Trimesh(v, f, process=False); t.merge_vertices(); trimesh.repair.fix_winding(t)
+            for agg in (3, 5, 4, 6):                         # Cragowl's thin antler tines: agg 3 leaves holes, agg 5 closes with a few faces flipped
+                v, f = fs.simplify(np.asarray(k.vertices, np.float32), np.asarray(k.faces, np.int32), target_count=tris, agg=agg); t = trimesh.Trimesh(v, f, process=False); t.merge_vertices(); trimesh.repair.fix_winding(t)
+                if t.is_watertight and t.is_winding_consistent and t.body_count == 1: print('fallback agg', agg); break
             assert t.is_watertight and t.is_winding_consistent and t.body_count == 1, 'no closed decimation, even with the winding repaired'
         print('dec', len(t.faces), 'closed', t.is_watertight, 'parts', t.body_count, t.bounds.round(3).tolist())
         s.finish(np.array(t.vertices), np.array(t.faces), out, s.eyes())

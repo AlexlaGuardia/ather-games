@@ -90,7 +90,7 @@ def sleep(u):
 a, b = 0, .12                                                  # the perch settles until she sits on her feet, and not a hair under the ground
 for _ in range(16):
     DROP = (a + b) / 2; l = min(low(perch(.0)), low(sleep(.75)), low(perch(1 / 4))); a, b = (DROP, b) if l > -.0005 else (a, DROP)
-DROP = a; ST.clear(); print('perch drop', DROP)
+DROP = min(a, LM.get('drop_max', 9.)); ST.clear(); print('perch drop', DROP)   # a long-legged form perches higher: a deep knee fold dips the blend into it
 clips, T, R = {}, {}, {}
 for n, fn, k, t in (('idle', idle, 70, 7.5), ('walk', hop, HOP['n'], 2 * HOP['reach'] * H / HOP['duty'] / HOP['v']), ('run', fly, FLY['n'], FLY['T']), ('glide', glide, 16, 3.2), ('sit', perch, 46, 6.), ('lie', sleep, 20, 4.2)):
     ST.clear(); clips[n] = wrap(fn, k); T[n] = t; R[n] = max(ST) if ST else None
