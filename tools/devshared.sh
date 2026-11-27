@@ -97,7 +97,14 @@ shared_tree_rss_mb() {
     kids=""; for q in $frontier; do kids="$kids $(pgrep -P "$q" 2>/dev/null | tr '\n' ' ')"; done
     frontier="$(echo $kids)"; all="$all $frontier"
   done
-  ps -o rss= -p "$(echo $all | tr ' ' ',')" 2>/dev/null | awk '{s+=$1} END{print int(s/1024)}'
+  # RSS + VmSwap: 11-27 the shared server was 1.8 GB resident AND 1.3 GB in swap (swap full); RSS alone read
+  # "1.8 GB, fine" and the 3 GB recycle never fired. A footprint that ignores swap undercounts exactly when it matters.
+  local q kb=0 r w
+  for q in $all; do
+    r=$(awk '/^VmRSS:/{print $2}' /proc/$q/status 2>/dev/null); w=$(awk '/^VmSwap:/{print $2}' /proc/$q/status 2>/dev/null)
+    kb=$((kb + ${r:-0} + ${w:-0}))
+  done
+  echo $((kb / 1024))
 }
 
 # ── ★ RECYCLE A BLOATED SHARED SERVER (2026-11-26, serb, Alex's call) ────────────────────────────
@@ -129,7 +136,11 @@ shared_recycle_if_bloated() {
   shared_alive || return 0
   rss=$(shared_tree_rss_mb); [ "$rss" -ge "$mb" ] || return 0
   quiet=$(( $(date +%s) - $(stat -c %Y "$SHARED_LOG" 2>/dev/null || echo 0) ))
-  [ "$quiet" -ge "$idle" ] || { echo "shared dev server ${rss} MB >= ${mb} but busy (log ${quiet}s ago); not recycling"; return 0; }
+  # Hard ceiling at mb+1000: with several lanes on it the log may never go quiet for $idle s (11-27: 3.4 GB
+  # and climbing, swap full). Past the ceiling the quiet-log rule is waived; the box-browser rule is not.
+  if [ "$quiet" -lt "$idle" ] && [ "$rss" -lt $((mb + 1000)) ]; then
+    echo "shared dev server ${rss} MB >= ${mb} but busy (log ${quiet}s ago); not recycling"; return 0
+  fi
   [ -f "$COORD_DIR/browser" ] && { echo "shared dev server ${rss} MB but the box browser is held; not recycling"; return 0; }
   shared_recycle
 }

@@ -88,7 +88,12 @@ tree_rss_mb() {
     kids=""; for q in $frontier; do kids="$kids $(pgrep -P "$q" 2>/dev/null | tr '\n' ' ')"; done
     frontier="$(echo $kids)"; all="$all $frontier"
   done
-  ps -o rss= -p "$(echo $all | tr ' ' ',')" 2>/dev/null | awk '{s+=$1} END{print int(s/1024)}'
+  local kb=0 r w
+  for q in $all; do   # RSS + VmSwap (see devshared.sh shared_tree_rss_mb: swap is memory too)
+    r=$(awk '/^VmRSS:/{print $2}' /proc/$q/status 2>/dev/null); w=$(awk '/^VmSwap:/{print $2}' /proc/$q/status 2>/dev/null)
+    kb=$((kb + ${r:-0} + ${w:-0}))
+  done
+  echo $((kb / 1024))
 }
 mem_pending_mb() {   # memory admitted jobs have reserved but not yet grown into
   local f p mb used pend=0
