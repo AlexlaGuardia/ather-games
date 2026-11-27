@@ -60,17 +60,20 @@ async function openFly(o: Page) {
 }
 
 const devtools = () => { const t = new EventTarget() as any, w = window as any; w.__THREE_DEVTOOLS__ = t; w.__scenes = []; w.__gls = []; t.addEventListener('observe', (e: any) => { const d = e.detail; if (d?.isScene) w.__scenes.push(d); else if (d?.info) w.__gls.push(d) }) }
-/** median draw calls per frame over 10 frames, with the scattered batches (InstancedMeshes holding only `s` ids) shown, then hidden */
+/** draw calls per frame (renderer.info, median of 10 frames) and the scattered batches' own share, counted EXACTLY: each scattered
+ *  InstancedMesh (only `s` ids) counts its onBeforeRender, one per draw it issues (a shadow or second pass shows as more than one) */
 const calls = (p: Page) => p.evaluate(async () => {
   const w = window as any, gl = w.__gls[w.__gls.length - 1]; if (!gl) return null
   const scat: any[] = []; for (const s of w.__scenes) s.traverse((o: any) => { const ids = o.userData?.scenery; if (o.isInstancedMesh && Array.isArray(ids) && ids.length && ids.every((i: string) => i[0] === 's')) scat.push(o) })
-  const proto = gl.render; let c = 0
+  const proto = gl.render; let c = 0, own = 0
+  const prev = scat.map(o => o.onBeforeRender); scat.forEach((o, i) => { o.onBeforeRender = function (...a: any[]) { own++; return prev[i].apply(o, a) } })
   gl.render = function (...a: any[]) { const r = proto.apply(gl, a); c += gl.info.render.calls; return r }
-  const med = async () => { const got: number[] = []; for (let i = 0; i < 10; i++) { c = 0; await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))); got.push(c) } return [...got].sort((x, y) => x - y)[got.length >> 1] }
-  const shown = await med(); scat.forEach(o => { o.visible = false }); const hidden = await med(); scat.forEach(o => { o.visible = true })
-  gl.render = proto
-  return { shown, hidden, batches: scat.length, pieces: scat.reduce((n, o) => n + o.count, 0) }
-}) as Promise<{ shown: number; hidden: number; batches: number; pieces: number } | null>
+  const got: number[] = [], mine: number[] = []
+  for (let i = 0; i < 10; i++) { c = 0; own = 0; await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))); got.push(c); mine.push(own) }
+  gl.render = proto; scat.forEach((o, i) => { o.onBeforeRender = prev[i] })
+  const med = (a: number[]) => [...a].sort((x, y) => x - y)[a.length >> 1]
+  return { total: med(got), scatter: med(mine), batches: scat.length, pieces: scat.reduce((n, o) => n + o.count, 0) }
+}) as Promise<{ total: number; scatter: number; batches: number; pieces: number } | null>
 const scatOf = (ps: any[]) => ps.filter(p => typeof p.id === 'string' && p.id[0] === 's')
 try {
   const owner = await br.createBrowserContext(), o = await owner.newPage()
@@ -107,7 +110,7 @@ try {
   ok(!!fd && fd.items.filter(i => ps.some(p => p.id === i.id)).length === ps.length, `2. the editor draws them all on the draft ground (${fd?.meshes} instanced meshes for ${fd?.drawn} pieces)`)
   await aim(o, B.x + 7, B.z + 14); await sleep(2500); await o.screenshot({ path: `${out}/b-painted.png` }).catch(() => {})
   const fc = await calls(o)
-  ok(!!fc && fc.batches <= 8 && fc.pieces >= ps.length, `2. Fly draw calls: ${fc?.shown} shown vs ${fc?.hidden} hidden = ${fc ? fc.shown - fc.hidden : '?'} for ${fc?.pieces} scattered pieces in ${fc?.batches} batches`)
+  ok(!!fc && fc.batches <= 8 && fc.pieces >= ps.length && fc.scatter > 0 && fc.scatter <= 2 * fc.batches, `2. Fly: the ${fc?.pieces} scattered pieces cost ${fc?.scatter} draw calls a frame (${fc?.batches} batches) of ${fc?.total} in all`)
   // ERASE: Shift + right at the second spot
   await aim(o, SPOTS[1].x, SPOTS[1].z); await lock(o)
   const ec = await o.evaluate(() => (window as W).__builderFly.centre()) as { x: number; z: number }
@@ -158,13 +161,16 @@ try {
   await A('tp', SPOTS[0].x - 8, SPOTS[0].z, yawE); await sleep(1500); await A('look', yawE, -0.25); await sleep(3000)
   await kp.screenshot({ path: `${out}/d-keeper-sees.png` })
   const kc = await calls(kp)
-  ok(!!kc && kc.batches > 0 && kc.batches <= 8, `7. keeper draw calls: ${kc?.shown} shown vs ${kc?.hidden} hidden = ${kc ? kc.shown - kc.hidden : '?'} for ${kc?.pieces} scattered pieces in ${kc?.batches} batches`)
-  const x0 = (await pos()).x
+  ok(!!kc && kc.batches > 0 && kc.batches <= 8 && kc.scatter > 0 && kc.scatter <= 2 * kc.batches, `7. keeper: the ${kc?.pieces} scattered pieces cost ${kc?.scatter} draw calls a frame (${kc?.batches} batches) of ${kc?.total} in all`)
+  // walk: from 1.5 m short of the patch's first piece on this row (the slow swiftshader frame rate walks a few metres a minute)
+  const row = ps.filter(p => Math.abs(p.z - SPOTS[0].z) < 1.5).sort((a, b) => a.x - b.x), first = row[0] ?? ps[0], goal = first.x + 2
+  await A('tp', first.x - 1.5, first.z, yawE); await sleep(1500); await A('look', yawE, -0.25); await sleep(1500)
+  const p0 = await pos()
   await kp.keyboard.down('KeyW')
-  for (let t = 0; t < 30; t++) { await sleep(500); if ((await pos()).x > SPOTS[1].x + 2) break }
+  for (let t = 0; t < 80; t++) { await sleep(500); if ((await pos()).x > goal) break }
   await kp.keyboard.up('KeyW'); await sleep(500)
-  const xE = (await pos()).x
-  ok(xE > SPOTS[0].x + 4, `7. the walk goes straight into the patch, nothing stops it (x ${x0.toFixed(1)} -> ${xE.toFixed(1)})`)
+  const pE = await pos(), passed = row.filter(p => p.x > p0.x && p.x < pE.x).length
+  ok(pE.x > goal && Math.abs(pE.z - p0.z) < 1, `7. the walk goes straight through the patch: (${p0.x.toFixed(1)}, ${p0.z.toFixed(1)}) -> (${pE.x.toFixed(1)}, ${pE.z.toFixed(1)}), past ${passed} pieces on its row`)
   await kp.screenshot({ path: `${out}/e-keeper-in-patch.png` })
   await ctx.close()
 } catch (e) { ok(false, 'threw: ' + String(e).slice(0, 300)) }
