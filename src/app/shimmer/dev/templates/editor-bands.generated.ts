@@ -6,7 +6,7 @@
  * drifted, so this file is a CACHE OF A COMPUTATION rather than a hand-kept list somebody has to
  * remember to update. `band-derive.ts` says why that distinction is the entire point.
  *
- * Derived against: voxel3d closure 349 files, play3d closure 279 files.
+ * Derived against: voxel3d closure 445 files, play3d closure 369 files.
  */
 export type Band = 'live' | 'legacy' | 'orphan' | 'tool' | 'opaque'
 
@@ -35,6 +35,8 @@ export const EDITOR_BANDS: EditorBand[] = [
     live: [], legacy: [], orphan: [] },
   { id: "evolution", file: "EvolutionEditor.tsx", band: "live", deployable: true,
     live: ["spirits/evolution-config","spirits/spirit"], legacy: [], orphan: [] },
+  { id: "fair", file: "FairDev.tsx", band: "live", deployable: false,
+    live: ["spirits/spirit"], legacy: [], orphan: [] },
   { id: "farming", file: "FarmingEditor.tsx", band: "live", deployable: true,
     live: ["engine/farming","sprites/items"], legacy: [], orphan: [] },
   { id: "items", file: "ItemEditor.tsx", band: "live", deployable: true,
@@ -50,7 +52,7 @@ export const EDITOR_BANDS: EditorBand[] = [
   { id: "spirits", file: "SpiritGallery.tsx", band: "live", deployable: false,
     live: ["spirits/spirit"], legacy: [], orphan: [] },
   { id: "terrain", file: "TerrainEditor.tsx", band: "orphan", deployable: false,
-    live: [], legacy: [], orphan: ["world/builder","world/builder-props","world/builder-zones","world/glade-builder","world/nyx-builder"] },
+    live: ["world/builder-props","world/glade-builder"], legacy: [], orphan: ["world/builder","world/builder-flush","world/builder-zones","world/nyx-builder"] },
   { id: "tools", file: "ToolsEditor.tsx", band: "live", deployable: true,
     live: ["engine/tools","sprites/items"], legacy: [], orphan: [] },
 ]

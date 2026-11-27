@@ -16,7 +16,7 @@ import { smashHit } from './fair-smash'
 import { SMASH_UI as L, strikerRise, rings, type SmashBoard } from './fair-smash-rules'
 
 const NONE: readonly string[] = []
-const SWING_MS = 450, RISE_MS = 900
+export const SWING_MS = 450, RISE_MS = 900
 
 export function SmashPanel({ onClose }: { onClose: () => void }) {
   const book = useBook()
@@ -58,18 +58,7 @@ export function SmashPanel({ onClose }: { onClose: () => void }) {
       entrants={[{ who: 'you', you: true, spirit: chosen?.name ?? null }]} canEnter={canSwing} onEnter={() => { void swing() }}
       note={board?.signedIn ? <span data-smash-tries={board.triesLeft} style={{ fontSize: 12, color: H.inkFaint }}>{board.triesLeft > 0 ? L.tries(board.triesLeft) : L.noTries}</span> : null}>
       <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'stretch' }}>
-        {/* the strength tester: a pole, a striker that climbs it, the bell at the top, the spirit's swing at the base */}
-        <div data-smash-pole data-rise={rise.toFixed(2)} data-rang={rang ? '1' : '0'} style={{ position: 'relative', width: 96, height: 230, flex: '0 0 auto', margin: '0 auto' }}>
-          <div style={{ position: 'absolute', left: 44, top: 26, width: 8, bottom: 30, borderRadius: 4, background: 'linear-gradient(90deg,#8d4119,#c8642a,#8d4119)' }} />
-          {Array.from({ length: 6 }, (_, i) => <div key={i} style={{ position: 'absolute', left: 36, width: 24, height: 1, top: 26 + ((230 - 56) * i) / 5, background: H.rule }} />)}
-          <div data-smash-bell style={{ position: 'absolute', left: 30, top: 0, width: 36, height: 30, borderRadius: '18px 18px 6px 6px', background: rang ? 'radial-gradient(circle at 50% 40%,#fff3b0,#e0b23f)' : 'linear-gradient(180deg,#d9b25a,#9a7426)', boxShadow: rang ? '0 0 22px 8px rgba(255,214,90,.75)' : 'inset 0 -3px 0 rgba(0,0,0,.2)', transform: rang ? 'rotate(-8deg)' : 'none', transition: 'transform 120ms, box-shadow 200ms' }} />
-          <div data-smash-striker style={{ position: 'absolute', left: 36, width: 24, height: 14, borderRadius: 5, background: H.rust, boxShadow: '0 2px 0 rgba(0,0,0,.25)', bottom: 30 + rise * (230 - 30 - 30 - 14), transition: phase === 'rise' ? `bottom ${RISE_MS}ms cubic-bezier(.2,.9,.3,1)` : 'none' }} />
-          <div style={{ position: 'absolute', left: 18, right: 18, bottom: 18, height: 12, borderRadius: 3, background: H.inkSoft }} />
-          <div data-smash-mallet style={{ position: 'absolute', left: 4, bottom: 26, width: 40, height: 10, transformOrigin: '0% 50%', transform: phase === 'swing' ? 'rotate(-70deg)' : 'rotate(0deg)', transition: `transform ${SWING_MS}ms cubic-bezier(.5,-0.4,.6,1.4)` }}>
-            <div style={{ position: 'absolute', left: 0, top: 3, width: 30, height: 4, background: H.inkSoft }} />
-            <div style={{ position: 'absolute', left: 26, top: -4, width: 14, height: 18, borderRadius: 3, background: H.emberLo }} />
-          </div>
-        </div>
+        <SmashPole phase={phase} rise={rise} rang={rang} />
 
         <div style={{ flex: '1 1 220px', minWidth: 0, display: 'grid', gap: 8, alignContent: 'start' }}>
           {board && !board.signedIn && <div style={{ fontSize: 12, color: H.inkFaint }}>{L.signIn}</div>}
@@ -99,5 +88,23 @@ export function SmashPanel({ onClose }: { onClose: () => void }) {
         </div>
       </div>
     </FairSignup>
+  )
+}
+
+// the strength tester: a pole, a striker that climbs it, the bell at the top, the spirit's swing at the base
+/** the strength tester (M243: its own component so /shimmer/dev?mode=fair mounts the same one; the speeds are its dial) */
+export function SmashPole({ phase, rise, rang, swingMs = SWING_MS, riseMs = RISE_MS }: { phase: 'idle' | 'swing' | 'rise' | 'done'; rise: number; rang: boolean; swingMs?: number; riseMs?: number }) {
+  return (
+    <div data-smash-pole data-rise={rise.toFixed(2)} data-rang={rang ? '1' : '0'} style={{ position: 'relative', width: 96, height: 230, flex: '0 0 auto', margin: '0 auto' }}>
+      <div style={{ position: 'absolute', left: 44, top: 26, width: 8, bottom: 30, borderRadius: 4, background: 'linear-gradient(90deg,#8d4119,#c8642a,#8d4119)' }} />
+      {Array.from({ length: 6 }, (_, i) => <div key={i} style={{ position: 'absolute', left: 36, width: 24, height: 1, top: 26 + ((230 - 56) * i) / 5, background: H.rule }} />)}
+      <div data-smash-bell style={{ position: 'absolute', left: 30, top: 0, width: 36, height: 30, borderRadius: '18px 18px 6px 6px', background: rang ? 'radial-gradient(circle at 50% 40%,#fff3b0,#e0b23f)' : 'linear-gradient(180deg,#d9b25a,#9a7426)', boxShadow: rang ? '0 0 22px 8px rgba(255,214,90,.75)' : 'inset 0 -3px 0 rgba(0,0,0,.2)', transform: rang ? 'rotate(-8deg)' : 'none', transition: 'transform 120ms, box-shadow 200ms' }} />
+      <div data-smash-striker style={{ position: 'absolute', left: 36, width: 24, height: 14, borderRadius: 5, background: H.rust, boxShadow: '0 2px 0 rgba(0,0,0,.25)', bottom: 30 + rise * (230 - 30 - 30 - 14), transition: phase === 'rise' ? `bottom ${riseMs}ms cubic-bezier(.2,.9,.3,1)` : 'none' }} />
+      <div style={{ position: 'absolute', left: 18, right: 18, bottom: 18, height: 12, borderRadius: 3, background: H.inkSoft }} />
+      <div data-smash-mallet style={{ position: 'absolute', left: 4, bottom: 26, width: 40, height: 10, transformOrigin: '0% 50%', transform: phase === 'swing' ? 'rotate(-70deg)' : 'rotate(0deg)', transition: `transform ${swingMs}ms cubic-bezier(.5,-0.4,.6,1.4)` }}>
+        <div style={{ position: 'absolute', left: 0, top: 3, width: 30, height: 4, background: H.inkSoft }} />
+        <div style={{ position: 'absolute', left: 26, top: -4, width: 14, height: 18, borderRadius: 3, background: H.emberLo }} />
+      </div>
+    </div>
   )
 }

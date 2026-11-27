@@ -25,8 +25,9 @@ const DayCycleEditor = dynamic(() => import('./editors/DayCycleEditor'))
 const ManaEditor = dynamic(() => import('./editors/ManaEditor'))            // engine/mana: alchemy reads it
 const TerrainEditor = dynamic(() => import('./editors/TerrainEditor'))   // BETA M62: sculpt the real Wilds
 const SpiritGallery = dynamic(() => import('./editors/SpiritGallery'), { ssr: false })   // BETA M213: every spirit model on a dial
+const FairDev = dynamic(() => import('./editors/FairDev'), { ssr: false })               // BETA M243: the three Fair events, no prize
 
-type EditorMode = 'index' | 'items' | 'farming' | 'alchemy' | 'evolution' | 'resources' | 'tools' | 'skills' | 'moves' | 'daycycle' | 'mana' | 'terrain' | 'spirits'
+type EditorMode = 'index' | 'items' | 'farming' | 'alchemy' | 'evolution' | 'resources' | 'tools' | 'skills' | 'moves' | 'daycycle' | 'mana' | 'terrain' | 'spirits' | 'fair'
 
 const EDITOR_MAP: Record<Exclude<EditorMode, 'index'>, { component: ComponentType<any>; deployable: boolean }> = {
   items:      { component: ItemEditor,          deployable: true },
@@ -41,6 +42,7 @@ const EDITOR_MAP: Record<Exclude<EditorMode, 'index'>, { component: ComponentTyp
   daycycle:   { component: DayCycleEditor,      deployable: true },
   terrain:    { component: TerrainEditor,       deployable: false },
   spirits:    { component: SpiritGallery,       deployable: false },
+  fair:       { component: FairDev,             deployable: false },
 }
 
 const TAB_GROUPS: { label: string; tabs: { id: EditorMode; label: string }[]; links?: { href: string; label: string }[] }[] = [
@@ -54,6 +56,7 @@ const TAB_GROUPS: { label: string; tabs: { id: EditorMode; label: string }[]; li
     label: 'Spirits',
     tabs: [
       { id: 'spirits', label: 'Gallery' },   // M213: the models on a dial
+      { id: 'fair', label: 'Fair events' },  // M243: Clash / Dash / Smash on a bench
       { id: 'moves', label: 'Moves' },
       { id: 'evolution', label: 'Evolution' },
     ],

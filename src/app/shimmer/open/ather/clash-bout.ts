@@ -10,7 +10,7 @@
 import type { Spirit } from '../../spirits/spirit'
 import { createPartyBattle, currentActor, chooseAction, takeAction } from '../../engine/party-battle'
 import { CLASH_AI, CLASH_TROUPE_MANA, type ClashTier } from './fair-clash-rules'
-import { createFight, step, tentEntrant, resolveBonded, bondSeed, type Bonded, DT, RING, type FightState, type FighterSnap, type FightEvent } from './clash-fight'
+import { createFight, step, tentEntrant, resolveBonded, bondSeed, type Bonded, DT, RING, type FightState, type FighterSnap, type FightEvent, type TickLog } from './clash-fight'
 
 export type BoutAct = 'idle' | 'walk' | 'windup' | 'strike' | 'evade' | 'guard' | 'hit' | 'down' | 'win'
 /** a short word the ring floats over her for a moment (a landed blow, a dodge, a block, a miss, her cheer) */
@@ -125,8 +125,10 @@ function actOf(f: FighterSnap, moving: boolean): BoutAct {
   return f.act === 'reposition' || moving ? 'walk' : 'idle'
 }
 /** a live bout: the engine stepped up to the asked time (20 Hz, positions eased between ticks) */
-export function liveBout(s: FightState, hold = 1.2): BoutPlay {
+export function liveBout(s: FightState, hold = 1.2, onTick?: (l: TickLog) => void): BoutPlay {
+  // M243: onTick = every engine tick as it is stepped (the /shimmer/dev?mode=fair log); the game passes none
   let prev = step(s), last = prev
+  onTick?.(prev)
   const press: [boolean, boolean] = [false, false], cues: { t: number; side: 0 | 1; c: BoutCue }[] = []
   const pose = (i: 0 | 1, t: number): BoutPose => {
     const a = prev.f[i], b = last.f[i], k = Math.max(0, Math.min(1, (t - last.t) / DT + 1))
@@ -139,7 +141,7 @@ export function liveBout(s: FightState, hold = 1.2): BoutPlay {
   return {
     at(t) {
       while (!s.over && last.t + DT <= t) {
-        prev = last; last = step(s, { cheer: [press[0], press[1]] }); press[0] = press[1] = false
+        prev = last; last = step(s, { cheer: [press[0], press[1]] }); press[0] = press[1] = false; onTick?.(last)
         for (const e of last.ev) { const c = cueOf(e.kind); if (c) cues.push({ t: last.t, side: cueSide(e), c }) }
         if (cues.length > 40) cues.splice(0, cues.length - 40)
       }

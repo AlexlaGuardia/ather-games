@@ -115,11 +115,19 @@ function Follow({ at, phone }: { at: () => RunState; phone: boolean }) {
 }
 
 const SUB = 0.05, MAX_DT = 0.5
-function Stepper({ racers, states, rolls, onTick }: { racers: Entry[]; states: React.MutableRefObject<RunState[]>; rolls: (() => number)[]; onTick: (dt: number) => void }) {
+function Stepper({ racers, states, rolls, onTick, speed }: { racers: Entry[]; states: React.MutableRefObject<RunState[]>; rolls: (() => number)[]; onTick: (dt: number) => void; speed?: number }) {
+  const acc = useRef(0)
   useFrame((_, raw) => {
     // real time whatever the frame rate (a slow phone still races at the race's pace): sub-steps of at most SUB s, and a
     // hitch longer than MAX_DT (a tab switch) is dropped rather than raced through
     const dt = Math.min(MAX_DT, raw)
+    // M243 (the /shimmer/dev?mode=fair tool): with `speed` the race steps in FIXED SUB steps (speed x real time), so the same
+    // seed runs the same race whatever the frame rate (fair-dev.ts runHeat is the same loop headless)
+    if (speed) {
+      acc.current += dt * speed
+      for (let n = 0; acc.current >= SUB && n < 400; n++) { acc.current -= SUB; states.current = states.current.map((s, i) => step(racers[i], s, SUB, rolls[i])); onTick(SUB) }
+      return
+    }
     for (let left = dt; left > 1e-6; left -= SUB) { const h = Math.min(SUB, left); states.current = states.current.map((s, i) => step(racers[i], s, h, rolls[i])) }
     onTick(dt)
   })
@@ -127,7 +135,7 @@ function Stepper({ racers, states, rolls, onTick }: { racers: Entry[]; states: R
 }
 
 const COUNT_S = 3, WAIT_S = 15
-export function DashRace({ racers, seed, phone, onDone }: { racers: Entry[]; seed: number; phone: boolean; onDone: (r: RaceResult) => void }) {
+export function DashRace({ racers, seed, phone, onDone, speed }: { racers: Entry[]; seed: number; phone: boolean; onDone: (r: RaceResult) => void; /** M243 dev: fixed steps at this speed */ speed?: number }) {
   const states = useRef<RunState[]>(racers.map(() => startState()))
   const rolls = useMemo(() => racers.map((_, i) => seeded(seed + i * 7919)), [racers, seed])
   const me = racers.findIndex(r => r.you)
@@ -163,7 +171,7 @@ export function DashRace({ racers, seed, phone, onDone }: { racers: Entry[]; see
         {racers.map((e, i) => <group key={i} position-z={laneZ(i, n)}><Body e={e} at={() => states.current[i]} /></group>)}
         {racers.map((_, i) => <Blocks key={i} lane={i} n={n} hp={() => states.current[i].blocks} />)}
         <Follow at={() => states.current[me]} phone={phone} />
-        {go && <Stepper racers={racers} states={states} rolls={rolls} onTick={onTick} />}
+        {go && <Stepper racers={racers} states={states} rolls={rolls} onTick={onTick} speed={speed} />}
       </Canvas>
       {/* HUD */}
       <div style={{ position: 'absolute', top: 10, left: 10, right: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, pointerEvents: 'none', fontFamily: 'inherit' }}>

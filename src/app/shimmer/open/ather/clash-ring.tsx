@@ -45,8 +45,10 @@ const lookOf = (sp: Species, el: Element) => (el === 'base' ? spiritModelFor(sp)
 
 type Live = { i: number; play: BoutPlay; start: number; swap: boolean; x: number; mine: boolean }
 
-export function ClashRing({ tier, title, entrants, runner = fightRunner, result, onDone, onExit }: {
+export function ClashRing({ tier, title, entrants, runner = fightRunner, result, onDone, onExit, speed, seed }: {
   tier: ClashTier; title: string
+  /** M243 (the /shimmer/dev?mode=fair tool): every bout's speed and the line's fight seed; unset = the ?clashx / ?clashseed dials */
+  speed?: number; seed?: number | null
   /** [0] = her spirit, then the line-up */ entrants: RingEntrant[]
   runner?: BoutRunner
   /** the panel's word on the run once it is over (the prize line) */ result: { won: boolean; prize?: number } | null
@@ -70,13 +72,13 @@ export function ClashRing({ tier, title, entrants, runner = fightRunner, result,
     const go = () => {
       const swap = bt.b === YOU   // the runner takes her side first
       const [sa, sb] = swap ? [bt.b!, bt.a!] : [bt.a!, bt.b!]
-      const play = runner.run({ spirit: entrants[sa].spirit(), keeper: sa === YOU, bonded: entrants[sa].bonded, known: entrants[sa].known }, { spirit: entrants[sb].spirit(), keeper: sb === YOU, bonded: entrants[sb].bonded, known: entrants[sb].known }, { tier, seed: seedDial() !== null ? seedDial()! * 1000 + i : undefined })
-      const l: Live = { i, play, start: performance.now(), swap, mine, x: speedDial() * (mine ? 1 : TROUPE_X) }
+      const play = runner.run({ spirit: entrants[sa].spirit(), keeper: sa === YOU, bonded: entrants[sa].bonded, known: entrants[sa].known }, { spirit: entrants[sb].spirit(), keeper: sb === YOU, bonded: entrants[sb].bonded, known: entrants[sb].known }, { tier, seed: (seed ?? seedDial()) != null ? (seed ?? seedDial())! * 1000 + i : undefined })
+      const l: Live = { i, play, start: performance.now(), swap, mine, x: (speed ?? speedDial()) * (mine ? 1 : TROUPE_X) }
       liveRef.current = l; setYourTurn(false); setCheerUsed(false); setLive(l)
     }
     if (mine) { setYourTurn(true); const t = setTimeout(go, YOUR_TURN_MS); return () => clearTimeout(t) }
     go()
-  }, [phase, live, done, br, runner, entrants, tier])
+  }, [phase, live, done, br, runner, entrants, tier, speed, seed])
   // a bout's end (the runner says it is over): hold on the winner, then move the tree
   const ended = !!live && live.play.over(tOf(live, now))
   useEffect(() => {

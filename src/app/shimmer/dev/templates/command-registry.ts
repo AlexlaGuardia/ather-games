@@ -21,6 +21,7 @@ export const COMMAND_REGISTRY: CommandEntry[] = [
   // M214: only the editors the live game reads (see EDITOR_MAP in ../page.tsx); the rest are in DEV_ARCHIVE.md.
   { id: 'terrain', label: 'Creative mode', keywords: ['world', 'builder', 'terrain', 'zones', 'creative'], category: 'editor', action: 'switchMode', mode: 'terrain' },
   { id: 'spirits', label: 'Spirit gallery', keywords: ['spirit', 'model', 'form', 'gallery'], category: 'editor', action: 'switchMode', mode: 'spirits' },
+  { id: 'fair', label: 'Fair events bench', keywords: ['fair', 'clash', 'dash', 'smash', 'bench'], category: 'editor', action: 'switchMode', mode: 'fair' },
   { id: 'moves', label: 'Moves', keywords: ['attack', 'ability'], category: 'editor', action: 'switchMode', mode: 'moves' },
   { id: 'evolution', label: 'Evolution', keywords: ['evolve', 'stage'], category: 'editor', action: 'switchMode', mode: 'evolution' },
   { id: 'tools', label: 'Tools', keywords: ['equipment', 'gear'], category: 'editor', action: 'switchMode', mode: 'tools' },
