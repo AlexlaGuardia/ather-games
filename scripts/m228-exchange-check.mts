@@ -4,6 +4,8 @@
 //   The Citadel has no Grand Exchange door (the shipped doors code). Run: --phone (390x844) and without (1440x900).
 // ⚠ Writes the LIVE accounts db for the two test keepers only (dummy_m228_a / dummy_m228_b): run from the repo root, on the box.
 //   Cleanup: every order those two hold is deleted at the start and at the end.
+//   M228b: orders now FILL and Co. clerks quote the basic goods, so A's plank sell is priced ABOVE the clerks' buy (99, not 7)
+//   to stay a resting order; the fill path has its own check (m228b-market-check.mts).
 //   npx tsx scripts/m228-exchange-check.mts [--phone] [--url https://ather.games] [--out /tmp/m228]
 import puppeteer from 'puppeteer-core'
 import { mkdirSync, readFileSync } from 'fs'
@@ -101,7 +103,7 @@ try {
   // the bag as the panel reads it (the save key is per keeper): "you have N"
   const bagPlanks = () => p.evaluate(() => Number((document.querySelector('[data-x-form]')?.textContent ?? '').match(/you have (\d+)/)?.[1] ?? -1))
   const before = await bagPlanks()
-  await (await p.$('[data-x-side="sell"]'))!.click(); await setField('[data-x-n]', '3'); await setField('[data-x-price]', '7')
+  await (await p.$('[data-x-side="sell"]'))!.click(); await setField('[data-x-n]', '3'); await setField('[data-x-price]', '99')
   await (await p.$('[data-x-place]'))!.click(); await sleep(2500)
   const msg1 = await p.evaluate(() => document.querySelector('[data-x-msg]')?.textContent ?? '')
   ok(/Sell order placed/.test(msg1) && (await bagPlanks()) === before - 3, `7. a SELL order is placed and its 3 planks leave the bag (${msg1}; bag ${before} -> ${await bagPlanks()})`)
@@ -118,7 +120,7 @@ try {
   // keeper B reads the ONE book with B's own session
   const bBook = await (await fetch(`${url}/api/exchange`, { headers: { cookie: `ather_session=${mintSession(KB.id, KB.name)}` } })).json() as { book: { side: string; item: string; who: string; mine: boolean; n: number; price: number }[] }
   const seen = bBook.book.filter(r => r.who === KA.name && r.item === 'goldwood_plank' && !r.mine)
-  ok(seen.some(r => r.side === 'sell' && r.n === 3 && r.price === 7) && seen.some(r => r.side === 'buy' && r.n === 2 && r.price === 5), `10. keeper B sees A's sell (3 at 7) and buy (2 at 5) in the shared book`)
+  ok(seen.some(r => r.side === 'sell' && r.n === 3 && r.price === 99) && seen.some(r => r.side === 'buy' && r.n === 2 && r.price === 5), `10. keeper B sees A's sell (3 at 99) and buy (2 at 5) in the shared book`)
   ok(errs.length === 0, `11. no page errors (${errs.slice(0, 2).join(' | ')})`)
 } finally {
   await br.close()

@@ -106,6 +106,9 @@ const sc = X.placeOrder(f, { side: 'sell', item: 'blankstone', n: 3, price: 1 },
 ok(sc.ok && sc.value.fills.length === 1 && sc.value.fills[0].price === qb.buy && sc.value.fills[0].buyer === CLERK_ID, "a keeper's sell fills a clerk buy at the clerk's price")
 const fClaim = X.listClaims(f)[CLAIM_MARKS] ?? 0
 ok(fClaim >= 3 * qb.buy - feeOf(3, qb.buy), 'and the Marks land in the claim box')
+const bm = X.marketOf('blankstone', T + 2500)
+ok(bm.stats?.last === qb.buy && bm.guide === SEED_PRICE.blankstone, `a clerk fill shows in the stats but never moves the guide (${JSON.stringify(bm)})`)
+ok(X.tickClerks(T + 2600, true).placed === 1, 'so the clerks refresh only the lot that filled, at the same quote')
 // FARM CAP: one keeper sells to the clerks all day; they pay at most clerk_day_marks_keeper
 const g = mk('farm_g')
 let farmed = 0

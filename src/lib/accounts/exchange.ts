@@ -148,12 +148,14 @@ export function cancelOrder(user_id: string, order_id: string): Result<BookRow> 
 }
 
 // ── the guide price + stats ──
-function fillsOf(item: string, now: number): Fill[] {
-  return accountsDb().prepare('SELECT n, price, at FROM exchange_fills WHERE item = ? AND at > ? ORDER BY at').all(item, now - WEEK_MS) as unknown as Fill[]
+/** an item's fills in the last 7 days; keepersOnly leaves out every fill a Co. clerk was in (the GUIDE reads only those, or the
+ *  clerks' own trades at guide -/+ spread would walk the guide, and so the clerks, down or up a step at a time) */
+function fillsOf(item: string, now: number, keepersOnly = false): Fill[] {
+  return accountsDb().prepare(`SELECT n, price, at FROM exchange_fills WHERE item = ? AND at > ?${keepersOnly ? " AND buyer NOT LIKE 'co:%' AND seller NOT LIKE 'co:%'" : ''} ORDER BY at`).all(item, now - WEEK_MS) as unknown as Fill[]
 }
+const guideOf = (item: string, now: number) => guidePrice(item, fillsOf(item, now, true), now)
 export function marketOf(item: string, now = Date.now()): { item: string; guide: number | null; stats: Stats | null } {
-  const f = fillsOf(String(item), now)
-  return { item: String(item), guide: guidePrice(String(item), f, now), stats: statsOf(f, now) }
+  return { item: String(item), guide: guideOf(String(item), now), stats: statsOf(fillsOf(String(item), now), now) }
 }
 
 // ── the Co. clerks ──
@@ -172,7 +174,7 @@ export function tickClerks(now = Date.now(), force = false): { placed: number; r
       return { placed, removed, fills }
     }
     for (const item of CLERK_ITEMS) {
-      const quote = clerkQuote(item, guidePrice(item, fillsOf(item, now), now), dial.spread)
+      const quote = clerkQuote(item, guideOf(item, now), dial.spread)
       if (!quote) continue
       for (const side of ['buy', 'sell'] as const) {
         const want = side === 'buy' ? quote.buy : quote.sell

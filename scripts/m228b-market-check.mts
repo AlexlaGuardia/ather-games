@@ -94,7 +94,13 @@ try {
   }, { TUT, BAG } as any)
   await p.goto(`${url}/shimmer/open/ather?hour=14`, { waitUntil: 'load', timeout: 240000 })
   await p.waitForFunction(() => !!(window as any).__ather?.travel, { timeout: 180000, polling: 1000 })
-  await sleep(3000); await dismissStartCard(p)
+  await sleep(3000)
+  try { await dismissStartCard(p) } catch (e) {
+    await p.screenshot({ path: `${out}/x-start-card.png` })
+    const near = await p.evaluate(() => { const el = [...document.querySelectorAll('div')].find(d => d.children.length === 0 && /^Tap to start$/i.test((d.textContent ?? '').trim())); if (!el) return 'none'; const r = el.getBoundingClientRect(); const top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2); return `card at ${Math.round(r.x)},${Math.round(r.y)} ${Math.round(r.width)}x${Math.round(r.height)}; on top: <${top?.tagName} ${(top as HTMLElement)?.className ?? ''}> "${(top?.textContent ?? '').slice(0, 80)}"` })
+    console.log(`start card: ${String(e).slice(0, 120)} · ${near}`)
+    throw e
+  }
   for (let i = 0; i < 4 && await p.evaluate(() => /Resume[\s\S]{0,40}Tooltips/.test(document.body.innerText)); i++) { await p.keyboard.press('Escape'); await sleep(600) }
   const A = (fn: string, ...a: unknown[]) => p.evaluate((f: string, x: unknown[]) => (window as any).__ather?.[f]?.(...x), fn, a)
   const front = toWorld(0, COUNTER.z + 1.5), ahead = toWorld(0, COUNTER.z - 2)
