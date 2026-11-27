@@ -37,7 +37,8 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
   ok(consumeLine('bread', consumeEffect('bread')!, 'Bread').startsWith('you eat the bread: +'), '§1 the line says what happened')
   const unwired = (Object.keys(BUFF_DEFS) as BuffId[]).filter(b => !WIRED_BUFFS.has(b))
   for (const b of unwired) {
-    const pid = Object.entries(POTION_BUFFS).find(([, v]) => v === b)![0]
+    const pid = Object.entries(POTION_BUFFS).find(([, v]) => v === b)?.[0]
+    if (!pid) { ok(b === 'kindred', `§1 only kindred has no bottle (its bond philter was cut 11-27): ${b}`); continue }
     ok(consumeLine(pid, consumeEffect(pid)!, pid).includes('not felt here yet'), `§1 ★ ${b} is unwired and the drink line SAYS so`)
   }
 }

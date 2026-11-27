@@ -64,10 +64,10 @@ ok(startBrewing('not_a_potion', host, 0) === null, 'an unknown potion starts not
 
 // ── ★ THE PHYSICAL BREWING (2026-09-21): the pot holds it, any station in reach walks a step ────
 {
-  // A potion with a real road, the philter: still → bowl → pour.
-  const pid = 'holding_philter'
+  // A potion with a real road, the moonvine tonic: still → bowl → pour.
+  const pid = 'moonvine_tonic'
   const road = roadOf(pid)
-  ok(road.length === 2 && road[0] === 'distil' && road[1] === 'mix', 'the philter walks still → bowl (the word\'s default road)')
+  ok(road.length === 2 && road[0] === 'distil' && road[1] === 'mix', 'the moonvine tonic walks still → bowl')
   const at = { space: 'plot', x: 10, y: 5, z: 10 }
   const b0 = startBrewing(pid, host, 1000, at)!
   ok(brewingKey(at) === 'plot:10,5,10', 'the key is the cauldron')
@@ -142,7 +142,8 @@ ok(startBrewing('not_a_potion', host, 0) === null, 'an unknown potion starts not
   ok(roadLine(r1) === '⟳ still → bowl → pour', `running: ${roadLine(r1)}`)
   ok(roadLine(s1) === '✓ still → bowl → pour', `one walked: ${roadLine(s1)}`)
   ok(roadLine(lit) === '✓ still → ✓ bowl → ⟳ pour', `lit: ${roadLine(lit)}`)
-  ok(roadLine(startBrewing('mana_draught', host, 0, at)!) === 'pour', 'a draught has no road — just the pour')
+  // (was 'a draught has no road': the draught class was retired 11-27 and mana_draught is the Mana Elixir now, so it walks the elixir road)
+  ok(roadLine(startBrewing('mana_draught', host, 0, at)!) === 'mortar → still → pour', 'the Mana Elixir walks its class road, mortar then still')
 
   // the save: round-trips, drops the malformed, re-derives the run's step from the stage
   const saved = JSON.parse(JSON.stringify({ [brewingKey(at)]: r1, [brewingKey(w0.at!)]: { ...lit, at: w0.at }, bad: { potionId: 'nope' }, wrongkey: { ...b0 }, [brewingKey(later.at!)]: { ...later, hands: {} } }))
@@ -150,21 +151,22 @@ ok(startBrewing('not_a_potion', host, 0) === null, 'an unknown potion starts not
   ok(Object.keys(back).length === 2, `two of five entries survive the load (${Object.keys(back).join(', ')})`)
   ok(back[brewingKey(at)].run?.station === stillKey && back[brewingKey(at)].run?.since === 5000 && back[brewingKey(at)].run?.step === 1, 'a running pot comes back running')
   ok(back[brewingKey(w0.at!)].lit && back[brewingKey(w0.at!)].litAt === 9000 && back[brewingKey(w0.at!)].stage === 2, 'a lit pot comes back lit at its time')
+  ok(Object.keys(brewingsFromSave({ [brewingKey(at)]: { ...b0, potionId: 'holding_philter' } })).length === 0, 'an old pot of the cut holding_philter (athernyx d0211ca) loads as no pot')
   ok(Object.keys(brewingsFromSave(undefined)).length === 0 && Object.keys(brewingsFromSave('x')).length === 0, 'absent and malformed load empty')
   ok(brewingsFromSave({ [brewingKey(at)]: { ...b0, stage: 99 } })[brewingKey(at)].stage === road.length, 'a stage past the road is clamped to it')
 
   // the look-label: what a station says from the path, and when it says nothing
   ok(lookLine({}, 'cauldron', 'plot', 10, 5, 10, 0) === null && lookLine({}, 'still', 'plot', 0, 0, 0, 0) === null, 'an empty pot and an idle still say nothing')
-  ok(lookLine({ [brewingKey(at)]: b0 }, 'cauldron', 'plot', 10, 5, 10, 2000) === 'Holding Philter — waiting on a still', `a fresh pot: ${lookLine({ [brewingKey(at)]: b0 }, 'cauldron', 'plot', 10, 5, 10, 2000)}`)
+  ok(lookLine({ [brewingKey(at)]: b0 }, 'cauldron', 'plot', 10, 5, 10, 2000) === 'Moonvine Tonic — waiting on a still', `a fresh pot: ${lookLine({ [brewingKey(at)]: b0 }, 'cauldron', 'plot', 10, 5, 10, 2000)}`)
   ok(lookLine({ [brewingKey(at)]: b0 }, 'still', 'plot', 0, 0, 0, 2000) === '1 waiting' && lookLine({ [brewingKey(at)]: b0 }, 'grinder', 'plot', 0, 0, 0, 2000) === null, 'a still says 1 waiting; a mortar says nothing')
-  ok(lookLine({ [brewingKey(at)]: r1 }, 'cauldron', 'plot', 10, 5, 10, 5000 + 1000) === `Holding Philter — still at work, ${Math.ceil((stepMs(r1) - 1000) / 1000)}s`, `mid-run the pot names the still: ${lookLine({ [brewingKey(at)]: r1 }, 'cauldron', 'plot', 10, 5, 10, 6000)}`)
-  ok(lookLine({ [brewingKey(at)]: r1 }, 'still', 'plot', 3, 5, 3, 6000)?.startsWith('distilling the Holding Philter, ') === true, `the running still says what it distils: ${lookLine({ [brewingKey(at)]: r1 }, 'still', 'plot', 3, 5, 3, 6000)}`)
+  ok(lookLine({ [brewingKey(at)]: r1 }, 'cauldron', 'plot', 10, 5, 10, 5000 + 1000) === `Moonvine Tonic — still at work, ${Math.ceil((stepMs(r1) - 1000) / 1000)}s`, `mid-run the pot names the still: ${lookLine({ [brewingKey(at)]: r1 }, 'cauldron', 'plot', 10, 5, 10, 6000)}`)
+  ok(lookLine({ [brewingKey(at)]: r1 }, 'still', 'plot', 3, 5, 3, 6000)?.startsWith('distilling the Moonvine Tonic, ') === true, `the running still says what it distils: ${lookLine({ [brewingKey(at)]: r1 }, 'still', 'plot', 3, 5, 3, 6000)}`)
   ok(lookLine({ [brewingKey(at)]: r1 }, 'still', 'plot', 4, 5, 4, 6000) === null, 'a second still says nothing while the first runs (the pot is not open)')
-  ok(lookLine({ [brewingKey(at)]: r1 }, 'cauldron', 'plot', 10, 5, 10, 5000 + stepMs(r1)) === 'Holding Philter — waiting on a bowl', 'the label reads a finished run as finished the frame it finishes (settle on a copy)')
+  ok(lookLine({ [brewingKey(at)]: r1 }, 'cauldron', 'plot', 10, 5, 10, 5000 + stepMs(r1)) === 'Moonvine Tonic — waiting on a bowl', 'the label reads a finished run as finished the frame it finishes (settle on a copy)')
   ok(lookLine({ [brewingKey(at)]: r1 }, 'still', 'plot', 3, 5, 3, 5000 + stepMs(r1)) === null, 'and the still that ran it goes quiet the same frame')
-  ok(lookLine({ [brewingKey(at)]: s2 }, 'cauldron', 'plot', 10, 5, 10, 8000) === 'Holding Philter — the road is walked, light it', 'a walked road says light it')
-  ok(lookLine({ [brewingKey(at)]: lit }, 'cauldron', 'plot', 10, 5, 10, 9000 + 2000) === `Holding Philter — lit, ${Math.ceil((brewMs(lit) - 2000) / 1000)}s to the pour`, 'a lit pot counts to the pour')
-  ok(lookLine({ [brewingKey(at)]: lit }, 'cauldron', 'plot', 10, 5, 10, 9000 + brewMs(lit)) === 'Holding Philter — the pour is ready', 'a ready pot says so')
+  ok(lookLine({ [brewingKey(at)]: s2 }, 'cauldron', 'plot', 10, 5, 10, 8000) === 'Moonvine Tonic — the road is walked, light it', 'a walked road says light it')
+  ok(lookLine({ [brewingKey(at)]: lit }, 'cauldron', 'plot', 10, 5, 10, 9000 + 2000) === `Moonvine Tonic — lit, ${Math.ceil((brewMs(lit) - 2000) / 1000)}s to the pour`, 'a lit pot counts to the pour')
+  ok(lookLine({ [brewingKey(at)]: lit }, 'cauldron', 'plot', 10, 5, 10, 9000 + brewMs(lit)) === 'Moonvine Tonic — the pour is ready', 'a ready pot says so')
   ok(lookLine({ a: b0, b: later }, 'still', 'plot', 0, 0, 0, 3000) === '2 waiting', 'two pots on the plot: 2 waiting')
   ok(lookLine({ a: b0 }, 'still', 'wilds', 0, 0, 0, 3000) === null, 'a still in another space sees no plot pot')
 

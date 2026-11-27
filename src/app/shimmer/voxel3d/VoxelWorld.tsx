@@ -51,7 +51,7 @@ import { FLORA, plantVariant, flowerForm, forageKind, deadfallVariant } from '..
 import { raycast, tickBreak, dropsFor, breakXP, setBreakRate, getBreakRate, type BreakState, type RayHit, afterBreak } from '../voxel/mine'
 import { spawnDrop, tossDrop, tickDrops, type Drop } from '../voxel/drops'
 import { orphanedLeaves, dueLeaves, withoutLeaves, enqueueLeaves, type PendingLeaf } from '../voxel/decay'
-import { salvageItems, salvageMessage } from '../voxel/salvage'
+import { salvageItems, salvageMessage, dropCutItems } from '../voxel/salvage'
 import { blockDef, materialForItem, emitOf, BLOCKS, type BlockSkill } from '../voxel/registry'
 import { editIndex, unpackIndex, recordEdit, applyEdits, packEdits, unpackEdits, isStale, GENERATOR_VERSION, type ColumnEdits } from '../voxel/edits'
 import { cropForSeed, CROP_DEFS, getCropGrowthPhase } from '../engine/farming'
@@ -4422,6 +4422,8 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       if (!p || !live) return
       if (p.inv) {
         inv.current = p.inv as Inventory
+        // A canon-CUT item has no successor and is left out quietly (`salvage.ts` › CUT_ITEMS, athernyx d0211ca).
+        if (Array.isArray(inv.current.slots)) inv.current.slots = dropCutItems(inv.current.slots)
         // ── ★ A BAG OUTLIVES THE RULES IT WAS FILLED UNDER (2026-08-13) ────────────────────────
         // The building grammar retired `block_stone`, so a save from before it holds an item that
         // nothing places, nothing crafts and nothing names — junk the game cannot explain. Remap it

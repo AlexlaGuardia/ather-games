@@ -277,7 +277,7 @@ export const ITEMS: ItemDef[] = [
   // ── the wild forage (2026-09-16) — canon's alchemy undergrowth, `world/flora.md` › Flora in Alchemy
   { id: 'puff_spores', name: 'Puff Spores', type: 'resource', rarity: 'common', description: 'A pinch of pale spores shaken from a puff cluster. A base for many potions.', stackable: true, maxStack: 50, sellPrice: 2, tradeable: true },
   { id: 'glow_moss', name: 'Glow-moss', type: 'resource', rarity: 'common', description: 'A soft tuft of moss that keeps its own faint light. Marks a path at night.', stackable: true, maxStack: 50, sellPrice: 3, tradeable: true },
-  { id: 'wakereed', name: 'Wakereed', type: 'resource', rarity: 'common', description: 'A hollow pale stalk from a river\'s shallows. It stood in the current by not rushing. Steeped for a bond that will not settle.', stackable: true, maxStack: 50, sellPrice: 3, tradeable: true },
+  { id: 'wakereed', name: 'Wakereed', type: 'resource', rarity: 'common', description: 'A hollow pale stalk from a river\'s shallows. It stood in the current by not rushing.', stackable: true, maxStack: 50, sellPrice: 3, tradeable: true },
   { id: 'shelf_slices', name: 'Shelf Slices', type: 'resource', rarity: 'common', description: 'Slices cut from a bracket fungus that climbed a trunk. Layered like the years it took. For a spirit infusion.', stackable: true, maxStack: 50, sellPrice: 3, tradeable: true },
   { id: 'goldwood_bark', name: 'Goldwood Bark', type: 'resource', rarity: 'common', description: 'Papery golden bark, mildly aromatic.', stackable: true, maxStack: 50, sellPrice: 2, tradeable: true },
   // Prospecting
@@ -337,8 +337,6 @@ export const ITEMS: ItemDef[] = [
   { id: 'earth_infusion', name: 'Earth Infusion', type: 'consumable', rarity: 'rare', description: 'Brown-amber and heavier than it looks. Feeds a spirit the Earth element.', stackable: true, maxStack: 10, sellPrice: 60, tradeable: true },
   { id: 'water_infusion', name: 'Water Infusion', type: 'consumable', rarity: 'rare', description: 'Teal and always moving. Feeds a spirit the Water element.', stackable: true, maxStack: 10, sellPrice: 60, tradeable: true },
   { id: 'crystal_elixir', name: 'Crystal Elixir', type: 'consumable', rarity: 'uncommon', description: 'Clear crystalline liquid. Mana surges and lingers.', stackable: true, maxStack: 5, sellPrice: 25, tradeable: true, effect: { stat: 'mana', amount: 50 } },
-  { id: 'bond_philter', name: 'Bond Philter', type: 'consumable', rarity: 'uncommon', description: 'Rose-tinted draught. Spirits feel closer after drinking it.', stackable: true, maxStack: 5, sellPrice: 22, tradeable: true, effect: { stat: 'bond', amount: 15 } },
-  { id: 'holding_philter', name: 'Holding Philter', type: 'consumable', rarity: 'uncommon', description: 'Pale green, steeped from wakereed. For a bond that will not settle: it does not deepen so much as it stays.', stackable: true, maxStack: 5, sellPrice: 26, tradeable: true, effect: { stat: 'bond', amount: 10 } },
   { id: 'starlight_tincture', name: 'Starlight Tonic', type: 'consumable', rarity: 'rare', description: 'Starwillow extract. Everything you learn sticks.', stackable: true, maxStack: 5, sellPrice: 40, tradeable: true, effect: { stat: 'xp_boost', amount: 0.3, duration: 120 } },
   { id: 'deep_essence', name: 'Deep Essence', type: 'consumable', rarity: 'rare', description: 'Abyssal concentrate. Fully restores your mana pool.', stackable: true, maxStack: 5, sellPrice: 50, tradeable: true, effect: { stat: 'mana_full', amount: 0 } },
   { id: 'ather_infusion', name: 'Ather Tonic', type: 'consumable', rarity: 'legendary', description: 'Pure Ather distillate. The world moves slower around you.', stackable: true, maxStack: 3, sellPrice: 80, tradeable: true, effect: { stat: 'combo', amount: 0, subEffects: [{ stat: 'harvest_speed', amount: 0.5, duration: 120 }, { stat: 'xp_boost', amount: 0.3, duration: 120 }] } },
@@ -2966,42 +2964,6 @@ const CRYSTAL_ELIXIR = px(S, S, `
   00000000000000000000000000000000
 `)
 
-// Bond Philter — heart-like flask (purple+cream)
-const BOND_PHILTER = px(S, S, `
-  00000000000000000000000000000000
-  00000000000000000000000000000000
-  00000000000000000000000000000000
-  00000000000000000000000000000000
-  00000000000000444400000000000000
-  00000000000000444400000000000000
-  00000000000000444400000000000000
-  00000000000000444400000000000000
-  00000000000044444444000000000000
-  00000000000044444444000000000000
-  00000000004488888844000000000000
-  00000000004488888844000000000000
-  00000000448888338888440000000000
-  00000000448888338888440000000000
-  00000000448888888888440000000000
-  00000000448888888888440000000000
-  00000000448888338888440000000000
-  00000000448888338888440000000000
-  00000000004488888844000000000000
-  00000000004488888844000000000000
-  00000000000044444400000000000000
-  00000000000044444400000000000000
-  00000000000000000000000000000000
-  00000000000000000000000000000000
-  00000000000000000000000000000000
-  00000000000000000000000000000000
-  00000000000000000000000000000000
-  00000000000000000000000000000000
-  00000000000000000000000000000000
-  00000000000000000000000000000000
-  00000000000000000000000000000000
-  00000000000000000000000000000000
-`)
-
 // Starlight Tonic — tall flask (green glow)
 const STARLIGHT_TINCTURE = px(S, S, `
   00000000000000000000000000000000
@@ -3624,7 +3586,6 @@ export const ITEM_FRAME_MAP: Record<string, string[]> = {
   shimmer_salve:       ['SHIMMER_SALVE'],
   glowfin_brew:        ['GLOWFIN_BREW'],
   crystal_elixir:      ['CRYSTAL_ELIXIR'],
-  bond_philter:        ['BOND_PHILTER'],
   starlight_tincture:  ['STARLIGHT_TINCTURE'],
   deep_essence:        ['DEEP_ESSENCE'],
   ather_infusion:      ['ATHER_INFUSION'],
@@ -4108,7 +4069,6 @@ export const ITEM_ICONS: Record<string, SpriteAnim> = {
   shimmer_salve:       { frames: [SHIMMER_SALVE], rate: 1 },
   glowfin_brew:        { frames: [GLOWFIN_BREW], rate: 1 },
   crystal_elixir:      { frames: [CRYSTAL_ELIXIR], rate: 1 },
-  bond_philter:        { frames: [BOND_PHILTER], rate: 1 },
   starlight_tincture:  { frames: [STARLIGHT_TINCTURE], rate: 1 },
   deep_essence:        { frames: [DEEP_ESSENCE], rate: 1 },
   ather_infusion:      { frames: [ATHER_INFUSION], rate: 1 },

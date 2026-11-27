@@ -20,6 +20,7 @@ import { renameRetired } from '../ather/farming'   // M204 s3: retired crops
 import { POTIONS } from '../ather/alchemy'
 import { DEWL, DEWL_FIRST } from '../ather/dewl'
 import { CROPS, GRADES, seedId, cropId, parseGraded } from '../ather/farming'
+import { isCutItem } from '../../voxel/salvage'
 import { alcName, isAlcPotion, effectOf, INTERMEDIATES, ALC_POTIONS, ALC_STATIONS, alcId, potionId } from '../ather/alchemy-set'
 
 export interface ItemDef {
@@ -346,6 +347,9 @@ export const renameSpices = (i: Inv): Inv => (i.slots.some(x => x && x.id in LEG
  *  count kept (farming.ts renameRetired). Pure; a bag with none is returned as is. */
 export const renameRetiredCrops = (i: Inv): Inv => (i.slots.some(x => x && renameRetired(x.id) !== x.id) ? { ...i, slots: i.slots.map(x => (x && renameRetired(x.id) !== x.id ? { ...x, id: renameRetired(x.id) } : x)) } : i)
 
+/** M234 s1b: a canon-CUT item (the spirit bottles, athernyx d0211ca + 30d19fd) has no successor and is dropped from a bag. Pure. */
+export const dropCutStacks = (i: Inv): Inv => (i.slots.some(x => x && isCutItem(x.id)) ? { ...i, slots: i.slots.map(x => (x && isCutItem(x.id) ? null : x)) } : i)
+
 export function loadInv(waymarksLeft = FREE_WAYMARKS): Inv {
   try {
     const v = JSON.parse(localStorage.getItem(keeperKey(INV_KEY)) ?? 'null')
@@ -361,6 +365,7 @@ export function loadInv(waymarksLeft = FREE_WAYMARKS): Inv {
       if (out.slots.some((x: Stack | null) => x?.id === 'forage')) out = { ...out, slots: out.slots.map((x: Stack | null) => (x?.id === 'forage' ? { ...x, id: 'mast' } : x)) }
       out = renameSpices(out)   // M207: M204's spices are now the infusions
       out = renameRetiredCrops(out)   // M204 s3: a retired crop loads as its replacement (Goldleaf)
+      out = dropCutStacks(out)   // M234 s1b: a canon-CUT item (voxel/salvage.ts › CUT_ITEMS) loads as nothing
       // rinning arrived (11-15): an older bag is handed the starting bait once
       if (!(out.gifts ?? []).includes('bait1')) out = { ...give(out, 'bait', STARTING_BAIT).inv, gifts: [...(out.gifts ?? []), 'bait1'] }
       return out

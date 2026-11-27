@@ -127,7 +127,7 @@ const label = (id: string) => id
 {
   const g: Slots = Array.from({ length: 12 }, () => null)
   addToGrid(g, 'raw_mana_shard', 5, MAX); addToGrid(g, 'goldwood_plank', 3, MAX); addToGrid(g, 'goldwood_log', 2, MAX)
-  addToGrid(g, 'holding_philter', 1, MAX); addToGrid(g, 'seed_goldleaf', 4, MAX)
+  addToGrid(g, 'moonvine_tonic', 1, MAX); addToGrid(g, 'seed_goldleaf', 4, MAX)
   const pretty = (id: string) => id.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
   const ids = (v: number[]) => v.map(i => g[i]!.itemId)
   ok(bankMatches('raw_mana_shard', 'Raw Mana Shard', 'shard') && bankMatches('raw_mana_shard', 'Raw Mana Shard', 'MANA sh'), 'a token matches the label, case-free, any order of tokens')
@@ -136,7 +136,7 @@ const label = (id: string) => id
   ok(bankMatches('anything', 'Anything', '   '), 'a blank query matches everything')
   ok(ids(bankView(g, 'all', pretty, 'goldwood')).sort().join() === 'goldwood_log,goldwood_plank', 'the view under a query is the matching stacks')
   ok(ids(bankView(g, 'brews', pretty, 'goldwood')).sort().join() === 'goldwood_log,goldwood_plank', '★ a query searches the WHOLE pool — the Brews tab does not hide the planks')
-  ok(ids(bankView(g, 'brews', pretty, '')).join() === 'holding_philter', 'and with no query the tab filters as before')
+  ok(ids(bankView(g, 'brews', pretty, '')).join() === 'moonvine_tonic', 'and with no query the tab filters as before')
   ok(bankView(g, 'all', pretty, 'nothing like this').length === 0, 'no match, no rows')
   ok(ids(bankView(g, 'all', pretty, 'gold')).join() === 'goldwood_plank,goldwood_log,seed_goldleaf', 'results keep the rail order (the plank is a block, the log a material, the seed garden)')
 }

@@ -158,8 +158,6 @@ const full = () => 0
   const salve = POTION_DEFS.shimmer_salve
   ok(brewBlocker(salve, 99, 99, rich, inWorld, roomy) !== 'absent',
     'the tier-1 salve no longer says "in these lands" — a sunfruit bush grows in the meadow')
-  ok(brewBlocker(POTION_DEFS.bond_philter, 99, 99, rich, inWorld, roomy) !== 'absent',
-    'and the philter no longer does — a moonberry bush grows under the canopy')
   ok(inWorld('shimmerscale'), 'shimmerscale is reachable — a cast lands it at tier 1')
   // The machinery itself is still exercised in section 3 above, on a def that can never be brewed.
 }

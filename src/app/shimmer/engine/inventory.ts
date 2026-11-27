@@ -3,6 +3,7 @@
 // Chests are portable containers: items inside a picked-up chest are inaccessible
 
 import { ITEMS } from '../sprites/items'
+import { isCutItem } from '../voxel/salvage'
 import { FURNITURE } from '../sprites/furniture'
 
 // --- Constants ---
@@ -272,7 +273,7 @@ export function inventoryToSave(inv: Inventory): InventorySave {
 export function inventoryFromSave(saved: InventorySave): Inventory {
   const slots: SlotGrid = new Array(INVENTORY_SLOTS).fill(null)
   for (let i = 0; i < Math.min(saved.length, INVENTORY_SLOTS); i++) {
-    slots[i] = saved[i] ? { ...saved[i]! } : null
+    slots[i] = saved[i] && !isCutItem(saved[i]!.itemId) ? { ...saved[i]! } : null   // a canon-cut item loads as nothing
   }
   return { slots }
 }
@@ -290,7 +291,7 @@ export function chestFromSave(saved: ChestSave): ChestStorage {
   const slotCount = saved.slots.length || CHEST_SLOTS
   const slots: SlotGrid = new Array(slotCount).fill(null)
   for (let i = 0; i < slotCount; i++) {
-    slots[i] = saved.slots[i] ? { ...saved.slots[i]! } : null
+    slots[i] = saved.slots[i] && !isCutItem(saved.slots[i]!.itemId) ? { ...saved.slots[i]! } : null   // a canon-cut item loads as nothing
   }
   return { furnitureInstanceId: saved.furnitureInstanceId, slots, label: saved.label }
 }

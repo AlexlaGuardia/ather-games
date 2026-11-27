@@ -15,7 +15,7 @@ import { elementForInfusion, infusionPointsOf } from './alchemy'
 export const FLEETFOOT_SPEED = 1.12    // moonvine_tonic — ground speed mult (matches slide-hop's ×1.12 feel step)
 export const ANGLER_BITE = 0.5         // glowfin_brew — bites land this × sooner…
 export const ANGLER_WINDOW = 2         // …and the `!` window stays up this × longer
-export const KINDRED_MULT = 2          // bond_philter — companion @15 assist bonus ×2
+export const KINDRED_MULT = 2          // no bottle grants it since the spirit bottles were cut (athernyx 30d19fd); kept so a saved buff still reads
 export const STARLIGHT_XP = 1.5        // starlight_tincture — gathering XP mult (forestry/prospecting/rinning/farming)
 export const DEEPSIGHT_FIND = 0.15     // deep_essence — flat bonus-find chance added to every gather
 export const ATHER_REGEN = 10          // ather_infusion — mana regen ×10 (1/min → 1 per 6s: a felt trickle)
@@ -35,7 +35,7 @@ export const BED_POTIONS: Readonly<Record<string, string>> = {
 export type BuffId =
   | 'fleetfoot'   // moonvine_tonic    — move speed
   | 'anglers_eye' // glowfin_brew      — rinning bites sooner + wider window
-  | 'kindred'     // bond_philter      — companion assist doubled
+  | 'kindred'     // (no bottle since 11-27) — companion assist doubled
   | 'starlight'   // starlight_tincture— gathering XP up
   | 'deepsight'   // deep_essence      — bonus-find on gathers
   | 'dreamwalk'   // dreamroot_elixir  — wild spirits stay calm (no mist encounters)
@@ -64,8 +64,6 @@ export const BUFF_DEFS: Record<BuffId, { name: string; glyph: string; color: str
 export const POTION_BUFFS: Record<string, BuffId> = {
   moonvine_tonic: 'fleetfoot',
   glowfin_brew: 'anglers_eye',
-  bond_philter: 'kindred',
-  holding_philter: 'kindred',
   starlight_tincture: 'starlight',
   deep_essence: 'deepsight',
   dreamroot_elixir: 'dreamwalk',
@@ -74,20 +72,14 @@ export const POTION_BUFFS: Record<string, BuffId> = {
 }
 
 /**
- * ★ A POTION THAT HOLDS ITS BUFF LONGER THAN THE BUFF'S OWN CLOCK (2026-09-21). The Holding Philter
- * (`alchemy.ts`) is the Wakereed steeped for a restless bond — canon says *holding, not hurry*, so
- * it grants the bond philter's Kindred and simply keeps it twice as long. The buff table stays one
- * row per effect; this is the one place a bottle may lengthen the span. Drinking either philter
- * refreshes the same timer — the longer one wins only by being drunk last, as any refresh does.
+ * A bottle may hold its buff longer than the buff's own clock: one row here per such bottle. Empty
+ * since 2026-11-27 (canon cut the one bottle that did, athernyx d0211ca); the hook stays for the next.
  */
-export const HOLDING_MULT = 2
-export const POTION_BUFF_MS: Readonly<Record<string, number>> = {
-  holding_philter: BUFF_DEFS.kindred.durationMs * HOLDING_MULT,
-}
+export const POTION_BUFF_MS: Readonly<Record<string, number>> = {}
 /** How long THIS bottle holds its buff — the potion's own span, else the buff's. */
 export const potionBuffMs = (potionId: string): number =>
   POTION_BUFF_MS[potionId] ?? BUFF_DEFS[POTION_BUFFS[potionId]].durationMs
-/** The buff's line at THIS bottle's span — `companion assist ×2 · 16m` for the holding philter. */
+/** The buff's line at THIS bottle's span — `<effect> · <minutes>m`. */
 export function potionBuffLine(potionId: string): string | null {
   const buff = POTION_BUFFS[potionId]
   if (!buff) return null
@@ -177,7 +169,7 @@ export function gatherXpMult(buffs: ActiveBuffs, nowMs: number): number {
 export function bonusFind(buffs: ActiveBuffs, nowMs: number): number {
   return (hasBuff(buffs, 'deepsight', nowMs) ? DEEPSIGHT_FIND : 0) + (hasBuff(buffs, 'dawn', nowMs) ? DAWN_FIND : 0)
 }
-/** Multiplier on the companion's OWN assist bonus (bond_philter deepens the bond). */
+/** Multiplier on the companion's OWN assist bonus (no bottle grants it since 11-27). */
 export function kindredMult(buffs: ActiveBuffs, nowMs: number): number {
   return hasBuff(buffs, 'kindred', nowMs) ? KINDRED_MULT : 1
 }

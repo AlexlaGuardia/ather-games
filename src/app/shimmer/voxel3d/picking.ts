@@ -12,8 +12,8 @@
 // so every harvest permanently deleted a bush from the world and nothing ever put one back. The
 // only appearances of the word "regrow" in this tree are BUGS where something came back by mistake.
 //
-// That is not cosmetic. Sunfruit and moonberry feed three brews (`shimmer_salve` ×2,
-// `bond_philter` ×3, `holding_philter` ×2) and are the favourite food of six of the ten spirits.
+// That is not cosmetic. Sunfruit feeds the salve (`shimmer_salve` ×2; moonberry's bottle was cut
+// 11-27), and both are the favourite food of six of the ten spirits.
 // A keeper who worked the thickets hard enough would have quietly deleted an alchemy line, months
 // before anyone noticed, with no error and nothing in a log.
 //

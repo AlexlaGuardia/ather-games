@@ -23,7 +23,7 @@ const SEED = 1337
 ok(inWorld('sunfruit'), 'sunfruit is obtainable in the voxel world')
 ok(inWorld('moonberry'), 'moonberry is obtainable in the voxel world')
 for (const d of Object.values(POTION_DEFS as Record<string, { id: string; recipe: { itemId: string }[] }>)) {
-  if (d.id !== 'shimmer_salve' && d.id !== 'bond_philter') continue
+  if (d.id !== 'shimmer_salve') continue   // (bond_philter, moonberry's brew, was cut 11-27: athernyx 30d19fd)
   const missing = d.recipe.filter(r => !inWorld(r.itemId)).map(r => r.itemId)
   ok(missing.length === 0, `${d.id} has every ingredient in-world (missing: ${missing.join(', ')})`)
 }

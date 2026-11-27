@@ -68,7 +68,7 @@ ok(routeOf('dawn_cordial').at(-1) === 'cauldron' && alchemyRecipe('finish:dawn_c
 for (const def of Object.values(POTION_DEFS)) {
   if (def.tier === 1) ok(routeOf(def.id).length <= 2, `§2 ★★ tier 1 stays a short walk: ${def.id} = ${routeOf(def.id).length} stations`)
 }
-ok(jobOf('mana_infusion') === 'spirit' && jobOf('bond_philter') === 'spirit', '§2 infusions and philters are for the SPIRIT')
+ok(jobOf('mana_infusion') === 'spirit', '§2 infusions are for the SPIRIT (the philters were cut 11-27)')
 ok(jobOf('shard_tonic') === 'hand' && jobOf('moonvine_tonic') === 'hand' && jobOf('glowfin_brew') === 'hand', '§2 tonics are for the HAND (Glowfin is a fishing dose: a tonic, not a brew)')
 ok(jobOf('harvest_brew') === 'plot' && jobOf('shimmer_salve') === 'plot', '§2 brews and salves are for the PLOT')
 ok(ALCHEMY_INTERMEDIATES.every(id => intermediateLabel(id) !== null), '§2 every stage has a readable name')

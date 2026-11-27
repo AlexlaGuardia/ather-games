@@ -4,7 +4,7 @@ import {
   gatherXpMult, bonusFind, kindredMult, speedMult, manaRegenMult, rinTune, suppressEncounters,
   BUFF_DEFS, POTION_BUFFS, MANA_POTIONS, HEAL_POTIONS,
   STARLIGHT_XP, DAWN_XP, DEEPSIGHT_FIND, DAWN_FIND, KINDRED_MULT, FLEETFOOT_SPEED, DAWN_SPEED, ATHER_REGEN,
-  BED_POTIONS, POTION_BUFF_MS, HOLDING_MULT, potionBuffMs, potionBuffLine, type ActiveBuffs,
+  BED_POTIONS, POTION_BUFF_MS, potionBuffMs, potionBuffLine, type ActiveBuffs,
 } from './potion-effects'
 import { POTION_DEFS, elementForInfusion, INFUSION_BREWS } from './alchemy'
 
@@ -64,7 +64,7 @@ drinkBuff(b2, 'moonvine_tonic', now)
 chk('fleetfoot × dawn speed', close(speedMult(b2, now + 1), FLEETFOOT_SPEED * DAWN_SPEED))
 chk('kindred off by default', kindredMult(b2, now + 1) === 1)
 drinkBuff(b2, 'bond_philter', now)
-chk('kindred doubles assist', kindredMult(b2, now + 1) === KINDRED_MULT)
+chk('the cut bond_philter (athernyx 30d19fd) grants no kindred', kindredMult(b2, now + 1) === 1 && KINDRED_MULT > 1)
 chk('regen off by default', manaRegenMult({}, now) === 1)
 drinkBuff(b2, 'ather_infusion', now)
 chk('ather flow lifts regen', manaRegenMult(b2, now + 1) === ATHER_REGEN)
@@ -78,7 +78,7 @@ chk('dreamwalk calms the mist', suppressEncounters(b2, now + 1))
 
 // HUD list + prune
 const list = activeBuffList(b2, now + 1)
-chk('all 8 buffs listed when live', list.length === 8)
+chk('all 7 drinkable buffs listed when live (kindred has no bottle since 11-27)', list.length === 7)
 chk('list sorted longest-remaining first', list.every((e, i, a) => i === 0 || a[i - 1].remainMs >= e.remainMs))
 const pruned = pruneBuffs(b2, now + BUFF_DEFS.dawn.durationMs + 1)
 chk('prune drops everything expired', Object.keys(pruned).length === 0)
@@ -95,32 +95,25 @@ for (const [el, id] of Object.entries(INFUSION_BREWS)) {
   chk(`${id} reports its element`, elementForInfusion(id) === el)
 }
 
-// ── the holding philter: the same Kindred, held twice as long (2026-09-21) ─────────────────────
-// Canon's Wakereed is steeped for HOLDING, so the bottle lengthens a span rather than adding a
-// row. Pinned from both sides: the span IS longer, and it is the bond philter's × HOLDING_MULT
-// (not a number someone fitted), and every line that names a clock names THIS bottle's.
+// ── the span override hook, empty since the 2026-11-27 cuts (athernyx d0211ca, 30d19fd) ───────
+// The spirit bottles were cut; the hook stays. Pinned: every override is a buff potion, and a
+// bottle with no override keeps its buff's own clock and says so.
 {
-  chk('holding philter grants kindred', POTION_BUFFS.holding_philter === 'kindred')
-  chk('holding span = bond span × HOLDING_MULT', potionBuffMs('holding_philter') === potionBuffMs('bond_philter') * HOLDING_MULT)
-  chk('HOLDING_MULT is a real lengthening', HOLDING_MULT > 1)
-  chk('the bond philter keeps the buff\'s own span', potionBuffMs('bond_philter') === BUFF_DEFS.kindred.durationMs)
+  chk('the cut bottles grant nothing', !('holding_philter' in POTION_BUFFS) && !('bond_philter' in POTION_BUFFS) && !('holding_philter' in POTION_BUFF_MS))
+  chk('the moonvine tonic keeps the buff\'s own span', potionBuffMs('moonvine_tonic') === BUFF_DEFS.fleetfoot.durationMs)
   for (const pid of Object.keys(POTION_BUFF_MS)) chk(`${pid} (a span override) is a buff potion`, pid in POTION_BUFFS)
   const h: ActiveBuffs = {}
-  drinkBuff(h, 'holding_philter', now)
-  chk('kindred live past the bond philter\'s clock', hasBuff(h, 'kindred', now + BUFF_DEFS.kindred.durationMs + 1))
-  chk('kindred live at the last instant of the held span', hasBuff(h, 'kindred', now + potionBuffMs('holding_philter') - 1))
-  chk('and gone after it', !hasBuff(h, 'kindred', now + potionBuffMs('holding_philter')))
-  chk('kindred doubles assist under the holding philter too', kindredMult(h, now + 1) === KINDRED_MULT)
-  const bondLine = potionBuffLine('bond_philter'), holdLine = potionBuffLine('holding_philter')
-  chk('bond line names 8m', bondLine !== null && / 8m$/.test(bondLine), bondLine ?? '')
-  chk('holding line names 16m', holdLine !== null && / 16m$/.test(holdLine), holdLine ?? '')
-  chk('holding line carries the same effect words', holdLine !== null && holdLine.startsWith(BUFF_DEFS.kindred.effect))
-  chk('the menu line is the bottle\'s line', potionEffectLine('holding_philter') === holdLine)
+  drinkBuff(h, 'moonvine_tonic', now)
+  chk('fleetfoot live at the last instant of its span', hasBuff(h, 'fleetfoot', now + potionBuffMs('moonvine_tonic') - 1))
+  chk('and gone after it', !hasBuff(h, 'fleetfoot', now + potionBuffMs('moonvine_tonic')))
+  const line = potionBuffLine('moonvine_tonic')
+  chk('moonvine line names 6m', line !== null && / 6m$/.test(line), line ?? '')
+  chk('the menu line is the bottle\'s line', potionEffectLine('moonvine_tonic') === line)
   chk('every BUFF_DEFS line is its effect at its own clock', (Object.values(BUFF_DEFS)).every(d => d.line === `${d.effect} · ${d.durationMs / 60_000}m`))
   // Drinking the shorter after the longer REFRESHES to the shorter — that is what refresh means,
   // and this pins it so nobody later "fixes" it into a max() without a test noticing.
-  drinkBuff(h, 'bond_philter', now + 1000)
-  chk('a later bond philter refreshes to its own span', !hasBuff(h, 'kindred', now + 1000 + BUFF_DEFS.kindred.durationMs + 1))
+  drinkBuff(h, 'moonvine_tonic', now + 1000)
+  chk('a later tonic refreshes to its own span', !hasBuff(h, 'fleetfoot', now + 1000 + BUFF_DEFS.fleetfoot.durationMs + 1))
 }
 
 console.log(`\npotion-effects: ${ok} ok, ${bad} failed`)

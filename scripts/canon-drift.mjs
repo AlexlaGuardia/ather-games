@@ -1135,6 +1135,42 @@ function toMarkdown(counts) {
   }
 }
 
+// ── GATE 11c: CUT ITEMS (M234 s1b; athernyx d0211ca + 30d19fd, Alex 11-27) ──
+// A cut is not a rename: the thing has no successor and must not come back under its old name. Canon writes the cut in
+// game/alchemy.md as "the <Name> is CUT"; every such name is read from there, so a later cut in the same words is checked
+// with no edit here. Case-blind, spaced or run together, prose counts (GATE 11's reason). The saved id (`holding_philter`)
+// stays in voxel/salvage.ts › CUT_ITEMS so an old bag drops it, and an underscore never matches.
+{
+  const p = join(CANON, 'game', 'alchemy.md')
+  const alc = existsSync(p) ? read(p) : ''
+  // Two shapes in canon: "the <Name> is CUT" (d0211ca) and the "- **Spirit bottles are cut**" bullet, whose bold two-word
+  // names are the cut bottles (30d19fd: the build's **Bond Philter** and the **Holding Philter** go).
+  const bottles = alc.split('\n').filter((l) => /^- \*\*Spirit bottles are cut\*\*/.test(l)).join(' ')
+  const cuts = [...new Set([
+    ...[...alc.matchAll(/the ([A-Z][a-z]+ [A-Z][a-z]+) is CUT/g)].map((m) => m[1]),
+    ...[...bottles.matchAll(/\*\*([A-Z][a-z]+ [A-Z][a-z]+)\*\*/g)].map((m) => m[1]),
+  ])]
+  if (!cuts.length) {
+    add('BLIND', 'cut-items', 'could not read any "the <Name> is CUT" in game/alchemy.md — THE CHECK DID NOT RUN',
+      'The source is the Wakereed amend note (athernyx d0211ca). If canon reworded it, point this reader at it; do not delete the gate.')
+  } else {
+    let bad = 0
+    for (const name of cuts) {
+      const pat = name.toLowerCase().replace(' ', ' ?')
+      let hits = []
+      try {
+        hits = execSync(`grep -rniE "${pat}" --include=*.ts --include=*.tsx /root/ather-games/src/app/shimmer || true`, { encoding: 'utf8' }).trim().split('\n').filter(Boolean)
+      } catch { hits = [] }
+      if (!hits.length) continue
+      bad++
+      const where = hits.slice(0, 4).map((h) => h.split('/shimmer/')[1]?.split(':').slice(0, 2).join(':')).join(' · ')
+      add('COLLISION', 'cut-items', `'${name}' was CUT from canon (alchemy.md, 11-27) and still ships in ${hits.length} place(s)`,
+        `It has no successor: remove it. Old saves drop it through voxel/salvage.ts › CUT_ITEMS. First hits: ${where}.`)
+    }
+    if (!bad) add('CLEAN', 'cut-items', `no cut item ships; ${cuts.length} cut(s) read from canon (${cuts.join(', ')})`)
+  }
+}
+
 // ── GATE 13: CREATURE SIZES ─────────────────────────────────────────────────
 // ★★★ THIS IS THE GATE THAT STOPS A TRANSCRIPTION BECOMING A HAND-KEPT MIRROR.
 // `sprites/creature-size.ts` carries a height per species. Until 2026-08-27 those were the build
@@ -1342,7 +1378,7 @@ console.log('canon-drift: ' + ORDER.filter((s) => counts[s]).map((s) => `${count
 // matching line UP out of the "does not check" list. Never delete a line to quiet the output.
 const LIVE_AREAS = [...new Set(findings.map((f) => f.area))].sort()
 const PINNED_AREAS = [
-  'base-species', 'birth-affinity', 'canon-holds', 'canon-vs-canon', 'creature-sizes', 'element-herbs', 'grown-sizes',
+  'base-species', 'birth-affinity', 'canon-holds', 'canon-vs-canon', 'creature-sizes', 'cut-items', 'element-herbs', 'grown-sizes',
   'infusions', 'keeper-moves', 'map-legend', 'mist-rosters', 'npcs', 'renamed-potions', 'retired-vocab', 'second-forms', 'zones',
 ].sort()
 

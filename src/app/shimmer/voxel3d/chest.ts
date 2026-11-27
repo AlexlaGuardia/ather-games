@@ -29,6 +29,7 @@
 // to them.
 
 import type { ItemStack } from '../engine/inventory'
+import { isCutItem } from '../voxel/salvage'
 
 /** A container's contents. Fixed length, `null` = empty slot — a gap is a place, not a shorter list. */
 export type Slots = (ItemStack | null)[]
@@ -109,7 +110,7 @@ function adoptGrid(saved: unknown, size: number): Slots {
   const spare: ItemStack[] = []
   for (let i = 0; i < saved.length; i++) {
     const s = saved[i] as ItemStack | null
-    if (!s || typeof s.itemId !== 'string' || !(s.count > 0)) continue
+    if (!s || typeof s.itemId !== 'string' || !(s.count > 0) || isCutItem(s.itemId)) continue   // a canon-cut item loads as nothing (`salvage.ts` › CUT_ITEMS)
     const stack: ItemStack = { itemId: s.itemId, count: s.count }
     if (i < size) g[i] = stack
     else spare.push(stack)

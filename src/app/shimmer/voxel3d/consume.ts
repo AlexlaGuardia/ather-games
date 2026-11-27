@@ -93,7 +93,7 @@ export function consumeLine(itemId: string, eff: ConsumeEffect, name: string): s
   if (eff.advanceCropsMs) parts.push(`your crops jump ${Math.round(eff.advanceCropsMs / 60_000)}m`)
   if (eff.buff) {
     const b = BUFF_DEFS[eff.buff]
-    // The line at THIS bottle's span — a holding philter keeps Kindred twice as long as the buff's row says.
+    // The line at THIS bottle's span (`POTION_BUFF_MS`), which may be longer than the buff's row says.
     parts.push(WIRED_BUFFS.has(eff.buff) ? `${b.name} — ${potionBuffLine(itemId) ?? b.line}` : `${b.name} (not felt here yet)`)
   }
   const verb = eff.kind === 'eat' ? 'you eat' : 'you drink'

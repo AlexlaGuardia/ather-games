@@ -47,6 +47,7 @@ import { ALCHEMY_INTERMEDIATES, COOKED } from './alchemy-chain'
 import { FROM_FARMING, FROM_RINNING } from './obtainable'
 import { FOOD } from './consume'
 import { CHEST_SLOTS, addToGrid, type Slots } from './chest'
+import { isCutItem } from '../voxel/salvage'
 
 /** What one placed chest adds. The chest's own size, so "ten chests" means what it always meant. */
 export const SLOTS_PER_CHEST = CHEST_SLOTS
@@ -243,6 +244,7 @@ export function bankFromSave(saved: unknown): Slots {
   for (const s of saved as unknown[]) {
     const st = s as Partial<ItemStack> | null
     if (!st || typeof st.itemId !== 'string' || typeof st.count !== 'number' || !isFinite(st.count) || st.count <= 0) continue
+    if (isCutItem(st.itemId)) continue   // a canon-cut item loads as nothing (`salvage.ts` › CUT_ITEMS)
     out.push({ ...(st as ItemStack), count: Math.floor(st.count) })
   }
   return out

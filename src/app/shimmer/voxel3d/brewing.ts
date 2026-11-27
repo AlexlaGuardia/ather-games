@@ -285,7 +285,7 @@ export function pour(b: Brewing): Pour | null {
 /**
  * The look-label's suffix for a station block, or null when there is nothing to say (an empty
  * pot, an idle mortar with no pot waiting). A plot with three pots is readable from the path:
- *   `Holding Philter — waiting on a still` · `— still at work, 4s` · `— lit, 8s to the pour` ·
+ *   `Moonvine Tonic — waiting on a still` · `— still at work, 4s` · `— lit, 8s to the pour` ·
  *   `— the pour is ready` · a road station: `grinding the Shard Tonic, 2s` · `2 waiting`.
  * Pure; the host settles nothing here (a label reads, the panel writes) — `settle` is applied
  * to a copy so a finished run reads as finished the frame it finishes.

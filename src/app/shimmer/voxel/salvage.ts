@@ -37,6 +37,34 @@ export const RETIRED_ITEMS: Readonly<Record<string, string>> = {
   block_deep_stone: 'rubble',
 }
 
+/**
+ * ★ ITEMS CANON CUT WITH NO SUCCESSOR — the one exception to "remap, do not delete".
+ *
+ * A retirement above names what the thing BECAME. A cut names nothing: the thing never existed in
+ * the world canon now describes, and there is no honest successor to hand the player (refunding the
+ * ingredients would be a recipe in reverse, which the header above forbids). Alex ruled the drop
+ * (athernyx d0211ca + 30d19fd, M234 s1b), so a saved stack of one of these, and any intermediate of its chain
+ * (`stage_<id>_<n>`, `base_<id>`), is quietly left out when a bag, bank, chest or rack loads.
+ * Keep the ruling on the line, same as above.
+ */
+export const CUT_ITEMS: ReadonlySet<string> = new Set([
+  'holding_philter',   // 2026-11-27, athernyx d0211ca: the philter class retired and Alex cut the bottle. Wakereed stays.
+  'bond_philter',      // 2026-11-27, athernyx 30d19fd: spirit bottles cut (food feeds spirits, potions heal keepers). Moonberry stays.
+])
+
+/** Is this saved id a cut item, or an intermediate of one's chain? */
+export function isCutItem(itemId: string): boolean {
+  if (CUT_ITEMS.has(itemId)) return true
+  const m = /^(?:stage|base)_(.+?)(?:_\d+)?$/.exec(itemId)
+  return !!m && CUT_ITEMS.has(m[1])
+}
+
+/** The same grid with every cut stack emptied to null, slot positions kept. Returns the input when nothing was cut. */
+export function dropCutItems<T extends { itemId: string } | null | undefined>(slots: T[]): T[] {
+  if (!slots.some(s => s && isCutItem(s.itemId))) return slots
+  return slots.map(s => (s && isCutItem(s.itemId) ? (null as T) : s))
+}
+
 /** One slot of a bag: an item and how many, or nothing. Structural, so this file needs no import. */
 export interface SlotLike { itemId: string; count: number }
 

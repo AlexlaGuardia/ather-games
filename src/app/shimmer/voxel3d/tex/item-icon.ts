@@ -523,7 +523,7 @@ export function alchemySourceOf(itemId: string): { kind: 'powder' | 'extract' | 
   if (itemId === 'roast_rinn') return { kind: 'roast', source: 'shimmerscale' }
   if (itemId === 'roasted_glowroot') return { kind: 'roast', source: 'glowroot_bulb' }
   // ★ A BOTTLE FOR A POTION NOBODY PAINTED (2026-09-21). `bed_brew` shipped 09-17 as a magenta chip
-  // and the holding philter would have been the second; the same argument as every arm above —
+  // and others would follow; the same argument as every arm above —
   // generic filler is code, hero art is Alex. A hand-painted flask in `ITEM_ICONS` always wins
   // (`iconSourceFor` asks this arm first, so the gate is here, not there); the rest get a glass
   // flask holding the first ingredient's tint, which is what a potion IS on a shelf.
