@@ -23,11 +23,19 @@ export const SUPPLIER_KINDS: Readonly<Record<string, SupplierKind>> = {
   'trade-co': { label: FRONT_SHOPS['trade-co'].name, lots: [
     { id: 'rootbulb', n: 10, price: 200 },
     { id: 'capgrain', n: 10, price: 250 },
+    // M134 s2: the Smithy's edge metals (RULED athernyx 4d65536: mortal-side, bought in bulk; Venium from the Spine, Eurleen from
+    // the Valkara mountains). Which Nyx seller sells metal is not named in canon: the existing Trading Co. carries it for now
+    // (CANON_GAPS [OPEN] M134 s2). Jin's prices (🟨): 6 = two new edges or an edge + its repairs; one edge's 3 = 450 / 360
+    // Marks, a lot fits inside a new keeper's 1,500 and a delivery run or two pays the next. Venium (the rarer seam) costs more.
+    { id: 'venium', n: 6, price: 900 },
+    { id: 'eurleen', n: 6, price: 720 },
   ] },
 }
 export const supplierKind = (ref: string | undefined | null): SupplierKind | null => (ref && Object.prototype.hasOwnProperty.call(SUPPLIER_KINDS, ref) ? SUPPLIER_KINDS[ref] : null)
-/** every good the Trading Co. supplier sells is a canon staple */
+/** the canon staples the Trading Co. supplier sells (its food lots) */
 export const MARKET_GOODS = Object.keys(STAPLES)
+/** M134 s2: the edge metals it sells (ather/edges.ts EDGE_METALS) */
+export const METAL_LOTS = ['venium', 'eurleen'] as const
 
 export type LotBuy = { ok: true; ledger: Ledger; inv: Inv } | { ok: false; why: string }
 export function buyLot(ledger: Ledger, inv: Inv, kind: string, id: string): LotBuy {

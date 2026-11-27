@@ -2,7 +2,7 @@
 // BETA M205 s1: the Ather Trading Co. supplier (business/suppliers.ts) + the Rootbulb roast (ather/cooking.ts). Canon pins read the
 // canon file: Rootbulb + Capgrain are cuisine.md's own names; a lot lands WHOLE in the bag or nothing changes.
 import { readFileSync, existsSync } from 'node:fs'
-import { SUPPLIER_KINDS, supplierKind, buyLot, MARKET_GOODS } from './suppliers'
+import { SUPPLIER_KINDS, supplierKind, buyLot, MARKET_GOODS, METAL_LOTS } from './suppliers'
 import { STAPLES, ROAST, DISHES, isDish } from '../ather/cooking'
 import { roomAccepts } from '../ather/rooms'
 import { OPEN_ITEMS, ITEM_GROUP, newInv, give, countOf, SLOTS } from '../shared/inventory'
@@ -24,7 +24,10 @@ if (existsSync(CUISINE)) {
 ok(MARKET_GOODS.sort().join() === 'capgrain,rootbulb', 'staples: something other than Rootbulb + Capgrain')
 // the kind
 const fm = SUPPLIER_KINDS['trade-co']
-ok(!!fm && fm.lots.map(l => l.id).sort().join() === 'capgrain,rootbulb', 'market: does not sell exactly Rootbulb + Capgrain')
+// M134 s2 moved this assert: the Trading Co. now ALSO carries the Smithy's edge metals, so 'exactly Rootbulb + Capgrain' became
+// 'its food lots are exactly Rootbulb + Capgrain, and its other lots are exactly the two edge metals'
+ok(!!fm && fm.lots.filter(l => MARKET_GOODS.includes(l.id)).map(l => l.id).sort().join() === 'capgrain,rootbulb', 'market: its food lots are not exactly Rootbulb + Capgrain')
+ok(!!fm && fm.lots.filter(l => !MARKET_GOODS.includes(l.id)).map(l => l.id).sort().join() === [...METAL_LOTS].sort().join(), 'market: its non-food lots are not exactly the edge metals')
 ok(fm.lots.every(l => l.n >= 5 && l.price >= 100 && l.price <= 2_000), 'market: a lot is not bulk, or its price is off the Smokehouse scale')
 ok(supplierKind('trade-co') === fm && supplierKind('toString') === null && supplierKind(undefined) === null && supplierKind('grain') === null, 'kind lookup: wrong (or reads the prototype)')
 // buying

@@ -82,7 +82,7 @@ import { play as sfx, statusOf as sfxStatus } from '../shared/sfx'
 import { BREW } from './alchemy'
 import { RINSTICKS, makeRinstick, loadTools, saveTools, rinstickName, easeOf } from './rinsticks'
 import { FOCUSES, BENCH, makeFocus, reachOf, focusName, type FocusSkill } from './focuses'
-import { EDGE, EDGE_METALS, EDGE_TOOLS, FIT_METAL, EDGE_TEXT, canTakeEdge, edgeOn, edgeLeft, fitEdge, warnAt, type EdgeFamily } from './edges'   // M134 s1
+import { EDGE, EDGE_METALS, EDGE_TOOLS, FIT_METAL, EDGE_TEXT, canTakeEdge, edgeOn, edgeLeft, fitEdge, warnAt, type EdgeFamily, repairCost, repairEdge, repairAllPlan, repairAll, costText, REPAIR_TEXT } from './edges'   // M134 s1 + s2
 import { METAL_RING } from '../../ui/tool-stage'
 import { TOOL_DEFS } from '../../engine/tools'
 import { isBuilding, useBuildMode, enterBuild, exitBuild, buildPoint, onBuildTap, setBuildTool, buildTool, useBuildTool, onBuildDraw, buildYaw, buildFocus, setPlanLift, setPlanInsets, viewTo } from './build-mode'
@@ -2171,12 +2171,35 @@ function FocusList({ r, inv, skill }: { r: Room; inv: ReturnType<typeof useInv>;
 function EdgeList({ inv }: { inv: ReturnType<typeof useInv> }) {
   const [tools, setTools] = useState(() => loadTools())
   useEffect(() => { const on = () => setTools(loadTools()); addEventListener('open:tools', on); return () => removeEventListener('open:tools', on) }, [])
+  // M134 s2: REPAIR ALL shows its total first (confirm), then charges it whole
+  const [asking, setAsking] = useState(false)
+  const plan = repairAllPlan(tools, inv ?? getInv()), short = Object.keys(plan.short).length > 0
   return (
     <div data-edges>
       <div style={lab}>Edges</div>
       <div style={{ fontSize: 12.5, color: H.inkSoft, margin: '4px 0 8px' }}>
-        An edge of any metal reaches one tier more. Venium works faster; Eurleen lasts longer and takes a little less mana. Only the edge wears; at 0 it breaks away.
+        An edge of any metal reaches one tier more. Venium works faster; Eurleen lasts longer and takes a little less mana. Only the edge wears; at 0 it breaks away. Repair it before then.
       </div>
+      {plan.lines.length > 0 && (
+        <div data-repair-all data-repair-cost={costText(plan.total)} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', margin: '0 0 10px' }}>
+          {!asking ? (
+            <span data-repair-ask><HearthButton small onClick={() => setAsking(true)}>Repair all</HearthButton></span>
+          ) : (
+            <>
+              <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: short ? '#a33' : H.ink }} data-repair-total>
+                Repair all for {costText(plan.total)}?{short ? ` Short ${costText(plan.short)}.` : ''}
+              </span>
+              <span data-repair-confirm><HearthButton small primary disabled={short} onClick={() => {
+                const r = repairAll(loadTools(), getInv())
+                setAsking(false)
+                if (!r.ok) { hudSay(r.why, 'info'); return }
+                setInv(r.inv); saveTools(r.tools, true); setTools(r.tools); hudSay(REPAIR_TEXT.all(r.mended, r.total), 'item')
+              }}>Repair</HearthButton></span>
+              <span data-repair-cancel><HearthButton small onClick={() => setAsking(false)}>Cancel</HearthButton></span>
+            </>
+          )}
+        </div>
+      )}
       {(Object.keys(EDGE_TOOLS) as EdgeFamily[]).map(fam => {
         const cur = tools[fam], on = edgeOn(cur), top = TOOL_DEFS[EDGE_TOOLS[fam]].name
         return (
@@ -2203,6 +2226,14 @@ function EdgeList({ inv }: { inv: ReturnType<typeof useInv> }) {
                         if (f.spent) setInv(f.inv)
                         saveTools(next, true); setTools(next); hudSay(EDGE_TEXT.fitted(m), 'item')
                       }}>{on === m ? 'On' : 'Fit'}</HearthButton>
+                      {repairCost(m, kept) > 0 && (
+                        <span data-edge-repair={m}><HearthButton small disabled={have < repairCost(m, kept)} onClick={() => {
+                          const r = repairEdge(loadTools()[fam], m, getInv())
+                          if (!r.ok) { hudSay(r.why, 'info'); return }
+                          const next = { ...loadTools(), [fam]: r.tool }
+                          setInv(r.inv); saveTools(next, true); setTools(next); hudSay(REPAIR_TEXT.repaired(m), 'item')
+                        }}>Repair · {repairCost(m, kept)}</HearthButton></span>
+                      )}
                     </div>
                   )
                 })}

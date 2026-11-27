@@ -12,8 +12,11 @@
 // Numbers are placeholders to feel (🟨, Alex's queue). Words below = plain labels for @lark.
 // The record rides on the tool's own save (open.tools.v1 › EquippedTool.edge), so no new key.
 //
-// s2 (not here): REPAIR + REPAIR ALL (cost first), metal SWAPS that spend metal, buying metal in bulk on the Nyx side.
-import { TOOL_DEFS, type EquippedTool } from '../../engine/tools'
+// s2 (Alex 11-24, this file): REPAIR before 0 (metal cost scales with the wear used, REPAIR_MAX at most: cheaper than a new edge
+//   so mending early pays), REPAIR ALL (repairAllPlan: the total shown FIRST, then repairAll charges it whole or not at all), at 0
+//   there is nothing to repair (it broke away; refit). SWAPS = fitEdge: the other metal's kept edge goes on free, else a new one for
+//   FIT_METAL; the edge taken off keeps its wear. Metal itself is bought in bulk at the Nyx supplier (business/suppliers.ts).
+import { TOOL_DEFS, type EquippedTool, type EquippedTools } from '../../engine/tools'
 import type { GatherDial } from './gather-dials'
 import { countOf, take, type Inv } from '../shared/inventory'
 
@@ -100,5 +103,63 @@ export const EDGE_TEXT = {
   warn: (m: EdgeMetal, n: number) => `Your ${EDGE[m].name} edge is wearing thin: ${n} ${n === 1 ? 'use' : 'uses'} left.`,
   broke: (m: EdgeMetal) => `Your ${EDGE[m].name} edge broke away. Fit a new one at the Smithy.`,
   fitted: (m: EdgeMetal) => `${EDGE[m].name} edge fitted.`,
+}
+// ── s2: REPAIR + REPAIR ALL ──
+/** the most metal one repair takes (a nearly-broken edge); a new edge is FIT_METAL, so repairing before 0 is always cheaper */
+export const REPAIR_MAX = FIT_METAL - 1
+/** metal to bring `metal`'s edge back to full from `left` uses: ceil(REPAIR_MAX x the share worn). Full or broken (0) = 0. */
+export function repairCost(metal: EdgeMetal, left: number): number {
+  const u = EDGE[metal].uses, l = Math.floor(left)
+  if (!(l > 0) || l >= u) return 0
+  return Math.ceil(REPAIR_MAX * (u - l) / u)
+}
+export type Repair = { ok: true; tool: EdgedTool; inv: Inv; spent: number } | { ok: false; why: string }
+/** Mend one kept edge (fitted or not) of `metal` to full, paying its own metal. Nothing left = it broke away: refit, not repair. */
+export function repairEdge(t: EquippedTool | undefined, metal: EdgeMetal, inv: Inv): Repair {
+  if (!t || !canTakeEdge(t)) return { ok: false, why: 'Only a Starwillow Pruner or Starwillow Spike takes an edge.' }
+  const cur = adoptEdge((t as EdgedTool).edge), left = cur?.left[metal] ?? 0
+  if (!cur || left <= 0) return { ok: false, why: `No ${EDGE[metal].name} edge to repair. Fit a new one.` }
+  const cost = repairCost(metal, left)
+  if (!cost) return { ok: false, why: `The ${EDGE[metal].name} edge is whole.` }
+  const bag = countOf(inv, metal) >= cost ? take(inv, metal, cost) : null
+  if (!bag) return { ok: false, why: `Needs ${cost} ${EDGE[metal].name}.` }
+  return { ok: true, tool: { ...t, edge: { ...cur, left: { ...cur.left, [metal]: EDGE[metal].uses } } }, inv: bag, spent: cost }
+}
+export type RepairLine = { fam: EdgeFamily; metal: EdgeMetal; left: number; cost: number }
+export type RepairPlan = { lines: RepairLine[]; total: Partial<Record<EdgeMetal, number>>; short: Partial<Record<EdgeMetal, number>> }
+/** what REPAIR ALL would mend and cost, every worn kept edge on both tools; `short` = metal missing from the bag (empty = can pay) */
+export function repairAllPlan(tools: EquippedTools, inv: Inv): RepairPlan {
+  const lines: RepairLine[] = [], total: Partial<Record<EdgeMetal, number>> = {}, short: Partial<Record<EdgeMetal, number>> = {}
+  for (const fam of Object.keys(EDGE_TOOLS) as EdgeFamily[]) {
+    const t = tools[fam]
+    if (!canTakeEdge(t)) continue
+    const e = adoptEdge((t as EdgedTool).edge)
+    for (const metal of EDGE_METALS) {
+      const left = e?.left[metal] ?? 0, cost = repairCost(metal, left)
+      if (cost) { lines.push({ fam, metal, left, cost }); total[metal] = (total[metal] ?? 0) + cost }
+    }
+  }
+  for (const m of EDGE_METALS) { const need = total[m] ?? 0, have = countOf(inv, m); if (need > have) short[m] = need - have }
+  return { lines, total, short }
+}
+/** the plan's cost in words, e.g. "2 Venium + 1 Eurleen" (placeholder, @lark) */
+export const costText = (total: Partial<Record<EdgeMetal, number>>) => EDGE_METALS.filter(m => total[m]).map(m => `${total[m]} ${EDGE[m].name}`).join(' + ')
+export type RepairAll = { ok: true; tools: EquippedTools; inv: Inv; total: Partial<Record<EdgeMetal, number>>; mended: number } | { ok: false; why: string }
+/** REPAIR ALL, after the keeper saw repairAllPlan's total: every worn edge to full, the whole cost or nothing changes */
+export function repairAll(tools: EquippedTools, inv: Inv): RepairAll {
+  const plan = repairAllPlan(tools, inv)
+  if (!plan.lines.length) return { ok: false, why: 'Nothing to repair.' }
+  if (Object.keys(plan.short).length) return { ok: false, why: `Needs ${costText(plan.total)}.` }
+  let bag = inv; const next: EquippedTools = { ...tools }
+  for (const l of plan.lines) {
+    const r = repairEdge(next[l.fam], l.metal, bag)
+    if (!r.ok) return { ok: false, why: r.why }
+    next[l.fam] = r.tool; bag = r.inv
+  }
+  return { ok: true, tools: next, inv: bag, total: plan.total, mended: plan.lines.length }
+}
+export const REPAIR_TEXT = {
+  repaired: (m: EdgeMetal) => `${EDGE[m].name} edge repaired.`,
+  all: (n: number, total: Partial<Record<EdgeMetal, number>>) => `${n} ${n === 1 ? 'edge' : 'edges'} repaired for ${costText(total)}.`,
 }
 export const isTopTool = (id: string) => !!TOOL_DEFS[id] && (Object.values(EDGE_TOOLS) as string[]).includes(id)
