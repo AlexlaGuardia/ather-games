@@ -1,6 +1,6 @@
 // node test: npx tsx src/app/shimmer/open/shared/fight-share.test.ts (BETA M28 slice 2)
 import { hostOf, sharing, encodeSnap, applySnap, SNAP_MAX, encodeHits, decodeHits, newDrops, decodeKills, layDrop, encodeHurt, decodeHurt, type NetHollow } from './fight-share'
-import { newCombat, spawnHollow, stepCombat, applyNetHit, applyNetHurt, blowCost, SHAMBLER, type Terrain } from '../ather/combat'
+import { newCombat, spawnHollow, stepCombat, applyNetHit, applyNetHurt, blowCost, SHAMBLER, NET_HIT_MAX, type Terrain } from '../ather/combat'
 let fails = 0
 const ok = (c: boolean, m: string) => { console.log(`${c ? '✓' : '✗'} ${m}`); if (!c) fails++ }
 const T: Terrain = { heightAt: () => 0, walkable: () => true }
@@ -48,8 +48,8 @@ ok(!guest.hollows.some(h => h.id === g0.id), 'gone from the host = gone from the
   for (const [id, dmg] of wire) applyNetHit(H, id, dmg)
   ok(victim.hp === victim.maxHp - 12, `the host applies a guest's hit (${victim.maxHp} -> ${victim.hp})`)
   for (const [id] of wire) applyNetHit(H, id, 999)   // over the cap: ignored
-  ok(victim.hp === victim.maxHp - 12, 'an absurd hit (> 200) is ignored')
-  for (let i = 0; i < 3; i++) applyNetHit(H, victim.id, 12)   // the killing blows land between steps
+  ok(victim.hp === victim.maxHp - 12, `an absurd hit (> ${NET_HIT_MAX}) is ignored`)
+  for (let i = 0, n = Math.ceil(victim.hp / 12); i < n; i++) applyNetHit(H, victim.id, 12)   // the killing blows land between steps (M245: as many as its hp needs)
   stepCombat(H, T, { x: 0, y: 0, z: 0 }, 1 / 30)
   const kills = H.events.filter(e => e.kind === 'hit' && e.killed).length
   const rows = newDrops(H, seen, false)

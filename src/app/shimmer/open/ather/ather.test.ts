@@ -268,7 +268,8 @@ for (const [n, p] of [['greg', GREG], ['threshold', THRESHOLD]] as const) {
     kills += d.events.filter(e => e.kind === 'hit' && e.killed).length
   }
   ok(kills === 1 && h.hp <= 0, 'combat: a Repeater could not put a shambler down')
-  ok(shots >= 2 && shots <= 6, `combat: ${shots} shots to kill (want ~3 body)`)
+  // M245 (Alex 11-27): shambler 150 hp, Repeater 18 a round = 9 body shots (was 45 / 10 = ~3-5 with misses): the band follows the hp
+  ok(shots >= 9 && shots <= 14, `combat: ${shots} shots to kill (want ~9 body: 150 / 18)`)
   ok(d.drops.length === 1 && d.drops[0].amount >= 1, 'combat: no grey matter dropped')
   let got = 0
   for (let k = 0; k < 600 && !got; k++) {

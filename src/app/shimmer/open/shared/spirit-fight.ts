@@ -15,6 +15,7 @@
 //    winds up at it, and a keeper in its reach is still lunged at. Floaters and champions are never drawn (nothing is shot at her).
 //  · Off duty (no fight, not joining, nothing to walk to) fightSlot is null and M126's formation owns her place: a fight only
 //    MOVES THE SLOT the same walk is already on, so neither hand-over jumps.
+import { M245_HOLLOW_SCALE } from './gunplay'
 import { fxOn, LURE_STOP, type Combat, type Hollow } from '../ather/combat'
 
 export type Act = 'hit' | 'mend' | 'slow'
@@ -32,7 +33,7 @@ export const FIGHT = {
   gap: 1.2,                     // s between any two helps of the trio
   helps: 10, share: 0.12,       // the trio's budget a fight: helps in all, and their damage as a part of the keeper's
   join: 0.7,                    // odds one spirit joins one fight
-  hit: 5, hitRange: 14,         // damage a HIT does; a target further from the keeper than this is left alone
+  hit: 5 * M245_HOLLOW_SCALE, hitRange: 14,   // damage a HIT does (M245: x10/3 with the Hollows' hp, was 5); a target further from the keeper than this is left alone
   mend: 6, mendUnder: 0.5,      // health a MEND gives; only under this part of full health
   slowN: 3, slowR: 6, slowSecs: 2.5,   // Hollows this close to the keeper, this many at least, slowed this long
   draw: 0.5, chase: 3, lead: 7.5, leadA: 0.9, away: 3.2, drawR: 14, drawSee: 9,   // s1b: odds a HIT turns it on her; s it chases; m from the keeper and radians round them she leads it; the closest she lets it come; past drawR m of the keeper it ends; how near her a walker turns

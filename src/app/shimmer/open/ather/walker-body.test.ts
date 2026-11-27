@@ -68,6 +68,6 @@ const sha = (a: number[]) => createHash('sha1').update(a.map(v => v.toFixed(5)).
 { const s = sprout('crawler'), o = s.lumps.map(() => new THREE.Matrix4()); poseSprout(s, { t: 1.3, tell: 0.4, fall: 0.2, walk: 0.7, knock: 0.1 }, o); const c = sha(o.flatMap(m => m.elements))
   const f = flitMats(); poseFlit({ t: 1.3, zip: 0.3, tell: 0.4, bank: 0.1, kick: 0, knock: 0.1 }, f); const d = sha(f.flatMap(m => m.elements))
   ok(c === 'ef476ec80b', `the Pooler's body is the one before M163 (${c})`); ok(d === '13cfd681a9', `the Flit's too (${d})`) }
-ok([SHAMBLER.hp, SHAMBLER.damage, SHAMBLER.chaseSpeed, SHAMBLER.windup, SHAMBLER.radius, SHAMBLER.hitReach, HEAD_R, BODY_R].join() === '45,14,2.1,0.45,0.42,1.15,0.26,0.44' && CRAWLER.bodyR === 0.5, 'fight numbers untouched')
+ok([SHAMBLER.hp, SHAMBLER.damage, SHAMBLER.chaseSpeed, SHAMBLER.windup, SHAMBLER.radius, SHAMBLER.hitReach, HEAD_R, BODY_R].join() === '150,14,2.1,0.45,0.42,1.15,0.26,0.44' && CRAWLER.bodyR === 0.5, 'fight numbers untouched (hp: M245, 45 -> 150)')
 console.log(`walker-body: ${pass} pass, ${fail} fail`)
 if (fail) process.exit(1)

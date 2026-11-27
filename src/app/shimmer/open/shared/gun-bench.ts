@@ -3,7 +3,7 @@
 // the tuner's rhythm dials (fp-gun setRhythm); this file is the rest of a gun's numbers (damage a round, crit, pellets, burst, round
 // speed, charge, clip, reload), saved per gun to this browser and copied with "Copy values". ⚠ BENCH ONLY: the game never reads these
 // stats (the tuner's Fire preview and its read-out do); a number goes live when Jin bakes it into gunplay.ts on Alex's word.
-import { RANGE_GUNS, BACKBONE_DAMAGE, M177_SPEED, type RangeGun } from './gunplay'
+import { RANGE_GUNS, BACKBONE_DAMAGE, M177_SPEED, headOf, type RangeGun } from './gunplay'
 import { TWINS_GUN } from './twins-sim'
 
 /** M9 GRINDER (canon game/weapons.md › Models, Magii 842ef49, Alex 11-27: "a third full auto long gun with a slower fire rate but higher
@@ -11,11 +11,12 @@ import { TWINS_GUN } from './twins-sim'
  *  0.22 s a round held (the Backbone's average is 0.21 s a round, 0.09 inside a burst) at 13.5 a round (1.3x the Backbone's 10.4) =
  *  61.4 a second held: above the Backbone's 49.5, under the Spitter's 63.6 and the Roar's 78.8 point blank (the band). 1.6x the
  *  Backbone (16.6) at 0.22 s would be 75.6 a second, a Roar at range, so it starts at 1.3x; the damage dial goes to 1.6x and past. */
-export const GRINDER_DAMAGE = 13.5
+/** M245 (Alex 11-27): 29 a round (was 13.5); head = body x HEAD_MULT (1.5x). Still bench only. */
+export const GRINDER_DAMAGE = 29
 export const GRINDER_GUN: RangeGun = {
   id: 'grinder', name: 'M9 GRINDER', slot: 'LONGBARREL', auto: true,
   fireCd: 0.22, projSpeed: M177_SPEED.backbone, projLife: 92 / M177_SPEED.backbone,   // the Backbone's reach (46 m/s x 2.0 s)
-  damage: GRINDER_DAMAGE, crit: Math.round(GRINDER_DAMAGE * 19 / 12 * 10) / 10, clip: 40, reloadTime: 2.2, reloadMana: 13,
+  damage: GRINDER_DAMAGE, crit: headOf('grinder', GRINDER_DAMAGE), clip: 40, reloadTime: 2.2, reloadMana: 13,
   hipSpread: 2.0, adsSpread: 0.22, bloomPerShot: 0.32, bloomMax: 3.0, bloomDecay: 5, adsBloomScale: 0.4, kickPitch: 0.014, kickYaw: 0.006,
   converge: 40, headR: 0.08, trailR: 0.065, hipMove: 0.76, adsMove: 0.46,
   burst: 1, burstGap: 0, pellets: 1, shove: 0.08, color: '#8a7650',
@@ -30,8 +31,8 @@ export interface GunStats { damage: number; crit: number; pellets: number; burst
 export type StatKey = keyof GunStats
 /** `only`: the dial shows only on a gun that has the feature (pellets on a shell gun, burst on a burst gun, charge on a charged gun) */
 export const STAT_DIALS: { k: StatKey; label: string; min: number; max: number; step: number; only?: (g: RangeGun) => boolean }[] = [
-  { k: 'damage', label: 'damage a round', min: 1, max: 80, step: 0.1 },
-  { k: 'crit', label: 'head damage', min: 1, max: 120, step: 0.1 },
+  { k: 'damage', label: 'damage a round', min: 1, max: 160, step: 0.1 },   // M245: the Lance is 108
+  { k: 'crit', label: 'head damage', min: 1, max: 320, step: 0.1 },   // M245: a Lance head is 216
   { k: 'pellets', label: 'pellets', min: 2, max: 16, step: 1, only: g => g.pellets > 1 },
   { k: 'burst', label: 'rounds a burst', min: 2, max: 6, step: 1, only: g => g.burst > 1 },
   { k: 'projSpeed', label: 'round speed', min: 20, max: 220, step: 1 },

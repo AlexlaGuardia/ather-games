@@ -27,13 +27,45 @@ export interface RangeGun extends WeaponDef {
   charge?: number
   /** canon: a weapon that can never take a sigil (the Enchant Temple turns it away) */
   noSigil?: boolean
-  /** M150 s5 (Alex 11-27: "the reacher I'd like to one shot hollows with headshots"): a HEADSHOT on a Hollow takes all it has left,
-   *  whatever its hp (the rhythm dials scale crit, so this is a rule, not a number). A body shot keeps the gun's damage. Hollows only. */
-  headKill?: boolean
 }
 
-/** M148: the Backbone's damage a round. 10.4 = 49.5 a second held, 41.9 with reloads: never past the engine Repeater's (0.16 s) 62.5 / 42.0. */
-export const BACKBONE_DAMAGE = 10.4
+/** M148: the Backbone's damage a round (was 10.4). M245 (Alex 11-27): 24 (the Hollows went to 100-150 hp), a round AS EVERYONE FIRES
+ *  IT: on its baked M195 rhythm (M195_BACKBONE_RHYTHM, fp-gun GUN_RHYTHM_BAKED), which withRhythm scales damage by to keep the
+ *  damage a second. So the ROW carries 24 x the row's cycle / the baked cycle (20.43), and the gun in hand fires 24. */
+export const BACKBONE_DAMAGE = 24
+/** M195 (Alex 11-26, the Gun Tuner paste): the Backbone's baked rhythm (fp-gun GUN_RHYTHM_BAKED reads it) */
+export const M195_BACKBONE_RHYTHM = { BURST_GAP: 0.07, BURST_DELAY: 0.6 }
+/** M245: what the Backbone's ROW carries a round so the baked rhythm fires BACKBONE_DAMAGE (row cycle 0.63 s, baked 0.74 s) */
+export const BACKBONE_ROW_DAMAGE = BACKBONE_DAMAGE * (2 * 0.09 + 0.45) / (2 * M195_BACKBONE_RHYTHM.BURST_GAP + M195_BACKBONE_RHYTHM.BURST_DELAY)
+/** M245 (Alex 11-27, BETA M245): the open world's BODY damage a round, every gun re-numbered with the Hollows' hp (shambler 45 -> 150,
+ *  crawler 35 -> 120, floater 30 -> 100). engine/weapons.ts (play3d's guns) is untouched: these are applied over its values, as M177's
+ *  speeds are. Champions (champion.ts CHAMP.barHp) are scaled by M245_CHAMP_SCALE so their time-to-kill holds. */
+export const M245_DAMAGE: Record<string, number> = { repeater: 18, spitter: 16, backbone: BACKBONE_DAMAGE, roar: 12, lance: 108, 'charred-rifle': 77 }
+/** M245: the damage a round a gun's ROW carries for M245_DAMAGE to be what it fires in hand (only the Backbone has a baked rhythm) */
+const ROW_DAMAGE: Record<string, number> = { backbone: BACKBONE_ROW_DAMAGE }
+/** M245 HEADSHOTS (Alex 11-27): HEAD = BODY x this, ONE table for every gun (bench guns too). Most guns 1.5x, shotguns 1.25x a pellet,
+ *  precision rifles 2x. Replaces the M150 s5 Lance headKill insta-kill: a Lance head (216) drops a 150 shambler only because 216 > 150. */
+export const HEAD_MULT: Record<string, number> = {
+  repeater: 1.5, spitter: 1.5, backbone: 1.5, grinder: 1.5,
+  roar: 1.25, twins: 1.25,
+  lance: 2, 'charred-rifle': 2,
+}
+/** a gun's head (crit) damage a round: its body damage x HEAD_MULT (one decimal) */
+export const headOf = (id: string, damage: number) => Math.round(damage * (HEAD_MULT[id] ?? 1.5) * 10) / 10
+/** M245: pellets a round where Alex changed them (the Roar 9 -> 8) */
+export const M245_PELLETS: Record<string, number> = { roar: 8 }
+/** M245: each gun's damage / crit / pellets a round BEFORE the re-number (the before/after table and the champion scale) */
+export const M245_BEFORE: Record<string, { damage: number; crit: number; pellets?: number }> = {
+  repeater: { damage: 10, crit: 16 }, spitter: { damage: 7, crit: 11 }, backbone: { damage: 10.4, crit: 16.5 }, roar: { damage: 7, crit: 9, pellets: 9 },
+  lance: { damage: 22, crit: 34 }, 'charred-rifle': { damage: 22, crit: 55 },
+}
+const reDamage = (g: RangeGun): RangeGun => {
+  const d = M245_DAMAGE[g.id], row = ROW_DAMAGE[g.id]
+  return row ? { ...g, damage: row, crit: row * (HEAD_MULT[g.id] ?? 1.5) } : d ? { ...g, damage: d, crit: headOf(g.id, d) } : g
+}
+/** M245: what non-gun damage on a Hollow (the fist, casts, a spirit's hit, burning) is scaled by to keep its hits-to-kill: the shambler's
+ *  and floater's hp factor (150/45 = 100/30 = 10/3). */
+export const M245_HOLLOW_SCALE = 10 / 3
 const base = (id: string) => WEAPONS.find(w => w.id === id)!
 /** M151 (Alex 11-25): every gun fires while held, so the Repeater's cadence is the open world's own: 0.22 s = 45 a second held. */
 export const REPEATER_CD = 0.22
@@ -67,20 +99,28 @@ export const RANGE_GUNS: RangeGun[] = ([
     hipSpread: 6.5, adsSpread: 4.2, bloomPerShot: 0, bloomMax: 0,
     bloomDecay: 6, adsBloomScale: 0, kickPitch: 0.04, kickYaw: 0.012,
     converge: 14, headR: 0.05, trailR: 0.04, hipMove: 0.78, adsMove: 0.6,
-    burst: 1, burstGap: 0, pellets: 9, shove: 0.35, color: '#d0503c' },
-  { ...base('lance'), burst: 1, burstGap: 0, pellets: 1, shove: 0.12, color: '#a070d8', headKill: true },   // M150 s5: one head = one Hollow
+    burst: 1, burstGap: 0, pellets: M245_PELLETS.roar, shove: 0.35, color: '#d0503c' },   // M245 (Alex 11-27): 8 pellets (was 9) x 12 (M245_DAMAGE)
+  { ...base('lance'), burst: 1, burstGap: 0, pellets: 1, shove: 0.12, color: '#a070d8' },   // M245: the M150 s5 headKill rule is gone (HEAD_MULT 2x)
   // ★ THE CHARRED RIFLE (canon RULED 11-15, CANON_GAPS › "Kael leaves the Charred Rifle at the shipyard"; Alex: "its single
   // fire with a short charge up but packs a punch"). Kael's retired Prototype, left to the keeper with the shipyard; it can
   // NEVER take a sigil (world/manalic-weapons.md). A primary: one heavy round per pull after a 0.35 s charge. Numbers = build.
   { id: 'charred-rifle', name: 'CHARRED RIFLE', slot: 'LONGBARREL', auto: false,
     fireCd: 0.9, projSpeed: 70, projLife: 2.2,
-    // M150 s5 (Alex 11-27: "the charred rifle I'd like it get the reacher's damage"): its damage a round = the Lance's (was 34)
+    // M150 s5 (Alex 11-27: "the charred rifle I'd like it get the reacher's damage"): its damage a round = the Lance's (was 34).
+    // M245: re-numbered to 77 by reDamage (M245_DAMAGE); this is the pre-M245 value it scales from.
     damage: base('lance').damage, crit: 55, clip: 5, reloadTime: 2.0, reloadMana: 12,
     hipSpread: 0.5, adsSpread: 0.06, bloomPerShot: 0, bloomMax: 0,
     bloomDecay: 6, adsBloomScale: 0, kickPitch: 0.03, kickYaw: 0.006,
     converge: 60, headR: 0.09, trailR: 0.07, hipMove: 0.85, adsMove: 0.55,
     burst: 1, burstGap: 0, pellets: 1, shove: 0.2, color: '#6b4a2f', charge: 0.35, noSigil: true },
-] as RangeGun[]).map(quicken)
+] as RangeGun[]).map(quicken).map(reDamage)
+/** M245: the factor champion bar hp (and a champion's wave adds, its heal, the guest-hit caps) is scaled by: the DEFAULT gun's
+ *  (the Repeater, every newcomer's) damage factor, 18 / 10 = 1.8. The 09-24 keeper rule (a newcomer with the default gun keeps pace;
+ *  wilds-teeth / wilds-merge sims) holds a champion fight to the newcomer's time-to-kill, and only this factor keeps it: the
+ *  harmonic mean over all six guns (2.52, the factor that keeps the MEAN time-to-kill) stretched a newcomer's champion 24.9 -> 35.7 s
+ *  and took deaths 0 -> 15 / 200 (over the rule's 6%). The precision rifles drop a champion faster than before (m245-damage.test). */
+export const M245_DEFAULT_GUN = 'repeater'
+export const M245_CHAMP_SCALE = M245_DAMAGE[M245_DEFAULT_GUN] / M245_BEFORE[M245_DEFAULT_GUN].damage
 /** a burst gun's full cycle, first round to first round (its trigger held) */
 export const burstCycle = (g: { burst: number; burstGap: number; fireCd: number }) => (g.burst - 1) * g.burstGap + g.fireCd
 export const RHYTHM_DIALS = { gap: { min: 0.04, max: 0.16, step: 0.005 }, delay: { min: 0.3, max: 0.9, step: 0.01 }, fire: { min: 0.05, max: 1.5, step: 0.01 } } as const
@@ -88,17 +128,19 @@ const clampTo = (v: number, d: { min: number; max: number }) => Math.max(d.min, 
 /** M148: a burst gun on another rhythm (the gun tuner's dials). Damage per round follows the cycle, so a rhythm never changes the
  *  gun's damage per second. Same object back when nothing moves.
  *  M197: a single-fire gun takes `delay` as its FIRE INTERVAL (seconds between rounds, RHYTHM_DIALS.fire); `gap` is ignored. */
+/** M245: float dust off a rhythm-scaled number (24 x 0.63 / 0.74 x 0.74 / 0.63 reads 24, not 23.999999999999996) */
+const tidy = (v: number) => Math.round(v * 1e9) / 1e9
 export function withRhythm<G extends RangeGun>(g: G, gap?: number, delay?: number): G {
   if (g.burst <= 1) {
     const fireCd = Number.isFinite(delay) ? clampTo(delay!, RHYTHM_DIALS.fire) : g.fireCd
     if (fireCd === g.fireCd) return g
     const k = fireCd / g.fireCd
-    return { ...g, fireCd, damage: g.damage * k, crit: g.crit * k }
+    return { ...g, fireCd, damage: tidy(g.damage * k), crit: tidy(g.crit * k) }
   }
   const burstGap = Number.isFinite(gap) ? clampTo(gap!, RHYTHM_DIALS.gap) : g.burstGap, fireCd = Number.isFinite(delay) ? clampTo(delay!, RHYTHM_DIALS.delay) : g.fireCd
   if (burstGap === g.burstGap && fireCd === g.fireCd) return g
   const k = burstCycle({ burst: g.burst, burstGap, fireCd }) / burstCycle(g)
-  return { ...g, burstGap, fireCd, damage: g.damage * k, crit: g.crit * k }
+  return { ...g, burstGap, fireCd, damage: tidy(g.damage * k), crit: tidy(g.crit * k) }
 }
 export const gunForSlate = (slate: string) => RANGE_GUNS.find(g => g.slot === slate) ?? null
 

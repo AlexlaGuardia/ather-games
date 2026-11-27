@@ -14,7 +14,7 @@ ok(['SIDEARM', 'SHORTBARREL', 'LONGBARREL', 'BREACHER', 'REACHER'].every(s => !!
 ok(RANGE_GUNS.map(g => g.name).join() === 'REPEATER,SPITTER,BACKBONE,ROAR,LANCE,CHARRED RIFLE', `rack names drifted: ${RANGE_GUNS.map(g => g.name)}`)
 // ★ the Charred Rifle (canon 11-15): a primary, single fire after a short charge, heavier than any round on the racks, never takes a sigil
 const cr = RANGE_GUNS.find(g => g.id === 'charred-rifle')!
-ok(!!cr && cr.slot !== 'SIDEARM' && !cr.auto && (cr.charge ?? 0) > 0 && cr.noSigil === true && cr.damage === RANGE_GUNS.find(g => g.id === 'lance')!.damage && cr.damage > Math.max(...RANGE_GUNS.filter(g => g !== cr && g.id !== 'lance' && g.pellets === 1).map(g => g.damage)), 'the Charred Rifle: a charged single-fire primary that packs a punch (M150 s5: the Lance\'s damage, Alex 11-27) and takes no sigil')
+ok(!!cr && cr.slot !== 'SIDEARM' && !cr.auto && (cr.charge ?? 0) > 0 && cr.noSigil === true && cr.damage === 77 && cr.damage > Math.max(...RANGE_GUNS.filter(g => g !== cr && g.id !== 'lance' && g.pellets === 1).map(g => g.damage)), 'the Charred Rifle: a charged single-fire primary that packs a punch (M245, Alex 11-27: 77, second only to the Lance) and takes no sigil')
 ok(new Set(RANGE_GUNS.map(g => g.color)).size === RANGE_GUNS.length, 'two racks share a colour')
 
 const run = (id: string, frames: number, down: (i: number) => boolean) => {
@@ -47,9 +47,9 @@ ok(sp.shots >= 8, `the Spitter held for 1 s fires ${sp.shots} (auto)`)
 // the Backbone's burst: one press = three rounds, and the burst finishes even if the trigger is released
 const bb = run('backbone', 40, i => i === 0)
 ok(bb.shots === 3, `one Backbone press fires ${bb.shots}, not a 3-round burst`)
-// the Roar: one round, nine pellets
+// the Roar: one round, eight pellets (M245, Alex 11-27: was nine)
 const ro = run('roar', 2, i => i === 0)
-ok(ro.shots === 1 && ro.out.length === 9, `the Roar fired ${ro.shots} rounds / ${ro.out.length} pellets`)
+ok(ro.shots === 1 && ro.out.length === 8, `the Roar fired ${ro.shots} rounds / ${ro.out.length} pellets`)
 // an empty clip reloads itself and comes back full
 {
   const g = holdGun(RANGE_GUNS[0]), out: Round[] = []

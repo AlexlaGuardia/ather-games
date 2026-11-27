@@ -39,7 +39,7 @@ ok(flitGeometry() === flitGeometry() && FLIT.count * geoTris(flitGeometry()) <= 
   ok(a === b && a !== z, 'one material per ground colour, shared'); ok(a.emissive.getHex() === 0 && !a.emissiveMap, 'no emissive, ever')
   releaseGroundEnvs(); ok(sharedGoop('#9cc46a', false) !== a, 'freed when the Wilds are left') }
 // the sim's numbers are M120 s1's, whatever the body looks like
-ok(FLOATER.hp === 30 && FLOATER.damage === 6 && FLOATER.splash === 3 && FLOATER.shots === 3 && FLOATER.charge === 0.7 && FLOATER.hover === 2.2 && FLOATER.zipSpeed === 9, 'the fight numbers are M120 s1\'s')
+ok(FLOATER.hp === 100 && FLOATER.damage === 6 && FLOATER.splash === 3 && FLOATER.shots === 3 && FLOATER.charge === 0.7 && FLOATER.hover === 2.2 && FLOATER.zipSpeed === 9, 'the fight numbers are M120 s1\'s (hp: M245, 30 -> 100)')
 ok(FLIT_HIT_R === 0.5, 'the core sphere is the one this body was built to')
 // M120 s3c: WHAT A ROUND HITS. A point round dropped on each drawn lump, in every pose (beats included), turned any way: it hits
 // the wings (root to near the tip), the tail, the feet, the reach; just past them it misses. `ray` = a short step through q along d.

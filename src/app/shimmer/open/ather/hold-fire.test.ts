@@ -26,7 +26,7 @@ for (const id of ['repeater', 'roar', 'lance']) {
   const r = mk(id); drive(r, 0.05, 1 / 60, () => true); const n = r.keeper.ammo; reload(r); ok(drive(r, g.reloadTime - 0.1, 1 / 60, () => true).length === 0 && r.keeper.ammo === n, `${id}: a reload stops it`); ok(drive(r, 0.5, 1 / 60, () => true).length >= 1 && r.keeper.reloading <= 0, `${id}: and it resumes`)
 }
 // the Roar
-{ const c = mk('roar'), rs = (fire(c, eye, aim), c.rounds); ok(rs.length === 9 && c.keeper.ammo === 5, `a Roar shell = ${rs.length} pellets, one round`); ok(new Set(rs.map(r => r.vx)).size > 1, 'spread') }
+{ const c = mk('roar'), rs = (fire(c, eye, aim), c.rounds); ok(rs.length === 8 && c.keeper.ammo === 5, `a Roar shell = ${rs.length} pellets, one round`); ok(new Set(rs.map(r => r.vx)).size > 1, 'spread') }
 for (const id of ['repeater', 'lance', 'backbone', 'spitter', 'charred-rifle']) { const c = mk(id); fire(c, eye, aim); ok(c.rounds.length === 1 && c.rounds[0].shove === undefined, `${id}: one round, no shove`) }
 const shot = (id: string, T: Terrain = FLAT, lunge = false) => {
   const c = mk(id), h = spawnHollow(c, FLAT, 0, -4); h.hp = 500; h.state = lunge ? 'lunge' : 'stagger'; h.t = 99

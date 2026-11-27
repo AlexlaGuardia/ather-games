@@ -25,8 +25,9 @@ export const PUSH_FWD = 2.2
 export const PUSH_UP = 2.0
 /** A Hollow punched while still is shoved this far (metres, before its weight); a moving one only flinches. */
 export const PUSH_HOLLOW_M = 0.6
-/** The fist's damage on a Hollow (players take none). Build number (Jin): ~1/6 of a shambler's 35 hp. */
-export const FIST_DMG = 6
+/** The fist's damage on a Hollow (players take none). Build number (Jin): ~1/6 of a shambler's 35 hp. M245: 6 -> 20 with the Hollows'
+ *  10/3x hp (a shambler still takes 8 punches, a floater 5, a lone crawler 6). */
+export const FIST_DMG = 20
 
 export type BoopOutcome = 'push' | 'tap'
 /** Still = slow on the ground. Moving (or in the air) = a friendly tap. */

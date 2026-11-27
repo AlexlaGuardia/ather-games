@@ -31,7 +31,7 @@ import { box, type Part, type Model } from './gun-kit'
 import { modelGeometry, KIT_MATS } from './gun-kit-geo'
 import { MARKS, TINTS, drawMark, markGlow, defaultLook, type SightLook } from './sight-marks'
 import { getSightLooks, lookFor } from './sight-looks'
-import { withRhythm, type RangeGun } from './gunplay'
+import { withRhythm, M195_BACKBONE_RHYTHM, type RangeGun } from './gunplay'
 import { fittedModel, fittedSight } from './gun-fit'
 import { getLoadout } from './loadout'
 
@@ -96,7 +96,7 @@ export const RHYTHM_KEYS = ['BURST_GAP', 'BURST_DELAY', 'FIRE_INTERVAL'] as cons
 /** M195: a gun's rhythm everyone fires (Alex's tuner pastes land here); this browser's dials sit on top. Absent = the gun's row.
  *  M197: a single-fire gun's dial is FIRE_INTERVAL (seconds between rounds); a burst gun's are BURST_GAP + BURST_DELAY. */
 export const GUN_RHYTHM_BAKED: Readonly<Record<string, Rhythm>> = {
-  backbone: { BURST_GAP: 0.07, BURST_DELAY: 0.6 },   // M195, Alex 11-26
+  backbone: { ...M195_BACKBONE_RHYTHM },   // M195, Alex 11-26 (gunplay.ts: BACKBONE_ROW_DAMAGE is sized on it)
 }
 const rhythmOf = (t: Rhythm | undefined): Rhythm => Object.fromEntries(RHYTHM_KEYS.filter(k => typeof t?.[k] === 'number').map(k => [k, t![k]]))
 export const GUN_TUNE_KEY = 'open:gun-tune.v2'

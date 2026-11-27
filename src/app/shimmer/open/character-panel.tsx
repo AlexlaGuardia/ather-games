@@ -12,6 +12,7 @@ import { OPT } from './shared/keeper-look'
 import { useState } from 'react'
 import { H, hearthDisplay, Well, HearthButton } from '../ui/hearth'
 import { RANGE_GUNS } from './shared/gunplay'
+import { rhythmDefaultsFor } from './shared/fp-gun'
 import { useLoadout, setLoadout, equip, gunsFor, vesselsFor, type OwnedVessel } from './shared/loadout'
 import { fittedSight, fitSight, ownedSights, sightName } from './shared/gun-fit'   // M81 s2
 import { armedGun, sigilOf, reloadPayOf } from './shared/gun-sigil'   // M93 s4: the Armory shows the sigil-tuned gun
@@ -223,7 +224,8 @@ const NOT_IN_PLAY: ReadonlySet<TunedStat> = new Set<TunedStat>(['mobility', 'hea
  *  fitted sigil (M93 s4, gun-sigil.ts armedGun: the same tuning the gun fires with). */
 function GunStats({ id }: { id: string }) {
   const l = useLoadout(), fs = fittedSight(l, id), birth = useBirth()   // M81 s2: the Armory shows the fitted gun
-  const row = RANGE_GUNS.find(x => x.id === id); if (!row) return null
+  const raw = RANGE_GUNS.find(x => x.id === id); if (!raw) return null
+  const row = rhythmDefaultsFor(raw)   // M245: the row as everyone fires it (the Backbone's baked M195 rhythm: 24 a round, not its row's 20.4)
   const g = armedGun(row, l, birth), sig = sigilOf(l, id), lv = g === row ? {} : statLevels(sig)
   const mana = reloadPayOf(g)
   const tuned = (Object.entries(lv) as [TunedStat, number][]).filter(([, v]) => v !== 0)

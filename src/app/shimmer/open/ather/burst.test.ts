@@ -1,7 +1,7 @@
 // BETA M148: the Backbone's burst rhythm in the Ather (combat.ts stepTrigger) and on the range (gunplay stepGun).
 // Run: npx tsx src/app/shimmer/open/ather/burst.test.ts
 import { newCombat, stepCombat, stepTrigger, dropBurst, fire, reload, type Combat, type Terrain } from './combat'
-import { RANGE_GUNS, RHYTHM_DIALS, burstCycle, withRhythm, holdGun, stepGun, type RangeGun, type Round } from '../shared/gunplay'
+import { RANGE_GUNS, HEAD_MULT, RHYTHM_DIALS, burstCycle, withRhythm, holdGun, stepGun, type RangeGun, type Round } from '../shared/gunplay'
 import { weaponDef } from '../../engine/weapons'
 import { dialedGun, setRhythm, setGunTune, selectGunTune, resetGunTune, defaultsFor, settleAt, SETTLE_S, GUN_DEFAULTS } from '../shared/fp-gun'
 let pass = 0; const fails: string[] = []
@@ -24,7 +24,7 @@ const rep = { ...RANGE_GUNS.find(g => g.id === 'repeater')!, fireCd: weaponDef('
 /** held damage a second, and over clip + reload (perfect taps on the Repeater) */
 const rates = (g: RangeGun, d: number) => { const last = Math.ceil(g.clip / g.burst) - 1, cyc = g.burst > 1 ? burstCycle(g) : g.fireCd; return { hold: g.burst * d / cyc, sus: g.clip * d / (last * cyc + (g.burst - 1) * g.burstGap + g.reloadTime) } }
 for (const k of ['damage', 'crit'] as const) { const b = rates(bb, bb[k]), r = rates(rep, rep[k]); console.log(`${k}: Backbone ${b.hold.toFixed(1)} held / ${b.sus.toFixed(1)} with reloads; Repeater ${r.hold.toFixed(1)} / ${r.sus.toFixed(1)}`); ok(b.hold <= r.hold && b.sus <= r.sus, `${k}: the Backbone beats the Repeater`) }
-ok(near(bb.crit / bb.damage, 19 / 12, 0.01), 'the head shot scales with it')
+ok(near(bb.crit / bb.damage, HEAD_MULT.backbone, 1e-9), 'the head shot scales with it (M245: x HEAD_MULT, was 19/12)')
 ok(bb.clip === 30 && bb.reloadTime === 1.6, 'clip and reload as they were')
 
 // hold 3 s = 5 bursts = 15 rounds at every frame rate, steady
@@ -62,7 +62,8 @@ for (const period of [2, 3, 5, 9, 38]) { const n = drive(mk(), 5, 1 / 60, t => M
 { const g = holdGun(bb), out: Round[] = []; let n = 0; for (let i = 0; i < 180; i++) n += stepGun(g, 1 / 60, true, eye, aim, Math.random, out).length; ok(n === 15, `the range: hold 3 s fires ${n}`) }
 
 // every other gun: rows untouched, and fire() still one round per call
-const ROWS = { repeater: [0.22, 10, 16, 1, 0], spitter: [0.11, 7, 11, 1, 0], roar: [0.8, 7, 9, 1, 0], lance: [0.5, 22, 34, 1, 0], 'charred-rifle': [0.9, 22, 55, 1, 0] } as Record<string, number[]>
+// M245 (Alex 11-27): the damage / crit re-numbered (was repeater 10/16, spitter 7/11, roar 7/9, lance 22/34, charred 22/55); rhythms untouched
+const ROWS = { repeater: [0.22, 18, 27, 1, 0], spitter: [0.11, 16, 24, 1, 0], roar: [0.8, 12, 15, 1, 0], lance: [0.5, 108, 216, 1, 0], 'charred-rifle': [0.9, 77, 154, 1, 0] } as Record<string, number[]>
 // M197 (meaning moved): a single gun now HAS a rhythm, its fire interval; undialled it is the row, and `gap` never touches it
 for (const [id, r] of Object.entries(ROWS)) { const g = RANGE_GUNS.find(x => x.id === id)!; ok(JSON.stringify([g.fireCd, g.damage, g.crit, g.burst, g.burstGap]) === JSON.stringify(r), `${id} changed`); ok(dialedGun(g) === g && withRhythm(g, 0.1) === g && withRhythm(g, 0.1, g.fireCd) === g, `${id}: undialled = the row`) }
 { const c = mk(RANGE_GUNS.find(g => g.id === 'lance')!); ok(fire(c, eye, aim) && !fire(c, eye, aim) && c.keeper.ammo === c.gun.clip - 1, 'Lance: one round a call') }

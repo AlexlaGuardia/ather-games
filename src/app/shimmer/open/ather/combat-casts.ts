@@ -32,6 +32,7 @@ import { castForMove, type CastSpec } from '../../play3d/cast'
 import { beginSustain, sustainStep, type Sustain, type SustainEnd } from '../../play3d/sustain'
 import { shapeCells } from '../../engine/conjured-terrain'
 import { FIELD_TICK_MS } from '../../engine/field-effects'
+import { M245_HOLLOW_SCALE } from '../shared/gunplay'
 import { HEAD_Y, BODY_Y, fxOn, type Combat, type CombatField, type CombatPiece, type Hollow, type HollowFx, type Terrain } from './combat'
 
 type V3 = { x: number; y: number; z: number }
@@ -52,7 +53,8 @@ export function layStatuses(h: Hollow, kinds: readonly string[], secs: number): 
 
 function damage(c: Combat, T: Terrain, h: Hollow, n: number) {
   if (n <= 0) return
-  h.hp -= n * (fxOn(h, 'vulnerable') ? 1.3 : 1); h.hitFlash = 0.15
+  // M245: a cast's damage (play3d's spec numbers, bolt and field alike) is scaled with the Hollows' 10/3x hp, so it keeps its hits-to-kill
+  h.hp -= n * M245_HOLLOW_SCALE * (fxOn(h, 'vulnerable') ? 1.3 : 1); h.hitFlash = 0.15
   const killed = h.hp <= 0
   c.events.push({ kind: 'hit', id: h.id, head: false, killed })
   if (killed) c.drops.push({ id: c.nextId++, x: h.x, y: T.heightAt(h.x, h.z), z: h.z, amount: h.kind === 'floater' ? 2 : 1, age: 0 })

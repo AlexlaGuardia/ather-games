@@ -1,6 +1,6 @@
 // node test: npx tsx src/app/shimmer/open/shared/champ-share.test.ts (BETA M156 s3: one champion, one kill, a clear for everyone there)
 import { applyChamp, applySnap, believeDown, champNetHit, encodeHand, encodeSnap, shownOf, takeHand, CHAMP_DPS_MAX, CHAMP_ID, DOWN_MS, SNAP_MAX, decodeChamp, encodeChamp, decodeKills, type HitBudget, type Shown } from './fight-share'
-import { newCombat, stepCombat, spawnHollow, type Combat, type CombatEvent, type Terrain } from '../ather/combat'
+import { newCombat, stepCombat, spawnHollow, NET_HIT_MAX, type Combat, type CombatEvent, type Terrain } from '../ather/combat'
 import { CHAMP, THERE_R, wakeChampion } from '../ather/champion'
 import { freshInfection, guestClue, fell, begin, parseInfection, purge, CLUES } from '../ather/infection'
 import { freshTell, dueGiven, told, due, note, carried } from '../ather/infect-tell'
@@ -33,7 +33,7 @@ for (const bad of [null, 3, [], [...snap.c!].slice(1), ['n1', ...snap.c!.slice(1
 // the host's side
 { const c = up([{ id: 'g', x: 8, y: 0, z: 0 }]), B = new Map<string, HitBudget>(), hp = c.champ!.hp
   ok(champNetHit(c, T, { id: 'g', x: 8, z: 0 }, 30, B, 0) && c.champ!.hp === hp - 30, 'a guest there hurts it')
-  ok(!champNetHit(c, T, undefined, 30, B, 0) && !champNetHit(c, T, { id: 'far', x: 300, z: 0 }, 30, B, 0) && !champNetHit(c, T, { id: 'g', x: 8, z: 0 }, 201, B, 0) && !champNetHit(c, T, { id: 'g', x: 8, z: 0 }, -5, B, 0) && c.champ!.hp === hp - 30, 'nobody there, too far, too much, negative: nothing')
+  ok(!champNetHit(c, T, undefined, 30, B, 0) && !champNetHit(c, T, { id: 'far', x: 300, z: 0 }, 30, B, 0) && !champNetHit(c, T, { id: 'g', x: 8, z: 0 }, NET_HIT_MAX + 1, B, 0) && !champNetHit(c, T, { id: 'g', x: 8, z: 0 }, -5, B, 0) && c.champ!.hp === hp - 30, 'nobody there, too far, too much, negative: nothing')
   let dealt = 0; for (let k = 0; k < 100; k++) if (champNetHit(c, T, { id: 'g', x: 8, z: 0 }, 10, B, 500)) dealt += 10
   ok(dealt + 30 <= CHAMP_DPS_MAX, `no more than ${CHAMP_DPS_MAX} a second (${dealt + 30})`); c.champ!.state = 'submerge'; ok((champNetHit(c, T, { id: 'g', x: 8, z: 0 }, 10, B, 5000), c.champ!.hp === hp - 30 - dealt || c.champ!.bar > 0), 'not while it sinks') }
 // fights the nearest; a guest is hurt by the host's word; the leash counts all of us

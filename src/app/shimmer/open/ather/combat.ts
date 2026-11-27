@@ -14,7 +14,7 @@
 // ★ PURE. No react, no three. The scene layer feeds it the keeper's eye and aim, and draws what it returns.
 
 import { canFire, spreadDeg, bloomAfterShot, bloomAfterRest, weaponDef, type WeaponDef } from '../../engine/weapons'
-import { RANGE_GUNS } from '../shared/gunplay'
+import { RANGE_GUNS, M245_HOLLOW_SCALE } from '../shared/gunplay'
 import { stepChampion, hitChampion, CHAMP, type Champion } from './champion'
 import { easeRemote } from '../shared/fight-share'   // M28: a non-host's Hollows ease to the host's snapshot
 import { ECON, payReload } from '../shared/vitals-economy'
@@ -62,7 +62,7 @@ export interface Pack { wx: number; wz: number; t: number }
 export type HollowFx = 'rooted' | 'disarmed' | 'blinded' | 'slowed' | 'staggered' | 'vulnerable' | 'burning'
 export const fxOn = (h: Hollow, k: HollowFx) => (h.fx?.[k] ?? 0) > 0
 /** what a cast status does to a Hollow (build; tune with play) */
-export const FX = { slowMult: 0.45, vulnerableMult: 1.3, burnDps: 5 } as const
+export const FX = { slowMult: 0.45, vulnerableMult: 1.3, burnDps: 5 * M245_HOLLOW_SCALE } as const   // M245: burn keeps its seconds-to-kill on the 10/3x hp
 /** A floater's spit: slow enough to see coming and side-step. */
 export interface Spit { x: number; y: number; z: number; vx: number; vy: number; vz: number; life: number; dmg?: number
   /** M120: a floater's shot SPLASHES where it lands: this much to a keeper inside FLOATER.splashR of the landing (a direct hit pays `dmg` instead) */
@@ -73,9 +73,7 @@ export interface Round { x: number; y: number; z: number; vx: number; vy: number
   /** M151: metres a hit shoves the body (a breacher's pellet, behind M151.shell) */
   shove?: number
   /** M177: where it left and whose it is (the streak grows out of the barrel, drawn as that gun's): look only */
-  from?: { x: number; y: number; z: number }; gun?: string
-  /** M150 s5: a headshot on a Hollow takes all it has (the Lance, gunplay RangeGun.headKill) */
-  headKill?: boolean }
+  from?: { x: number; y: number; z: number }; gun?: string }
 export interface Drop { id: number; x: number; y: number; z: number; amount: number; age: number }
 
 export interface Keeper {
@@ -101,8 +99,9 @@ export const KEEPER_HP = 100
 export const REGEN_DELAY = ECON.hpDelay, REGEN_RATE = ECON.hpRegen
 /** Shambler tuning (build pacing, Jin). M120 (Alex 11-24 'the wilds are tame'): hp 30 -> 45 = five Repeater body shots or three
  *  to the head (sized for a keeper + a party); chase 1.7 -> 2.1 and wander 0.55 -> 0.7 ('a little bit faster'). */
+/** M245 (Alex 11-27): hp 45 -> 150 (the guns were re-numbered with it, gunplay.ts M245_DAMAGE). */
 export const SHAMBLER = {
-  hp: 45, wanderSpeed: 0.7, chaseSpeed: 2.1, notice: 24, forget: 40,
+  hp: 150, wanderSpeed: 0.7, chaseSpeed: 2.1, notice: 24, forget: 40,
   lungeRange: 2.6, windup: 0.45, lungeSpeed: 6.5, lungeTime: 0.32, recover: 1.1,
   hitReach: 1.15, damage: 14, stagger: 0.28, radius: 0.42, height: 1.75,
 }
@@ -110,7 +109,8 @@ export const SHAMBLER = {
  *  M120 (Alex 11-24): it ZIPS 2-3 spots (zipSpeed, inside keepNear..keepFar), then HOLDS (`charge` = the tell) and fires a
  *  burst of `shots` spits `shotGap` apart; each SPLASHES where it lands (splashR / splash). hp 20 -> 30, damage 10 -> 6 a shot (+3 splash on a near miss). */
 export const FLOATER = {
-  hp: 30, hover: 2.2, keepNear: 9, keepFar: 16, notice: 30, forget: 44, speed: 2.1,
+  hp: 100, hover: 2.2,   // M245: 30 -> 100
+  keepNear: 9, keepFar: 16, notice: 30, forget: 44, speed: 2.1,
   charge: 0.7, recover: 1.8, spitSpeed: 11, spitLife: 3, spitR: 0.35, damage: 6, share: 0.25,
   zipSpeed: 9, zipTime: 0.9, zipPause: 0.25, zipsMin: 2, zipsMax: 3, shots: 3, shotGap: 0.22, splashR: 1.6, splash: 3,
 }
@@ -124,7 +124,8 @@ export const PACK = { min: 3, max: 5, floaters: 1, spread: 3.5, roam: 12, catchU
  *  readable; it flinches less the bigger it is. A round DISPERSES it like any Hollow (hp to 0, it ends; no split, so a merge only
  *  ever lowers the entity count). populate counts a crawler by its MASS, so pooling never pulls in fresh spawns. */
 export const CRAWLER = {
-  hp: 35, damage: 8, wanderSpeed: 0.8, chaseSpeed: 2.5, notice: 20, forget: 36,
+  hp: 120, damage: 8, wanderSpeed: 0.8,   // M245: hp 35 -> 120 (a pooled body still ADDS: 120 x mass)
+  chaseSpeed: 2.5, notice: 20, forget: 36,
   lungeRange: 1.9, windup: 0.5, lungeSpeed: 6, lungeTime: 0.3, recover: 1.2, hitReach: 1.0, stagger: 0.24,
   radius: 0.5, bodyY: 0.35, bodyR: 0.5, height: 0.7,
   seekR: 14, touch: 0.25, speedExp: 0.3, scaleK: 0.55, scaleMax: 4, share: 0.22, brood: [2, 3] as [number, number],
@@ -150,8 +151,6 @@ export const weightOf = (h: Hollow) => h.kind === 'crawler' ? Math.max(1, h.mass
 /** grey matter a dispersed Hollow leaves */
 const dropOf = (c: Combat, h: Hollow) => (h.kind === 'floater' ? 2 : h.kind === 'crawler' ? Math.min(8, Math.max(1, h.mass ?? 1)) : 1) + Math.floor(rnd(c) * 3)
 export const HEAD_Y = 1.55, HEAD_R = 0.26, BODY_Y = 0.85, BODY_R = 0.44
-/** M150 s5: what a headKill round's head hit takes from a Hollow: all it has left (0 for any other round) */
-export const headKillOf = (r: Pick<Round, 'headKill'>, h: Pick<Hollow, 'hp'>) => (r.headKill ? Math.max(0, h.hp) : 0)
 /** M163: the Walker's heavy legs and the ends of its hanging arms count (they were drawn under the body sphere's 0.29 m and a round went through them),
  *  and the body ball is drawn in to the slimmer skin (1.6 -> 1.4). Newcomer Roar vs the champion, 600 fights: 80 -> 66 lost (noise). */
 export const LEG_Y = 0.3, LEG_R = 0.36, BODY_FIT = 1.4
@@ -340,9 +339,11 @@ export function stripSkin(c: Combat): boolean {
   popSkin(c, f); return true
 }
 
+/** M245: the most one guest round may claim on a Hollow (was 200 at the old numbers): a Charred head 154 x the 1.3 amp = 200.2 */
+export const NET_HIT_MAX = 500
 export function applyNetHit(c: Combat, id: number, dmg: number) {
   const h = c.hollows.find(o => o.id === id)
-  if (!h || h.hp <= 0 || !(dmg > 0) || dmg > 200) return
+  if (!h || h.hp <= 0 || !(dmg > 0) || dmg > NET_HIT_MAX) return
   h.hp -= dmg * (fxOn(h, 'vulnerable') ? FX.vulnerableMult : 1); h.hitFlash = 0.12
   if (h.state !== 'lunge' && h.state !== 'charge') { h.state = 'stagger'; h.t = h.kind === 'floater' ? SHAMBLER.stagger : walkerOf(h).stagger }
 }
@@ -514,7 +515,7 @@ export function fire(c: Combat, eye: { x: number; y: number; z: number }, aim: {
     let dz = aim.z + (pz * Math.cos(th) + qz * Math.sin(th)) * r
     const dl = Math.hypot(dx, dy, dz); dx /= dl; dy /= dl; dz /= dl
     const x0 = eye.x + dx * 0.4, y0 = eye.y - 0.08 + dy * 0.4, z0 = eye.z + dz * 0.4
-    c.rounds.push({ x: x0, y: y0, z: z0, vx: dx * w.projSpeed, vy: dy * w.projSpeed, vz: dz * w.projSpeed, life: w.projLife, dmg: w.damage, crit: w.crit, ...(pellets > 1 ? { shove: shell!.shove } : {}), ...((w as { headKill?: boolean }).headKill ? { headKill: true } : {}), from: { x: x0, y: y0, z: z0 }, gun: w.id })
+    c.rounds.push({ x: x0, y: y0, z: z0, vx: dx * w.projSpeed, vy: dy * w.projSpeed, vz: dz * w.projSpeed, life: w.projLife, dmg: w.damage, crit: w.crit, ...(pellets > 1 ? { shove: shell!.shove } : {}), from: { x: x0, y: y0, z: z0 }, gun: w.id })
   }
   k.ammo--; k.sinceShot = 0; k.bloom = bloomAfterShot(w, k.bloom)
   c.events.push({ kind: 'fired' })
@@ -667,7 +668,7 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
       if (segDist2(ox, oy, oz, r.x, r.y, r.z, h.x, h.y + BODY_Y, h.z) < BODY_R * BODY_R * BODY_FIT || segDist2(ox, oy, oz, r.x, r.y, r.z, h.x, h.y + LEG_Y, h.z) < LEG_R * LEG_R) best = { h, head: false }
     }
     if (best && c.remote) {   // M28: a non-host's round: feedback now, the host decides the damage (slice 3)
-      const h = best.h, dmg = Math.max((best.head ? r.crit : r.dmg) * ((k.ampUntil ?? 0) > (c.clock ?? 0) ? AMP_MULT : 1), best.head ? headKillOf(r, h) : 0)
+      const h = best.h, dmg = (best.head ? r.crit : r.dmg) * ((k.ampUntil ?? 0) > (c.clock ?? 0) ? AMP_MULT : 1)
       h.hitFlash = 0.12; r.life = 0
       ;(c.netHits ??= []).push({ id: h.id, dmg, head: best.head })
       c.events.push({ kind: 'hit', id: h.id, head: best.head, killed: false })
@@ -676,7 +677,7 @@ export function stepCombat(c: Combat, T: Terrain, feet: { x: number; y: number; 
     if (best) {
       const h = best.h
       const mult = (fxOn(h, 'vulnerable') ? FX.vulnerableMult : 1) * ((k.ampUntil ?? 0) > (c.clock ?? 0) ? AMP_MULT : 1)
-      h.hp -= Math.max((best.head ? r.crit : r.dmg) * mult, best.head ? headKillOf(r, h) : 0); h.hitFlash = 0.12; r.life = 0
+      h.hp -= (best.head ? r.crit : r.dmg) * mult; h.hitFlash = 0.12; r.life = 0
       if (h.state !== 'lunge' && h.state !== 'charge') { h.state = 'stagger'; h.t = h.kind === 'floater' ? SHAMBLER.stagger : walkerOf(h).stagger }
       shoveBody(c, T, h, r)
       const killed = h.hp <= 0

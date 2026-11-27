@@ -6,20 +6,23 @@
 // halves. Shape (Alex, BETA M152): two barrels x two shots = four before the reload (early reload allowed), LEFT gun first, 0.2 s
 // apart held, huge shove point blank, nearly nothing past ~8 m, one-dump power with a low sustained rate. Numbers = build (Jin).
 import type { RangeGun } from './gunplay'
-import { RANGE_GUNS } from './gunplay'
+import { RANGE_GUNS, headOf } from './gunplay'
 import { newCombat, spawnHollow, stepCombat, stepTrigger, heldGun, swapGun, stepAway, M151, BODY_Y, type Combat } from '../ather/combat'
 import { FLAT, SIM, championFight, packFight, summarise, type Summary } from '../ather/wilds-sim'
 import { groupPack } from '../ather/combat'
 
 /** metres the Twins' pellets fly before they are spent (reach = projSpeed x projLife) */
 export const TWINS_REACH = 8.5
+/** M245: the Twins' damage a shell (all 8 pellets on) */
+export const TWINS_SHELL = 99
 export const TWINS_GUN: RangeGun = {
   id: 'twins', name: 'DB2 TWINS', slot: 'SIDEARM', auto: false,
   // four rounds (L, R, L, R), 0.2 s apart held, then the long reload. Early reload allowed (the engine's reload on a part clip).
   fireCd: 0.2, clip: 4, reloadTime: 3.2, reloadMana: 14,
   projSpeed: 68, projLife: TWINS_REACH / 68,
   // a sawn-off cone: wide, so the pellets on a body fall away fast with range; ADS tightens it a little (no zoom)
-  damage: 4.2, crit: 5.6, hipSpread: 11, adsSpread: 8.8, bloomPerShot: 0, bloomMax: 0, bloomDecay: 6, adsBloomScale: 0,
+  // M245 (Alex 11-27: "Twins 99 per slug"): 99 a shell = 8 pellets x 12.375 (was 4.2 = 33.6 a shell); head = body x HEAD_MULT (1.25x a pellet)
+  damage: TWINS_SHELL / 8, crit: headOf('twins', TWINS_SHELL / 8), hipSpread: 11, adsSpread: 8.8, bloomPerShot: 0, bloomMax: 0, bloomDecay: 6, adsBloomScale: 0,
   kickPitch: 0.05, kickYaw: 0.014, converge: 6, headR: 0.05, trailR: 0.04, hipMove: 0.88, adsMove: 0.72,
   burst: 1, burstGap: 0, pellets: 8, shove: 0.55, color: '#a27e3c',
 }

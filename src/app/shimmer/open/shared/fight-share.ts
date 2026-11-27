@@ -6,6 +6,7 @@
 //           roster, with no election message; when the host leaves, the next lowest takes over from the last snapshot
 //           (its Hollows are already there).
 // ★ PURE (no React, no three, no socket). Node test: fight-share.test.ts.
+import { NET_HIT_MAX } from '../ather/combat'
 import type { Combat, CombatEvent, Hollow, HollowKind, HollowState, Terrain } from '../ather/combat'
 import { CHAMP, CHAMP_ID, THERE_R, hurtChampion, thereAt, throwVolley, type Attack, type Champion, type ChampState } from '../ather/champion'
 
@@ -132,7 +133,7 @@ export const DOWN_MS = 8000, HAND_MS = 25_000
 /** the fall is told again, for a word the relay dropped (once is believed) */
 export const DOWN_AGAIN = [1000, 2500]
 /** a guest's rounds on the champion: no more than this a second (the best gun in the game, and room) */
-export const CHAMP_DPS_MAX = 250
+export const CHAMP_DPS_MAX = 700   // M245: was 250 at the old gun numbers (the guns' damage went up to 4.9x; a Lance head 216 x the 1.3 amp)
 const CSTATES: ChampState[] = ['rise', 'idle', 'windup', 'act', 'recover', 'submerge', 'home']
 const ATTACKS: Attack[] = ['slam', 'lunge', 'volley']
 const r2 = (v: number) => Math.round(v * 100) / 100
@@ -161,7 +162,7 @@ export function applyChamp(c: Combat, T: Terrain, v: unknown, me: { x: number; z
 export interface HitBudget { at: number; dmg: number }
 export function champNetHit(c: Combat, T: Terrain, from: { id: string; x: number; z: number } | undefined, dmg: number, budget: Map<string, HitBudget>, now: number): boolean {
   const ch = c.champ
-  if (!ch || !from || !(dmg > 0) || dmg > 200 || !thereAt(c, ch, from)) return false
+  if (!ch || !from || !(dmg > 0) || dmg > NET_HIT_MAX || !thereAt(c, ch, from)) return false
   let b = budget.get(from.id)
   if (!b || now - b.at >= 1000) { b = { at: now, dmg: 0 }; budget.set(from.id, b) }
   if (b.dmg + dmg > CHAMP_DPS_MAX) return false
