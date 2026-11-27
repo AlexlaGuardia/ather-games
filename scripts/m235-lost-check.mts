@@ -7,6 +7,7 @@
 //     ground at C's centre dropped (carved void), the black-light pillar is up in the
 //     Wilds and still up from the garden; a reload keeps C lost
 //   0 page errors
+import puppeteer, { type Page } from 'puppeteer-core'
 import { pickWilds } from './lib/glade-gate.mts'   // M172: E at the Glade's gate opens the fold map; the Wilds is a stop on it
 import { mkdirSync, readFileSync } from 'node:fs'
 import { SETTLEMENT } from '../src/app/shimmer/open/ather/first-settlement'
