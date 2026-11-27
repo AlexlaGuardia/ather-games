@@ -212,6 +212,25 @@ const SCHEMA = `
       n          INTEGER NOT NULL,
       PRIMARY KEY (user_id, day)
     );
+    -- BETA M233 s2: the Fair's DASH board (fair-dash.ts; rules: ather/fair-dash-rules.ts). One row per keeper per season: their
+    -- best time AND the spirit + stats that ran it (the GHOST pool other keepers race against), and the day's races per keeper.
+    CREATE TABLE IF NOT EXISTS fair_dash (
+      season     INTEGER NOT NULL,
+      user_id    TEXT NOT NULL,
+      ms         INTEGER NOT NULL,
+      spirit     TEXT NOT NULL,
+      species    TEXT NOT NULL,
+      element    TEXT NOT NULL,
+      stats      TEXT NOT NULL,
+      at         INTEGER NOT NULL,
+      PRIMARY KEY (season, user_id)
+    );
+    CREATE TABLE IF NOT EXISTS fair_dash_tries (
+      user_id    TEXT NOT NULL,
+      day        TEXT NOT NULL,
+      n          INTEGER NOT NULL,
+      PRIMARY KEY (user_id, day)
+    );
 `
 
 /** Our own stable id — deliberately NOT the google sub, so a provider can change later. */
@@ -459,6 +478,8 @@ export function deleteAccount(user_id: string): boolean {
   d.prepare('DELETE FROM exchange_orders WHERE user_id = ?').run(user_id)
   d.prepare('DELETE FROM fair_smash WHERE user_id = ?').run(user_id)
   d.prepare('DELETE FROM fair_smash_tries WHERE user_id = ?').run(user_id)
+  d.prepare('DELETE FROM fair_dash WHERE user_id = ?').run(user_id)
+  d.prepare('DELETE FROM fair_dash_tries WHERE user_id = ?').run(user_id)
   d.prepare('DELETE FROM saves WHERE user_id = ?').run(user_id)
   const res = d.prepare('DELETE FROM accounts WHERE user_id = ?').run(user_id)
   return Number(res.changes) > 0
