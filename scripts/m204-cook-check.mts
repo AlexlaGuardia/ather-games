@@ -10,7 +10,9 @@
 // (phase A), a cooking room at (-100, 100) (phase B), then a bloomed fox planter at (-130, 102.5) in the party (phase C). Her
 // stat record: 30 growths + 5 GRD played, so the Earth form's GRD bar is met (asserted in the panel first).
 //  A. E at each station: its infusions listed and makeable; Make -> the infusion in the bag, its inputs spent. The old Earth
-//     Spice reads as a Golden Tonic (2 with the Still's). Rootvine is nowhere in the bag.
+//     Spice reads as a Golden Tonic (2 with the Still's). Rootvine is nowhere in the bag: M204 s3, an old save's 2 Rootvine (A)
+//     + 1 Rootvine seed load as 2 Goldleaf (A) + 1 Goldleaf seed (canon 35c83eb: Rootvine RETIRED, Goldleaf the earth herb).
+//     C also reads the bar's label: canon's Steep, 'Steep 0/10' / '2/10' / '10/10'.
 //  B. E at the hearth: Cook each element's meal from its infusion + a scale; Focus; collect -> +1 Mana, +1 Storm, +2 Earth,
 //     +1 Water Meal.
 //  C. Her panel: bar 10 empty; feed Mana -> slot 0 mana colour, Storm -> slot 1 storm colour; reload: still there. Three Earth
@@ -51,7 +53,7 @@ try {
     localStorage.setItem('ather:shimmer:birthRune', 'star')
     const slots: unknown[] = Array(32).fill(null)
     const put: [string, number][] = [['waymark', 12], ['shimmerscale', 5], ['shimmerscale_scales', 1], ['water_crystal', 1], ['violet_crystal', 1], ['earth_crystal', 1], ['storm_crystal', 1],
-      ['crop:goldleaf:B', 1], ['crop:stormgrass:C', 1], ['earth_spice', 1], ['earth_meal', 2], ['water_meal', 4]]
+      ['crop:goldleaf:B', 1], ['crop:stormgrass:C', 1], ['earth_spice', 1], ['earth_meal', 2], ['water_meal', 4], ['crop:rootvine:A', 2], ['seed:rootvine:D', 1]]   // M204 s3: an OLD save's Rootvine
     put.forEach(([id, n], k) => { slots[k] = { id, n } })
     localStorage.setItem('open.inv.v1', JSON.stringify({ v: 1, slots, gifts: ['bait1'] }))
     localStorage.setItem('open.works.v1', JSON.stringify({ v: 1, rooms: [], chests: [], pieces: piece }))
@@ -90,6 +92,7 @@ try {
   ok(!a.earth_spice && !a.water_crystal && !a.violet_crystal && !a.earth_crystal && !a.storm_crystal && !a['crop:goldleaf:B'] && !a['crop:stormgrass:C'] && !a.shimmerscale_scales && a.shimmerscale === 5,
     `A the inputs spent (gems, Goldleaf, Stormgrass, the Shimmerscale scales (M206); 5 Shimmerscale left: ${a.shimmerscale}); no spice left`)
   ok(!Object.keys(a).some(k => k.includes('rootvine')), 'A no Rootvine anywhere in the bag')
+  ok(a['crop:goldleaf:A'] === 2 && a['seed:goldleaf:D'] === 1, `A an old save's Rootvine loaded as Goldleaf, grade and count kept (2 crop A, 1 seed D: ${a['crop:goldleaf:A']}, ${a['seed:goldleaf:D']})`)   // M204 s3: canon 35c83eb retires Rootvine
 
   // ── B. the hearth cooks the spice + a Shimmerscale into an Earth Meal
   await setWorks({ v: 1, rooms: [ROOM], chests: [], pieces: [] }); await load()
@@ -119,13 +122,13 @@ try {
   await setWorks({ v: 1, rooms: [], chests: [], pieces: [PLANTER] }); await load()
   await p.evaluate((x, z) => (window as any).__ather.tp(x, z, 0), KEEP.x, KEEP.z)
   for (let i = 0; i < 60; i++) { await sleep(500); if (await p.evaluate(() => !!(window as any).__spiritModel?.trots?.fox)) break }
-  type Pan = { bar: string[]; slots: { el: string; bg: string }[]; locked: string; formEl: string | null; formName: string | null; earthMet: string | null; feeds: string[]; w: number; overflow: boolean }
+  type Pan = { bar: string[]; slots: { el: string; bg: string }[]; locked: string; formEl: string | null; formName: string | null; earthMet: string | null; feeds: string[]; w: number; overflow: boolean; steep: string }
   const readPanel = () => p.evaluate(() => {
     const pn = document.querySelector<HTMLElement>('[data-panel="spirit"]'); if (!pn) return null
     const bar = pn.querySelector('[data-meal-bar]'), r = pn.getBoundingClientRect(), fe = pn.querySelector('[data-form-element]')
     return { bar: (bar?.getAttribute('data-meal-bar') ?? '').split(',').filter(Boolean), slots: [...pn.querySelectorAll('[data-meal-slot]')].map(s => ({ el: s.getAttribute('data-meal-el') ?? '', bg: getComputedStyle(s).backgroundColor })),
       locked: bar?.getAttribute('data-meal-locked') ?? '', formEl: fe?.getAttribute('data-form-element') ?? null, formName: fe?.getAttribute('data-form-name') ?? null,
-      earthMet: pn.querySelector('[data-form-bar="earth"]')?.getAttribute('data-form-met') ?? null,
+      earthMet: pn.querySelector('[data-form-bar="earth"]')?.getAttribute('data-form-met') ?? null, steep: (pn.querySelector('[data-steep]')?.textContent ?? '').trim(),
       feeds: [...pn.querySelectorAll('[data-feed-meal]')].map(x => x.getAttribute('data-feed-meal')!), w: r.width, overflow: r.right > innerWidth + 0.5 || r.left < -0.5 }
   }) as Promise<Pan | null>
   const opts = () => p.evaluate(() => [...document.querySelectorAll('[data-talk-option]')].length)
@@ -149,6 +152,7 @@ try {
   const hex = (h: string) => { const n = parseInt(h.slice(1), 16); return `rgb(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255})` }
   const c0 = await openPanel()
   ok(!!c0 && c0.slots.length === 10 && c0.bar.length === 0, `C her panel: a 10-slot bar, empty (${c0?.slots.length}, ${c0?.bar.join()})`)
+  ok(c0?.steep === 'Steep 0/10', `C the bar is canon's Steep: 'Steep 0/10' (${c0?.steep})`)   // M204 s3 (alchemy.md › THE COOKING ROAD: UI word Steep)
   ok(c0?.earthMet === '1', `C setup: her Earth form's stat bar is met (${c0?.earthMet})`)
   ok(!!c0 && c0.feeds.includes('earth_meal') && c0.feeds.includes('water_meal'), `C feed buttons for the meals in the bag (${c0?.feeds.join()})`)
   await shot('c-0-panel')
@@ -158,6 +162,7 @@ try {
   const c1 = await readPanel()
   ok(!!c1 && c1.bar.join() === 'mana,storm' && c1.slots[0].bg === hex(ELEMENT_COLORS.mana) && c1.slots[1].bg === hex(ELEMENT_COLORS.storm) && c1.slots[2].el === '', `C fed Mana + Storm: slot 0 mana, slot 1 storm, in their colours (${c1?.slots[0].bg}, ${c1?.slots[1].bg})`)
   ok(!!c1 && c1.formEl === null, 'C two meals: no form yet')
+  ok(c1?.steep === 'Steep 2/10', `C two meals: 'Steep 2/10' (${c1?.steep})`)
   await shot('c-1-fed')
   await p.keyboard.press('Escape'); await sleep(600)
   // reload: the bar survives
@@ -182,6 +187,7 @@ try {
   }
   const c4 = await readPanel()
   ok(stable && prev.join() === 'mana,storm,earth,earth,earth,water,water,water,water,water', `C five Water meals: each takes the next slot, no earlier slot changes (${prev.join()})`)
+  ok(c4?.steep === 'Steep 10/10', `C ten meals: 'Steep 10/10' (${c4?.steep})`)
   ok(!!c4 && c4.slots[9].bg === hex(ELEMENT_COLORS.water), `C a water slot in the water colour (${c4?.slots[9].bg})`)
   ok(stays, 'C her element stays earth (never changes)')
   ok(!!c4 && c4.locked === '1' && c4.feeds.length === 0, `C 10 meals: the bar is locked, no feed button (${c4?.locked}, ${c4?.feeds.join()})`)

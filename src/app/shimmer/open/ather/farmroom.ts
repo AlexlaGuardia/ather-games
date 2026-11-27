@@ -11,7 +11,7 @@
 //
 // PURE but for the guarded load/save. Time and randomness are injected.
 import { gardenKey } from '@/lib/keeper-local'
-import { newFarm, plant, harvest, compost, isArmed, growMs, parseGraded, seedId, CROPS, GRADES, DOSE_COST, CHARGE_CAP, COMPOST_PER_ITEM, type Farm, type Bed, type CropId, type Item } from './farming'
+import { newFarm, plant, liveCrop, harvest, compost, isArmed, growMs, parseGraded, seedId, CROPS, GRADES, DOSE_COST, CHARGE_CAP, COMPOST_PER_ITEM, type Farm, type Bed, type CropId, type Item } from './farming'
 import { putIn } from './garden-bank'
 import { roomStore, ROOM_STORE_SLOTS, type Works } from './rooms'
 import { take, type Inv } from '../shared/inventory'
@@ -105,7 +105,9 @@ const okBed = (b: unknown): b is Bed => !!b && typeof b === 'object' && (b as Be
 export function adoptFarm(raw: unknown): FarmSave {
   const v = raw as Partial<FarmSave> | null, f = v?.farm
   if (v?.v !== 1 || !f || !Array.isArray(f.beds)) return freshFarmSave()
-  const beds = Array.from({ length: BEDS }, (_, i) => (okBed(f.beds![i]) ? { crop: f.beds![i]!.crop as CropId, grade: f.beds![i]!.grade, plantedAt: f.beds![i]!.plantedAt, watered: !!f.beds![i]!.watered } : null))
+  // M204 s3: a bed growing a RETIRED crop (Rootvine) keeps growing as its replacement (Goldleaf), same grade, same planting
+  const bedsIn = f.beds.map(b => (b && typeof b === 'object' && typeof (b as Bed).crop === 'string' ? { ...(b as Bed), crop: liveCrop((b as Bed).crop) as CropId } : b))
+  const beds = Array.from({ length: BEDS }, (_, i) => (okBed(bedsIn[i]) ? { crop: bedsIn[i]!.crop as CropId, grade: bedsIn[i]!.grade, plantedAt: bedsIn[i]!.plantedAt, watered: !!bedsIn[i]!.watered } : null))
   const charge = Number.isFinite(f.charge) ? Math.max(0, Math.min(CHARGE_CAP, Math.floor(f.charge as number))) : 0
   return { v: 1, farm: { beds, charge }, starter: v.starter === true }
 }

@@ -4,7 +4,9 @@
 // OWNER, 390 x 844, swiftshader, a fresh context per case (seeded localStorage; every non-GET fetch is stubbed, so no save
 // is written anywhere). One bloomed fox planter; her pot's `meals` is the bar.
 //  1. 0 meals: no accent on her (probe accents = null).
-//  2. 3 earth meals: a PARTIAL earth accent (n 3, open, strength < 0.5, the bar's earth colour lit).
+//  2. 3 earth meals: a PARTIAL earth accent (n 3, open, strength < 0.5). ASSERT MOVED (M204 s3, canon 35c83eb: the glow is
+//     the element's canon colour, Earth BROWN): its hex is ELEMENT_COLORS.earth itself (#8a6a3a), no longer that colour 'lit'
+//     (#ffc46b, which read gold/orange).
 //  3. a MIXED 10-meal bar: LOCKED (strength 1, the count mix); RELOAD: the same locked accent.
 //  4. owner preview ?form=storm / water / mana: Vulnarc / Vulnix / Vulnara carry their effect (fx mounted on her, all 9 rig
 //     anchors found); Vulnara's gold trail lays smears while she runs. ?form=earth (Vulnore): no effect.
@@ -14,6 +16,7 @@
 import puppeteer, { type Page } from 'puppeteer-core'
 import { mkdirSync } from 'fs'
 import { accentOf } from '../src/app/shimmer/open/ather/spirit-accent'
+import { ELEMENT_COLORS } from '../src/app/shimmer/spirits/spirit'
 import { aimAt } from './lib/aim.mts'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), shots = flag('--shots', ''), KEY = process.env.OWNER_KEY
@@ -75,7 +78,7 @@ const frameMs = (p: Page) => p.evaluate(async () => { const t0 = performance.now
   await frame(p, 'a-0-meals'); await p.browserContext().close() }
 // 2. three earth
 { const p = await open(['earth', 'earth', 'earth'], ''); const a = await accent(p), want = accentOf(['earth', 'earth', 'earth'])!
-  ok(!!a && a.n === 3 && !a.locked && a.s > 0 && a.s < 0.5 && a.hex === want.hex, `2 3 earth meals: a partial earth accent (${JSON.stringify(a)}, earth ${want.hex})`)
+  ok(!!a && a.n === 3 && !a.locked && a.s > 0 && a.s < 0.5 && a.hex === want.hex && a.hex === ELEMENT_COLORS.earth && ELEMENT_COLORS.earth === '#8a6a3a', `2 3 earth meals: a partial earth accent in canon brown (${JSON.stringify(a)}, earth ${want.hex}, canon #8a6a3a)`)
   await frame(p, 'b-3-earth'); await p.browserContext().close() }
 // 3. mixed 10, then reload
 { const p = await open(MIX, ''); const a = await accent(p), want = accentOf(MIX)!

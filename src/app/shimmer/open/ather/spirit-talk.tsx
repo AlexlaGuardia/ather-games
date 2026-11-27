@@ -120,10 +120,10 @@ export function SpiritPanel({ sp, id, phone, onClose }: { sp: Parameters<typeof 
   return (
     <HearthFrame title={sheet.name} maxWidth={420} onClose={onClose} fixed dataPanel="spirit">
       <div data-spirit-sheet={sp} data-spirit-name={sheet.name} className="px-4 pt-7 pb-4">
-        {/* M204: her bar (Alex 11-26): 10 slots by her name, one per spiced meal she was fed, in its element's colour. Never resets. */}
+        {/* M204: her bar (Alex 11-26), canon's STEEP (M204 s3, 'Steep 6/10'): 10 slots by her name, one per spiced meal she was fed, in its element's colour. Never resets. */}
         {id && pot && (
           <div data-meal-bar={meals.join(',')} data-meal-locked={meals.length >= BAR_SLOTS ? '1' : '0'} className="mb-2" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-            <span className="text-[11px] font-bold uppercase" style={{ color: H.inkSoft, letterSpacing: '.1em' }}>{MEAL_UI.bar}</span>
+            <span data-steep={MEAL_UI.steep(meals.length)} className="text-[11px] font-bold uppercase tabular-nums" style={{ color: H.inkSoft, letterSpacing: '.1em', whiteSpace: 'nowrap' }}>{MEAL_UI.steep(meals.length)}</span>
             <div style={{ display: 'flex', gap: 3 }}>
               {Array.from({ length: BAR_SLOTS }, (_, k) => (
                 <span key={k} data-meal-slot={k} data-meal-el={meals[k] ?? ''} style={{ width: 14, height: 14, borderRadius: 3,

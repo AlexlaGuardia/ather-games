@@ -4,7 +4,7 @@
 // "Stock from the bag": the store rises by exactly those goods, the pack drops by them (logs/tools stay), and after a
 // RELOAD the store still holds them and the panel shows them. --phone builds at desktop size, reloads at 390x844 touch and works the panel by taps. 0 page errors.
 // SETUP (stated): bag = 20 goldwood logs (build costs 18), hotbar slots 2-3 = 5 Violetbloom seed + 3 Goldleaf crop,
-// bag slot 10 = 2 Rootvine seed. A fresh anonymous browser: never a real keeper's save.
+// bag slot 10 = 2 Stormgrass seed. A fresh anonymous browser: never a real keeper's save.
 //   npx tsx scripts/farm-stock-check.mts [--url http://localhost:3201] [--out dir] [--phone]
 import puppeteer from 'puppeteer-core'
 import { mkdirSync } from 'fs'
@@ -25,7 +25,7 @@ await p.evaluateOnNewDocument((SEED_V: string, CROP_G: string, SEED_R: string) =
   const slots: unknown[] = Array(32).fill(null)
   slots[0] = { id: 'repeater', n: 1 }; slots[1] = { id: 'waymark', n: 12 }; slots[2] = { id: SEED_V, n: 5 }; slots[3] = { id: CROP_G, n: 3 }; slots[8] = { id: 'goldwood_log', n: 20 }; slots[10] = { id: SEED_R, n: 2 }
   localStorage.setItem('open.inv.v1', JSON.stringify({ v: 1, slots, gifts: ['bait1'] })); localStorage.removeItem('open.works.v1'); localStorage.removeItem('open.farm.v1')
-}, seedId('violetbloom'), cropId('goldleaf'), seedId('rootvine'))
+}, seedId('violetbloom'), cropId('goldleaf'), seedId('stormgrass'))
 const read = (k: string) => p.evaluate(key => JSON.parse(localStorage.getItem(key) ?? 'null'), k)
 const bag = async () => { const r: Record<string, number> = {}; for (const s of ((await read('open.inv.v1'))?.slots ?? []) as ({ id: string; n: number } | null)[]) if (s) r[s.id] = (r[s.id] ?? 0) + s.n; return r }
 const store = async () => { const r: Record<string, number> = {}; for (const s of ((await read('open.works.v1'))?.rooms?.[0]?.store ?? []) as { id: string; n: number }[]) r[s.id] = (r[s.id] ?? 0) + s.n; return r }
@@ -83,7 +83,7 @@ await aimAt(p, b.x, b.z, 0.6)
 await useE('[data-panel="farm"]')
 res.panel = await p.evaluate(() => !!document.querySelector('[data-panel="farm"]'))
 res.beds = await p.evaluate(() => document.querySelectorAll('[data-bed]').length)
-const SV = seedId('violetbloom'), CG = cropId('goldleaf'), SR = seedId('rootvine')
+const SV = seedId('violetbloom'), CG = cropId('goldleaf'), SR = seedId('stormgrass')
 const bag0 = await bag(), st0 = await store()
 res.before = { bag: { sv: bag0[SV] ?? 0, cg: bag0[CG] ?? 0, sr: bag0[SR] ?? 0, logs: bag0.goldwood_log ?? 0, repeater: bag0.repeater ?? 0 }, store: { sv: st0[SV] ?? 0, cg: st0[CG] ?? 0, sr: st0[SR] ?? 0 } }
 await shot('stock-1-before')
@@ -109,5 +109,5 @@ const pass = res.panel === true && res.button === true && bf.bag.sv === 5 && bf.
   && a.store.sv === bf.store.sv + 5 && a.store.cg === bf.store.cg + 3 && a.store.sr === bf.store.sr + 2
   && a.bag.sv === 0 && a.bag.cg === 0 && a.bag.sr === 0 && a.bag.logs === bf.bag.logs && a.bag.repeater === bf.bag.repeater
   && rl.sv === a.store.sv && rl.cg === a.store.cg && rl.sr === a.store.sr && (res.panelSlots as number) >= 6 && res.overflow === false && errs.length === 0
-console.log(pass ? `PASS${phone ? ' (phone 390x844)' : ''}: Farm built → hotbar + bag farm goods (5 Violetbloom seed, 3 Goldleaf, 2 Rootvine seed) → Stock from the bag moved all 10 into the store, pack dropped by them, logs stayed → reload: store kept them, panel shows ${res.panelSlots} stacks → 0 page errors` : 'FAIL')
+console.log(pass ? `PASS${phone ? ' (phone 390x844)' : ''}: Farm built → hotbar + bag farm goods (5 Violetbloom seed, 3 Goldleaf, 2 Stormgrass seed) → Stock from the bag moved all 10 into the store, pack dropped by them, logs stayed → reload: store kept them, panel shows ${res.panelSlots} stacks → 0 page errors` : 'FAIL')
 await br.close(); process.exit(pass ? 0 : 1)

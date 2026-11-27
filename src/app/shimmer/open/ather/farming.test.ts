@@ -9,10 +9,10 @@ const MIN = 60_000, T0 = 5_000_000
 // canon's table, written out here on purpose (the module's copy is what is being checked)
 const CANON: Record<string, [string, number, number]> = {
   goldleaf: ['Goldleaf', 1, 5], ather_wheat: ['Ather Wheat', 1, 8], dewdrop_vine: ['Dewdrop Vine', 1, 10],
-  violetbloom: ['Violetbloom', 2, 20], stormgrass: ['Stormgrass', 2, 20], rootvine: ['Rootvine', 2, 25], tidepetal: ['Tidepetal', 2, 20],
+  violetbloom: ['Violetbloom', 2, 20], stormgrass: ['Stormgrass', 2, 20], tidepetal: ['Tidepetal', 2, 20],
   starbloom: ['Starbloom', 3, 45], heartleaf: ['Heartleaf', 3, 60], ather_lily: ['Ather Lily', 4, 120],
 }
-ok(Object.keys(CROPS).length === 10 && Object.keys(CANON).length === 10, 'canon: crop count is not 10')
+ok(Object.keys(CROPS).length === 9 && Object.keys(CANON).length === 9, 'canon: crop count is not 9 (canon\'s 10 less Rootvine, retired 35c83eb)')
 for (const [id, [name, tier, min]] of Object.entries(CANON)) {
   const c = CROPS[id as CropId]
   ok(!!c && c.name === name && c.tier === tier && c.growMs === min * MIN, `canon: ${id} drifted from canon (${name}, tier ${tier}, ${min} min)`)
@@ -33,7 +33,7 @@ const armedFarm = (f: Farm, items = DOSE_COST): Farm => compost(f, [{ id: 'junk'
 }
 // watering is exactly 0.75; armed stacks
 {
-  const f = planted('rootvine'), t = CROPS.rootvine.growMs
+  const f = planted('stormgrass'), t = CROPS.stormgrass.growMs
   const w = water(f, 0, T0 + 1); ok(w.ok, 'water: refused a fresh bed')
   if (w.ok) {
     const b = w.farm.beds[0]!

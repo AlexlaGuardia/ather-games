@@ -18,6 +18,7 @@
 //
 // ★ PURE: no React, no DOM except the guarded load/save.
 import { gardenKey } from '@/lib/keeper-local'
+import { renameRetired } from './farming'   // M204 s3: retired crops
 import { CHEST_SLOTS } from '../../voxel3d/chest'
 import { HOTBAR, SLOTS, ITEM_GROUP, itemDef, give, type Inv, type Stack, type ItemGroup } from '../shared/inventory'
 
@@ -112,7 +113,10 @@ export const BANK_KEY = 'open.bank.v1'
 export function adoptBank(v: unknown): Bank {
   const raw = (v as { v?: number; stacks?: unknown })?.stacks
   if ((v as { v?: number })?.v !== 1 || !Array.isArray(raw)) return freshBank()
-  return { v: 1, stacks: raw.filter((s): s is Stack => !!s && typeof s.id === 'string' && Number.isFinite(s.n) && s.n >= 1).map(s => ({ id: s.id, n: Math.floor(s.n) })) }
+  const stacks = raw.filter((s): s is Stack => !!s && typeof s.id === 'string' && Number.isFinite(s.n) && s.n >= 1).map(s => ({ id: s.id, n: Math.floor(s.n) }))
+  // M204 s3: a RETIRED crop (Rootvine, canon 35c83eb) comes back as its replacement (Goldleaf), in place, grade + count kept
+  // (renamed, never merged: a bank may hold several stacks of one id, each within its stack size, so nothing moves or spills)
+  return { v: 1, stacks: stacks.some(s => renameRetired(s.id) !== s.id) ? stacks.map(s => ({ id: renameRetired(s.id), n: s.n })) : stacks }
 }
 export function loadBank(): Bank {
   try { return adoptBank(JSON.parse(localStorage.getItem(gardenKey(BANK_KEY)) ?? 'null')) } catch { return freshBank() }

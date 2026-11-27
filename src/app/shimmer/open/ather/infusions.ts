@@ -15,7 +15,8 @@
 // (the bar, MEALS_FOR_FORM and the form gate below are unchanged). Names = Alex's working words, canon [OPEN] (athernyx
 // CANON_GAPS 'Cooking, part 2'), for @lark. ROOTVINE IS RETIRED (Alex: "too close to rootbulb"): no tree turns it up any more.
 // Old saves: a `<el>_spice` in a bag is RENAMED in place to its element's infusion when the bag loads (inventory.ts loadInv,
-// LEGACY_SPICE), so a keeper loses nothing; a crop:rootvine already held stays an inert crop.
+// LEGACY_SPICE), so a keeper loses nothing. M204 s3 (canon 35c83eb): Rootvine is gone from the crop roster; a held or growing
+// Rootvine loads as Goldleaf, the earth herb, grade and count kept (farming.ts RETIRED_CROPS).
 //
 // Herb finds (M204, Jin's application of canon's herb grounds, alchemy.md 07-30): a herb is FOUND at a node the keeper
 // already works. Stormgrass feeds the Storm Broth; Tidepetal + Violetbloom stay finds (canon herbs, growable crops).
@@ -33,9 +34,9 @@ import type { Pot } from './spirit-seeds'
 export const ELEMENTS: readonly FormElement[] = ['mana', 'storm', 'earth', 'water']
 export const isElement = (v: unknown): v is FormElement => typeof v === 'string' && (ELEMENTS as readonly string[]).includes(v)
 
-/** canon's herb per element (alchemy.md); only the finds below are dropped. Earth's (Rootvine) is retired from play (M207). */
+/** the herbs a FIND turns up (alchemy.md); earth has none: Goldleaf (canon's earth herb since 35c83eb) is a tier-1 crop grown from seed. */
 export const HERB_OF: Readonly<Partial<Record<FormElement, CropId>>> = { mana: 'violetbloom', storm: 'stormgrass', water: 'tidepetal' }
-/** which tree's pruning turns up which herb (Jin's application, above); goldwood + shimmeroak none (M207: Rootvine retired) */
+/** which tree's pruning turns up which herb (Jin's application, above); goldwood + shimmeroak none (M207: no earth find) */
 export const TREE_HERB: Readonly<Record<string, FormElement>> = { starwillow: 'water', dawnwood: 'storm' }
 /** which crystal's breaking turns up which herb */
 export const CRYSTAL_HERB: Readonly<Record<string, FormElement>> = { violet: 'mana' }
@@ -146,13 +147,15 @@ export function settleForm(pot: Pot, sp: Species, statOf: StatOf): { pot: Pot; e
 export const MEAL_UI = {
   infusionBlurb: (el: string, station: string) => `Made at the ${station}. Cook it into a ${el} Meal at the hearth.`,
   mealName: (el: string) => `${el} Meal`,
-  mealBlurb: (el: string) => `A ${el} meal. Open a garden spirit's panel and feed it to her: it adds ${el} to her bar, for good.`,
+  mealBlurb: (el: string) => `A ${el} meal. Open a garden spirit's panel and feed it to her: it adds ${el} to her Steep, for good.`,
   make: 'Make',
   infusions: 'Meal ingredients',
-  bar: 'Element',
+  /** M204 s3: canon's word for the bar (alchemy.md › THE COOKING ROAD: UI word *Steep*, e.g. *Steep 6/10*) */
+  bar: 'Steep',
+  steep: (n: number) => `Steep ${n}/${BAR_SLOTS}`,
   feed: (meal: string) => `Feed ${meal}`,
-  fed: (el: string, n: number) => `${el} · ${n} / ${BAR_SLOTS}`,
+  fed: (el: string, n: number) => `${el} · Steep ${n}/${BAR_SLOTS}`,
   evolved: (form: string) => `She takes her second form: ${form}`,
-  locked: 'Her bar is full.',
+  locked: 'Her Steep is full.',
   meals: (el: string, n: number) => `Leaning ${el}: ${n} / ${MEALS_FOR_FORM} meals`,
 }

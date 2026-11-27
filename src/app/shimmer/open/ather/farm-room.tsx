@@ -221,7 +221,7 @@ const WOOD_C = '#8f6038', SOIL = '#4a3020', FRAME = '#a77a4a'
 /** Where bed i sits, in the room's local metres (x across, z depth; the door is at −z, the standing spot at +1.6). */
 export const bedAt = (i: number) => ({ x: i < 3 ? -2.5 : 2.5, z: [-1.4, 0, 1.4][i % 3] })
 /** One tint per crop for the ripe bloom (simple: a colour each, no drawing per crop). */
-const BLOOM: Record<CropId, string> = { goldleaf: '#e8c24a', ather_wheat: '#e6d28a', dewdrop_vine: '#8fd6e8', violetbloom: '#a97ae0', stormgrass: '#e9e46a', rootvine: '#c98a5a', tidepetal: '#5fb8d8', starbloom: '#fff2a8', heartleaf: '#e86a7a', ather_lily: '#f5d8ff' }
+const BLOOM: Record<CropId, string> = { goldleaf: '#e8c24a', ather_wheat: '#e6d28a', dewdrop_vine: '#8fd6e8', violetbloom: '#a97ae0', stormgrass: '#e9e46a', tidepetal: '#5fb8d8', starbloom: '#fff2a8', heartleaf: '#e86a7a', ather_lily: '#f5d8ff' }
 const LEAF = '#5fb04a', LEAF_DK = '#3f8a3a'
 const SPOTS: [number, number][] = [[-0.5, -0.22], [0.05, 0.2], [0.52, -0.15]]
 

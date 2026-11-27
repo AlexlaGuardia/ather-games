@@ -23,16 +23,29 @@ export const GRADES: readonly Grade[] = Object.freeze(['D', 'C', 'B', 'A', 'S'] 
 export const DEFAULT_GRADE: Grade = 'D'
 
 const MIN = 60_000
-export type CropId = 'goldleaf' | 'ather_wheat' | 'dewdrop_vine' | 'violetbloom' | 'stormgrass' | 'rootvine' | 'tidepetal' | 'starbloom' | 'heartleaf' | 'ather_lily'
+export type CropId = 'goldleaf' | 'ather_wheat' | 'dewdrop_vine' | 'violetbloom' | 'stormgrass' | 'tidepetal' | 'starbloom' | 'heartleaf' | 'ather_lily'
 export interface Crop { id: CropId; name: string; tier: 1 | 2 | 3 | 4; growMs: number }
 const C = (id: CropId, name: string, tier: 1 | 2 | 3 | 4, min: number): Crop => Object.freeze({ id, name, tier, growMs: min * MIN })
-/** Canon's resource tables, exactly (growth time per tier row). */
+/** Canon's resource tables, exactly (growth time per tier row), less RETIRED_CROPS (below). */
 export const CROPS: Readonly<Record<CropId, Crop>> = Object.freeze({
   goldleaf: C('goldleaf', 'Goldleaf', 1, 5), ather_wheat: C('ather_wheat', 'Ather Wheat', 1, 8), dewdrop_vine: C('dewdrop_vine', 'Dewdrop Vine', 1, 10),
-  violetbloom: C('violetbloom', 'Violetbloom', 2, 20), stormgrass: C('stormgrass', 'Stormgrass', 2, 20), rootvine: C('rootvine', 'Rootvine', 2, 25), tidepetal: C('tidepetal', 'Tidepetal', 2, 20),
+  violetbloom: C('violetbloom', 'Violetbloom', 2, 20), stormgrass: C('stormgrass', 'Stormgrass', 2, 20), tidepetal: C('tidepetal', 'Tidepetal', 2, 20),
   starbloom: C('starbloom', 'Starbloom', 3, 45), heartleaf: C('heartleaf', 'Heartleaf', 3, 60),
   ather_lily: C('ather_lily', 'Ather Lily', 4, 120),
 })
+
+/** M204 s3 (canon 35c83eb, game/alchemy.md › THE COOKING ROAD › Herbs): ROOTVINE IS RETIRED (too close to Rootbulb) and
+ *  GOLDLEAF takes its place as the earth herb. A retired crop is gone from CROPS; whatever a keeper still holds of it (a
+ *  seed, a crop, a growing bed) comes back as its replacement at the SAME grade and count, so nothing is lost. */
+export const RETIRED_CROPS: Readonly<Record<string, CropId>> = Object.freeze({ rootvine: 'goldleaf' })
+/** an id with a retired crop in it (`seed:rootvine:B`) -> the same id with its replacement (`seed:goldleaf:B`); anything else as is */
+export function renameRetired(id: string): string {
+  if (typeof id !== 'string') return id
+  const p = id.split(':')
+  return p.length === 3 && (p[0] === 'seed' || p[0] === 'crop') && Object.prototype.hasOwnProperty.call(RETIRED_CROPS, p[1]) ? `${p[0]}:${RETIRED_CROPS[p[1]]}:${p[2]}` : id
+}
+/** a bed's crop, a retired one replaced */
+export const liveCrop = (crop: string): string => (Object.prototype.hasOwnProperty.call(RETIRED_CROPS, crop) ? RETIRED_CROPS[crop] : crop)
 
 // ── tunables ───────────────────────────────────────────────────────────────────────────────────────────────────
 export const WATER_MULT = 0.75            // canon: watering reduces growth time by 25%

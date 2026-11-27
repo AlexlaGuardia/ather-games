@@ -3,8 +3,11 @@
 // Run: npx tsx src/app/shimmer/open/ather/infusions.test.ts
 import { readFileSync } from 'node:fs'
 import { HERB_OF, TREE_HERB, CRYSTAL_HERB, HERB_FIND_CHANCE, rollHerb, feedMeal, settleForm, mealsOf, mealCounts, mealLean, mealId,
-  elementOfMeal, BAR_SLOTS, MEALS_FOR_FORM, ELEMENTS, INFUSION, infusionId, infusionsAt, infusionTake, elementOfInfusion, LEGACY_SPICE } from './infusions'
-import { itemDef as def2, renameSpices, newInv, give } from '../shared/inventory'
+  elementOfMeal, BAR_SLOTS, MEALS_FOR_FORM, ELEMENTS, INFUSION, infusionId, infusionsAt, infusionTake, elementOfInfusion, LEGACY_SPICE, MEAL_UI } from './infusions'
+import { itemDef as def2, renameSpices, renameRetiredCrops, newInv, give } from '../shared/inventory'
+import { renameRetired, parseGraded, CROPS } from './farming'   // M204 s3
+import { adoptBank } from './garden-bank'
+import { adoptFarm } from './farmroom'
 import { ALC_STATIONS } from './alchemy-set'
 import { GEM, CRYSTAL_ITEM } from './prospecting'
 import { prunePlan } from './forestry'
@@ -96,7 +99,23 @@ const conv = renameSpices(oldBag)
 const cnt = (i: typeof conv, id: string) => i.slots.reduce((a, x) => a + (x?.id === id ? x.n : 0), 0)
 ok(cnt(conv, 'golden_tonic') === 2 && cnt(conv, 'aqual_sauce') === 1, 'old spices load as Golden Tonic x2 + Aqual Sauce x1')
 ok(!conv.slots.some(x => x?.id.endsWith('_spice')), 'no spice left in the bag')
-ok(cnt(conv, 'crop:rootvine:D') === 3, 'a held Rootvine stays (an inert crop)')
+ok(cnt(conv, 'crop:rootvine:D') === 3, 'renameSpices alone leaves crops alone')
+// ── 3d. M204 s3 (canon 35c83eb: Rootvine RETIRED, Goldleaf the earth herb): whatever a keeper holds of Rootvine comes back as
+// Goldleaf, grade + count kept: the bag, the garden bank (and every room store, same parser), a growing bed
+{
+  let b = give(newInv(0), 'crop:rootvine:A', 3).inv; b = give(b, 'seed:rootvine:D', 2).inv; b = give(b, 'crop:goldleaf:A', 1).inv; b = give(b, 'crop:stormgrass:B', 4).inv
+  const r = renameRetiredCrops(b)
+  ok(cnt(r, 'crop:goldleaf:A') === 4 && cnt(r, 'seed:goldleaf:D') === 2 && cnt(r, 'crop:stormgrass:B') === 4, 'bag: 3 Rootvine A + 2 Rootvine seed D load as Goldleaf A (+1 held = 4) + 2 Goldleaf seed D; Stormgrass untouched')
+  ok(!r.slots.some(x => x?.id.includes('rootvine')), 'bag: no Rootvine left')
+  ok(r.slots.every((x, k) => !x === !b.slots[k]), 'bag: the slots stay where they were')
+  ok(renameRetiredCrops(conv) !== conv && renameRetiredCrops(r) === r, 'bag: one with no Rootvine is returned as is')
+  ok(renameRetired('crop:rootvine:S') === 'crop:goldleaf:S' && renameRetired('seed:rootvine:C') === 'seed:goldleaf:C' && renameRetired('rootvine_coil') === 'rootvine_coil' && renameRetired('crop:stormgrass:D') === 'crop:stormgrass:D', 'renameRetired: graded seed/crop ids only, grade kept')
+  ok(parseGraded('crop:rootvine:D') === null && !('rootvine' in CROPS), 'Rootvine is gone from the crop roster')
+  const bank = adoptBank({ v: 1, stacks: [{ id: 'crop:rootvine:B', n: 7 }, { id: 'crop:goldleaf:B', n: 2 }, { id: 'aqual_sauce', n: 1 }] })
+  ok(bank.stacks.length === 3 && bank.stacks[0].id === 'crop:goldleaf:B' && bank.stacks[0].n === 7 && bank.stacks[1].n === 2 && bank.stacks[2].id === 'aqual_sauce', `bank: Rootvine B x7 loads as Goldleaf B x7, in place (${JSON.stringify(bank.stacks)})`)
+  const farm = adoptFarm({ v: 1, farm: { beds: [{ crop: 'rootvine', grade: 'A', plantedAt: 1000, watered: true }, { crop: 'stormgrass', grade: 'D', plantedAt: 5, watered: false }], charge: 3 }, starter: true })
+  ok(farm.farm.beds[0]?.crop === 'goldleaf' && farm.farm.beds[0]?.grade === 'A' && farm.farm.beds[0]?.plantedAt === 1000 && farm.farm.beds[0]?.watered === true && farm.farm.beds[1]?.crop === 'stormgrass', `farm: a growing Rootvine bed grows on as Goldleaf, grade + planting kept (${JSON.stringify(farm.farm.beds.slice(0, 2))})`)
+}
 ok(conv.slots.length === oldBag.slots.length && conv.slots.every((x, k) => !x === !oldBag.slots[k]), 'the slots stay where they were')
 ok(renameSpices(newInv(0)) === newInv(0) || renameSpices(conv) === conv, 'a bag with no spice is returned as is')
 ok(Object.keys(LEGACY_SPICE).length === 4 && ELEMENTS.every(el => LEGACY_SPICE[`${el}_spice`] === INFUSION[el].id), 'every old spice maps to its element\'s infusion')
@@ -158,5 +177,12 @@ if (ev.ok) {
 const src = readFileSync('src/app/shimmer/open/ather/infusions.ts', 'utf8')
 ok(!/Infusion'|Pour /.test(src), 'no brewed-Infusion words left in the cooking file')
 
+// ── M204 s3: the bar is canon's STEEP (alchemy.md › THE COOKING ROAD: "UI word: *Steep* (e.g. *Steep 6/10*)"), read from the file
+{
+  const alc = readFileSync('/root/athernyx/CANON/game/alchemy.md', 'utf8'), m = /UI word: \*([A-Za-z]+)\* \(e\.g\. \*([^*]+)\*\)/.exec(alc)
+  ok(!!m && MEAL_UI.bar === m[1] && MEAL_UI.steep(6) === m[2], `the bar's word is canon's, word for word (${m?.[1]} / ${m?.[2]} vs ${MEAL_UI.bar} / ${MEAL_UI.steep(6)})`)
+  ok(/at \*\*10 meals the Steep is full and SET\*\*/.test(alc) && BAR_SLOTS === 10, 'canon: 10 meals and the Steep is set; the build: 10 slots')
+  ok(MEAL_UI.steep(0) === 'Steep 0/10' && MEAL_UI.steep(10) === 'Steep 10/10' && MEAL_UI.fed('Earth', 4) === 'Earth · Steep 4/10', 'Steep n/10 in the panel and the fed line')
+}
 if (fails.length) { console.error(`FAIL ${fails.length}:\n  ` + fails.join('\n  ')); process.exit(1) }
 console.log(`infusions.test ${pass} ok`)
