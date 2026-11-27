@@ -31,10 +31,13 @@ try {
     localStorage.setItem('open.inv.v1', JSON.stringify({ v: 1, slots, gifts: ['bait1'] }))
   }, KEPT)
   await p.goto(`${url}/shimmer/open/ather?hour=13`, { waitUntil: 'load', timeout: 240000 })
+  if (PHONE) { await sleep(8000); await dismissStartCard(p, 60000) }   // the phone card can sit over the boot
   await p.waitForFunction(() => !!(window as any).__ather?.state, { timeout: 240000 }); await sleep(2500)
   if (PHONE) await dismissStartCard(p)
   if (PHONE) {
-    const b = await p.evaluate(() => { const e = [...document.querySelectorAll<HTMLElement>('[data-touch-cluster] button, button')].find(x => /(^|\s)pack$/i.test((x.innerText ?? '').trim())); const r = e?.getBoundingClientRect(); return r ? { x: r.x + r.width / 2, y: r.y + r.height / 2 } : null })
+    const m = await p.evaluate(() => { const r = document.querySelector<HTMLElement>('[data-touch="menu"]')?.getBoundingClientRect(); return r ? { x: r.x + r.width / 2, y: r.y + r.height / 2 } : null })   // the pack chip lives in the MENU
+    if (m) { await p.touchscreen.tap(m.x, m.y); await sleep(600) }
+    const b = await p.evaluate(() => { const e = document.querySelector<HTMLElement>('[data-touch="pack"]'); const r = e?.getBoundingClientRect(); return r ? { x: r.x + r.width / 2, y: r.y + r.height / 2 } : null })
     ok(!!b, '0. phone: the pack button is there')
     if (b) await p.touchscreen.tap(b.x, b.y)
   } else await p.keyboard.press('KeyI')
