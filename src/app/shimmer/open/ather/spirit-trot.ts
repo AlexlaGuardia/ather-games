@@ -152,7 +152,7 @@ function segDist(a: { x: number; z: number }, b: { x: number; z: number }, k: { 
 /** where the keeper is (world xz; yaw 0 looks down -z) */
 /** M126 s1: `slot` = her place in the formation (shared/follow-formation.ts): where she walks to and, stood there, which way
  *  she faces. No slot = the old ring round the keeper (a call home, the tests' bare keeper). */
-export type FollowTarget = () => { x: number; z: number; yaw: number; slot?: { x: number; z: number; face: number; act?: 'sniff' | 'lie' } | null }
+export type FollowTarget = () => { x: number; z: number; yaw: number; slot?: { x: number; z: number; face: number; act?: 'sniff' | 'lie'; /** M141 s2: a fetch is never faster than the keeper walks */ vMax?: number } | null }
 
 const TAU = Math.PI * 2
 const wrap = (a: number) => ((a + Math.PI) % TAU + TAU) % TAU - Math.PI
@@ -491,7 +491,7 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
         if (goal && Math.hypot(end.x - pos.x, end.z - pos.z) < F.settle) fGo = false
         else {
           const behind = sl ? Math.hypot(end.x - pos.x, end.z - pos.z) : Math.max(0, d - F.slot)
-          const v = clamp(D.speed * 0.8 + kV + behind * F.catchK, D.speed * 0.5, F.vMax) * (D.planted && d >= F.keep + 0.2 ? (1 - sitK) * clamp(Math.cos(wrap(Math.atan2(tg.x - pos.x, tg.z - pos.z) - yaw)), 0.3, 1) : 1), stp = Math.min(gd - (goal ? 0 : F.slot), v * dt)
+          const v = Math.min(sl?.vMax ?? F.vMax, clamp(D.speed * 0.8 + kV + behind * F.catchK, D.speed * 0.5, F.vMax)) * (D.planted && d >= F.keep + 0.2 ? (1 - sitK) * clamp(Math.cos(wrap(Math.atan2(tg.x - pos.x, tg.z - pos.z) - yaw)), 0.3, 1) : 1), stp = Math.min(gd - (goal ? 0 : F.slot), v * dt)
           const h0 = Math.atan2(tg.x - pos.x, tg.z - pos.z)
           let moved = false
           if (stp > 1e-4) for (let i = 0; i < 9 && !moved; i++) {

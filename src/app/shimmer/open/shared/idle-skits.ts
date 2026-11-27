@@ -149,6 +149,8 @@ const nowMs = () => (typeof performance !== 'undefined' ? performance.now() : Da
 /** combat-layer: a Hollow stands within SKIT.hollowR of the keeper this frame (no skits while they are about) */
 export function noteHollowNear(now = nowMs()) { hollowUntil = now + SKIT.hollowHold * 1000; run = null }
 export const skitsOn = () => !!run
+/** M141 s2: a Hollow was about (the same hold as the skits'): no fetching then */
+export const hollowAbout = (now = nowMs()) => now < hollowUntil
 /** Step the skits (the first call in a frame does it) and read this follower's skit slot. null = its formation slot. */
 export function skitSlot(id: string, k: Keeper, now = nowMs()): SkitSlot | null {
   if (tickedAt < 0 || now - tickedAt >= 4) {

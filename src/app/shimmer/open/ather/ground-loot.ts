@@ -87,6 +87,15 @@ export function claimLoot(id: string, who: string): boolean {
 }
 export function releaseLoot(id: string, who: string): void { if (claims.get(id) === who) claims.delete(id) }
 export const holderOf = (id: string) => claims.get(id)
+/** s2: the holder sets it down somewhere else (a spirit called off with it in her mouth; a toss into a full bag lands at the
+ *  keeper's feet). Saved; same id, same n, same life: never a second drop. False = gone, or another holds it. The claim stays. */
+export function moveLoot(id: string, who: string, to: Spot3): boolean {
+  const h = shelfOf(id); fresh(h)
+  const d = h.loot.find(o => o.id === id)
+  if (!d || claims.get(id) !== who || ![to.x, to.y, to.z].every(num)) return false
+  h.loot = h.loot.map(o => (o === d ? { ...d, x: to.x, y: to.y, z: to.z } : o)); save(h)
+  return true
+}
 /** The one way out of the record: `give` puts n in the bag and answers what did not fit (that stays on the ground). Null = not
  *  there any more, or another holds it. The claim is over either way. */
 export function payLoot(id: string, who: string, give: (item: string, n: number) => number, now = Date.now()): { item: string; got: number; left: number } | null {

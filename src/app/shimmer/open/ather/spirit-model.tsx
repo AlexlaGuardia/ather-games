@@ -29,6 +29,7 @@ import { slotOf } from './spirit-seeds'   // M122: a spirit's slot in her plante
 import { fightSlot } from '../shared/spirit-fight'   // M127 s1
 import { joinFormation, leaveFormation, tickFormation, formationSlot, reportFormationPos, inFormation } from '../shared/follow-formation'   // M126 s1
 import { skitSlot } from '../shared/idle-skits'   // M126 s2
+import { fetchSlot, joinFetch, leaveFetch } from './spirit-fetch'   // M141 s2
 import { bodyRadius } from './obstacles'
 import { gardenFollow, gardenGround } from './garden-follow'   // M126
 import { GROUND_Y } from './plot'
@@ -204,15 +205,16 @@ function SpiritModel({ sp, look, nav, id, avatar, dev, meals, gallery, clip }: {
   useEffect(() => {
     if (!trot || !id || !dev) return
     // M126 s1: a following spirit takes her place in the one formation (shared/follow-formation.ts), spaced by her body
-    const target = () => { tickFormation(keeperAt); return { x: keeperAt.x, z: keeperAt.z, yaw: keeperAt.yaw, slot: fightSlot(id) ?? skitSlot(id, keeperAt) ?? formationSlot(id) } }   // M127: a fight's spot first;   // M126 s2: idle = her skit's spot
+    const target = () => { tickFormation(keeperAt); return { x: keeperAt.x, z: keeperAt.z, yaw: keeperAt.yaw, slot: fightSlot(id) ?? fetchSlot(id) ?? skitSlot(id, keeperAt) ?? formationSlot(id) } }   // M141 s2: her fetch before her skit   // M127: a fight's spot first;   // M126 s2: idle = her skit's spot
     const sync = () => {
       const on = isFollowing(id)
       if (on && nav) joinFormation({ id, kind: 'spirit', r: bodyRadius(GROWN[sp] ?? { height: 0.5 }), blocked: (x, z) => (fnav && gardenGround() ? fnav.slotBlocked(x, z) : nav.blocked(x, z)), y: fnav ? (x, z, near) => (gardenGround() ? fnav.height(x, z, near) : null) : undefined })
       else leaveFormation(id)
+      if (on) joinFetch(id, sp); else leaveFetch(id)   // M141 s2: only a following spirit fetches
       trot.follow(on ? target : null)
     }
     sync(); const off = subscribeFollow(sync)
-    return () => { off(); spiritLive.delete(id); leaveFormation(id) }
+    return () => { off(); spiritLive.delete(id); leaveFormation(id); leaveFetch(id) }
   }, [trot, id, dev, nav, sp, fnav])
   // M109 s4 THE PARTY KEEPS NEAR: while her planter id is in the party she picks her runs round the keeper (loose company)
   useEffect(() => {

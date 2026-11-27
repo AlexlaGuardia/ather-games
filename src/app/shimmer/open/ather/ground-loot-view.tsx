@@ -13,6 +13,10 @@ import { DEWL, DEWL_FIRST, markFirstDewl } from './dewl'
 import { CRYSTAL_ITEM, type CrystalKind } from './prospecting'
 import { CRYSTAL_LOOK } from './crystal-nodes'
 import { claimLoot, inPull, lootNow, payLoot, releaseLoot, type Loot, type LootPlace, type Spot3 } from './ground-loot'
+import { endFetch, fetchCarried, fetchState, tickFetch } from './spirit-fetch'   // M141 s2
+import { spiritLive } from './spirit-follow'
+import { hollowAbout } from '../shared/idle-skits'
+import { fightSlot } from '../shared/spirit-fight'
 
 const ME = 'keeper', FLY_S = 0.4, FALL_MS = 450, SAY_S = 0.9, MAX = 48, SEE_M = 70
 export const LOOT_FULL = 'Your bag is full.'   // the wording the bag already uses (melee-view, shipyard-plot)
@@ -42,13 +46,20 @@ export function GroundLoot({ keeper, ground, can, place = 'wilds' }: {
   const drop = () => { for (const id of fly.current.keys()) releaseLoot(id, ME); fly.current.clear() }
   useEffect(() => {
     const g = window as unknown as { __ather?: Record<string, unknown> }
-    g.__ather = { ...(g.__ather ?? {}), loot: () => lootNow(Date.now(), place).map(d => ({ ...d })) }   // checks: READ only
+    g.__ather = { ...(g.__ather ?? {}), loot: () => lootNow(Date.now(), place).map(d => ({ ...d })), fetch: fetchState }   // checks: READ only
     const f = fly.current
-    return () => { for (const id of f.keys()) releaseLoot(id, ME); f.clear() }   // left the Wilds mid-flight: it is on the ground
+    return () => { for (const id of f.keys()) releaseLoot(id, ME); f.clear(); endFetch() }   // M141 s2: a spirit's hold too   // left the Wilds mid-flight: it is on the ground
   }, [place])
   useFrame((_, dtRaw) => {
-    const dt = Math.min(0.1, dtRaw), now = Date.now(), all = lootNow(now, place), f = keeper(), tm = T.current
-    if (!can()) drop()
+    const dt = Math.min(0.1, dtRaw), now = Date.now(), all = lootNow(now, place), f = keeper(), tm = T.current, may = can()
+    // M141 s2: a following spirit's fetch (spirit-fetch.ts) first; the keeper walking up to a drop she is going for takes it
+    tickFetch({ now, dt, keeper: f, loot: all, hollow: hollowAbout(), fighting: id => fightSlot(id) !== null, can: may, fits: item => give(getInv(), item, 1).left === 0,
+      at: id => { const s = spiritLive.get(id); return s && now - s.at < 500 ? { x: s.x, y: s.y, z: s.z } : null },
+      keeperTakes: d => may && inPull(d, f, now) && fits(d),
+      pay: (id, who) => { const r = payLoot(id, who, (item, n) => { const g = give(getInv(), item, n); if (g.left < n) setInv(g.inv); return g.left }, now)
+        if (r && r.got > 0) { sfx('pickup-item'); got.current.set(r.item, (got.current.get(r.item) ?? 0) + r.got); gotT.current = SAY_S } } })
+    const held = new Map(fetchCarried().map(c => [c.loot, c]))
+    if (!may) drop()
     else {
       let blocked = false
       for (const d of all) {
@@ -70,14 +81,20 @@ export function GroundLoot({ keeper, ground, can, place = 'wilds' }: {
       got.current.clear()
     }
     const count = [0, 0, 0, 0], t = now / 1000
-    for (const d of all) {
+    for (const d of lootNow(now, place)) {   // read again: a toss may have landed this frame
       const L = lookOf(d.item), mesh = meshes[L.m].current
       if (!mesh || count[L.m] >= MAX || Math.abs(d.x - f.x) > SEE_M || Math.abs(d.z - f.z) > SEE_M) continue
       const g = ground(d.x, d.z), y = Number.isFinite(g) ? g : d.y, w = fly.current.get(d.id), k = (d.x * 7 + d.z * 13) % 6.28
       const fall = Math.max(0, 1 - (now - d.at) / FALL_MS)
       tm.p.set(d.x, y + 0.3 + Math.sin(t * 2 + k) * 0.05 + 2.2 * (1 - (1 - fall) * (1 - fall)), d.z)
       let s = 1
-      if (w) { const u = Math.min(1, w.t / FLY_S), e = u * u; tm.p.lerp(tm.s.set(f.x, f.y + 0.9, f.z), e); tm.p.y += Math.sin(u * Math.PI) * 0.4; s = 1 - 0.5 * e }
+      const c = held.get(d.id)
+      if (c) {   // M141 s2: in her mouth, or in the air on its way to the keeper
+        const top = (spiritLive.get(c.spirit)?.h ?? 0.5) * 0.75
+        tm.p.set(c.at.x, c.at.y + top, c.at.z)
+        if (c.phase === 'toss' && c.from) { const u = c.u; tm.p.set(c.from.x + (f.x - c.from.x) * u, c.from.y + top + (f.y + 0.9 - c.from.y - top) * u + Math.sin(u * Math.PI) * 1.1, c.from.z + (f.z - c.from.z) * u) }
+        s = 0.8
+      } else if (w) { const u = Math.min(1, w.t / FLY_S), e = u * u; tm.p.lerp(tm.s.set(f.x, f.y + 0.9, f.z), e); tm.p.y += Math.sin(u * Math.PI) * 0.4; s = 1 - 0.5 * e }
       mesh.setMatrixAt(count[L.m], tm.m.compose(tm.p, tm.q.setFromEuler(tm.e.set(L.m === 0 ? 1.25 : 0.2, t * 0.8 + k, 0)), tm.s.set(s, s * (L.m === 1 ? 1.6 : 1), s)))
       if (L.m === 3) inner.current?.setMatrixAt(count[3], tm.m)
       mesh.setColorAt(count[L.m], tm.c.set(L.c)); count[L.m]++
