@@ -97,8 +97,9 @@ try {
   ok(picks.includes('goldwood_plank'), `6. search "goldwood pl" finds Goldwood Plank (${picks.join(', ')})`)
   await (await p.$('[data-x-pick="goldwood_plank"]'))!.click(); await sleep(600)
   await p.screenshot({ path: `${out}/d-search.png` })
-  const setField = async (sel: string, v: string) => { await p.$eval(sel, (e: any) => { e.focus(); e.select?.() }); await p.click(sel, { clickCount: 3 }); await p.keyboard.press('Backspace'); await p.type(sel, v) }
-  const bagPlanks = () => p.evaluate(() => (JSON.parse(localStorage.getItem('open.inv.v1') ?? '{"slots":[]}').slots as any[]).reduce((a, s) => a + (s?.id === 'goldwood_plank' ? s.n : 0), 0))
+  const setField = async (sel: string, v: string) => { await p.focus(sel); for (let i = 0; i < 8; i++) await p.keyboard.press('Backspace'); await p.type(sel, v) }
+  // the bag as the panel reads it (the save key is per keeper): "you have N"
+  const bagPlanks = () => p.evaluate(() => Number((document.querySelector('[data-x-form]')?.textContent ?? '').match(/you have (\d+)/)?.[1] ?? -1))
   const before = await bagPlanks()
   await (await p.$('[data-x-side="sell"]'))!.click(); await setField('[data-x-n]', '3'); await setField('[data-x-price]', '7')
   await (await p.$('[data-x-place]'))!.click(); await sleep(2500)
