@@ -69,7 +69,7 @@ try {
       localStorage.setItem(`${pre}ather.spiritStats.v1`, JSON.stringify({ 'vx-m233': { form: 'base', g: { agi: 10 }, plays: 0, xp: 0, grown: 0 } }))
     }
   }, { TUT, POTS, id: KA.id } as any)
-  await p.goto(`${url}/shimmer/open/ather?hour=14&clashx=8&clashseed=${SEED}`, { waitUntil: 'load', timeout: 240000 })
+  await p.goto(`${url}/shimmer/open/ather?hour=14&clashx=4&clashseed=${SEED}`, { waitUntil: 'load', timeout: 240000 })
   await p.waitForFunction(() => !!(window as any).__ather?.travel, { timeout: 180000, polling: 1000 })
   await sleep(3000)
   try { await dismissStartCard(p) } catch (e) { await p.screenshot({ path: `${out}/0-start-stuck.png` }); for (let i = 0; i < 3; i++) { await p.keyboard.press('Escape'); await sleep(600) }; await dismissStartCard(p) }
@@ -137,13 +137,13 @@ try {
       })
       if (st.old) oldScene = true
       if (!ringInfo && st.canvas && st.models.split(',').filter(Boolean).length >= 2) { ringInfo = st; await sleep(800); await p.screenshot({ path: `${out}/2b-ring-troupe-bout.png` }) }
+      if (st.kb === '1' && !cheer) { const c = await p.$('[data-clash-cheer]'); if (c) { await c.click().catch(() => {}); await sleep(400); cheer = await p.evaluate(() => (document.querySelector('[data-clash-cheer]') as HTMLElement | null)?.dataset.cheerUsed ?? 'gone') } }
       if (st.bout != null && order[order.length - 1] !== `${st.bout}${st.kb === '1' ? 'you' : ''}`) {
         order.push(`${st.bout}${st.kb === '1' ? 'you' : ''}`)
         if (st.tree.some(t => t.startsWith('0:done')) && st.bout !== '0') advanced = true
-        if (st.kb === '1' && tries === 1) { await sleep(3000); await p.screenshot({ path: `${out}/2c-ring-your-bout-${st.bout}.png` }) }
+        if (st.kb === '1' && tries === 1 && st.bout === '1') { await sleep(1500); await p.screenshot({ path: `${out}/2c-ring-your-bout-${st.bout}.png` }) }
       }
       if (st.kb === '1' && st.models.split(',').filter(Boolean).length >= 2) keeperModels = st.models
-      if (st.kb === '1' && !cheer) { const c = await p.$('[data-clash-cheer]'); if (c) { await c.click().catch(() => {}); await sleep(400); cheer = await p.evaluate(() => (document.querySelector('[data-clash-cheer]') as HTMLElement | null)?.dataset.cheerUsed ?? 'gone') } }
       if (st.res) { result = st.res; break }
       await sleep(250)
     }
@@ -154,7 +154,7 @@ try {
   }
   ok(sawLoad, '4a. Enter shows the Clash LOAD screen')
   ok(!!ringInfo && ringInfo.canvas && ringInfo.tree.length === 3, `4b. the RING mounts: a WebGL canvas, 2 spirit models (${ringInfo?.models}), the tournament panel's tree of 3 bouts (${ringInfo?.tree.join(' ')})`)
-  ok(order[0] === '0' && order.includes('1you') && advanced, `4c. bouts run one by one, the troupe's first, the tree advances, then hers (${order.join(' -> ')})`)
+  ok(order[0] === '0' && order.includes('1you') && order.includes('2you') && advanced, `4c. bouts run one by one, the troupe's first, the tree advances, then hers (${order.join(' -> ')})`)
   ok(/vulnyx/.test(keeperModels) && keeperModels.split(',').length >= 2, `4d. her bout shows her Vulnyx and her opponent in the ring (${keeperModels})`)
   ok(cheer === '1' || cheer === 'gone', `4h. her bout has a CHEER button, spent after one press (${cheer})`)
   ok(result === 'won', `4e. the keeper's run reaches a result: ${result} (try ${tries})`)
