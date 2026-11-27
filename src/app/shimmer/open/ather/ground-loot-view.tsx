@@ -54,7 +54,7 @@ export function GroundLoot({ keeper, ground, can, place = 'wilds' }: {
     const dt = Math.min(0.1, dtRaw), now = Date.now(), all = lootNow(now, place), f = keeper(), tm = T.current, may = can()
     // M141 s2: a following spirit's fetch (spirit-fetch.ts) first; the keeper walking up to a drop she is going for takes it
     tickFetch({ now, dt, keeper: f, loot: all, hollow: hollowAbout(), fighting: id => fightSlot(id) !== null, can: may, fits: item => give(getInv(), item, 1).left === 0,
-      at: id => { const s = spiritLive.get(id); return s && now - s.at < 500 ? { x: s.x, y: s.y, z: s.z } : null },
+      at: id => { const s = spiritLive.get(id); return s && now - s.at < 5000 ? { x: s.x, y: s.y, z: s.z } : null },   // 5 s, not 500 ms: a phone at 1 fps still has her (gone = deleted on unmount)
       keeperTakes: d => may && inPull(d, f, now) && fits(d),
       pay: (id, who) => { const r = payLoot(id, who, (item, n) => { const g = give(getInv(), item, n); if (g.left < n) setInv(g.inv); return g.left }, now)
         if (r && r.got > 0) { sfx('pickup-item'); got.current.set(r.item, (got.current.get(r.item) ?? 0) + r.got); gotT.current = SAY_S } } })

@@ -55,19 +55,22 @@ try {
   ok(!!rec, 'the Goldwood worked'); if (!rec) throw new Error('never worked')
   const roll = sumOf(rec.drops.filter(d => d.n > 0).map(d => ({ item: d.id, n: d.n })))
   await tp(sx, sz)   // stand still, 6 m out
-  const seen = new Set<string>(); let nearest = 99, gotAny = false
+  const seen = new Set<string>(), trace: string[] = []; let nearest = 99, gotAny = false
   const t0 = Date.now()
   while (Date.now() - t0 < 240000) {
     await frame()
     const st = (await A<{ id: string; phase: string | null }[]>('fetch()')) ?? []; for (const r of st) if (r.phase) seen.add(r.phase)
     const k = await A<{ px: number; pz: number }>('state()'), l = await lootOf(p); for (const d of l) nearest = Math.min(nearest, Math.hypot(d.x - k.px, d.z - k.pz))
     if (seen.has('carry') && !gotAny) await shot('1-carry')
+    if (Date.now() - t0 > (trace.length + 1) * 15000) { const sp = await p.evaluate(() => { const r = [...((window as any).__spiritModel?.rigs?.values() ?? [])][0]; return r ? { x: +r.x.toFixed(2), z: +r.z.toFixed(2), mode: r.mode, v: +r.v.toFixed(2) } : null })
+      trace.push(`t${Math.round((Date.now() - t0) / 1000)} her ${JSON.stringify(sp)} keeper ${k.px.toFixed(1)},${k.pz.toFixed(1)} fetch ${JSON.stringify(st)} drops ${JSON.stringify(l.map(d => [+d.x.toFixed(2), +d.z.toFixed(2)]))}`) }
     const b = await bag(); gotAny = Object.values(b).some(n => n > 0)
     if (!l.length || (gotAny && seen.has('toss') && Date.now() - t0 > 90000)) break
     await sleep(400)
   }
   const b = await bag(), ground = sumOf(await lootOf(p)), both: Record<string, number> = { ...b }; for (const [k, n] of Object.entries(ground)) both[k] = (both[k] ?? 0) + n
   ok(seen.has('go') && seen.has('carry') && seen.has('toss'), `she went, picked up, tossed (${[...seen]})`)
+  if (!seen.has('toss')) console.log(trace.join('\n'))
   ok(gotAny, `the bag holds what she brought ${JSON.stringify(b)} of the roll ${JSON.stringify(roll)}`)
   ok(nearest > 2.05, `the keeper never stood within their own 2 m pull (nearest drop ${nearest.toFixed(2)} m)`)
   ok(same(both, roll), `bag + ground = the roll, never more (${JSON.stringify(both)})`)
