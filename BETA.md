@@ -500,6 +500,7 @@ Steps (one worker each, in order; each keeps `beta-m7-saves` green):
 - Already on the board, Nyx-side: M49 deeds inside shipyards/shops · M80 E = get in the car · M115 suppliers · M108 Kael's ship gate · M128 settlement infections · M58 Nyx ground layers + ribbons (opt-in)
 
 ## Alex's queue (🔒: look / feel / canon; clear it when you have a minute)
+- **M202 Hovari line (11-26, LIVE owner ?form=storm|mana|earth|water):** judge docs/looks/m202-hovari-line-2026-11-26/line-sheet.jpg. Known: Obsidari's flank stones read weak + wings shorter than the art; Lumari's wisp + Tidari's bubbles are effects, not modelled.
 - M145+M212 live: judge arrow + '!' look (docs/looks/m145-m212-2026-11-26/; '!' reads big up close) and pick the next 'firsts' for M145 s2 (pack, map, seeds, tools, waymark, training, party).
 - M205: tag a Supplier zone 'Ather Trading Co.' where it stands in the Nyx builder (panel is live, no zone tagged yet).
 - **M181 Rune Hold door on old saves (11-26, LIVE):** the fold map lists Rune Hold once Greg's gems are handed, The Dig starts, or you hold a city door. An old keeper with none of those loses the door from the map until one happens. OK, or should every old save keep it?
