@@ -101,7 +101,8 @@ async function run(label: string, phone: boolean) {
     await talk('bonn', 'Bonn')
     ok(await poll(async () => (await tools()).forestry?.toolId === 'worn_blade', 10000), `${label} 3. Bonn lit the Worn Pruner (${(await tools()).forestry?.toolId ?? '-'})`)
     const glyphs = await p.evaluate(() => [...document.querySelectorAll('[data-tool-glyph]')].map(e => e.getAttribute('data-tool-glyph')))
-    ok(glyphs.includes('m167-pruner') && glyphs.includes('m167-spike'), `${label} 4. the dial shows the locked glyphs (${[...new Set(glyphs)].join(',')})`)
+    // the phone draws no dials (hearth-hud-layer: tool pips on the bar's lip, no picture); any tool glyph drawn is the locked one
+    ok(glyphs.every(g => g === 'm167-pruner' || g === 'm167-spike') && (phone || (glyphs.includes('m167-pruner') && glyphs.includes('m167-spike'))), `${label} 4. ${phone ? 'no tool picture but the locked one (the phone has pips, no dials)' : 'the dial shows the locked glyphs'} (${[...new Set(glyphs)].join(',') || 'none'})`)
     const bag = await p.evaluate(() => JSON.parse(localStorage.getItem('open.inv.v1') ?? 'null')?.slots ?? []) as ({ id: string } | null)[]
     ok(!bag.some(s => s && /^worn_|pruner|spike/.test(s.id)), `${label} 4. the bag holds no tool (tools sit in the sockets; the dial is their picture)`)
 
