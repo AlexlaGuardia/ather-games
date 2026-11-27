@@ -90,7 +90,7 @@ await p.keyboard.press(`Digit${at + 1}`)
 let placing = await pollUntil(() => p.evaluate(() => document.querySelector('[data-placing]')?.getAttribute('data-placing') === 'chest'), 5000)
 if (!placing && !desk) { await tap(`[data-hot="${at}"]`); placing = await pollUntil(() => p.evaluate(() => document.querySelector('[data-placing]')?.getAttribute('data-placing') === 'chest'), 5000) }
 ok(placing, 'hold: holding it shows the Keepstone ghost')
-if (desk) { await p.keyboard.press('e'); ok(true, 'place: pressed E (Place (E))') } else ok(await tap('[data-act="place"]'), 'place: tapped Place')   // desktop sets a held piece with E
+if (desk) { await p.keyboard.press('Enter'); ok(true, 'place: pressed Enter (a tap of E on a software GPU can outlast the hold-to-turn timer)') } else ok(await tap('[data-act="place"]'), 'place: tapped Place')   // desktop sets a held piece with E
 ok(await pollUntil(async () => (await works())?.starterOut !== true, 5000), 'place: the save no longer marks it out')
 if ((await works())?.starterOut) console.log('   hud after place:', (await p.evaluate(() => document.body.innerText)).replace(/\n+/g, ' | ').slice(0, 600))
 const w2 = await works(), sp = w2?.starter
