@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+{ # ★ PARSED WHOLE BEFORE IT RUNS (2026-11-27, serb). bash reads a script AS IT EXECUTES; an in-place
+  # edit while one is running (a `browser run` lasts minutes, a devwin hours) makes it resume at a stale byte
+  # offset: 11-27 a running coord.sh executed the fragment 'ing,' of a comment (rc 127). Inside braces bash
+  # must read to the closing '}' first, so a running copy never sees the edit. Edit by write-new + mv as well.
 # coord.sh — multi-window game-dev coordination for /root/ather-games
 #
 # One shared machine, one master branch, one build (:3200). Windows swarm a
@@ -838,3 +842,5 @@ case "${1:-status}" in
     if [ "${1:-}" = "--if-bloated" ]; then shared_recycle_if_bloated "${2:-3000}" "${3:-300}"; else shared_recycle; fi ;;
   *) echo "usage: coord {claim <lane> [note] | status | build [msg] | sweep [args] | release [lane] | reap | lock | unlock | browser run <what> -- <cmd...>|up <what>|down | memgate <mb> [max_s] [what] | tsc [args] | shared-recycle [--if-bloated <mb> <idle_s>]}"; exit 1 ;;
 esac
+exit $?
+}

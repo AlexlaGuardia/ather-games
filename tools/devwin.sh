@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+{ # ★ PARSED WHOLE BEFORE IT RUNS (2026-11-27, serb). bash reads a script AS IT EXECUTES; an in-place
+  # edit while one is running (a `browser run` lasts minutes, a devwin hours) makes it resume at a stale byte
+  # offset: 11-27 a running coord.sh executed the fragment 'ing,' of a comment (rc 127). Inside braces bash
+  # must read to the closing '}' first, so a running copy never sees the edit. Edit by write-new + mv as well.
 # devwin — start a satellite window's own dev server.
 #
 # Why this exists: the swarm shares one working tree, so the only thing two windows
@@ -149,3 +153,5 @@ cleanup_devwin() {
 }
 trap cleanup_devwin EXIT INT TERM
 wait "$DEV_PID"
+exit $?
+}
