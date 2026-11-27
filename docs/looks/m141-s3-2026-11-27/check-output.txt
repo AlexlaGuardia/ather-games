@@ -1,0 +1,26 @@
+  ok   at the Goldwood
+  .. 27s joined
+  ok   the three following spirits are in the Wilds and may fetch (3)
+  .. 36s round 0: prune
+  .. 46s worked; watching
+  runs: fox 21 frames D 13.54 T 3.64 | owl 42 frames D 13.07 T 8.84 | hummingbird 30 frames D 9.92 T 5.67
+  ok   fox: round trip 13.54 m in 3.64 s = 3.72 m/s, never above the walk 4.2
+  dash samples: go speeds 17.0,0.6,6.5,6.7,6.7,31.2,8.5 | carry keeper-dist 6.02,6.74,6.78,7.10,6.79,5.75,5.67,4.62,3.57,2.52
+  ok   dash: a burst out above the walk (peak 31.16 m/s)
+  ok   dash: bounces away from the keeper with it before the return (+1.08 m)
+  ok   dash: then brings it back
+  ok   owl: round trip 13.07 m in 8.84 s = 1.48 m/s, never above the walk 4.2
+  swoop samples: go t/lift/moved 0.25/0.19/0.00,0.50/0.64/0.00,0.55/0.75/0.00,0.57/0.80/0.00,0.82/1.26/0.00,0.85/1.30/0.00,1.10/1.50/0.00,1.35/1.50/0.00,1.60/1.50/0.00,1.62/1.21/0.87,1.87/1.19/0.95,2.12/0.89/1.97,2.37/0.63/3.02,2.62/0.41/4.07,2.87/0.24/5.12,3.12/0.12/6.17,3.37/0.04/7.22,3.62/0.00/8.27
+  ok   swoop: waits 1.35 s in place (moved 0.00 m), rising to 1.50 m
+  ok   swoop: then ONE dive down onto the drop (ends 0.00 m up)
+  ok   hummingbird: round trip 9.92 m in 5.67 s = 1.75 m/s, never above the walk 4.2
+  pluck samples: go lift 0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,-0.20,-0.24 | carry -0.45,-0.14,-0.11,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00
+  ok   pluck: keeps her hover height on the way
+  ok   pluck: dips only at the grab (deepest -0.45 m)
+  bag {"goldwood_sapling":1,"goldwood_log":2} ground {"goldwood_log":1} first roll {"goldwood_log":3,"goldwood_sapling":1}
+  ok   the bag holds what they brought
+  ok   0 page errors 
+PASS
+EDESK_RUN=m141s3-fetch-moves-check-sprites-1127-070001-687673
+EDESK_EXIT=0
+rc=0
