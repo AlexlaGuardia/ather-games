@@ -10,6 +10,7 @@
 //
 // ★ grip / fore are LONGBARREL's exactly, so Alex's 11-22 hand values (offsets from these anchors) still land on the new models.
 import type { OpticId } from './optics'
+import { ironsFor, type IronStyle } from './irons'
 
 export type PartColor = 'body' | 'dark' | 'metal' | 'ember' | 'glass' | 'dot'
   | KitColor   // M149: the new family's own colours (gun-kit-v2.ts); no model drawn today uses one
@@ -26,7 +27,8 @@ export type Model = { parts: Part[]; grip: [number, number, number]; fore: [numb
   /** M149: one mesh per colour instead of one per part (cheap draw calls) */ merge?: boolean
   /** M149: how close the eye comes to this sight, as a share of the gun's own ADS_DIST dial (1 = the dial) */ adsK?: number
   /** M149: a prism's eyepiece, width and height of the glass: the zoomed picture is drawn inside it */ lens?: [number, number]
-  /** M149: the sight's own cut when the keeper has picked none */ cut?: 'dot' | 'cross' }
+  /** M149: the sight's own cut when the keeper has picked none */ cut?: 'dot' | 'cross'
+  /** M178: an iron-sighted model's front post (its tip y, its z): aiming puts it at the view's centre */ post?: [number, number] }
 export const box = (o: Part['o'], s: Part['s'], c: PartColor = 'body'): Part => ({ o, s, c })
 const cyl = (o: Part['o'], d: number, len: number, c: PartColor, shape: 'cyl' | 'tube' = 'cyl'): Part => ({ o, s: [d, d, len], c, shape })
 const disc = (o: Part['o'], d: number, c: 'glass' | 'dot'): Part => ({ o, s: [d, d, 0], c, shape: 'disc' })
@@ -34,7 +36,8 @@ const both = (f: (side: 1 | -1) => Part) => [f(1), f(-1)]
 
 export type KitGunId = 'backbone' | 'charred-rifle'
 /** A gun body with a rail: everything but the sight. railTop = the rail's top face (y); seatZ = where a sight sits on it. */
-export interface KitGun { id: KitGunId; name: string; parts: Part[]; grip: Model['grip']; fore: Model['fore']; railTop: number; seatZ: number; own: KitSightId }
+export interface KitGun { id: KitGunId; name: string; parts: Part[]; grip: Model['grip']; fore: Model['fore']; railTop: number; seatZ: number; own: KitSightId
+  /** M178: how its irons are cut (shared/irons.ts) */ irons?: IronStyle }
 
 const GRIP: Model['grip'] = [0, -0.06, 0.1], FORE: Model['fore'] = [0, -0.06, -0.26]
 
@@ -62,7 +65,7 @@ export const KIT_GUNS: Record<KitGunId, KitGun> = {
   // a crude stamped box: welded seams and rivets, a short strap rail bolted on top, a bare barrel in a scorched shroud, the
   // SEALED external mana cell clamped to the left (no magazine: it never reloads from a box), a bent-strip skeleton stock, the
   // charge seam lit down the right side (it flares as the charge builds), blisters where Veyra's fire took the runes
-  'charred-rifle': { id: 'charred-rifle', name: 'Charred Rifle', grip: GRIP, fore: FORE, railTop: 0.048, seatZ: -0.04, own: 'ring', parts: [
+  'charred-rifle': { id: 'charred-rifle', name: 'Charred Rifle', grip: GRIP, fore: FORE, railTop: 0.048, seatZ: -0.04, own: 'ring', irons: 'crude', parts: [
     box([0, 0, -0.04], [0.054, 0.074, 0.32]),                                // stamped receiver
     box([0, 0.038, -0.04], [0.056, 0.004, 0.32], 'dark'),                    // the weld seam along the top
     ...[0.08, -0.04, -0.16].flatMap(z => [0.02, -0.02].flatMap(y => both(x => box([0.028 * x, y, z], [0.004, 0.006, 0.006], 'metal')))),   // rivets
@@ -86,10 +89,13 @@ export const KIT_GUNS: Record<KitGunId, KitGun> = {
 }
 
 // ── the sights: seat-relative (origin = the rail's top face at the seat), eye = the sight line's height above the rail ──
-export type KitSightId = 'hood' | 'ring' | 'lens' | 'scope2'
+export type KitSightId = 'irons' | 'hood' | 'ring' | 'lens' | 'scope2'
 export interface KitSight { id: KitSightId; name: string; optic: OpticId; eye: number; parts: Part[] }
 const clamp = (len: number): Part => box([0, 0.005, 0], [0.026, 0.01, len], 'dark')
 export const KIT_SIGHTS: Record<KitSightId, KitSight> = {
+  // M178: the IRONS every gun wears by default: not a piece on the rail but cut into the gun (shared/irons.ts builds them per body,
+  // so `eye` and `parts` here are placeholders; kitModel asks ironsFor). Both kit guns are longbarrels: the long irons' 1.3x.
+  irons: { id: 'irons', name: 'Iron sights', optic: 'irons-long', eye: 0, parts: [] },
   // the Backbone's own: a square stamped hood over a small crystal notch, low on the rail
   hood: { id: 'hood', name: 'Issue hood', optic: 'reddot', eye: 0.02, parts: [
     clamp(0.04), ...both(x => box([0.012 * x, 0.021, 0], [0.004, 0.024, 0.03], 'metal')), box([0, 0.034, 0], [0.028, 0.004, 0.03], 'metal'),
@@ -113,11 +119,17 @@ export const KIT_SIGHTS: Record<KitSightId, KitSight> = {
   ] },
 }
 /** Which sights each rail takes (start: the gun's own + the open lens + the 2x; where sights come from is a later economy call). */
-export const sightsFor = (g: KitGun): KitSightId[] => [g.own, 'lens', 'scope2']
+export const sightsFor = (g: KitGun): KitSightId[] => ['irons', g.own, 'lens', 'scope2']   // M178: irons first, every gun's default
+/** M178: where a kit gun's rear notch stands: just behind the seat, on the rail */
+export const IRON_REAR_BACK = 0.05
 
 /** A gun with a sight seated on its rail, as a Model the rig draws: sight parts moved to the seat; eye/sightZ = the sight line. */
 export function kitModel(gunId: KitGunId, sightId: KitSightId): Model {
   const g = KIT_GUNS[gunId], s = KIT_SIGHTS[sightId]
+  if (sightId === 'irons') {
+    const ir = ironsFor(g.parts, g.seatZ + IRON_REAR_BACK, g.irons ?? 'clean')
+    return { parts: [...g.parts, ...ir.parts], grip: g.grip, fore: g.fore, top: g.railTop, sightZ: ir.rearZ, eye: ir.eye, optic: s.optic, post: [ir.eye, ir.frontZ] }
+  }
   const seated = s.parts.map(p => ({ ...p, o: [p.o[0], p.o[1] + g.railTop, p.o[2] + g.seatZ] as Part['o'] }))
   return { parts: [...g.parts, ...seated], grip: g.grip, fore: g.fore, top: g.railTop, sightZ: g.seatZ, eye: g.railTop + s.eye, optic: s.optic }
 }

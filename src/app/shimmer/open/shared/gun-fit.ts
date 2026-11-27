@@ -16,15 +16,16 @@ import type { Loadout } from './loadout'
 export const isKitGun = (id: string): id is KitGunId => id in KIT_GUNS
 const isSight = (id: unknown): id is KitSightId => typeof id === 'string' && id in KIT_SIGHTS
 
-/** the sight a kit gun wears when nothing was fitted: the one matching the optic it aims through today */
+/** the sight a kit gun wears when nothing was fitted: the one matching the optic it aims through today. M178: that is the IRONS on
+ *  every gun (the 2x it used to default to is a bought sight now; a keeper who FITTED it keeps it, see ownedSights) */
 export function defaultSight(gunId: KitGunId): KitSightId {
   const row = RANGE_GUNS.find(g => g.id === gunId), today: OpticId = opticOf(row ?? { slot: 'LONGBARREL' }).id
   return sightsFor(KIT_GUNS[gunId]).find(s => KIT_SIGHTS[s].optic === today) ?? KIT_GUNS[gunId].own
 }
-/** the sights this keeper may fit to this gun (s3's shop purchases add to it) */
+/** the sights this keeper may fit to this gun (s3's shop purchases add to it). M178: the irons + the gun's own stamped sight */
 export function freeSights(gunId: KitGunId): KitSightId[] {
   const own = KIT_GUNS[gunId].own, d = defaultSight(gunId)
-  return own === d ? [own] : [own, d]
+  return own === d ? [own] : [d, own]
 }
 export function ownedSights(l: Loadout, gunId: string): KitSightId[] {
   if (!isKitGun(gunId)) return []

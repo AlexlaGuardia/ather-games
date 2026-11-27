@@ -16,18 +16,19 @@ for (const id of Object.keys(KIT_GUNS) as KitGunId[]) {
   const g = KIT_GUNS[id]
   // Alex's 11-22 hand values are offsets from grip / fore: the new bodies must keep the shipped anchors or the gloves float
   ok(same(g.grip, live[id].grip) && same(g.fore, live[id].fore), `${id}: grip/fore are the shipped longbarrel anchors (hand tune lands)`)
-  ok(sightsFor(g)[0] === g.own && sightsFor(g).length >= 2, `${id}: takes its own sight plus at least one alternative`)
+  ok(sightsFor(g)[0] === 'irons' && sightsFor(g)[1] === g.own && sightsFor(g).length >= 3, `${id}: M178 irons first, then its own sight, plus alternatives`)
   for (const s of sightsFor(g)) {
     const m = kitModel(id, s), sight = KIT_SIGHTS[s]
-    ok(m.parts.length === g.parts.length + sight.parts.length, `${id}+${s}: the sight is its own part set, seated on the gun`)
+    ok(m.parts.length === g.parts.length + (s === 'irons' ? 6 : sight.parts.length), `${id}+${s}: the sight is its own part set, seated on the gun`)
+    ok(JSON.stringify(m.parts.slice(0, g.parts.length)) === JSON.stringify(g.parts), `${id}+${s}: the body is untouched under the sight`)
     ok(m.eye! > g.railTop && m.optic === sight.optic, `${id}+${s}: the sight line sits above the rail and names the sight's optic`)
     // the dot of a non-scope sight lies ON the sight line, so ADS puts it dead centre
     const dot = m.parts.filter(p => p.c === 'dot')
-    ok(OPTICS[sight.optic].scoped || (dot.length === 1 && Math.abs(dot[0].o[1] - m.eye!) < 1e-9), `${id}+${s}: the etched mark is on the sight line`)
+    ok(OPTICS[sight.optic].scoped || (dot.length === 1 && Math.abs(dot[0].o[1] - m.eye!) < (s === 'irons' ? 0.005 : 1e-9)), `${id}+${s}: the etched mark is on the sight line (irons: the pip at the post's tip)`)
     ok(Math.abs(sightOf(m, OPTICS[sight.optic]).y - m.eye!) < 1e-9 && Number.isFinite(adsPos(m, OPTICS[sight.optic])[1]), `${id}+${s}: the rig aims down this sight line`)
   }
 }
-ok(sightsFor(KIT_GUNS.backbone)[0] !== sightsFor(KIT_GUNS['charred-rifle'])[0], 'each gun has its own issue sight')
+ok(sightsFor(KIT_GUNS.backbone)[1] !== sightsFor(KIT_GUNS['charred-rifle'])[1], 'each gun has its own issue sight')
 
 // the live game is untouched: only the dev page's preview swaps a model in, and letting go restores the shipped one
 const kit = kitModel('backbone', 'scope2')
@@ -39,7 +40,8 @@ ok(modelOf({ id: 'backbone', slot: 'LONGBARREL' }) === live.backbone, 'letting g
 
 // ── M149 s1: the locked family (gun-kit-v2.ts), off in the game ──
 // every model a player draws today, byte for byte as it was before M149 (verified against HEAD's data 11-24; change it only with a look Alex OK'd)
-{ const all = [...(['SIDEARM', 'SHORTBARREL', 'LONGBARREL', 'BREACHER', 'REACHER'] as const).map(slot => modelOf({ id: 'x', slot })), live.backbone, live['charred-rifle'], ...Object.entries(KIT_GUNS).flatMap(([id, g]) => sightsFor(g).map(s => kitModel(id as KitGunId, s)))]
+// M178 (Alex 11-25) adds irons to every body; the hash pins the BODIES + the pre-M178 sights (a gun naming the red dot draws the bare body)
+{ const all = [...(['SIDEARM', 'SHORTBARREL', 'LONGBARREL', 'BREACHER', 'REACHER'] as const).map(slot => modelOf({ id: 'x', slot, optic: 'reddot' })), kitModel('backbone', 'scope2'), kitModel('charred-rifle', 'scope2'), ...Object.entries(KIT_GUNS).flatMap(([id, g]) => sightsFor(g).filter(s => s !== 'irons').map(s => kitModel(id as KitGunId, s)))]
   ok(createHash('sha1').update(JSON.stringify(all)).digest('hex') === 'cc8dcb4a4cf7e9942e85f4298c84102af7350861', 'every model in the game is byte-identical to before M149: ' + createHash('sha1').update(JSON.stringify(all)).digest('hex')) }
 const SLOT: Record<V2GunId, 'LONGBARREL' | 'REACHER' | 'SHORTBARREL'> = { backbone: 'LONGBARREL', 'charred-rifle': 'LONGBARREL', lance: 'REACHER', spitter: 'SHORTBARREL' }
 ok(Object.keys(V2_GUNS).includes('spitter') && V2_GUNS.spitter.own === 'iron' && V2_GUNS.spitter.parts.some(p => p.c === 'bronze'), 'M196: the Spitter is in the new family, iron by default, with bronze on it')

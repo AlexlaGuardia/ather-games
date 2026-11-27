@@ -25,7 +25,8 @@ import * as THREE from 'three'
 import { useThree } from '@react-three/fiber'
 import { buildHand, tintMittens, ORDER, SEAT_COLOR } from './open-hands'
 import { gemGlow } from './morel'   // M33: the gem on the gun hand pulses as the rounds change
-import { OPTICS, opticOf, throughScope, lensFov, type Optic } from './optics'
+import { OPTICS, opticOf, throughScope, lensFov, isIrons, type Optic } from './optics'
+import { ironsFor, type IronStyle } from './irons'
 import { box, type Part, type Model } from './gun-kit'
 import { modelGeometry, KIT_MATS } from './gun-kit-geo'
 import { MARKS, TINTS, drawMark, markGlow, defaultLook, type SightLook } from './sight-marks'
@@ -168,7 +169,22 @@ export function previewGunModel(id: string, m: Model | null, hold?: Partial<GunT
   if (m && hold) holds = { ...holds, [id]: hold }; else { const { [id]: _h, ...rest } = holds; holds = rest }
   if (id === curGun) apply() }
 // M81 s2: a kit gun (Backbone, Charred Rifle) draws its kit model with the keeper's FITTED sight (gun-fit.ts, saved in the loadout)
-export const modelOf = (g: Pick<RangeGun, 'id' | 'slot'>): Model => preview[g.id] ?? fittedModel(getLoadout(), g.id) ?? (g.id === 'charred-rifle' ? CHARRED : MODELS[g.slot] ?? MODELS.LONGBARREL)
+// M178 (Alex 11-25): every gun's default sight is a pair of IRONS (shared/irons.ts), cut into each body in its own style: the
+// rear notch just behind where the old optic sat, the front post near the muzzle. One cached model per (body, sight).
+const IRON_BACK = 0.06
+const ironModels = new Map<string, Model>()
+function withIrons(key: string, m: Model, optic: Optic, style: IronStyle): Model {
+  const k = `${key}:${optic.id}`, had = ironModels.get(k); if (had) return had
+  const ir = ironsFor(m.parts, m.sightZ + IRON_BACK, style)
+  const out: Model = { ...m, parts: [...m.parts, ...ir.parts], sightZ: ir.rearZ, eye: ir.eye, optic: optic.id, post: [ir.eye, ir.frontZ] }
+  ironModels.set(k, out); return out
+}
+/** the body a gun is drawn with when no kit model covers it */
+const bodyOf = (g: Pick<RangeGun, 'id' | 'slot'>): [string, Model] => g.id === 'charred-rifle' ? ['charred', CHARRED] : MODELS[g.slot] ? [g.slot, MODELS[g.slot]] : ['LONGBARREL', MODELS.LONGBARREL]
+export const modelOf = (g: Pick<RangeGun, 'id' | 'slot' | 'optic'>): Model => preview[g.id] ?? fittedModel(getLoadout(), g.id) ?? (() => {
+  const [k, m] = bodyOf(g), o = opticOf(g)
+  return isIrons(o.id) ? withIrons(k, m, o, g.id === 'charred-rifle' ? 'crude' : 'clean') : m   // a gun row naming a better optic keeps the old optic build
+})()
 /** the optic in hand: a model that carries its own sight (a kit model) names it; else the gun's */
 const opticIn = (m: Model, g: RangeGun): Optic => (m.optic ? OPTICS[m.optic] : opticOf(g))
 
@@ -179,6 +195,7 @@ export const adsPos = (m: Model, o: Optic) => { const s = sightOf(m, o); return 
 
 // ── the ADS store the page reads (zoom, look slow-down, the cone) and the scope ring renders from ──
 let lastSight = { y: 0, z: 0 }   // the sight line in the gun's frame, as last aimed (the tuner check reads where it lands on screen)
+let lastPost: [number, number] | null = null   // M178: the front post's tip in the gun's frame, when the gun is on its irons
 let adsT = 0, optic: Optic | null = null, look: SightLook | null = null, glow = 0
 const subs = new Set<() => void>()
 let snap = { t: 0, optic: null as Optic | null, look: null as SightLook | null, glow: 0 }
@@ -333,7 +350,7 @@ export const FpGun = forwardRef<FpGunApi>(function FpGun(_, ref) {
       // the etching lights faintly while mana runs through a drawn gun, and flares as a round leaves or a charge builds
       glow = markGlow(true, i.now, i.firedAt, i.charging ?? 0); (mats.dot as THREE.MeshBasicMaterial).opacity = glow
       optic = o; publish()
-      lastSight = { y: sightOf(m, o).y, z: sightOf(m, o).z }
+      lastSight = { y: sightOf(m, o).y, z: sightOf(m, o).z }; lastPost = m.post ?? null
       // recoil: a fresh round kicks, then it springs home
       if (i.firedAt > s.lastFired) { s.lastFired = i.firedAt; s.kick = Math.min(1.5, s.kick + 1); if (i.gun.burst > 1) s.punch = 1 }
       s.kick *= Math.exp(-VM.KICK_DECAY * d)
@@ -362,7 +379,7 @@ export const FpGun = forwardRef<FpGunApi>(function FpGun(_, ref) {
   }), [camera, rig, mats])
   useEffect(() => { loadGunTune() }, [])   // this browser's tune from /shimmer/dev/guns
   useEffect(() => {
-    ;(window as unknown as { __fpGun?: unknown }).__fpGun = { ads: () => adsT, optic: () => optic?.id ?? null, shown: () => rig.root.visible, key: () => rig.key, mark: () => (look ? `${look.mark}:${look.tint}` : null), glow: () => glow, kick: () => st.current.punch, lens: () => lensCost.current, ...(process.env.NODE_ENV !== 'production' ? { preview: previewGunModel, info: () => ({ ...gl.info.render }) } : {}), pos: () => rig.held.position.toArray(), aim: () => { const v = new THREE.Vector3(0, lastSight.y, lastSight.z); rig.model?.localToWorld(v); v.project(camera); return [v.x, v.y] }, vm: () => ({ S: VM.S, HAND: VM.HAND, HIP_Z: VM.HIP_Z }) }   // M190: the hold in use (read only)
+    ;(window as unknown as { __fpGun?: unknown }).__fpGun = { ads: () => adsT, optic: () => optic?.id ?? null, shown: () => rig.root.visible, key: () => rig.key, mark: () => (look ? `${look.mark}:${look.tint}` : null), glow: () => glow, kick: () => st.current.punch, lens: () => lensCost.current, ...(process.env.NODE_ENV !== 'production' ? { preview: previewGunModel, info: () => ({ ...gl.info.render }) } : {}), pos: () => rig.held.position.toArray(), aim: () => { const v = new THREE.Vector3(0, lastSight.y, lastSight.z); rig.model?.localToWorld(v); v.project(camera); return [v.x, v.y] }, post: () => { if (!lastPost || !rig.model) return null; const v = new THREE.Vector3(0, lastPost[0], lastPost[1]); rig.model.localToWorld(v); v.project(camera); return [v.x, v.y] }, irons: () => isIrons(optic?.id), vm: () => ({ S: VM.S, HAND: VM.HAND, HIP_Z: VM.HIP_Z }) }   // M190: the hold in use (read only)
     return () => {
       adsT = 0; optic = null; publish()
       rig.root.traverse(o => { if (o instanceof THREE.Mesh) o.geometry.dispose() })

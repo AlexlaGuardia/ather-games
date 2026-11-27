@@ -7,10 +7,13 @@
 // + knockback) need two fields that file does not have yet, so they live here as RangeGun extensions until the hub
 // folds them into engine/weapons.ts. ⚠ Nothing in this file edits a weapons.ts value.
 
+import type { OpticId } from './optics'
 import { WEAPONS, canFire, spreadDeg, bloomAfterShot, bloomAfterRest, coneDirection, type WeaponDef } from '../../engine/weapons'
 import { ECON, payReload } from './vitals-economy'
 
 export interface RangeGun extends WeaponDef {
+  /** M178: this gun's sight (shared/optics.ts). Absent = IRONS, every gun's default; a bought better sight (s2) names its optic here */
+  optic?: OpticId
   /** rounds per trigger pull, fireCd apart is the BURST gap below; 1 = single */
   burst: number
   burstGap: number

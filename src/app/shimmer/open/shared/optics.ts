@@ -9,7 +9,7 @@
 // ★ Zoom is a FOCAL-LENGTH ratio, not a field-of-view ratio. A 2x makes things look twice as big, which is tan(fov/2) halved,
 // NOT fov halved (at a 70° base, fov/2 = 35° but true 2x = 38.6°; the error grows with the base). adsFov does the trig.
 
-export type OpticId = 'reddot' | 'scope2' | 'scope3' | 'prism3'   // prism3: M149, worn by no gun until slice 2
+export type OpticId = 'irons' | 'irons-long' | 'reddot' | 'scope2' | 'scope3' | 'prism3'   // prism3: M149, worn by no gun until slice 2
 export interface Optic {
   id: OpticId
   /** the magnification a player reads on it */
@@ -23,16 +23,26 @@ export interface Optic {
   name: string
 }
 export const OPTICS: Record<OpticId, Optic> = {
+  // M178 (Alex 11-25): the IRONS every gun wears by default (shared/irons.ts). No scope ring, ever: you look along the gun. With the
+  // ring gone the 2x / 3x a long gun used to punch in would blow the gun itself up across the screen (the gun is drawn by the same
+  // camera), so a long gun's irons punch in a modest 1.3x and the short guns keep the red dot's 1.1x.
+  irons: { id: 'irons', mag: 1, zoom: 1.1, scoped: false, name: 'Iron sights' },
+  'irons-long': { id: 'irons-long', mag: 1, zoom: 1.3, scoped: false, name: 'Iron sights' },
   reddot: { id: 'reddot', mag: 1, zoom: 1.1, scoped: false, name: 'Red dot (1x)' },
   scope2: { id: 'scope2', mag: 2, zoom: 2, scoped: true, name: 'Scope (2x)' },
   scope3: { id: 'scope3', mag: 3, zoom: 3, scoped: true, name: 'Scope (3x)' },
   prism3: { id: 'prism3', mag: 3, zoom: 3, scoped: false, view: 1.1, name: 'Prism (3x)' },
 }
-/** Alex's defaults, by Slate: breachers (shotguns), shortbarrels (SMGs) and sidearms get the red dot; longbarrels a 2x; reachers
+/** WAS Alex's 11-18 defaults (M178 replaced them with irons), by Slate: breachers (shotguns), shortbarrels (SMGs) and sidearms get the red dot; longbarrels a 2x; reachers
  *  (the snipers) a 3x. The sidearm is Jin's call (Alex named shotguns + SMGs). An unknown Slate falls back to the red dot. */
-export const OPTIC_OF_SLATE: Record<string, OpticId> = { BREACHER: 'reddot', SHORTBARREL: 'reddot', SIDEARM: 'reddot', LONGBARREL: 'scope2', REACHER: 'scope3' }
+export const OPTIC_OF_SLATE_M149: Record<string, OpticId> = { BREACHER: 'reddot', SHORTBARREL: 'reddot', SIDEARM: 'reddot', LONGBARREL: 'scope2', REACHER: 'scope3' }
+/** M178: what every gun ACTUALLY wears by default: irons (a long gun's punch in a little further). The table above is the 11-18
+ *  default it replaced, kept for M178 s2, where those sights become things you buy. An unknown Slate falls back to the short irons. */
+export const OPTIC_OF_SLATE: Record<string, OpticId> = { BREACHER: 'irons', SHORTBARREL: 'irons', SIDEARM: 'irons', LONGBARREL: 'irons-long', REACHER: 'irons-long' }
+export const isIrons = (id: OpticId | null | undefined) => id === 'irons' || id === 'irons-long'
 
-export const opticOf = (g: { slot: string; optic?: OpticId }): Optic => OPTICS[g.optic ?? OPTIC_OF_SLATE[g.slot] ?? 'reddot']
+/** a gun's sight: its own `optic` field (RangeGun.optic, the per-gun sight; s2's bought sight lands there or in the fitting), else irons */
+export const opticOf = (g: { slot: string; optic?: OpticId }): Optic => OPTICS[g.optic ?? OPTIC_OF_SLATE[g.slot] ?? 'irons']
 
 const RAD = Math.PI / 180
 /** The vertical field of view in the sights, from the keeper's own (degrees). t = 0..1 eases between the two in TANGENT space,

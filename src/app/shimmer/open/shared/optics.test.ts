@@ -1,6 +1,6 @@
 // shared/optics.ts: Alex's defaults by Slate, a per-gun override, true focal-length zoom, and the look slow-down that matches it.
 //   npx tsx src/app/shimmer/open/shared/optics.test.ts
-import { OPTICS, opticOf, adsFov, adsLookScale, throughScope, SCOPE_IN } from './optics'
+import { OPTICS, opticOf, adsFov, adsLookScale, throughScope, SCOPE_IN, isIrons, OPTIC_OF_SLATE_M149 } from './optics'
 import { RANGE_GUNS } from './gunplay'
 
 let pass = 0, fail = 0
@@ -8,18 +8,22 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else { fail++; console.lo
 const near = (a: number, b: number, e = 1e-6) => Math.abs(a - b) < e
 const tanH = (deg: number) => Math.tan((deg * Math.PI) / 360)
 
-// Alex 11-18: shotguns + SMGs a red dot, long barrels a 2x, snipers a 3x
+// M178 (Alex 11-25, replacing 11-18's red dot / 2x / 3x): EVERY gun's default sight is irons; a long gun's punch in a little further
 const by = (id: string) => RANGE_GUNS.find(g => g.id === id)!
-ok(opticOf(by('roar')).id === 'reddot', 'Roar (breacher, the shotgun) wears the red dot')
-ok(opticOf(by('spitter')).id === 'reddot', 'Spitter (shortbarrel, the SMG) wears the red dot')
-ok(opticOf(by('repeater')).id === 'reddot', 'Repeater (sidearm) wears the red dot')
-ok(opticOf(by('backbone')).id === 'scope2', 'Backbone (longbarrel) wears a 2x')
-ok(opticOf(by('charred-rifle')).id === 'scope2', "Kael's Charred Rifle (longbarrel) wears a 2x")
-ok(opticOf(by('lance')).id === 'scope3', 'Lance (reacher, the sniper) wears a 3x')
-ok(RANGE_GUNS.every(g => !!opticOf(g)), 'every gun on the racks has a sight')
-// the swap is data: a gun naming its own optic wins over its Slate
+for (const id of ['roar', 'spitter', 'repeater']) ok(opticOf(by(id)).id === 'irons', `${id} (a short gun) wears irons`)
+for (const id of ['backbone', 'charred-rifle', 'lance']) ok(opticOf(by(id)).id === 'irons-long', `${id} (a long gun) wears the long irons`)
+ok(RANGE_GUNS.length >= 6 && RANGE_GUNS.every(g => isIrons(opticOf(g).id)), 'every gun on the racks wears irons by default')
+ok(RANGE_GUNS.every(g => !opticOf(g).scoped && !throughScope(opticOf(g), 1)), 'no gun looks through the scope ring by default, even at full ADS')
+ok(isIrons('irons') && isIrons('irons-long') && !isIrons('reddot') && !isIrons('scope2') && !isIrons(null), 'isIrons')
+// the irons' zoom is modest from BOTH sides: a punch-in you can feel, never a scope's
+for (const o of [OPTICS.irons, OPTICS['irons-long']]) ok(o.zoom > 1.05 && o.zoom <= 1.35 && o.mag === 1, `${o.id}: a modest punch-in (${o.zoom})`)
+ok(OPTICS['irons-long'].zoom > OPTICS.irons.zoom, "a long gun's irons punch in further than a short gun's")
+// the better sights are still there for s2 (bought), worn by no gun by default
+ok(OPTICS.scope2.scoped && OPTICS.scope3.scoped && !!OPTICS.prism3 && !!OPTICS.reddot, 'the red dot, scopes and prism code paths stay')
+ok(OPTIC_OF_SLATE_M149.LONGBARREL === 'scope2' && OPTIC_OF_SLATE_M149.REACHER === 'scope3', "11-18's defaults kept for s2, not worn")
+// the swap is data: a gun naming its own optic (the per-gun sight field) wins over its Slate
 ok(opticOf({ slot: 'LONGBARREL', optic: 'reddot' }).id === 'reddot', "a gun's own optic beats its Slate's default")
-ok(opticOf({ slot: 'NOPE' }).id === 'reddot', 'an unknown Slate falls back to the red dot')
+ok(opticOf({ slot: 'NOPE' }).id === 'irons', 'an unknown Slate falls back to irons')
 
 // zoom is focal length: things look `zoom` times bigger, so tan(fov/2) shrinks by exactly `zoom`
 for (const base of [60, 70, 90]) for (const o of Object.values(OPTICS)) {

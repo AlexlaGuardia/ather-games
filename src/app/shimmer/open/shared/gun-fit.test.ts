@@ -25,9 +25,10 @@ ok(!isKitGun('repeater') && isKitGun('backbone'), 'isKitGun')
 
 // ── fitting ──
 const L = owning('backbone', 'repeater')
-// M81 s3: FREE = the gun's own + the 2x it aims through today; the open lens is a shop buy
-ok(JSON.stringify(ownedSights(L, 'backbone')) === JSON.stringify(['hood', 'scope2']), `free: the Backbone owns its hood + its 2x only (${ownedSights(L, 'backbone')})`)
-ok(JSON.stringify(freeSights('charred-rifle')) === JSON.stringify(['ring', 'scope2']), 'free: the Charred Rifle owns its ring + its 2x')
+// M81 s3 -> M178: FREE = the irons (what it aims through today) + the gun's own; the 2x and the open lens are shop buys
+ok(JSON.stringify(ownedSights(L, 'backbone')) === JSON.stringify(['irons', 'hood']), `free: the Backbone owns its irons + its hood only (${ownedSights(L, 'backbone')})`)
+ok(JSON.stringify(freeSights('charred-rifle')) === JSON.stringify(['irons', 'ring']), 'free: the Charred Rifle owns its irons + its ring')
+ok(!fitSight(L, 'backbone', 'scope2').ok, 'M178: the 2x is not free any more (s2 sells it)')
 ok(!fitSight(L, 'backbone', 'lens').ok, 'the open lens is not free any more')
 const bought = addOwnedSight(L, 'backbone', 'lens')
 ok(ownedSights(bought, 'backbone').includes('lens') && fitSight(bought, 'backbone', 'lens').ok, 'bought: the lens joins the Backbone and fits')
@@ -70,9 +71,27 @@ if (lensL.ok) {
   const hood = fitSight(lensL.loadout, 'backbone', 'hood')
   if (hood.ok) { setLoadout(hood.loadout); ok(modelOf(gun('backbone')) !== m && modelOf(gun('backbone')).eye === kitModel('backbone', 'hood').eye, 'refitting changes the model in hand') }
   setLoadout(owning('backbone'))
-  ok(modelOf(gun('backbone')).optic === opticOf(gun('backbone')).id, 'no fitting: the Backbone aims as it did before M81')
-  ok(modelOf(gun('repeater')).optic === undefined, 'the Repeater keeps its own model')
+  ok(modelOf(gun('backbone')).optic === opticOf(gun('backbone')).id && modelOf(gun('backbone')).optic === 'irons-long', 'no fitting: the Backbone aims through its irons (M178)')
+  ok(fittedModel(owning('repeater'), 'repeater') === null && modelOf(gun('repeater')).optic === 'irons' && !!modelOf(gun('repeater')).post, 'the Repeater keeps its own body, on irons (M178)')
 }
+
+
+// ── M178: every gun's default sight is irons; the field persists; an old save keeps the sight it FITTED ──
+for (const g of RANGE_GUNS) {
+  const m = modelOf(g)
+  ok((m.optic === 'irons' || m.optic === 'irons-long') && !!m.post, `${g.id}: by default its model aims through irons with a front post`)
+  ok(!!m.post && m.post[0] === m.eye && m.post[1] < m.sightZ - 0.15, `${g.id}: the post tip is ON the sight line, well ahead of the rear notch (a pistol's sight radius at least)`)
+}
+for (const id of ['backbone', 'charred-rifle'] as const) ok(defaultSight(id) === 'irons' && fittedSight(owning(id), id) === 'irons', `${id}: nothing fitted -> irons`)
+{ const f2 = fitSight(owning('backbone'), 'backbone', 'irons')
+  ok(f2.ok && JSON.parse(JSON.stringify(f2.ok ? f2.loadout : null)).fit.backbone.sight === 'irons', 'the sight field is written to the save')
+  if (f2.ok) { const back = JSON.parse(JSON.stringify(f2.loadout)) as Loadout; ok(fittedSight(back, 'backbone') === 'irons', 'and read back after a round trip') }
+  const oldScope: Loadout = { ...owning('backbone', 'charred-rifle'), fit: { backbone: { sight: 'scope2' }, 'charred-rifle': { sight: 'lens', owned: ['lens'] } } }
+  const rt = JSON.parse(JSON.stringify(oldScope)) as Loadout
+  ok(fittedSight(rt, 'backbone') === 'scope2' && ownedSights(rt, 'backbone').includes('scope2'), 'an old save that fitted the 2x keeps it fitted and owned')
+  ok(fittedSight(rt, 'charred-rifle') === 'lens', 'an old save that bought the lens keeps it fitted')
+  const off = fitSight(rt, 'backbone', 'irons')
+  ok(off.ok && ownedSights(off.loadout, 'backbone').includes('scope2'), 'swapping the fitted 2x for irons keeps the 2x owned') }
 
 console.log(`gun-fit: ${pass} passed, ${fail} failed`)
 if (fail) process.exit(1)
