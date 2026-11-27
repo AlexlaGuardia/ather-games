@@ -48,6 +48,14 @@ export function settlementLots(s: Settlement, season: number, folk: Folk[] = fol
     return { id: `${s.id}:${p}`, settlement: s.id, profession: p, folkId: firstOf.get(p)!.id, x, z, yaw, w: LOT_W, d: LOT_D }
   })
 }
+/** M237 s2 COUNTER (World Builder > Settlements): homes STANDING (the lots a keeper sees) vs the owner's Homes value (Auto = the
+ *  trades' own count, so then placed = set). placed < set = what is still missing (fewer trades among its folk than homes asked). */
+export function homesCount(s: Settlement, season: number): { placed: number; set: number; auto: boolean } {
+  const placed = settlementLots(s, season).length
+  return { placed, set: s.homes ?? placed, auto: s.homes === undefined }
+}
+/** the counter's words: 'Homes 3/5', 'Homes 4/4 auto' (plain UI label; @lark may reword) */
+export const homesLabel = (c: { placed: number; set: number; auto: boolean }) => `Homes ${c.placed}/${c.set}${c.auto ? ' auto' : ''}`
 /** Slot k of the ring (0..MAX_LOTS-1): the pad's centre and turn. The bake (scripts/bake-path-profiles.mts) levels all five. */
 export function lotSlot(s: Settlement, season: number, k: number): { x: number; z: number; yaw: number } {
   const a = h01(`${season}:${s.id}`, 77) * Math.PI * 2 + (k * Math.PI * 2) / MAX_LOTS

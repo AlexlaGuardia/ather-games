@@ -11,7 +11,7 @@
 import { give, take, itemDef, type Inv } from '../shared/inventory'
 import type { Settlement, SettlementBiome } from './network'
 import type { Profession } from './moglins'
-import { folkOf, seasonRoster, RESERVED_NAMES, type Folk } from './settlement-folk'
+import { folkOf, seasonRoster, RESERVED_NAMES, ADDED_SETTLEMENT_ID, type Folk } from './settlement-folk'
 import { GLADE_ID } from './moonwell-glade'
 import { settlementTurn } from './folk-spots'
 import { DEWL, dewls } from './dewl'
@@ -60,7 +60,7 @@ export function burrfolkOf(s: Settlement, season: number, folk: readonly Folk[] 
   const idx = Number(/-(\d+)$/.exec(s.id)?.[1] ?? 0), free = freeNames(season)
   // a season whose folk use nearly the whole pool leaves fewer free names than stalls: those stall-keepers go by their kind's
   // name (canon's word) rather than share a living speaker's (canon: two living speakers never share a name). Pool = Magii's.
-  const name = free[idx] ?? BURR_KIND
+  const name = (ADDED_SETTLEMENT_ID.test(s.id) ? undefined : free[idx]) ?? BURR_KIND   // M237 s2: an owner-added settlement's folk hold the spares past free[10]
   return { id: `burr:${season}:${s.id}`, name, home: s.id, stock: stallStock(s, folk) }
 }
 

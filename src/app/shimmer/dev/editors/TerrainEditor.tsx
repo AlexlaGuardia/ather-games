@@ -52,7 +52,7 @@ import { ZoneBuilder } from './ZoneBuilder'   // M84 s2: build on a zone
 import { FURNITURE } from '../../open/ather/furniture'
 import { quad } from '../../open/ather/build-prefs'
 import { applySettlementEdits, addSettlementEdit, moveSettlementEdit, removeSettlementEdit, patchEdit, removedIds, type SettlementEdits, type EditedSettlement } from '../../open/ather/settlement-edits'   // M237
-import { SettlementMarkers, SettlementsPanel } from './settlements-tool'
+import { SettlementMarkers, SettlementsPanel, namesForNextAdd } from './settlements-tool'
 
 // ── BETA M83 p1 s1a: the editor works on the World Builder DRAFT (world/builder.ts), never on the live layer. Save + autosave write
 // the draft; PUBLISH makes it a version and puts it live; the history rolls back to any version. Players see nothing until Publish.
@@ -809,8 +809,8 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
               </g>) })}
           </svg>
         )}
-        {B && !glade && !nyx && (brush === 'settle' || showOv) && <SettlementMarkers box={{ x0: B.ox - B.meta.sizeX / 2, z0: B.oz - B.meta.sizeZ / 2, sx: B.meta.sizeX, sz: B.meta.sizeZ }} list={settleList} sel={selSettle} active={brush === 'settle'}
-          onAdd={(x, z) => { if (!baseNet) return; const r = addSettlementEdit(settlesRef.current, baseNet, x, z); setSettles(r.edits); setSelSettle(r.id) }}
+        {B && !glade && !nyx && (brush === 'settle' || showOv) && <SettlementMarkers box={{ x0: B.ox - B.meta.sizeX / 2, z0: B.oz - B.meta.sizeZ / 2, sx: B.meta.sizeX, sz: B.meta.sizeZ }} list={settleList} base={baseNet} sel={selSettle} active={brush === 'settle'}
+          onAdd={(x, z) => { if (!baseNet || namesForNextAdd(baseNet, settleList) === 0) return; const r = addSettlementEdit(settlesRef.current, baseNet, x, z); setSettles(r.edits); setSelSettle(r.id) }}
           onMove={(id, x, z) => setSettles(moveSettlementEdit(settlesRef.current, id, x, z))} onSelect={setSelSettle} />}
         {B && (brush === 'zone' || zoneBox) && (
           <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox={`${B.ox - B.meta.sizeX / 2} ${B.oz - B.meta.sizeZ / 2} ${B.meta.sizeX} ${B.meta.sizeZ}`} preserveAspectRatio="none" data-testid="zone-tile">

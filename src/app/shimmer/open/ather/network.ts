@@ -39,7 +39,8 @@ export const CONTEST_LABEL: Readonly<Record<Contest, string>> = { clash: 'Clash'
 /** a Clash tent's difficulty (Alex 11-27: 2 easy, 2 average, 1 difficult a season) */
 export type ClashLevel = 'easy' | 'average' | 'difficult'
 export const CLASH_LEVEL_LABEL: Readonly<Record<ClashLevel, string>> = { easy: 'Easy', average: 'Average', difficult: 'Difficult' }
-export interface Tent extends Fair { contest: Contest; level?: ClashLevel }
+/** `settlement` (M237 s2): pitched beside this settlement by the owner's layer (World Builder > Settlements > Event tent) */
+export interface Tent extends Fair { contest: Contest; level?: ClashLevel; settlement?: string }
 /** a tent's banner/prompt words: 'Smash', 'Clash · Easy' (plain UI labels; @lark may reword) */
 export const tentLabel = (t: Pick<Tent, 'contest' | 'level'>) => t.level ? `${CONTEST_LABEL[t.contest]} · ${CLASH_LEVEL_LABEL[t.level]}` : CONTEST_LABEL[t.contest]
 /** THE SEASON'S TENT PLAN = DATA (Alex 11-27): how many tents of each contest, and each Clash tent's difficulty.
@@ -62,7 +63,7 @@ export async function loadNetwork(season = SEASON, base = '/open/wilds', layer =
     const r = await fetch(`${base}/network-s${season}.json`); if (!r.ok) return null
     const n = withGlade((await r.json()) as Network); if (!layer) return n
     await ensureEdits()   // never throws: no layer = the bake as it is
-    const m = applySettlementEdits(n, settlementEditsLive())
+    const m = pitchOwnerTents(applySettlementEdits(n, settlementEditsLive()))   // M237 s2: the Fair pitches beside a settlement
     if (typeof window !== 'undefined') (window as unknown as { __atherNet?: () => Network }).__atherNet = () => m   // checks: READ only
     return m
   } catch { return null }
@@ -283,3 +284,52 @@ export function pickTents(n: Pick<Network, 'paths' | 'settlements' | 'fair' | 's
   for (let k = slots.length - 1; k > 0; k--) { const r = Math.floor(rnd() * (k + 1)); [slots[k], slots[r]] = [slots[r], slots[k]] }
   return chosen.map((f, i) => ({ ...f, ...slots[i] }))
 }
+
+// ── M237 s2: THE FAIR PITCHES BESIDE IT (Magii d2e2dca: the tents are the Thistledown troupe's; the owner's Event tent on a
+// settlement = "the Fair pitches beside it this season"). RULE: an owner tent TAKES OVER the baked plan's tent of the same contest
+// + level (the nearest such one not already taken), so the season keeps the plan's counts (5 Clash 2/2/1, 1 Dash, 1 Smash) and a
+// Clash tent keeps its number (its pregenerated line-up, its once-per-season prize). Only when every baked tent of that kind is
+// already taken does it ADD one. Pure.
+/** how far out from the settlement's centre the tent stands: past the lots' ring (pads reach ~30 m) by the big top's own ground */
+export const OWNER_TENT_RINGS = [60, 75, 90] as const
+/** a pitch keeps this far off every path, other settlements' ground and other tents' ground */
+export const OWNER_TENT_PATH_GAP = 24
+const OWNER_TENT_ANGLES = 24
+/** where the Fair pitches beside settlement `s`: the nearest ring with room, and on it the angle farthest from any path (ties: the
+ *  first). Door faces the settlement. `others` = every other tent standing. Null = no room (the editor says so). */
+export function ownerTentSpot(n: Network, s: Settlement, others: readonly Fair[], siteOk: (x: number, z: number) => boolean = () => true): Fair | null {
+  for (const r of OWNER_TENT_RINGS) {
+    let best: Fair | null = null, bestD = -1
+    for (let k = 0; k < OWNER_TENT_ANGLES; k++) {
+      const a = (k / OWNER_TENT_ANGLES) * Math.PI * 2, x = Math.round(s.x + Math.sin(a) * r), z = Math.round(s.z + Math.cos(a) * r)
+      const pd = n.paths.length ? pathDistanceScan(n, x, z) : Infinity
+      if (pd < OWNER_TENT_PATH_GAP) continue
+      if (n.settlements.some(o => o.id !== s.id && Math.hypot(o.x - x, o.z - z) < SETTLEMENT_CLEAR + FAIR_CLEAR)) continue
+      if (others.some(t => Math.hypot(t.x - x, t.z - z) < FAIR_CLEAR * 2)) continue
+      if (Math.hypot(LINGSTON.x - x, LINGSTON.z - z) < LINGSTON_CLEAR + FAIR_CLEAR) continue
+      if (!siteOk(x, z)) continue
+      const score = Math.min(pd, 60)
+      if (score > bestD) { bestD = score; best = { x, z, yaw: Math.atan2(s.x - x, s.z - z), path: `owner:${s.id}` } }
+    }
+    if (best) return best
+  }
+  return null
+}
+/** the merged network's tents with every settlement's owner tent pitched (see the rule above). No owner tent = the same object. */
+export function pitchOwnerTents(n: Network): Network {
+  const asks = n.settlements.filter(s => (s as { tent?: Pick<Tent, 'contest' | 'level'> }).tent) as (Settlement & { tent: Pick<Tent, 'contest' | 'level'> })[]
+  if (!asks.length) return n
+  const tents: Tent[] = tentsOf(n).map(t => ({ ...t })), taken = new Set<number>()
+  for (const s of asks) {
+    const want = s.tent, kind = (t: Tent) => t.contest === want.contest && (t.level ?? null) === (want.contest === 'clash' ? want.level ?? 'easy' : null)
+    let slot = -1, sd = Infinity
+    tents.forEach((t, i) => { if (!taken.has(i) && !t.settlement && kind(t)) { const d = Math.hypot(t.x - s.x, t.z - s.z); if (d < sd) { sd = d; slot = i } } })
+    const spot = ownerTentSpot(n, s, tents.filter((_, i) => i !== slot))
+    if (!spot) continue   // no room beside it: the baked tent stays where it was
+    const t: Tent = { ...spot, contest: want.contest, settlement: s.id, ...(want.contest === 'clash' ? { level: want.level ?? 'easy' } : {}) }
+    if (slot >= 0) { tents[slot] = t; taken.add(slot) } else { taken.add(tents.push(t) - 1) }
+  }
+  return { ...n, tents }
+}
+/** M237 s2 counter: the owner's tent for this settlement as pitched (null = none asked, or no room) */
+export const ownerTentOf = (n: Network, sid: string): Tent | null => tentsOf(n).find(t => t.settlement === sid) ?? null

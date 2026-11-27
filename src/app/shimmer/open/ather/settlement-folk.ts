@@ -113,6 +113,20 @@ export function seasonRoster(season: number): { slot: (j: number) => string; fre
   const r = { slot: (j: number) => swap.get(j) ?? names[order[j % order.length]], free: spare }
   rosters.set(season, r); return r
 }
+/** BETA M237 s2 (Alex via Magii 11-27: canon forbids two living Moglins with one name): a settlement the OWNER ADDED (World Builder
+ *  > Settlements, id `s<season>-x-<n>`, n >= SEASON_SETTLEMENTS) owns no slot of the name order (its slots would be the spares
+ *  or, past 11, the first settlements' names). Its folk take names from the season's free names AFTER the baked settlements'
+ *  Burrfolk (free[0..10]), in added-id order: added n starts past every lower added id's folk count (a removed one's names are
+ *  left unused, never handed twice). Names run out = that settlement has fewer folk (none at all = it stands empty and the
+ *  editor refuses the add). Its own Burrfolk goes by the kind's name (BURR_KIND, burrfolk.ts). The pool growing is a later slice. */
+export const ADDED_SETTLEMENT_ID = /^s\d+-x-(\d+)$/
+export function addedFolkNames(sid: string, season: number): string[] {
+  const m = ADDED_SETTLEMENT_ID.exec(sid); if (!m) return []
+  const spare = seasonRoster(season).free.slice(SEASON_SETTLEMENTS), idx = +m[1]
+  let off = 0
+  for (let j = SEASON_SETTLEMENTS; j < idx && off < spare.length; j++) off += folkCount(`s${season}-x-${j}`, season)
+  return spare.slice(off, off + folkCount(sid, season))
+}
 /** The Moglins living in a settlement this season. Same inputs, same folk, on every device. */
 export function folkOf(s: Settlement, season: number): Folk[] {
   if (s.id === GLEANER_POST.id) return []   // M112 s2: Gleaner's post is a stall, not a settlement (no folk)
@@ -127,8 +141,10 @@ export function folkOf(s: Settlement, season: number): Folk[] {
   // two Moglins alive this season share a name across ALL settlements, not just within one (canon: two living speakers never do).
   const roster = seasonRoster(season)   // reserved names (canon) swapped for spare ones; every other name as drawn before
   const idx = Number(/-(\d+)$/.exec(s.id)?.[1] ?? 0)
+  const added = ADDED_SETTLEMENT_ID.test(s.id) ? addedFolkNames(s.id, season) : null   // M237 s2: an owner-added one
   for (let k = 0; k < n; k++) {
-    const name = roster.slot((idx * FOLK_MAX + k) % seasonNames(season).order.length)
+    if (added && k >= added.length) break   // no free name left: never a second living Moglin with one name
+    const name = added ? added[k] : roster.slot((idx * FOLK_MAX + k) % seasonNames(season).order.length)
     const drawnTrade = pick(rnd, trades)
     const profession: Profession = rngOf(`digger:${season}:${s.id}:${k}`)() < DIGGER_P[biome] ? 'digger' : drawnTrade
     const drawn = { craft: pick(rnd, GRADE_ODDS), yield: pick(rnd, GRADE_ODDS), trade: pick(rnd, GRADE_ODDS) }   // kept so the season's other rolls do not shift
