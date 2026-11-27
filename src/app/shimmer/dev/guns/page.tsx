@@ -16,13 +16,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { FpGun, ScopeRing, VM, GUN_DEFAULTS, setGunTune, resetGunTune, loadGunTune, selectGunTune, defaultsFor, dialedGun, rhythmDefaultsFor, previewGunModel, todayModelOf, setRhythm, noteCycle, type FpGunApi, type GunTune } from '../../open/shared/fp-gun'
-import { RANGE_GUNS, RHYTHM_DIALS, burstCycle, holdGun, stepGun, type GunState, type RangeGun } from '../../open/shared/gunplay'
+import { RHYTHM_DIALS, burstCycle, holdGun, stepGun, type GunState, type RangeGun } from '../../open/shared/gunplay'
 import { playShot } from '../../open/shared/gun-sound'
 import { OPTICS, viewFov, opticOf } from '../../open/shared/optics'
 import { EYE_STAND } from '../../open/shared/locomotion'
-import { V2_GUNS, V2_SIGHTS, type V2GunId, type V2SightId } from '../../open/shared/gun-kit-v2'
+import { V2_SIGHTS, type V2SightId } from '../../open/shared/gun-kit-v2'
 import { SoundBench } from './sound-bench'
-import { BUILD_DIALS, BUILD_ZERO, builtModel, hasSocket, loadBuilds, saveBuild, type GunBuild, type BuildKey } from '../../open/shared/gun-build'
+import { BUILD_DIALS, BUILD_ZERO, BENCH_KITS, builtModel, hasSocket, hasStock, isBenchKit, sightFor, loadBuilds, saveBuild, type GunBuild, type BuildKey, type BenchKitId } from '../../open/shared/gun-build'
+import { BENCH_GUNS, BENCH_ONLY_GUNS, STAT_DIALS, benchGun, heldDps, loadStats, saveStats, type GunStats, type StatKey } from '../../open/shared/gun-bench'
 import { CompareStrip } from './compare'
 
 type Preview = 'hip' | 'aim' | 'run' | 'fire'
@@ -95,7 +96,7 @@ function Fov({ fov }: { fov: number }) {
 
 export default function GunTuner() {
   const api = useRef<FpGunApi>(null)
-  const [gunId, setGunId] = useState(RANGE_GUNS[0].id)
+  const [gunId, setGunId] = useState(BENCH_GUNS[0].id)
   const [preview, setPreview] = useState<Preview>('hip')
   const [paused, setPaused] = useState(false)
   const [, bump] = useState(0)
@@ -104,21 +105,22 @@ export default function GunTuner() {
   const [fresh, setFresh] = useState(false), [pick, setPick] = useState<V2SightId | null>(null)
   useEffect(() => {   // ?gun= &preview= &set=new &sight= (the look-sheet shots)
     const q = new URLSearchParams(window.location.search)
-    if (RANGE_GUNS.some(g => g.id === q.get('gun'))) setGunId(q.get('gun')!)
+    if (BENCH_GUNS.some(g => g.id === q.get('gun'))) setGunId(q.get('gun')!)
     if (PREVIEWS.some(p => p.id === q.get('preview'))) setPreview(q.get('preview') as Preview)
     if (q.get('set') === 'new') setFresh(true)
     if (q.get('sight') && q.get('sight')! in V2_SIGHTS) setPick(q.get('sight') as V2SightId)
   }, [])
-  const kit = gunId in V2_GUNS ? V2_GUNS[gunId as V2GunId] : null, kitSight = kit ? (pick && kit.sights.includes(pick) ? pick : kit.own) : null
-  const v2 = fresh ? kit : null, sight = v2 ? kitSight : null
+  // M150 s5: every bench gun has a kit (the family, the bench-only M9 Grinder, the Twins pair); a bench-only gun always shows its new model
+  const kit = isBenchKit(gunId) ? BENCH_KITS[gunId] : null, kitSight = kit ? sightFor(kit.id, pick) : null
+  const v2 = fresh || BENCH_ONLY_GUNS.has(gunId) ? kit : null, sight = v2 ? kitSight : null
   // M150 s4: the new model's BUILD dials (gun-build.ts), this browser's, loaded after mount (no localStorage on the server)
-  const [builds, setBuilds] = useState<Partial<Record<V2GunId, GunBuild>>>({})
+  const [builds, setBuilds] = useState<Partial<Record<BenchKitId, GunBuild>>>({})
   useEffect(() => { setBuilds(loadBuilds()) }, [])
   const build = kit ? builds[kit.id] ?? BUILD_ZERO : BUILD_ZERO
   const setBuild = (b: GunBuild | null) => { if (kit) setBuilds(saveBuild(kit.id, b)) }
-  const built = kit && kitSight ? builtModel(kit.id, kitSight, build) : null
+  const built = kit ? builtModel(kit.id, kitSight, build) : null
   useEffect(() => {
-    if (!v2 || !sight || !built) return
+    if (!v2 || !built) return
     previewGunModel(v2.id, built, v2.hold); bump(n => n + 1)
     return () => { previewGunModel(v2.id, null); bump(n => n + 1) }
   }, [v2, sight, built])
@@ -126,10 +128,20 @@ export default function GunTuner() {
   const [ready, setReady] = useState(false)
   useEffect(() => { loadGunTune(); setReady(true) }, [])
   // M197: this browser's dials only after mount (the server has no localStorage: reading them in the first render broke hydration)
-  const row = RANGE_GUNS.find(g => g.id === gunId) ?? RANGE_GUNS[0], gun = ready ? dialedGun(row) : rhythmDefaultsFor(row)
+  // M150 s5: the bench's gameplay dials (gun-bench.ts) ride on top of the rhythm; bench only, the game never reads them
+  const [stats, setStats] = useState<Record<string, Partial<GunStats>>>({})
+  useEffect(() => { setStats(loadStats()) }, [])
+  const row = BENCH_GUNS.find(g => g.id === gunId) ?? BENCH_GUNS[0], rhythmGun = ready ? dialedGun(row) : rhythmDefaultsFor(row), gun = benchGun(rhythmGun, stats[row.id])
+  const setStat = (k: StatKey | null, v?: number) => setStats(saveStats(row.id, k ? { ...(stats[row.id] ?? {}), [k]: v } : null))
   // per gun (11-19): picking a gun loads ITS numbers into the sliders
   useEffect(() => { selectGunTune(gunId); bump(n => n + 1) }, [gunId])
-  const values = () => JSON.stringify({ gun: gunId, ...Object.fromEntries(Object.keys(GUN_DEFAULTS).map(k => [k, VM[k as keyof GunTune]])), ...(gun.burst > 1 ? { BURST_GAP: gun.burstGap, BURST_DELAY: gun.fireCd } : { FIRE_INTERVAL: gun.fireCd }), ...(kit ? { BUILD: build } : {}) })
+  const values = () => JSON.stringify({ gun: gunId, ...Object.fromEntries(Object.keys(GUN_DEFAULTS).map(k => [k, VM[k as keyof GunTune]])), ...(gun.burst > 1 ? { BURST_GAP: gun.burstGap, BURST_DELAY: gun.fireCd } : { FIRE_INTERVAL: gun.fireCd }), ...(kit ? { BUILD: build } : {}), ...(stats[gunId] ? { STATS: stats[gunId] } : {}) })
+  useEffect(() => {   // M150 s5: what the bench shows, for the prod check (scripts/m150-bench-sliders-check.mts)
+    const zs = built ? built.parts.flatMap(p => (p.shape === 'poly' && p.axis !== 'z' ? p.pts!.map(q => q[0]) : [p.o[2] - (p.shape === 'plate' ? 0 : p.s[2] / 2)])) : []
+    ;(window as unknown as { __gunBench?: unknown }).__gunBench = { id: gun.id, damage: gun.damage, crit: gun.crit, pellets: gun.pellets, burst: gun.burst, projSpeed: gun.projSpeed, charge: gun.charge ?? 0,
+      clip: gun.clip, reloadTime: gun.reloadTime, fireCd: gun.fireCd, dps: heldDps(gun), parts: built?.parts.length ?? 0, front: zs.length ? Math.min(...zs) : 0, back: zs.length ? Math.max(...zs) : 0,
+      top: built?.top ?? 0, grip: built?.grip ?? null, preview: !!v2 }
+  })
   const base = rhythmDefaultsFor(row)   // M197: what the dials read with nobody's moves (the row, under any baked rhythm)
   const dials = gun.burst > 1
     ? ([['BURST_GAP', 'round gap (s)', RHYTHM_DIALS.gap, gun.burstGap, base.burstGap], ['BURST_DELAY', 'burst delay (s)', RHYTHM_DIALS.delay, gun.fireCd, base.fireCd]] as const)
@@ -143,7 +155,7 @@ export default function GunTuner() {
           The game&apos;s lens and held gun. Sliders save to this browser and the open world uses them at once. Copy values and paste them to Jin to make them the default.
         </p>
         <select data-gun value={gunId} onChange={e => setGunId(e.target.value)} style={{ ...chip, width: '100%', marginBottom: 8 }}>
-          {RANGE_GUNS.map(g => <option key={g.id} value={g.id}>{g.name} · {g.slot.toLowerCase()} · {opticOf(g).id}</option>)}
+          {BENCH_GUNS.map(g => <option key={g.id} value={g.id}>{g.name} · {g.slot.toLowerCase()} · {BENCH_ONLY_GUNS.has(g.id) ? 'bench only' : opticOf(g).id}</option>)}
         </select>
         {kit && (
           <div data-v2 style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
@@ -156,7 +168,7 @@ export default function GunTuner() {
           <section data-build style={{ marginBottom: 12 }}>
             <span className="gx-label" style={{ fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#c8b98a' }}>New model build</span>
             <span style={{ fontSize: 10, color: '#8b8598', marginLeft: 6 }}>{kit.name}: saved to this browser</span>
-            {BUILD_DIALS.filter(d => !d.socket || hasSocket(kit.id)).map(d => (
+            {BUILD_DIALS.filter(d => (!d.socket || hasSocket(kit.id)) && (!d.stock || hasStock(kit.id))).map(d => (
               <label key={d.k} style={{ display: 'grid', gridTemplateColumns: '92px 1fr 46px', gap: 6, alignItems: 'center', fontSize: 11, marginTop: 4 }}>
                 <span style={{ color: '#b5afc2' }}>{d.label}</span>
                 <input type="range" data-build-knob={d.k} min={d.min} max={d.max} step={d.step} value={build[d.k]}
@@ -183,7 +195,22 @@ export default function GunTuner() {
                 <span data-dial-val={k} style={{ fontVariantNumeric: 'tabular-nums', textAlign: 'right', color: v === def ? '#8b8598' : '#e8b04a' }}>{v.toFixed(3)}</span>
               </label>
             ))}
-            <div data-rhythm-read style={{ fontSize: 10, color: '#8b8598', marginTop: 4 }}>cycle {burstCycle(gun).toFixed(2)} s · {gun.damage.toFixed(1)} damage a round{gun.pellets > 1 ? ` x ${gun.pellets}` : ''} · {(gun.burst * gun.pellets * gun.damage / burstCycle(gun)).toFixed(1)} a second (held steady)</div>
+            <div data-rhythm-read style={{ fontSize: 10, color: '#8b8598', marginTop: 4 }}>cycle {burstCycle(gun).toFixed(2)} s · {gun.damage.toFixed(1)} damage a round{gun.pellets > 1 ? ` x ${gun.pellets}` : ''} · {heldDps(gun).toFixed(1)} a second (held steady)</div>
+          </section>
+          <section data-stats style={{ marginBottom: 12 }}>
+            <span className="gx-label" style={{ fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#c8b98a' }}>Gun stats</span>
+            <span style={{ fontSize: 10, color: '#8b8598', marginLeft: 6 }}>bench only: saved to this browser</span>
+            {STAT_DIALS.filter(d => !d.only || d.only(row)).map(d => {
+              const v = (gun as unknown as Record<string, number>)[d.k] ?? 0, def = (rhythmGun as unknown as Record<string, number>)[d.k] ?? 0
+              return (
+                <label key={d.k} style={{ display: 'grid', gridTemplateColumns: '92px 1fr 46px', gap: 6, alignItems: 'center', fontSize: 11, marginTop: 4 }}>
+                  <span style={{ color: '#b5afc2' }}>{d.label}</span>
+                  <input type="range" data-stat-knob={d.k} min={d.min} max={d.max} step={d.step} value={v} onChange={e => setStat(d.k, Number(e.target.value))} />
+                  <span data-stat-val={d.k} style={{ fontVariantNumeric: 'tabular-nums', textAlign: 'right', color: v === def ? '#8b8598' : '#e8b04a' }}>{d.step >= 1 ? v.toFixed(0) : v.toFixed(2)}</span>
+                </label>
+              )
+            })}
+            <button data-stats-reset style={{ ...chip, marginTop: 6 }} onClick={() => setStat(null)}>Reset stats</button>
           </section>
         {GROUPS.map(g => (
           <section key={g.title} style={{ marginBottom: 12 }}>

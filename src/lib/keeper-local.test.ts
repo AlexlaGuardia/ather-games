@@ -123,6 +123,7 @@ const DEVICE_KEYS = [
   'open:gun-sound.v1',            // shared/gun-sound.ts GUN_SOUND_KEY: the guns' voices tuned on /shimmer/dev/guns, this machine's
   'open:gun-tune.v2',             // fp-gun.tsx GUN_TUNE_KEY since 11-19: the tuner's moves PER GUN (a map), this machine's
   'open:gun-build.v1',            // M150 s4 gun-build.ts GUN_BUILD_KEY: the tuner's new-model build dials, a dev tool on this machine
+  'open:gun-stats.v1',            // M150 s5 gun-bench.ts GUN_STATS_KEY: the tuner's bench-only gun stats (damage, clip...), a dev tool on this machine
   'open:gun-tune.v1',             // fp-gun.tsx GUN_TUNE_KEY: the /shimmer/dev/guns tuner's live numbers, a dev tool on this machine
   'ather:shimmer:justBorn',       // read and cleared inside one boot
   'ather:shimmer:birthPending',   // vestigial, cleared only so an old latch does not look meaningful

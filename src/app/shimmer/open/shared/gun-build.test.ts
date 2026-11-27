@@ -1,5 +1,6 @@
 // M150 s4: the new-family models' BUILD DIALS (gun-build.ts). Run: npx tsx src/app/shimmer/open/shared/gun-build.test.ts
-import { BUILD_DIALS, BUILD_ZERO, builtModel, cleanBuild, hasSocket, muzzleOf, socketOf, loadBuilds, saveBuild, GUN_BUILD_KEY } from './gun-build'
+import { BUILD_DIALS, BUILD_ZERO, BENCH_KITS, BENCH_ONLY, builtModel, cleanBuild, hasSocket, hasStock, muzzleOf, socketOf, loadBuilds, saveBuild, dimZ, sightFor, GUN_BUILD_KEY, type BenchKitId } from './gun-build'
+import { TWINS } from './gun-kit-twins'
 import { V2_GUNS, v2Model, isCorePart, type V2GunId } from './gun-kit-v2'
 import { RANGE_GUNS } from './gunplay'
 import { trisOf } from './gun-kit-geo'
@@ -41,6 +42,44 @@ for (const id of IDS) {
   const mu = builtModel(id, 'holo', { muzzleZ: -0.02 })
   ok(near(mu.muzzle[1], base.muzzle[1] - 0.02) && mu.parts.length === base.parts.length, 'muzzle: the point moves, the model does not')
   ok(builtModel('charred-rifle', 'ring', { socketZ: 0.05 }).socket === null, 'the Prototype: a socket dial finds no core')
+}
+// M150 s5: THE DIMENSION DIALS on every bench gun, and the two bench-only guns (the Twins pair, the M9 Grinder)
+{
+  const zs = (m: { parts: { o: number[]; s: number[]; shape?: string; axis?: string; pts?: [number, number][] }[] }) => m.parts.flatMap(p =>
+    p.shape === 'poly' && p.axis !== 'z' ? p.pts!.map(q => q[0]) : [p.o[2] - (p.shape !== 'plate' && p.shape !== 'disc' ? p.s[2] / 2 : 0), p.o[2] + (p.shape !== 'plate' && p.shape !== 'disc' ? p.s[2] / 2 : 0)])
+  const ext = (m: Parameters<typeof zs>[0]) => { const z = zs(m); return [Math.min(...z), Math.max(...z)] }
+  const ALL = Object.keys(BENCH_KITS) as BenchKitId[]
+  ok(ALL.length === 8 && BENCH_ONLY.includes('twins') && BENCH_ONLY.includes('grinder'), 'the bench holds 8 guns: the family, the Twins, the Grinder')
+  for (const id of ALL) {
+    const s = sightFor(id, null), base = builtModel(id, s), [f0, b0] = ext(base)
+    const L = builtModel(id, s, { length: 1.2 }), [f1, b1] = ext(L)
+    ok(near(f1, f0 * 1.2) && near(b1, b0 * 1.2) && near(L.grip[2], base.grip[2] * 1.2) && near(L.muzzle[1], base.muzzle[1] * 1.2), `${id}: length stretches the whole gun and its anchors`)
+    const B = builtModel(id, s, { barrel: 1.5 }), [f2, b2] = ext(B), kz = BENCH_KITS[id].barrelZ
+    ok(near(f2, kz + (f0 - kz) * 1.5) && near(b2, b0) && near(B.grip[2], base.grip[2]) && near(B.muzzle[1], kz + (base.muzzle[1] - kz) * 1.5), `${id}: barrel stretches only ahead of the receiver (front ${f0.toFixed(3)} -> ${f2.toFixed(3)}), the grip stays`)
+    if (hasStock(id)) { const S = builtModel(id, s, { stock: 1.4 }), [f3, b3] = ext(S), sz = BENCH_KITS[id].stockZ!
+      ok(near(f3, f0) && near(b3, sz + (b0 - sz) * 1.4) && near(S.grip[2], base.grip[2]), `${id}: stock stretches only behind the receiver`) }
+    const H = builtModel(id, s, { height: 1.25, width: 0.8 })
+    ok(near(H.grip[1], base.grip[1] * 1.25) && near(H.top, base.top * 1.25) && H.eye! > base.eye!, `${id}: height lifts the grip, the rail and the sight line`)
+    const hy = (m: typeof base) => Math.max(...m.parts.filter(p => p.shape === 'poly' && p.axis !== 'z').flatMap(p => p.pts!.map(q => q[1])))
+    ok(near(hy(H), hy(base) * 1.25), `${id}: height scales the outlines (${hy(base).toFixed(3)} -> ${hy(H).toFixed(3)})`)
+    const wx = (m: typeof base) => Math.max(...m.parts.map(p => Math.abs(p.o[0])))
+    ok(wx(H) < wx(base), `${id}: width narrows the body`)
+    const all5 = builtModel(id, s, { length: 1.1, barrel: 1.2, stock: 1.1, height: 1.1, width: 1.1 })
+    ok(all5.parts.length === base.parts.length && all5.parts.every(p => [...p.o, ...p.s].every(Number.isFinite)), `${id}: every dial together keeps every part, all finite`)
+    const t = trisOf(base); ok(t > 400 && t < 6000, `${id}: cheap (${t} tris)`)
+  }
+  // the Twins: both guns in one model, the left one TWINS.gap to the left, sightless, both core halves move as one
+  const tw = builtModel('twins', null)
+  ok(tw.parts.length === TWINS.left.parts.length + TWINS.right.parts.length && sightFor('twins', 'holo') === null, 'Twins: the pair in one model, no sight')
+  ok(Math.min(...tw.parts.map(p => p.o[0])) < -TWINS.gap * 0.6, 'Twins: the left gun sits to the left of the grip')
+  ok(hasSocket('twins') && !hasStock('twins'), 'Twins: a core (two halves), no stock')
+  const tws = builtModel('twins', null, { socketZ: 0.02 }), moved = tws.parts.filter((p, i) => p.o[2] !== tw.parts[i].o[2])
+  ok(moved.length === TWINS.left.core.length + TWINS.right.core.length && near(tws.socket![1], tw.socket![1] + 0.02), `Twins: socket moves both core halves (${moved.length} parts)`)
+  // the Grinder: family style (iron + bronze + a core), longer than the Backbone, its own muzzle
+  const gr = builtModel('grinder', 'iron'), bbm = builtModel('backbone', 'iron')
+  ok(ext(gr)[0] < ext(bbm)[0] - 0.04 && gr.parts.some(p => p.c === 'bronze') && hasSocket('grinder') && hasStock('grinder'), 'Grinder: a longer family longbarrel with a core and a stock')
+  ok(near(muzzleOf('grinder')[1], ext(gr)[0]) || muzzleOf('grinder')[1] <= ext(gr)[0] + 0.005, 'Grinder: the muzzle is its front')
+  ok(near(dimZ({ barrelZ: -0.1, stockZ: 0.1 }, { ...BUILD_ZERO, barrel: 2 }, -0.3), -0.5) && near(dimZ({ barrelZ: -0.1, stockZ: null }, { ...BUILD_ZERO, stock: 2 }, 0.3), 0.3), 'dimZ: barrel region stretches, a stockless gun ignores stock')
 }
 // saved dials are cleaned: out of range clamps, junk falls back
 {

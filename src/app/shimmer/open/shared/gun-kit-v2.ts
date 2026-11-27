@@ -131,6 +131,20 @@ export const V2_GUNS: Record<V2GunId, V2Gun> = {
   ] },
 }
 
+// M150 s5 (Alex 11-27: "a third full auto long gun with a slower fire rate but higher damage per bullet"): the M9 GRINDER (canon
+// game/weapons.md › Models, Magii 842ef49: a full-auto longbarrel, slower fire than the Backbone, more per bullet). BENCH ONLY: not
+// in V2_GUNS (the game's family) and no player holds it; the Gun Tuner (gun-build.ts BENCH_KITS) draws it. Off the locked card: the
+// Backbone's receiver, chamber, lever, gauge, core and stock, a LONGER and heavier slotted shroud, a thick barrel with two bronze
+// bands, a flared bronze brake at the muzzle. grip / fore = the LONGBARREL anchors (the Backbone's hand tune lands).
+export const GRINDER_KIT: Omit<V2Gun, 'id'> & { id: 'grinder' } = { id: 'grinder', name: 'M9 Grinder', grip: GRIP, fore: FORE, railTop: 0.054, seatZ: -0.04, own: 'iron', sights: ['iron', 'holo', 'prism'], hold: HOLD, parts: [
+  receiver(0, 0), ...channel(-0.035, 0.13, 0.02, 0.026), ...chamber(-0.0965, -0.003, 0.094, 0.026), ...lever(-0.006, -0.018, 0.026), ...gauge(0.106, -0.018, 0.026),
+  bar([0, 0.002, -0.28], cut(0.056, 0.088, 0.009), 0.24, 'iron', 0.002), ...slots(-0.385, 10, 0.0215, 0.002, 0.06, 0.0285),
+  box([0, -0.046, -0.28], [0.03, 0.008, 0.2], 'bronze'),
+  cyl([0, 0, -0.465], 0.034, 0.13, 'iron'), ...[-0.43, -0.5].map(z => cyl([0, 0, z], 0.046, 0.016, 'bronze', 'z', 16)),
+  cyl([0, 0, -0.55], 0.058, 0.04, 'bronze', 'z', 16, 0.046), bore(-0.5705, 0, 0.03),
+  ...core(-0.048, -0.064), ...trigger(0.026, -0.078), grip(0, -0.05), ...stock(0),
+] }
+
 // ── the sights: each its own part set, seat-relative (origin = the flat top at the seat); eye = the sight line above the top ──
 export type V2SightId = 'iron' | 'holo' | 'prism' | 'ring'
 export interface V2Sight { id: V2SightId; name: string; optic: 'reddot' | 'prism3'; eye: number; adsK: number; lens?: [number, number]; cut: 'dot' | 'cross'; parts: Part[] }
