@@ -26,7 +26,11 @@ ok(parseBench('medium-broad', { torso: 3, scarf: 0 }).torso === 3, 'parse: an s2
 ok(parseBench('medium-broad', { head: 9 }).head === 0 && parseBench('medium-broad', {}).head === 0, 'parse: a bad / missing head is Classic')
 // M216 s2a: picking a head COPIES its starting dials onto the sliders (like a torso), and the build lays nothing over them
 ok(HEAD_STARTS.length === OPT.head.length && Object.keys(HEAD_STARTS[0]).length === 0, 'head starts: one per head, Classic none')
-ok(pickHead(DEFAULT_PROPORTIONS, 3).jaw === HEAD_STARTS[3].jaw && pickHead(DEFAULT_PROPORTIONS, 0).jaw === DEFAULT_PROPORTIONS.jaw, 'pickHead: B male copies its jaw, Classic leaves the sliders')
+ok(pickHead(DEFAULT_PROPORTIONS, 3).jaw === HEAD_STARTS[3].jaw && pickHead(DEFAULT_PROPORTIONS, 0).jaw === DEFAULT_PROPORTIONS.jaw, 'pickHead: B male copies its start, Classic leaves the sliders')
+// M225 (Alex 11-27): every cartoon head starts on the CLASSIC head shape: chin taper 0 + chin length 0, whatever was dialled
+{ const tapered = { ...DEFAULT_PROPORTIONS, jaw: 0.6, chin: 0.2 }
+  for (let h = 1; h < OPT.head.length; h++) { const q = pickHead(tapered, h); ok(q.jaw === 0 && q.chin === 0, `M225: head ${h} picked lands on chin taper 0 / chin length 0 (got ${q.jaw} / ${q.chin})`) }
+  ok(pickHead(tapered, 0).jaw === 0.6, 'M225: Classic leaves a dialled taper alone') }
 ok(isDefaultBench(parseBench('small-curved', { face: 9, mouth: -1, torso: 1.5, head: 0, scarf: 9, belt: -1 }), 'small-curved'), 'bad values not clamped to default')
 ok(isDefaultBench(parseBench('small-curved', 'junk'), 'small-curved'), 'junk not default')
 ok(defaultBench('small-curved').torso === 1 && defaultBench('large-broad').torso === 0, 'default body: Curved = A female, Broad = A male')
@@ -83,6 +87,27 @@ ok(scs.size === 6, `scarf picks not all distinct (${scs.size})`)
 ok(bes.size === 5, `belt picks not all distinct (${bes.size})`)
 ok(stats(buildKeeper(fem).group).mouth === stats(buildKeeper(fem).group).mouth && stats(benchKeeper(fem, pf, { ...defaultBench('medium-curved'), mouth: 3 }).group).mouth === 3, 'mouth 3 should be 3 meshes')
 
+// M225: the Hair size / height / forward dials move EVERY hair piece (cap + locks) as one, on every head, and nothing else
+{ const wp = (k: ReturnType<typeof buildKeeper>, name: string) => { k.group.updateMatrixWorld(true); const v: number[] = []; k.group.getObjectByName(name)!.traverse(o => { if ((o as THREE.Mesh).isMesh) { const w = new THREE.Vector3(); (o as THREE.Mesh).getWorldPosition(w); const s = new THREE.Vector3(); o.getWorldScale(s); v.push(w.x, w.y, w.z, s.x, s.y) } }); return v }
+  const faceOnly = (k: ReturnType<typeof buildKeeper>) => { const v: number[] = []; k.group.updateMatrixWorld(true); k.group.getObjectByName('head')!.traverse(o => { if ((o as THREE.Mesh).isMesh && o.parent?.name !== 'hair') { const w = new THREE.Vector3(); (o as THREE.Mesh).getWorldPosition(w); v.push(w.x, w.y, w.z) } }); return v.map(n => n.toFixed(5)).join(',') }
+  for (const head of [0, 1, 4, 8]) {
+    const look = { ...DEFAULT_LOOK, head }, p = proportionsFor(look), a = buildKeeper(look, p)
+    const hair = a.group.getObjectByName('hair')
+    ok(!!hair && hair.children.length > 4, `M225 head ${head}: the hair pieces ride one 'hair' group (${hair?.children.length})`)
+    const hairC = new THREE.Color(OPT.hair[look.hair]); let stray = 0
+    a.group.getObjectByName('head')!.traverse(o => { const m = o as THREE.Mesh, mat = m.material as THREE.MeshToonMaterial; if (m.isMesh && mat?.isMeshToonMaterial && mat.color.equals(hairC) && o.parent !== hair) stray++ })
+    ok(stray === 0, `M225 head ${head}: every hair-coloured piece is in the hair group (${stray} outside)`)
+    const hairGeos = new Set<string>(); hair?.children.forEach(o => { const m = o as THREE.Mesh; if (m.isMesh && (m.material as THREE.MeshToonMaterial).isMeshToonMaterial) hairGeos.add(m.geometry.uuid) })
+    let strayInk = 0; a.group.getObjectByName('head')!.traverse(o => { const m = o as THREE.Mesh; if (m.isMesh && hairGeos.has(m.geometry.uuid) && o.parent !== hair) strayInk++ })
+    ok(strayInk === 0, `M225 head ${head}: every hair piece's ink outline rides the hair group too (${strayInk} outside)`)
+    for (const [k, v] of [['hairSize', 1.2], ['hairY', 0.04], ['hairZ', -0.03]] as const) {
+      const b = buildKeeper(look, { ...p, [k]: v })
+      const ha = wp(a, 'hair'), hb = wp(b, 'hair')
+      ok(ha.length === hb.length && ha.some((n, i) => Math.abs(n - hb[i]) > 1e-4), `M225 head ${head}: ${k} moves the hair`)
+      ok(faceOnly(a) === faceOnly(b) && a.height === b.height, `M225 head ${head}: ${k} moves nothing but the hair`)
+    }
+  }
+}
 // nothing in the game imports the bench options
 import { execSync } from 'child_process'
 const users = execSync("grep -rl \"bench-looks\" src --include=*.ts --include=*.tsx || true").toString().trim().split('\n').filter(Boolean).sort()

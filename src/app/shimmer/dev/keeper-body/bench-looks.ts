@@ -18,15 +18,18 @@ export const BENCH_MOUTHS = ['Today', '1 Neutral line', '2 Slight smile', '3 Sof
 /** M216 s2b: the bench's Torso picker = the six LOCKED torso shapes (keeper-bodies.ts), which replace the M116b T1-T3
  *  try-on (Curved only). Picking one COPIES its starting dials onto the sliders (TORSO_STARTS); the build lays nothing over. */
 export const BENCH_TORSOS = OPT.torso
-/** M216 s2a: the cartoon heads' STARTING dials (the sheet's jaws: A soft oval, B long V chin, C square, D heart; mouth set
- *  low by letter), copied onto the sliders when a head is picked, exactly like a torso option: the head itself bakes none
- *  of them (keeper-heads.ts), the sliders stay the only source. Index = Look.head (0 = Classic, no start). */
+/** M216 s2a: the cartoon heads' STARTING dials, copied onto the sliders when a head is picked, exactly like a torso option:
+ *  the head itself bakes none of them (keeper-heads.ts), the sliders stay the only source. Index = Look.head (0 = Classic).
+ *  M225 (Alex 11-27 "id like the head to follow classics shape with the 0 on the chin taper"): every cartoon head now
+ *  starts on the CLASSIC head (chin taper 0, chin length 0 = the plain round head); only the mouth's start height differs
+ *  by letter. The sheet's jaws (A oval, B V, C square, D heart; M216 s2a starts 0.12-0.8) are his to dial in himself. */
+const CLASSIC_SHAPE = { jaw: 0, chin: 0 } as const
 export const HEAD_STARTS: readonly Partial<Proportions>[] = [
   {},
-  { jaw: 0.35, chin: 0.08, mouthLift: 0.012 }, { jaw: 0.45, chin: 0.06, mouthLift: 0.012 },
-  { jaw: 0.75, chin: 0.16, mouthLift: 0 }, { jaw: 0.8, chin: 0.12, mouthLift: 0 },
-  { jaw: 0.12, chin: 0.06, mouthLift: 0.012 }, { jaw: 0.25, chin: 0.04, mouthLift: 0.012 },
-  { jaw: 0.6, chin: 0.08, mouthLift: -0.008 }, { jaw: 0.6, chin: 0.06, mouthLift: -0.008 },
+  { ...CLASSIC_SHAPE, mouthLift: 0.012 }, { ...CLASSIC_SHAPE, mouthLift: 0.012 },
+  { ...CLASSIC_SHAPE, mouthLift: 0 }, { ...CLASSIC_SHAPE, mouthLift: 0 },
+  { ...CLASSIC_SHAPE, mouthLift: 0.012 }, { ...CLASSIC_SHAPE, mouthLift: 0.012 },
+  { ...CLASSIC_SHAPE, mouthLift: -0.008 }, { ...CLASSIC_SHAPE, mouthLift: -0.008 },
 ]
 export const pickHead = (p: Proportions, h: number): Proportions => ({ ...p, ...(HEAD_STARTS[h] ?? {}) })
 

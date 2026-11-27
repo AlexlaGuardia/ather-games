@@ -17,7 +17,7 @@
  * DOLL VS RAYMAN: the 11-17 placeholder comparison, kept behind its tab (doll-vs-rayman.tsx).
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ElementRef } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
 import type * as THREE from 'three'
 import { OrbitControls } from '@react-three/drei'
@@ -36,6 +36,9 @@ const BACKDROPS = [
 ]
 const fmt = (d: typeof DIALS[number], v: number) => d.kind === 'spacing' && d.key !== 'legs' ? `${v >= 0 ? '+' : ''}${v.toFixed(3)}` : v.toFixed(2)
 const same = (a: Proportions, b: Proportions) => DIALS.every(d => a[d.key] === b[d.key])
+/** M225: the dials that shape the head (one group on the bench, in this order) */
+const FACE_KEYS: readonly DialKey[] = ['headW', 'headH', 'jaw', 'chin', 'eye', 'eyeGap', 'eyeLift', 'mouthLift', 'ear', 'hairSize', 'hairY', 'hairZ', 'neck']
+const FACE_SET = new Set<string>(FACE_KEYS)
 
 /** the bench's own figure: the shipped builder + the try-on options (benchKeeper); turns and floats like KeeperFigure */
 function BenchFigure({ look, shape, bench, spin }: { look: Look; shape: Proportions; bench: BenchLook; spin: number }) {
@@ -43,6 +46,8 @@ function BenchFigure({ look, shape, bench, spin }: { look: Look; shape: Proporti
   useEffect(() => () => { body.group.clear() }, [body])
   const host = useRef<THREE.Group>(null), t = useRef(0)
   useFrame((_, dt) => { t.current += Math.min(dt, 0.1); if (host.current && spin) host.current.rotation.y += dt * spin; poseKeeper(body, t.current, 0) })
+  // M225 read-only probe (scripts/m225-bench-check.mts): the figure's own turn, to prove it holds still unless asked
+  useEffect(() => { (window as unknown as { __benchYaw?: () => number }).__benchYaw = () => host.current?.rotation.y ?? 0 }, [])
   return <group ref={host}><primitive object={body.group} /></group>
 }
 /** a short fingerprint of a built figure, so a check can see an option change the model (meshes, mouth meshes, torso shape) */
@@ -70,6 +75,7 @@ function figureSig(k: ReturnType<typeof benchKeeper>) {
   // M216: the head's own build (geometry shape + every face part's place and size), so a check sees a chin / eye dial land
   let hv = 0
   k.group.getObjectByName('head')!.traverse(o => {
+    if (o.name === 'hair') hv += o.position.z * 37 + o.position.y * 41 + o.scale.x * 43   // M225: the Hair size / height / forward dials
     const m = o as THREE.Mesh; if (!m.isMesh) return
     const pos = m.geometry.attributes.position
     for (let i = 0; i < pos.count; i += 3) hv += Math.abs(pos.getX(i)) + Math.abs(pos.getY(i)) * 1.3 + Math.abs(pos.getZ(i)) * 0.7
@@ -105,7 +111,11 @@ function ProportionsBench() {
   const [model, setModel] = useState(MODELS[2])   // medium-broad: the default keeper
   const [savedAll, setSavedAll] = useState<Record<string, Proportions> | null>(null)
   const [edits, setEdits] = useState<Record<string, Proportions>>({})
-  const [spin, setSpin] = useState(true)
+  const [spin, setSpin] = useState(false)   // M225 (Alex 11-27): still by default; drag orbits, the wheel zooms
+  const orbit = useRef<ElementRef<typeof OrbitControls>>(null)
+  useEffect(() => { (window as unknown as { __benchOrbit?: () => number[] }).__benchOrbit = () => { const o = orbit.current; return o ? [o.getAzimuthalAngle(), o.getPolarAngle(), o.getDistance()] : [] } }, [])
+  // M225 read-only probe: where the edited figure's crown + feet land on the canvas (NDC y, -1..1 = on screen)
+  useEffect(() => { (window as unknown as { __benchFrame?: (h: number, x: number) => number[] }).__benchFrame = (h, x) => { const c = orbit.current?.object; if (!c) return []; c.updateMatrixWorld(); const v = c.position.clone().set(x, h, 0).project(c), f = c.position.clone().set(x, 0, 0).project(c); return [v.y, f.y, v.x, f.x] } }, [])
   const [compare, setCompare] = useState(true)
   const [eyes, setEyes] = useState(2)   // Round: the eye-size dial reads best on whites + pupils
   const [bd, setBd] = useState(BACKDROPS[0])
@@ -182,8 +192,13 @@ function ProportionsBench() {
   )
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexWrap: 'wrap', overflow: 'auto' }}>
-      <div style={{ flex: '1 1 420px', minHeight: 360, display: 'flex', flexDirection: 'column' }}>
+    <div className="kb-wrap">
+      {/* M225: the canvas fills the window beside the sliders, which scroll on their own (before: a row-wrap stretched the canvas
+          to the slider column's height, ~1200 px, so a desk window showed only the head and the face sliders sat far below) */}
+      <style>{`.kb-wrap{height:100%;display:flex;overflow:hidden}.kb-view{flex:1 1 auto;min-width:0;min-height:0;display:flex;flex-direction:column}
+.kb-canvas{flex:1;min-height:300px;position:relative}.kb-side{flex:0 0 380px;min-height:0;overflow:auto;border-left:1px solid #2c2a38;padding:10px 14px}
+@media (max-width:820px){.kb-wrap{flex-direction:column;overflow:auto}.kb-view{flex:0 0 auto}.kb-canvas{flex:0 0 auto;height:58vh}.kb-side{flex:0 0 auto;overflow:visible;border-left:0;border-top:1px solid #2c2a38}}`}</style>
+      <div className="kb-view">
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', padding: '8px 12px' }}>
           {MODELS.map(m => (
             <button key={m} data-model={m} onClick={() => setModel(m)} style={{ ...chip, opacity: model === m ? 1 : 0.45 }}>
@@ -191,7 +206,7 @@ function ProportionsBench() {
             </button>
           ))}
         </div>
-        <div style={{ flex: 1, minHeight: 300, position: 'relative' }}>
+        <div className="kb-canvas" data-bench-canvas>
           <Canvas camera={{ position: [0, 1.0, 3.2], fov: 40 }}>
             <color attach="background" args={[bd.sky]} />
             <hemisphereLight args={[bd.sky, bd.ground, 0.9]} />
@@ -200,12 +215,12 @@ function ProportionsBench() {
             <mesh rotation={[-Math.PI / 2, 0, 0]}><planeGeometry args={[40, 40]} /><meshStandardMaterial color={bd.ground} roughness={1} /></mesh>
             <group position={[compare ? 0.42 : 0, 0, 0]}><BenchFigure look={look} shape={cur} bench={bench} spin={spin ? 0.5 : 0} /></group>
             {compare && <group position={[-0.62, 0, 0]}><KeeperFigure look={look} shape={DEFAULT_PROPORTIONS} spin={spin ? 0.5 : 0} /></group>}
-            <OrbitControls target={[0, 0.75, 0]} maxPolarAngle={Math.PI / 2 - 0.02} />
+            <OrbitControls ref={orbit} target={[0, 0.75, 0]} maxPolarAngle={Math.PI / 2 - 0.02} minDistance={0.8} maxDistance={8} enablePan={false} />
           </Canvas>
           {compare && <div style={{ position: 'absolute', left: 12, bottom: 8, fontSize: 10, color: '#2c2a38', background: '#ffffffaa', padding: '2px 6px', borderRadius: 3 }}>left: today · right: your edit</div>}
         </div>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', padding: '8px 12px', borderTop: '1px solid #2c2a38' }}>
-          <button onClick={() => setSpin(!spin)} style={{ ...chip, opacity: spin ? 1 : 0.45 }}>{spin ? 'Turntable' : 'Still (drag to orbit)'}</button>
+          <button data-act="spin" onClick={() => setSpin(!spin)} style={{ ...chip, opacity: spin ? 1 : 0.45 }}>{spin ? 'Turntable on' : 'Turntable off (drag to turn, wheel to zoom)'}</button>
           <button data-act="compare" onClick={() => setCompare(!compare)} style={{ ...chip, opacity: compare ? 1 : 0.45 }}>Beside today</button>
           <button onClick={() => setEyes((eyes + 1) % OPT.eyes.length)} style={chip}>Eyes: {OPT.eyes[eyes]}</button>
           {BACKDROPS.map(b => <button key={b.id} onClick={() => setBd(b)} style={{ ...chip, opacity: bd.id === b.id ? 1 : 0.4 }}>{b.label}</button>)}
@@ -214,7 +229,7 @@ function ProportionsBench() {
           </span>
         </div>
       </div>
-      <aside style={{ flex: '0 1 380px', minWidth: 300, borderLeft: '1px solid #2c2a38', padding: '10px 14px', overflow: 'auto' }}>
+      <aside className="kb-side">
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
           <span className="gx-title" style={{ fontSize: 12, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#c8b98a' }}>{MODEL_LABEL(model)}</span>
           <span style={{ flex: 1 }} />
@@ -235,10 +250,13 @@ function ProportionsBench() {
         </div>}
         {picker('scarf', 'Scarf', OPT.scarfStyle)}
         {picker('belt', 'Belt', OPT.belt)}
-        <h2 className="gx-label" style={{ fontSize: 10, letterSpacing: '0.14em', color: '#7f7a8c', margin: '10px 0 2px' }}>SIZE</h2>
-        {DIALS.filter(d => d.kind === 'size').map(row)}
-        <h2 className="gx-label" style={{ fontSize: 10, letterSpacing: '0.14em', color: '#7f7a8c', margin: '12px 0 2px' }}>SPACING</h2>
-        {DIALS.filter(d => d.kind === 'spacing').map(row)}
+        {/* M225 (Alex 11-27 "tune the eyes and hair so they fit nicely"): the head, face + hair dials together, then the body */}
+        <h2 className="gx-label" style={{ fontSize: 10, letterSpacing: '0.14em', color: '#7f7a8c', margin: '10px 0 2px' }}>HEAD, FACE + HAIR</h2>
+        {FACE_KEYS.map(k => row(DIALS.find(d => d.key === k)!))}
+        <h2 className="gx-label" style={{ fontSize: 10, letterSpacing: '0.14em', color: '#7f7a8c', margin: '12px 0 2px' }}>BODY SIZE</h2>
+        {DIALS.filter(d => d.kind === 'size' && !FACE_SET.has(d.key)).map(row)}
+        <h2 className="gx-label" style={{ fontSize: 10, letterSpacing: '0.14em', color: '#7f7a8c', margin: '12px 0 2px' }}>BODY SPACING</h2>
+        {DIALS.filter(d => d.kind === 'spacing' && !FACE_SET.has(d.key)).map(row)}
         <p style={{ fontSize: 10, color: '#6f6a7c', lineHeight: 1.5, marginTop: 12 }}>
           Floating limbs: no neck or limb segments, so arms = hand size + where the hands float, legs = foot size + how high the
           torso floats above them. A save is in the game at the next deploy.

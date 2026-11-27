@@ -114,7 +114,11 @@ function headAndFace(g: THREE.Group, o: Look, H: number, hair: string, skin: str
   // ── HAIR v3 (Alex 11-19: the cap + blobs read bald / helmet-like): LOCKS, tapered petals rooted on the scalp, standing a
   //    little proud so the outline breaks; a small cap underneath fills the gaps. A style = which locks.
   const hs: HairShape | 'Hooded' = dress.hood ? 'Hooded' : dress.hairStyle ?? (ch ? ch.hair : OPT.hairStyle[o.hairStyle]), R = H * 0.5
-  put(g, CAP, hair, [0, hy + H * 0.02, -H * 0.02], [R * 1.05, H * 0.55 * 1.05, R * 1.05], [-0.4, 0, 0], true)
+  // M225: every hair piece (cap + locks, every style) rides ONE group the Hair size / height / forward dials move (1 / 0 / 0 = as before)
+  const hg = new THREE.Group(); hg.name = 'hair'; g.add(hg)
+  if (p.hairSize !== 1) hg.scale.setScalar(p.hairSize)
+  if (p.hairY || p.hairZ) hg.position.set(0, p.hairY, p.hairZ)
+  put(hg, CAP, hair, [0, hy + H * 0.02, -H * 0.02], [R * 1.05, H * 0.55 * 1.05, R * 1.05], [-0.4, 0, 0], true)
   const centre = new THREE.Vector3(0, hy, 0), DOWN = new THREE.Vector3(0, -1, 0)
   const lock = (a: number, p: number, len: number, wid: number, lift = 0.15, sweep = 0, grav = 0.6) => {
     const n = new THREE.Vector3(Math.sin(p) * Math.sin(a), Math.cos(p), Math.sin(p) * Math.cos(a)).normalize()
@@ -124,9 +128,9 @@ function headAndFace(g: THREE.Group, o: Look, H: number, hair: string, skin: str
     const dir = down.clone().multiplyScalar(Math.max(0, 1 - grav)).addScaledVector(DOWN, grav).addScaledVector(n, lift).addScaledVector(side, sweep).normalize()
     const z = new THREE.Vector3().crossVectors(side, dir).normalize(), x = new THREE.Vector3().crossVectors(dir, z).normalize()
     const m = new THREE.Mesh(LOCK, toon(hair)); m.matrixAutoUpdate = false
-    m.matrix.makeBasis(x.multiplyScalar(wid), dir.multiplyScalar(len), z.multiplyScalar(wid * 0.45)).setPosition(root); g.add(m)
+    m.matrix.makeBasis(x.multiplyScalar(wid), dir.multiplyScalar(len), z.multiplyScalar(wid * 0.45)).setPosition(root); hg.add(m)
     const o2 = new THREE.Mesh(LOCK, INK); o2.matrixAutoUpdate = false
-    o2.matrix.copy(m.matrix).multiply(new THREE.Matrix4().makeScale(1.12, 1.06, 1.25)); g.add(o2)
+    o2.matrix.copy(m.matrix).multiply(new THREE.Matrix4().makeScale(1.12, 1.06, 1.25)); hg.add(o2)
   }
   const ring = (count: number, p: number, len: number, wid: number, lift: number, sweep = 0, from = -Math.PI, to = Math.PI, jit = 0, grav = 0.6) => {
     for (let i = 0; i < count; i++) {
@@ -142,18 +146,18 @@ function headAndFace(g: THREE.Group, o: Look, H: number, hair: string, skin: str
   if (hs === 'Swept')   { ring(10, 0.8, H * 0.32, H * 0.22, 0.08, 0, 0.7, 2 * Math.PI - 0.7, 0, 0.6); fringe(5, H * 0.5, 0.9, 0.35, 0.7) }
   if (hs === 'Bob')     { ring(14, 0.95, H * 0.62, H * 0.27, 0.22, 0, 0.95, 2 * Math.PI - 0.95, 0, 0.75); fringe(5, H * 0.32, 0, 0.8, 0.75) }
   if (hs === 'Long')    { ring(14, 0.95, H * 1.15, H * 0.27, 0.2, 0, 1.0, 2 * Math.PI - 1.0, 0.1, 0.85); fringe(5, H * 0.34, 0.2, 0.8, 0.75) }
-  if (hs === 'Bun')     { ring(10, 0.8, H * 0.28, H * 0.22, 0.06, 0, 0.7, 2 * Math.PI - 0.7, 0, 0.6); fringe(3, H * 0.24, 0, 0.8, 0.45); put(g, SPH, hair, [0, hy + H * 0.5, -H * 0.24], [H * 0.21, H * 0.21, H * 0.21]) }
+  if (hs === 'Bun')     { ring(10, 0.8, H * 0.28, H * 0.22, 0.06, 0, 0.7, 2 * Math.PI - 0.7, 0, 0.6); fringe(3, H * 0.24, 0, 0.8, 0.45); put(hg, SPH, hair, [0, hy + H * 0.5, -H * 0.24], [H * 0.21, H * 0.21, H * 0.21]) }
   // M216 s2a: the cartoon heads' hair (sheet NOTES.md, column A-D x male / female), chunky locks like every style above
   if (hs === 'A-M') { ring(10, 0.85, H * 0.3, H * 0.22, 0.08, 0, 0.7, 2 * Math.PI - 0.7, 0, 0.6); ring(5, 0.35, H * 0.44, H * 0.17, 0.9, 0.35, -1.3, 1.3, 0.15, 0); fringe(4, H * 0.3, 0.25, 0.75) }
   if (hs === 'A-F') { ring(12, 0.95, H * 1.1, H * 0.26, 0.2, 0, 1.0, 2 * Math.PI - 1.0, 0.1, 0.85); for (const s of [-1, 1]) lock(s * 0.95, 0.9, H * 1.2, H * 0.2, 0.1, 0, 0.95); fringe(4, H * 0.36, 0.6, 0.6, 0.6); for (const a of [-0.2, 0.25]) lock(a, 0.15, H * 0.3, H * 0.13, 0.9, 0, 0) }
   if (hs === 'B-M') { ring(10, 0.8, H * 0.3, H * 0.22, 0.08, 0, 0.7, 2 * Math.PI - 0.7, 0, 0.6); fringe(5, H * 0.42, 0.9, 0.4, 0.7); ring(3, 0.5, H * 0.42, H * 0.15, 0.85, 0.3, 2.3, 4.0, 0.1, 0); lock(0.3, 0.2, H * 0.34, H * 0.15, 0.85, 0.4, 0) }
   if (hs === 'B-F') { ring(14, 0.95, H * 1.15, H * 0.27, 0.2, 0, 1.0, 2 * Math.PI - 1.0, 0.1, 0.85); fringe(5, H * 0.5, 0.9, 0.4, 0.7); for (const s of [-1, 1]) lock(s * 0.9, 0.95, H * 1.1, H * 0.2, 0.1, 0, 0.9) }
   if (hs === 'C-M') { ring(10, 0.85, H * 0.22, H * 0.22, 0.08, 0, 0.7, 2 * Math.PI - 0.7, 0, 0.6); ring(7, 0.4, H * 0.34, H * 0.15, 1.0, 0, -1.4, 1.4, 0, 0); fringe(3, H * 0.2, 0, 0.8, 0.5) }
-  if (hs === 'C-F') { ring(10, 0.8, H * 0.28, H * 0.22, 0.06, 0, 0.7, 2 * Math.PI - 0.7, 0, 0.6); fringe(4, H * 0.28, 0.5, 0.7, 0.55); for (const s of [-1, 1]) lock(s * 0.85, 0.9, H * 0.7, H * 0.16, 0.1, 0, 0.9); put(g, SPH, hair, [H * 0.2, hy + H * 0.48, -H * 0.12], [H * 0.13, H * 0.13, H * 0.13]); for (const d of [-0.15, 0, 0.15]) lock(1.9 + d, 0.6, H * 0.95, H * 0.18, 0.9, 0.3, 0.35) }
+  if (hs === 'C-F') { ring(10, 0.8, H * 0.28, H * 0.22, 0.06, 0, 0.7, 2 * Math.PI - 0.7, 0, 0.6); fringe(4, H * 0.28, 0.5, 0.7, 0.55); for (const s of [-1, 1]) lock(s * 0.85, 0.9, H * 0.7, H * 0.16, 0.1, 0, 0.9); put(hg, SPH, hair, [H * 0.2, hy + H * 0.48, -H * 0.12], [H * 0.13, H * 0.13, H * 0.13]); for (const d of [-0.15, 0, 0.15]) lock(1.9 + d, 0.6, H * 0.95, H * 0.18, 0.9, 0.3, 0.35) }
   if (hs === 'D-M') { ring(11, 0.75, H * 0.38, H * 0.22, 0.25, 0, 0.6, 2 * Math.PI - 0.6, 0.3, 0.45); for (const a of [-0.4, 0.5]) lock(a, 0.15, H * 0.3, H * 0.14, 0.85, 0.2, 0); fringe(4, H * 0.32, 0.2, 0.6, 0.6, 0.2); for (const s of [-1, 1]) lock(s * 1.15, 0.8, H * 0.8, H * 0.08, 0.7, s * 0.5, 0.3) }
   if (hs === 'D-F') { ring(14, 0.95, H * 0.62, H * 0.27, 0.22, 0, 0.95, 2 * Math.PI - 0.95, 0, 0.75); fringe(6, H * 0.3, 0, 0.85, 0.8); for (const s of [-1, 1]) lock(s * 0.95, 0.95, H * 0.72, H * 0.18, 0.1, 0, 0.9) }
   // M154: Bonn's big coily hair: a full round cloud well past the head, short curls standing out all over it, the face clear
-  if (hs === 'Coily')   { put(g, SPH, hair, [0, hy + H * 0.1, -H * 0.24], [R * 1.42, H * 0.55 * 1.2, R * 1.12]); for (const [n, ph, len] of [[18, 1.45, 0.3], [16, 1.05, 0.32], [12, 0.62, 0.3], [6, 0.25, 0.28]] as const) ring(n, ph, H * len, H * 0.24, 1, 0, ph > 1 ? 1.25 : ph > 0.5 ? 0.9 : -Math.PI, ph > 1 ? 2 * Math.PI - 1.25 : ph > 0.5 ? 2 * Math.PI - 0.9 : Math.PI, 0.25, 0) }
+  if (hs === 'Coily')   { put(hg, SPH, hair, [0, hy + H * 0.1, -H * 0.24], [R * 1.42, H * 0.55 * 1.2, R * 1.12]); for (const [n, ph, len] of [[18, 1.45, 0.3], [16, 1.05, 0.32], [12, 0.62, 0.3], [6, 0.25, 0.28]] as const) ring(n, ph, H * len, H * 0.24, 1, 0, ph > 1 ? 1.25 : ph > 0.5 ? 0.9 : -Math.PI, ph > 1 ? 2 * Math.PI - 1.25 : ph > 0.5 ? 2 * Math.PI - 0.9 : Math.PI, 0.25, 0) }
   // M154: under a hood only the face-framing hair shows: a short fringe + a lock down each cheek (Tess, the sheet's bob)
   if (hs === 'Hooded')  { fringe(5, H * 0.3, 0, 0.85, 0.7); for (const s of [-1, 1]) lock(s * 0.85, 0.95, H * 0.5, H * 0.2, 0.05, 0, 0.9) }
   if (hs === 'Tail')    { ring(10, 0.8, H * 0.28, H * 0.22, 0.06, 0, 0.7, 2 * Math.PI - 0.7, 0, 0.6); fringe(3, H * 0.24, 0, 0.8, 0.45); for (const d of [-0.2, 0, 0.2]) lock(back + d, 1.05, H * 0.8, H * 0.17, 0.15, 0, 0.9) }

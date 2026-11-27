@@ -89,6 +89,7 @@ const OWN: Record<DialKey, readonly string[]> = {
   hand: ['hand-l', 'hand-r'], handX: ['hand-l', 'hand-r'], handY: ['hand-l', 'hand-r'], handZ: ['hand-l', 'hand-r'],
   foot: ['foot-l', 'foot-r'], footX: ['foot-l', 'foot-r'], legs: ['body', 'head', 'hand-l', 'hand-r'],
   belt: ['body'], beltY: ['body'],
+  hairSize: ['head'], hairY: ['head'], hairZ: ['head'],   // M225: the hair group rides the head
 }
 const MAIN: Partial<Record<DialKey, string>> = { torsoL: 'body', torsoW: 'body', legs: 'body' }
 ok(DIALS.every(d => OWN[d.key]?.length), 'a dial has no OWN row in this guard: add one when you add a dial')

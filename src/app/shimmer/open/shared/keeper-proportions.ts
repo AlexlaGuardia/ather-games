@@ -41,7 +41,11 @@ export const DIALS = [
   { key: 'eyeGap', label: 'Eye spacing', kind: 'spacing', min: -0.03, max: 0.04, step: 0.001, def: 0, note: 'm, each eye out from the middle (every face)' },
   { key: 'eyeLift', label: 'Eye height', kind: 'spacing', min: -0.04, max: 0.04, step: 0.001, def: 0, note: 'm, eyes + brows up / down (every face)' },
   { key: 'mouthLift', label: 'Mouth height', kind: 'spacing', min: -0.05, max: 0.05, step: 0.001, def: 0, note: 'm, the mouth up / down (every face and head)' },
-  { key: 'beltY', label: 'Belt height', kind: 'spacing', min: -0.12, max: 0.15, step: 0.005, def: 0, note: 'm, the belt up / down the torso (every belt)' },
+  // M225 (Alex 11-27 "tune the eyes and hair so they fit nicely"): the hair (cap + every lock, every style) as one piece
+  { key: 'hairSize', label: 'Hair size', kind: 'size', min: 0.8, max: 1.3, step: 0.01, def: 1, note: 'the hair (cap + locks) round the head, every style' },
+  { key: 'hairY', label: 'Hair height', kind: 'spacing', min: -0.06, max: 0.06, step: 0.002, def: 0, note: 'm, the hair up / down on the head (every style)' },
+  { key: 'hairZ', label: 'Hair forward', kind: 'spacing', min: -0.06, max: 0.06, step: 0.002, def: 0, note: 'm, the hair forward / back on the head (every style)' },
+  { key: 'beltY',label: 'Belt height', kind: 'spacing', min: -0.12, max: 0.15, step: 0.005, def: 0, note: 'm, the belt up / down the torso (every belt)' },
   { key: 'footX', label: 'Stance width', kind: 'spacing', min: -0.1, max: 0.2, step: 0.005, def: 0, note: 'm, feet apart' },
 ] as const satisfies readonly Dial[]
 

@@ -1,25 +1,32 @@
 'use client'
 // THE KEEPER CREATOR (BETA M29; the options + the save in shared/keeper-look.ts, the body in shared/keeper-figure.ts). Alex's
-// signed-off mock (docs/looks/keeper-creator.html) in the Carved Hearth frame: a turning preview and one row per choice.
+// signed-off mock (docs/looks/keeper-creator.html) in the Carved Hearth frame: a preview you turn with a drag (M225) and one row per choice.
 // Shown right after the birth rune (birth-gate.tsx) and from the Character tab (Change look). ★ Never a gate a new keeper can
 // get stuck in (hub 11-19): RANDOM and LOOKS GOOD are always there, Looks good saves whatever is showing (the default if
 // nothing was touched). Phone first: on a narrow screen the preview sits on top and the rows scroll under it.
-import { useState } from 'react'
+import { useEffect, useRef, useState, type ElementRef } from 'react'
 import { Canvas } from '@react-three/fiber'
+import { OrbitControls } from '@react-three/drei'
 import { HearthFrame, HearthButton, H, hearthDisplay } from '../ui/hearth'
 import { OPT, ROWS, HEAD_OWNS, FRAME_NOTE, setLook, randomLook, type Look, type LookKey } from './shared/keeper-look'
 import { getLook, saveLook } from './shared/look-store'
 import { KeeperFigure } from './shared/keeper-figure-view'
 
 
+// M225 (Alex 11-27 "a huge qol thing is for the keepers avatar to not spin in the editor but let the mouse rotate it"): the
+// preview holds still; a drag (one finger on a phone) turns the view round the keeper, the wheel / a pinch zooms a little.
 function Preview({ look }: { look: Look }) {
+  const orbit = useRef<ElementRef<typeof OrbitControls>>(null)
+  useEffect(() => {   // read-only probe (scripts/m225-bench-check.mts): the view's turn round the keeper
+    (window as unknown as { __creatorOrbit?: () => number[] }).__creatorOrbit = () => { const o = orbit.current; return o ? [o.getAzimuthalAngle(), o.getPolarAngle(), o.getDistance()] : [] }
+  }, [])
   return (
-    <Canvas data-creator-preview camera={{ position: [0, 1.1, 4.3], fov: 30 }} dpr={[1, 1.75]} style={{ width: '100%', height: '100%' }}
-      onCreated={({ camera }) => camera.lookAt(0, 0.88, 0)}>
+    <Canvas data-creator-preview camera={{ position: [0, 1.1, 4.3], fov: 30 }} dpr={[1, 1.75]} style={{ width: '100%', height: '100%' }}>
       <hemisphereLight args={['#fff4e0', '#6a7d6e', 0.75]} />
       <directionalLight position={[2, 3, 2.5]} intensity={1.1} />
       <mesh rotation-x={-Math.PI / 2} position-y={0.001}><circleGeometry args={[0.55, 32]} /><meshBasicMaterial color="#000" transparent opacity={0.12} /></mesh>
-      <KeeperFigure look={look} spin={0.45} yaw={-0.4} />
+      <KeeperFigure look={look} yaw={-0.4} />
+      <OrbitControls ref={orbit} target={[0, 0.88, 0]} enablePan={false} minDistance={2.2} maxDistance={6.5} minPolarAngle={0.6} maxPolarAngle={Math.PI / 2} />
     </Canvas>
   )
 }
