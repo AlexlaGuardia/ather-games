@@ -45,6 +45,13 @@ const shot = async (p: Page, n: string) => { if (shots) await p.screenshot({ pat
 const gl = (p: Page, n: number) => p.waitForFunction((k: number) => (window as any).__spiritModel?.rigs?.size === k, { timeout: 120000 }, n).then(() => true).catch(() => false)
 const rigs = (p: Page) => p.evaluate(() => [...((window as any).__spiritModel?.rigs?.values() ?? [])].map((r: any) => ({ id: r.id, sp: r.sp, h: r.h, alt: r.alt })))
 
+/** each rig's lowest sampled skinned body vertex over the ground she stands on, sampled `n` times 200 ms apart (M173's instrument:
+ *  a hoverer's hover lives in her glb's clips, so r.alt, the FLIER altitude, stays 0 for her) */
+const offs = (p: Page, n = 25) => p.evaluate(async (N: number) => { const W = window as any, out: Record<string, { sp: string; off: number[] }> = {}
+  for (let k = 0; k < N; k++) { for (const r of W.__spiritModel?.rigs?.values() ?? []) { const b = r.body, n = b.meshes.body.geometry.getAttribute('position').count, V = b.bones[0].position.clone(); let lo = 1e9
+    b.root.updateWorldMatrix(true, true); for (let i = 0; i < n; i += 5) { b.at('body', i, V); if (V.y < lo) lo = V.y }
+    ;(out[r.id] ??= { sp: r.sp, off: [] }).off.push(lo - r.y) } await new Promise(z => setTimeout(z, 200)) }
+  return Object.values(out) }, n)
 try {
   // ── A: the four bases
   { const A: Bed[] = (['rabbit', 'turtle', 'frog', 'firefly'] as Species[]).map(sp => ({ sp }))
@@ -53,9 +60,10 @@ try {
     const R = await rigs(p)
     for (const b of A) { const L = BASE_PREVIEW[b.sp]!, r = R.find(x => x.sp === b.sp)
       ok(!!r && Math.abs(r.h - L.h) < 1e-6 && got.includes(`${L.url.split('/').pop()} 200`), `A ${tag}: ${b.sp} draws ${L.name} (${L.url.split('/').pop()} ${got.includes(`${L.url.split('/').pop()} 200`) ? '200' : 'NOT LOADED'}, h ${r?.h.toFixed(4)} = ${L.h.toFixed(4)})`) }
-    // Luminara hovers: sample her altitude for 8 s
-    const alts: number[] = await p.evaluate(async () => { const out: number[] = []; for (let k = 0; k < 40; k++) { for (const r of ((window as any).__spiritModel?.rigs?.values() ?? [])) if (r.sp === 'firefly') out.push(r.alt); await new Promise(z => setTimeout(z, 200)) } return out })
-    ok(alts.length > 10 && alts.every(a => a > 0.5), `A ${tag}: Luminara hovers (alt ${Math.min(...alts).toFixed(2)} .. ${Math.max(...alts).toFixed(2)} m, ${alts.length} samples)`)
+    // Luminara hovers (her idle hangs 0.90..1.30 m up): her lowest body vertex stays well off the ground; the three walkers stand on it
+    const O = await offs(p), lum = O.find(o => o.sp === 'firefly')?.off ?? []
+    ok(lum.length > 10 && lum.every(a => a > 0.6), `A ${tag}: Luminara hovers (lowest body point ${Math.min(...lum).toFixed(2)} .. ${Math.max(...lum).toFixed(2)} m over the ground, ${lum.length} samples)`)
+    for (const o of O.filter(o => o.sp !== 'firefly')) ok(o.off.every(a => a > -0.03 && a < 0.3), `A ${tag}: ${o.sp} stands on the ground (lowest ${Math.min(...o.off).toFixed(3)} .. ${Math.max(...o.off).toFixed(3)} m)`)
     ok(!got.some(x => / [45]\d\d$/.test(x)), `A ${tag}: every spirit glb 200 (${[...new Set(got)].join(', ')})`)
     await shot(p, 'a-bases'); await p.close() }
   // ── B: the OK'd forms public, a not-OK'd form still the owner's
@@ -69,8 +77,8 @@ try {
       ok(!!urls[f.url] && got.includes(`${file} 200`) && R.some(r => r.sp === b.sp && Math.abs(r.h - f.h) < 1e-6), `B ${tag}: ${b.sp}/${b.el} draws ${f.name} (${file} mounted ${urls[f.url] ?? 0}, h ${f.h.toFixed(4)})`) }
     const vul = formLook('fox', 'mana')!
     ok(!urls[vul.url] && !got.some(x => x.startsWith(vul.url.split('/').pop()!)) && !!urls['/open/spirits/vulnyx-rigged.glb'], `B ${tag}: fox/mana (Vulnara, not OK'd) keeps her base for a player (vulnyx-rigged ${urls['/open/spirits/vulnyx-rigged.glb'] ?? 0}, vulnara ${urls[vul.url] ?? 0})`)
-    const hov = R.filter(r => r.sp === 'hummingbird')
-    ok(hov.length === 4 && hov.every(r => r.alt > 0.5), `B ${tag}: the four Hovari forms hover (${hov.map(r => r.alt.toFixed(2)).join(', ')} m)`)
+    const hov = (await offs(p)).filter(o => o.sp === 'hummingbird')
+    ok(hov.length === 4 && hov.every(o => o.off.every(a => a > 0.6)), `B ${tag}: the four Hovari forms hover (lowest body points ${hov.map(o => Math.min(...o.off).toFixed(2)).join(', ')} m)`)
     await shot(p, 'b-forms'); await p.close() }
   ok(errs.length === 0, `${tag}: 0 page errors (${errs.slice(0, 3).join(' | ')})`)
 } catch (e) { ok(false, `threw: ${String(e).slice(0, 300)}`) }
