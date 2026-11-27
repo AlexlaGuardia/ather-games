@@ -4,6 +4,7 @@
 // the folk / Greg / Momo figures that share the toon ramp (friend-figure.ts moulds).
 import { useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
+import { useNpcFace } from './use-npc-face'   // M229 s1
 import * as THREE from 'three'
 import { folkRamp, type FolkAction } from './folk-model'
 import type { FriendId } from './friend-figure'
@@ -24,6 +25,7 @@ export function FriendModel({ who, action = 'idle', seed = 0, speed = 1 }: { who
     w.__friendLooks = { ...(w.__friendLooks ?? {}), [who]: { ...friendRecord(who), keeper: true, height: Math.round(body.height * 1000) / 1000, faces: body.group.getObjectByName('head')?.userData.faces ?? null } }
     return () => { disposeMergedKeeper(body.group); body.group.clear() }   // the merged geometry is the figure's own; materials are shared
   }, [who, body])
-  useFrame((_, dt) => { poseKeeper(body, t.current += Math.min(0.05, dt) * speed, action === 'walk' ? 0.6 : 0) })
-  return <group userData={{ friend: who }}><primitive object={body.group} /></group>
+  const face = useNpcFace(`friend:${who}`)
+  useFrame((_, dt) => { poseKeeper(body, t.current += Math.min(0.05, dt) * speed, action === 'walk' ? 0.6 : 0); face.head(body.group.getObjectByName('head')) })
+  return <group ref={face.turn} userData={{ friend: who }}><primitive object={body.group} /></group>
 }

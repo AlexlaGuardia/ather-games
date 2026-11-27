@@ -66,6 +66,8 @@ setGladePeople(mv); ok(gladePeopleVersion() === ver + 1, 'a house moves the vers
 const L = lotAt('fennel')!; ok(L.x === -60 && L.z === 60 && ang(L.yaw, 1.2) && L.w === LOT_W && lotAt('sax')!.x !== -60, 'the lot')
 const o = onLot('fennel', 4), p0 = lotPad('fennel', 0); ok(near(o.x, -60 - Math.sin(L.yaw) * 4) && p0.x === -60, 'its points and its pad')
 const door = lotSpots([`${GLADE_ID}:fennel`])[0], want = doorSpot(gladeBlueprint('fennel')!, p0); ok(near(door.x, want.x) && near(door.z, want.z) && ang(door.yaw, L.yaw + Math.PI), 'the door goes with the house, and looks out of its front')
+const fen = gladeSpots([`${GLADE_ID}:fennel`])[0]
+ok(ang(fen.yaw, want.yaw) && Math.sin(fen.yaw) * (fen.x - L.x) + Math.cos(fen.yaw) * (fen.z - L.z) > 0, 'M229 s1: Fennel at her door looks OUT of that door (doorSpot yaw), away from her house, never into it')
 ok(near(gladeSpots([`${GLADE_ID}:fennel`])[0].x, want.x) && near(folkSpots(GLADE, [`${GLADE_ID}:fennel`])[0].z, want.z), 'Fennel, never moved himself, stands at his door')
 setGladePeople(putWho(mv, 'fennel', { x: -70, z: 100, q: 0 })); ok(gladeSpots([`${GLADE_ID}:fennel`])[0].x === -70, 'a Fennel Alex moved does not follow the house'); setGladePeople(mv)
 ok(gladeHome().x === -60 && ang(gladeHome().yaw, 2) && gladeHomeBoxes(flat, -62, 128, -58, 132).length === 2 && gladeHomeBoxes(flat, -101, 82, -96, 87).length === 0, "Greg's home")

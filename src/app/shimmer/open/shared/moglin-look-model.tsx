@@ -3,6 +3,7 @@
 // their locked looks; every other id is the plain chibi in its id's own coat, as before. Same poses (moglinPose), one rig.
 import { useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
+import { useNpcFace } from './use-npc-face'   // M229 s1
 import type * as THREE from 'three'
 import { MoglinModel, furOf, moglinPose, moglinBlink, type MoglinAction } from './moglin-model'
 import { figureMats } from './friend-model'
@@ -18,10 +19,11 @@ export function MoglinLookModel({ who, action = 'idle', seed = 0, speed = 1 }: {
   const f = moglinFigure(who), m = figureMats()
   const j = useRef<Partial<Record<MoglinJoint | 'eyes', THREE.Object3D | null>>>({})
   const t0 = useRef(seed * 1.7)
+  const face = useNpcFace(`moglin:${who}`)
   useFrame((_, dt) => {
     const t = (t0.current += Math.min(0.05, dt) * speed), p = holdPose(moglinPose(action, t), f.holds, action), o = j.current
     if (o.body) { o.body.rotation.z = p.roll; o.body.position.y = p.bob }
-    if (o.head) { o.head.rotation.x = p.headPitch; o.head.rotation.z = p.headRoll }
+    if (o.head) { o.head.rotation.x = p.headPitch; o.head.rotation.z = p.headRoll; face.head(o.head) }
     if (o.earL) o.earL.rotation.z = 0.78 + p.earDroop * 0.6
     if (o.earR) o.earR.rotation.z = -0.78 - p.earDroop * 0.6
     if (o.armL) o.armL.rotation.set(p.aL[0], 0, -p.aL[1])
@@ -35,7 +37,7 @@ export function MoglinLookModel({ who, action = 'idle', seed = 0, speed = 1 }: {
     return <group key={n} ref={o => { j.current[n] = o }} position={J.at}><mesh geometry={J.toon} material={m.toon} castShadow /><mesh geometry={J.ink} material={folkInk()} />{kids}</group>
   }
   return (
-    <group userData={{ moglinLook: who }}>
+    <group ref={face.turn} userData={{ moglinLook: who }}>
       {part('body', <>
         {part('legL')}{part('legR')}{part('armL')}{part('armR')}
         {part('head', <>

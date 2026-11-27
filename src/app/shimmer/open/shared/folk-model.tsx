@@ -14,6 +14,7 @@
 // buffers/programs; draw calls are ~2 x parts per NPC (measured on the bench page).
 import { useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
+import { useNpcFace } from './use-npc-face'
 import * as THREE from 'three'
 import { EAR } from './keeper-figure'
 
@@ -127,10 +128,12 @@ export function FolkModel({ look, action = 'idle', seed = 0, speed = 1, pose = '
   const armL = useRef<THREE.Group>(null), armR = useRef<THREE.Group>(null)
   const legL = useRef<THREE.Group>(null), legR = useRef<THREE.Group>(null)
   const t0 = useRef(seed * 1.3)
-  useFrame((_, dt) => poseFolk({ head: head.current, body: body.current, eyes: eyes.current, armL: armL.current, armR: armR.current, legL: legL.current, legR: legR.current }, action, t0.current += Math.min(0.05, dt) * speed, seed))
+  const face = useNpcFace('folk', pose === 'sit')   // M229 s1: turns to the keeper in a talk
+  useFrame((_, dt) => { poseFolk({ head: head.current, body: body.current, eyes: eyes.current, armL: armL.current, armR: armR.current, legL: legL.current, legR: legR.current }, action, t0.current += Math.min(0.05, dt) * speed, seed); face.head(head.current, true) })
   const r = res(), S = r.sphere
   const sit = pose === 'sit'   // seated on something ~0.48 m high: thighs forward, shins down (the bench is the scene's)
   return (
+    <group ref={face.turn}>
     <group scale={[look.build?.girth ?? 1, look.build?.height ?? 1, look.build?.girth ?? 1]}>
     <group ref={body}>
       {/* legs + boots, or a robe to the ankles */}
@@ -193,6 +196,7 @@ export function FolkModel({ look, action = 'idle', seed = 0, speed = 1, pose = '
           {look.hat === 'cap' && <Part geo={S} color={look.hatColor ?? look.shirt} pos={[0, H * 0.24, -H * 0.02]} scale={[H * 0.55, H * 0.3, H * 0.55]} />}
         </group>
       </group>
+    </group>
     </group>
     </group>
   )

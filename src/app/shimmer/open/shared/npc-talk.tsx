@@ -7,6 +7,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Html } from '@react-three/drei'
 import { markMet } from './met'   // BETA M33: a first talk = met (Morel may carry their calls)
+import { setTalkAt, clearTalkAt } from './npc-face'   // M229 s1: the figure under the bubble turns to the keeper
 
 export interface TalkOption { label: string; pick: () => void
   /** M109: shown greyed and not pickable (a coming answer), with an optional small tag ('soon') */
@@ -18,6 +19,8 @@ export function TalkBubble({ at, name, line, scene }: { at: [number, number, num
   /** optional stage direction above the line, in italics (Idony's beat, M13 part 3) */
   scene?: string }) {
   useEffect(() => { markMet(name) }, [name])
+  const [ax, , az] = at
+  useEffect(() => { const tok = setTalkAt(ax, az); return () => clearTalkAt(tok) }, [ax, az])
   return (
     <Html position={at} center zIndexRange={[40, 0]} style={{ pointerEvents: 'none' }}>
       <div data-talk-bubble style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', transform: 'translateY(-50%)' }}>

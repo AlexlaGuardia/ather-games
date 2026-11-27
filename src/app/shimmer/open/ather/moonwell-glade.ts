@@ -89,11 +89,18 @@ export function onLot(id: string, ahead: number, side = 0): { x: number; z: numb
 // M39: a lot that stands Alex's BLUEPRINT puts its Moglin at the building's own front door (glade-lots.ts registers the spot:
 // the blockout's front-of-lot spot sat inside every 13 x 8 blueprint or in one of its walls).
 // M153 s1c-2: the door is ASKED (the lot may be moved), kept until somebody or some house moves.
-const spotOverride = new Map<string, { at: () => { x: number; z: number }; ver: number; p: { x: number; z: number } | null }>()
-export function setLotSpot(lot: string, at: (() => { x: number; z: number }) | null) { if (at) spotOverride.set(lot, { at, ver: -1, p: null }); else spotOverride.delete(lot) }
+const spotOverride = new Map<string, { at: () => { x: number; z: number; yaw?: number }; ver: number; p: { x: number; z: number; yaw?: number } | null }>()
+export function setLotSpot(lot: string, at: (() => { x: number; z: number; yaw?: number }) | null) { if (at) spotOverride.set(lot, { at, ver: -1, p: null }); else spotOverride.delete(lot) }
 const doorOf = (lot: string) => { const o = spotOverride.get(lot); if (!o) return null; if (o.ver !== gladePeopleVersion()) { o.p = o.at(); o.ver = gladePeopleVersion() } return o.p }
 export function gladeSpots(ids: readonly string[]): { id: string; x: number; z: number; yaw: number }[] {
-  return lotSpots(ids).map(s => { const w = gladePerson(s.id); return w ? { id: s.id, x: w.x, z: w.z, yaw: w.yaw } : s })
+  return lotSpots(ids).map(s => {
+    const w = gladePerson(s.id); if (w) return { id: s.id, x: w.x, z: w.z, yaw: w.yaw }
+    // M229 s1: the Moglin at a blueprint's door looks OUT of that door (doorSpot's yaw). A side door is a door too: Fennel stood at
+    // her workshop's side door looking along its wall (Alex 11-27 "standing the wrong direction"). The lot's own spot (lotSpots:
+    // Yarrow's jars, the places list) keeps its facing.
+    const d = doorOf(s.id.split(':').pop() ?? s.id)?.yaw
+    return d === undefined ? s : { ...s, yaw: d }
+  })
 }
 /** the LOT's own spot (what belongs to the house: Yarrow's teaching jars), whoever moved */
 export function lotSpots(ids: readonly string[]): { id: string; x: number; z: number; yaw: number }[] {

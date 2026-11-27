@@ -12,7 +12,7 @@ import { FriendModel } from '../shared/friend-model'
 import { isFriend } from '../shared/friend-figure'
 import { NamedMoglin } from '../shared/moglin-look-model'
 import { gladeKeepers, gregInGlade } from './glade-cluster'
-import { GLADE, gladeFolk } from './moonwell-glade'
+import { GLADE, gladeFolk, lotAt } from './moonwell-glade'
 import { folkSpots, type Spot } from './folk-spots'
 import { gladeBlueprintVersion } from './glade-lots'
 import { keeperNow } from './network-scene'
@@ -69,8 +69,9 @@ export function GladeCluster({ ground, blocked, marker = true }: { ground: (x: n
   // read-only probe (scripts/glade-cluster-check.mts): who the Glade draws and where
   useEffect(() => {
     const w = window as unknown as { __glade?: Record<string, unknown> }   // shared with glade-lots-view's blueprint hook: merge
-    w.__glade = { ...(w.__glade ?? {}), keepers: KEEPERS, folk: FOLK, greg: GREG, marker }
-    return () => { if (w.__glade) { const { keepers: _k, folk: _f, greg: _g, marker: _m, ...rest } = w.__glade; void _k; void _f; void _g; void _m; if (Object.keys(rest).length) w.__glade = rest; else delete w.__glade }; gladeFolkDrawn = [] }
+    const fh = lotAt('fennel')   // M229 s1 check: Fennel's house, to judge which way out is
+    w.__glade = { ...(w.__glade ?? {}), keepers: KEEPERS, folk: FOLK, greg: GREG, marker, fennelHouse: fh ? { x: fh.x, z: fh.z } : null }
+    return () => { if (w.__glade) { const { keepers: _k, folk: _f, greg: _g, marker: _m, fennelHouse: _h, ...rest } = w.__glade; void _k; void _f; void _g; void _m; void _h; if (Object.keys(rest).length) w.__glade = rest; else delete w.__glade }; gladeFolkDrawn = [] }
   }, [marker, FOLK, KEEPERS, GREG])
   return (
     <>

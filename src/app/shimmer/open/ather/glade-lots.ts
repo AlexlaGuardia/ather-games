@@ -138,19 +138,22 @@ export function crateBoxes(ground: Ground, floor: number): Box[] {
 
 /** where a blueprint lot's Moglin stands: 1.2 m out from the building's FRONT-MOST outside door (the door with a room on one
  *  side and open ground on the other, nearest the green), on the open side; no outside door = 1.2 m in front of the footprint */
-export function doorSpot(bp: HouseBlueprint, pad: { x: number; z: number; yaw: number; y: number }): { x: number; z: number } {
+export function doorSpot(bp: HouseBlueprint, pad: { x: number; z: number; yaw: number; y: number }): { x: number; z: number; yaw: number } {
   const rooms = findRooms(bp.walls), inRoom = (i: number, j: number) => rooms.some(r => r.cells.some(([a, b]) => a === i && b === j))
-  const place = placeBlueprint(bp, pad), out: { u: number; v: number }[] = []
+  const place = placeBlueprint(bp, pad), out: { u: number; v: number; du: number; dv: number }[] = []
   for (const [k, w] of Object.entries(bp.walls)) {
     if (w.kind !== 'door') continue
     const [o, a, b] = k.split(','), i = +a, j = +b
-    if (o === 'h') { const r1 = inRoom(i, j - 1), r2 = inRoom(i, j); if (r1 !== r2) out.push({ u: i + 0.5, v: r2 ? j - 1.2 : j + 1.2 }) }
-    else { const r1 = inRoom(i - 1, j), r2 = inRoom(i, j); if (r1 !== r2) out.push({ u: r2 ? i - 1.2 : i + 1.2, v: j + 0.5 }) }
+    if (o === 'h') { const r1 = inRoom(i, j - 1), r2 = inRoom(i, j); if (r1 !== r2) out.push({ u: i + 0.5, v: r2 ? j - 1.2 : j + 1.2, du: 0, dv: r2 ? -1 : 1 }) }
+    else { const r1 = inRoom(i - 1, j), r2 = inRoom(i, j); if (r1 !== r2) out.push({ u: r2 ? i - 1.2 : i + 1.2, v: j + 0.5, du: r2 ? -1 : 1, dv: 0 }) }
   }
-  if (!out.length) return place.toWorld(bp.w / 2, -1.2)
+  // M229 s1: whoever stands at a door looks OUT of it (away from the room). A side door is a door too: Fennel stood at her
+  // workshop's side door looking along its wall at the front (Alex 11-27 "standing the wrong direction"). (du, dv) = out, local.
+  const s = Math.sin(pad.yaw), c = Math.cos(pad.yaw), yawOut = (du: number, dv: number) => Math.atan2(c * du + s * dv, -s * du + c * dv)
+  if (!out.length) { const f = place.toWorld(bp.w / 2, -1.2); return { ...f, yaw: yawOut(0, -1) } }
   // a two-piece door gives two spots side by side: average them; pick the door nearest the front (smallest v)
   out.sort((p, q) => p.v - q.v)
   const front = out.filter(p => Math.abs(p.v - out[0].v) < 1.5 && Math.abs(p.u - out[0].u) < 1.5)
   const u = front.reduce((t, p) => t + p.u, 0) / front.length, v = front.reduce((t, p) => t + p.v, 0) / front.length
-  return place.toWorld(u, v)
+  return { ...place.toWorld(u, v), yaw: yawOut(front[0].du, front[0].dv) }
 }

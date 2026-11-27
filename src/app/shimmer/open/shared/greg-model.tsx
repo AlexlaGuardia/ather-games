@@ -3,6 +3,7 @@
 // draw calls, standing or seated. Everywhere Greg is drawn uses this: the Glade (glade-greg.tsx) and the plot's table stop.
 import { useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
+import { useNpcFace } from './use-npc-face'   // M229 s1
 import type * as THREE from 'three'
 import { poseFolk, folkInk, type FolkAction, type FolkPose } from './folk-model'
 import { figureMats } from './friend-model'
@@ -18,8 +19,10 @@ export function GregModel({ action = 'idle', seed = 0, speed = 1, pose = 'stand'
   const root = useRef<THREE.Group>(null)
   const t = useRef(seed * 1.3)
   // the pose's bob goes to the whole figure, as on FolkModel; seated legs are not the rig's (no ref), as on FolkModel
-  useFrame((_, dt) => poseFolk({ ...j.current, body: root.current, ...(sit ? { legL: null, legR: null } : {}) }, action, t.current += Math.min(0.05, dt) * speed, seed))
+  const face = useNpcFace('greg', sit)
+  useFrame((_, dt) => { poseFolk({ ...j.current, body: root.current, ...(sit ? { legL: null, legR: null } : {}) }, action, t.current += Math.min(0.05, dt) * speed, seed); face.head(j.current.head, true) })
   return (
+    <group ref={face.turn}>
     <group ref={root} userData={{ greg: pose }}>
       {(Object.keys(f.joints) as JointName[]).map(n => {
         const leg = n === 'legL' || n === 'legR', J = sit && leg ? f.sit[n] : f.joints[n], s = n === 'armL' ? -1 : n === 'armR' ? 1 : 0
@@ -32,6 +35,7 @@ export function GregModel({ action = 'idle', seed = 0, speed = 1, pose = 'stand'
           </group>
         )
       })}
+    </group>
     </group>
   )
 }

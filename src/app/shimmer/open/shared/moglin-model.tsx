@@ -13,6 +13,7 @@
 // bigger head that reads at Wilds distance). The fur tones are the brief's own list. Nothing here is wired to the game.
 import { useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
+import { useNpcFace } from './use-npc-face'   // M229 s1: turns to the keeper in a talk
 import * as THREE from 'three'
 
 export type MoglinBuild = 'plush' | 'chibi'
@@ -92,11 +93,12 @@ export function MoglinModel({ build = MOGLIN_BUILD, action = 'idle', garb = 'non
   const legL = useRef<THREE.Group>(null), legR = useRef<THREE.Group>(null)
   const eyes = useRef<THREE.Group>(null)
   const t0 = useRef(seed * 1.7)
+  const face = useNpcFace('moglin')
   useFrame((_, dt) => {
     const t = (t0.current += Math.min(0.05, dt) * speed)
     const { roll, bob, headPitch, headRoll, earDroop, aL, aR, lL, lR } = moglinPose(action, t)
     if (body.current) { body.current.rotation.z = roll; body.current.position.y = bob }
-    if (head.current) { head.current.rotation.x = headPitch; head.current.rotation.z = headRoll }
+    if (head.current) { head.current.rotation.x = headPitch; head.current.rotation.z = headRoll; face.head(head.current) }
     if (earL.current) earL.current.rotation.z = 0.78 + earDroop * 0.6
     if (earR.current) earR.current.rotation.z = -0.78 - earDroop * 0.6
     if (armL.current) armL.current.rotation.set(aL[0], 0, -aL[1])
@@ -109,7 +111,7 @@ export function MoglinModel({ build = MOGLIN_BUILD, action = 'idle', garb = 'non
   const light = <meshStandardMaterial color={tone.light} roughness={0.95} />
   const H = B.headR
   return (
-    <group>
+    <group ref={face.turn}>
       <group ref={body}>
         {/* legs: pivots at the hips, stubby, with paw-feet */}
         {([-1, 1] as const).map(sd => (
