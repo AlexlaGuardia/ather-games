@@ -45,7 +45,9 @@ for (const page of ['ather/page.tsx', 'continent/page.tsx']) {
   ok(centred.length === allowed, `${page}: nothing else pinned in the centre band (${centred.join(',') || 'none'}; resume pills ${allowed})`)
 }
 const hud = readFileSync(join(__dirname, 'game-hud.tsx'), 'utf8')
-ok((hud.match(/<HudPrompts lines=\{prompts\}/g) ?? []).length === 2, 'game-hud: the slot is drawn in both layouts (phone + desktop)')
+ok((hud.match(/<HudPrompts lines=\{allPrompts\}/g) ?? []).length === 2, 'game-hud: the slot is drawn in both layouts (phone + desktop)')
+// M194: the slot carries the page's prompts plus the tutorial's tool beat (never the beat alone)
+ok(/allPrompts[^\n]*=[^\n]*\n?[^\n]*\[\.\.\.prompts, \{ text: toolBeatLine/.test(hud) && /: prompts\n/.test(hud), 'game-hud: allPrompts = the page prompts (+ the M194 beat line)')
 
 console.log(`hud-prompt: ${pass} pass, ${fail} fail`)
 process.exit(fail ? 1 : 0)

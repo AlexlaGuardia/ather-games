@@ -537,19 +537,25 @@ export function HearthLip({ face, vitals, mana, tools }: {
 
 /** A tool as a pip: phone-sized stand-in for a `hud-corner` socket. Level in the middle, XP as a
  *  ring, the act-here ember when that family is working. Data in, so the corner derives it. */
+/** M194: the tutorial's glow round a dial (a soft ember ring that breathes; the dial stays clickable through it) */
+export function DialGlow() {
+  return <span aria-hidden data-dial-glow className="pointer-events-none absolute -inset-1.5 rounded-full animate-pulse"
+    style={{ boxShadow: '0 0 0 3px rgba(255,196,96,.95), 0 0 18px 6px rgba(255,170,60,.7)' }} />
+}
+
 export type ToolPip = { family: string; level: number; xpPct: number; active: boolean
   /** M184: false = an EMPTY pip (the tool not handed yet); stage 0 worn, 1..3 upgrades; ringPct / ringColor = the upgrade's ring */
   held?: boolean; stage?: number; ringPct?: number | null; ringColor?: string | null }
-export function HearthToolPips({ face, pips, onPick, picked = null }: { face: HudFace; pips: readonly ToolPip[]
+export function HearthToolPips({ face, pips, onPick, picked = null, hint = null }: { face: HudFace; pips: readonly ToolPip[]
   /** M184 s2: tap a pip = the tool panel; omitted = inert */
-  onPick?: (family: string) => void; picked?: string | null }) {
+  onPick?: (family: string) => void; picked?: string | null; hint?: string | null }) {
   const t = HUD_FACES[face]
   const R = 9, C = 2 * Math.PI * R
   // a pip as a button: a 34 px touch target round the 22 px pip (the lip is tight, so it overlaps its neighbours' air)
   const tap = (p: ToolPip, el: React.ReactElement) => !onPick ? el : (
-    <button key={p.family} type="button" data-dial-btn={p.family} aria-label={p.family} aria-expanded={picked === p.family}
+    <button key={p.family} type="button" data-dial-btn={p.family} aria-label={p.family} aria-expanded={picked === p.family} data-dial-hint={hint === p.family ? '1' : undefined}
       onClick={e => { e.stopPropagation(); onPick(p.family) }}
-      className={`pointer-events-auto relative grid place-items-center -m-1.5 p-1.5 rounded-full transition-transform duration-150 active:scale-110 ${picked === p.family ? 'scale-110 brightness-125' : ''}`}>{el}</button>
+      className={`pointer-events-auto relative grid place-items-center -m-1.5 p-1.5 rounded-full transition-transform duration-150 active:scale-110 ${picked === p.family ? 'scale-110 brightness-125' : ''}`}>{hint === p.family && <DialGlow />}{el}</button>
   )
   return (
     <div className="flex items-center gap-1 shrink-0">

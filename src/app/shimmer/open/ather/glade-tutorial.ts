@@ -55,6 +55,8 @@ export interface Tut {
   folded: boolean
   /** M146: First Steps ended (back at Greg after the settlement's thanks). Absent on every save from before it: firstStepsOn. */
   fs?: 'done'
+  /** M194 (tool-beat.ts): the keeper has opened a tool panel, so the 'click the dial' beat is done. Absent = still owed. */
+  dial?: 'done'
 }
 export const freshTut = (): Tut => ({ v: 1, live: true, greg: { welcome: false, moglins: false, spirits: false, wilds: false }, heard: [], gifts: [], b2: 'none', baitDay: null, m70: 'none', m70node: null, m70side: 'none', folded: false })
 /** What an older save becomes: the whole tutorial done, every gift counted as given (they already hold their tools). */
@@ -182,6 +184,7 @@ export function parseTut(v: unknown): Tut | null {
     m70node: typeof o.m70node === 'string' ? o.m70node : null,
     m70side: M70SIDES.includes(o.m70side as M70Side) ? o.m70side! : 'none',
     ...(o.fs === 'done' ? { fs: 'done' as const } : {}),
+    ...(o.dial === 'done' ? { dial: 'done' as const } : {}),
     folded: o.folded !== false,   // M71: only an explicit false (a post-M71 newborn) is unfolded; a save without the field had its garden
     ...(Array.isArray(o.met) ? { met: [...new Set(o.met.filter((g): g is Guide => GUIDES.includes(g)))] } : {}),
   }

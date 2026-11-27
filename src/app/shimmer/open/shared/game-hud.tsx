@@ -46,6 +46,9 @@ import { OPEN_TOOL_FAMILIES } from '../../ui/tool-stage'
 import { loadTools, TOOLS_EVENT } from '../ather/rinsticks'
 import { toolPanel } from '../ather/tool-panel'
 import { ToolPanelView } from './tool-panel-view'
+import { useToolBeat } from '../ather/use-tool-beat'   // BETA M194: the tutorial points at the dial
+import { toolBeatLine } from '../ather/tool-beat'
+import { usePadKind } from './pad-bridge'
 import { ChordBars } from './chord-bars'   // BETA M188 s1: chordmates' health over your own
 import { createSkillSet, type SkillSet } from '../../engine/skills'
 import type { Vitals } from '../../engine/vitals'
@@ -292,6 +295,10 @@ export function GameHud({ size, pose, marks, vitals, mana, tools, skills, entrie
     return subscribe(() => { const n = linesAt().filter(l => l.kind === 'morel' && l.id > seen); for (const l of linesAt()) seen = Math.max(seen, l.id); if (n.length) sfx('morel-chime') })
   }, [])
   const T = mounted ? (tools ?? ownTools) : noTools, S = (mounted && skills) || basicSkills
+  // M194: a newborn's first tool in hand = its dial glows + one line in the prompt slot, until a tool panel opens
+  const hint = useToolBeat(T, OPEN_TOOL_FAMILIES, picked, mounted), padKind = usePadKind()
+  const allPrompts: readonly HudPromptLine[] = hint && !picked
+    ? [...prompts, { text: toolBeatLine(size === 'phone' ? 'touch' : padKind ? 'pad' : 'mouse'), data: { 'tool-beat': hint } }] : prompts
   const readouts = T.current && S.current ? OPEN_TOOL_FAMILIES.map(f => toolReadout(T.current!, S.current!, f, null)) : []
   const box = hudMapBox(size)
   const tray = trayBox(size)
@@ -346,7 +353,7 @@ export function GameHud({ size, pose, marks, vitals, mana, tools, skills, entrie
     return (
       <div className={`contents ${HEARTH_FONT_VARS}`}>
         <HearthHudLayer face={FACE} size="phone" entries={entries} sel={shown} held={null} dimmed={dimmed} onSelect={onSelect}
-          objective={null} vitals={vitals} mana={mana} tools={T} skills={S} activeTool={null} glyph={glyph} mapFrame={false} families={OPEN_TOOL_FAMILIES} onTool={pick} toolPicked={picked} />
+          objective={null} vitals={vitals} mana={mana} tools={T} skills={S} activeTool={null} glyph={glyph} mapFrame={false} families={OPEN_TOOL_FAMILIES} onTool={pick} toolPicked={picked} toolHint={hint} />
         {picked && T.current && <ToolPanelView panel={toolPanel(T.current, picked)} phone onClose={closePanel} />}
         {/* 11-18 (play's 390x844 shot): the screen-centred compass ran under the minimap; slide it left just enough */}
         <HearthCompass face={FACE} pose={pose} marks={marks} size="phone" centerX={phoneCompassX} />
@@ -364,7 +371,7 @@ export function GameHud({ size, pose, marks, vitals, mana, tools, skills, entrie
         {vh < 520 && vw > vh
           ? <Messages align="left" style={{ left: 'max(16px, env(safe-area-inset-left))', top: 12, maxWidth: phoneCompassX - compassWidth('phone') / 2 - 16 - 12 }} />
           : <Messages align="center" style={{ left: '50%', transform: 'translateX(-50%)', top: PHONE_ROW_TOP + 48 }} />}
-        <HudPrompts lines={prompts} size={size} vw={vw} vh={vh} />
+        <HudPrompts lines={allPrompts} size={size} vw={vw} vh={vh} />
       </div>
     )
   }
@@ -384,15 +391,15 @@ export function GameHud({ size, pose, marks, vitals, mana, tools, skills, entrie
       <div className="fixed bottom-4 left-4 pointer-events-none" style={{ zIndex: 32 }} data-hud="vitals"><HearthVitals face={FACE} vitals={vitals} /></div>
       <ChordBars vitals={vitals} phone={false} />
       <FirstArrow entries={entries} sel={sel} show={arrowShows({ input, fight })} phone={false} />
-      <div className="contents" style={{ zIndex: 32 }}><CornerFixed size={size} mana={mana} readouts={readouts} onPick={pick} picked={picked} /></div>
+      <div className="contents" style={{ zIndex: 32 }}><CornerFixed size={size} mana={mana} readouts={readouts} onPick={pick} picked={picked} hint={hint} /></div>
       {picked && T.current && <ToolPanelView panel={toolPanel(T.current, picked)} phone={false} onClose={closePanel} />}
       {casts && <CastPlates casts={casts} />}
-      <HudPrompts lines={prompts} size={size} vw={vw} vh={vh} />
+      <HudPrompts lines={allPrompts} size={size} vw={vw} vh={vh} />
     </div>
   )
 }
 
-function CornerFixed({ size, mana, readouts, onPick, picked }: { size: HudSize; mana: React.RefObject<Mana | null>; readouts: ReturnType<typeof toolReadout>[]; onPick: (f: ToolFamily) => void; picked: ToolFamily | null }) {
+function CornerFixed({ size, mana, readouts, onPick, picked, hint }: { size: HudSize; mana: React.RefObject<Mana | null>; readouts: ReturnType<typeof toolReadout>[]; onPick: (f: ToolFamily) => void; picked: ToolFamily | null; hint: ToolFamily | null }) {
   // the layer's Corner is `absolute bottom-4 right-4`; a fixed wrapper makes it screen-anchored on any page
-  return <div className="fixed inset-0 pointer-events-none" style={{ zIndex: 32 }}><Corner face={FACE} size={size} mana={mana} readouts={readouts} glyph={glyph} onPick={onPick} picked={picked} /></div>
+  return <div className="fixed inset-0 pointer-events-none" style={{ zIndex: 32 }}><Corner face={FACE} size={size} mana={mana} readouts={readouts} glyph={glyph} onPick={onPick} picked={picked} hint={hint} /></div>
 }
