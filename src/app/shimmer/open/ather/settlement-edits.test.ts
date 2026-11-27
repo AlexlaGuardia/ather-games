@@ -6,7 +6,7 @@ import { SETTLEMENT_GATHERS, CONTESTS, pitchOwnerTents, ownerTentOf, tentsOf, pa
 import { cleanSettlementEdits, applySettlementEdits, addSettlementEdit, moveSettlementEdit, removeSettlementEdit, patchEdit, settlementEditsCanon, nextAddedId, addedName, removedIds, FOCUS_BIOMES, TENT_CONTESTS, HOMES_MAX, SETTLEMENT_NAME_POOL, type SettlementEdits, type EditedSettlement } from './settlement-edits'
 import { cleanLayer, sameLayer, layerSize, planPublish, emptyIndex, EMPTY_LAYER } from '../../world/builder'
 import { settlementLots, MAX_LOTS, homesCount, homesLabel } from './settlement-lots'
-import { folkOf, folkCount, addedFolkNames } from './settlement-folk'
+import { folkOf, folkCount, addedFolkNames, EXTENDED_POOL, CANON_POOL, RESERVED_NAMES } from './settlement-folk'
 import { burrfolkOf, BURR_KIND } from './burrfolk'
 
 let pass = 0; const fails: string[] = []
@@ -154,11 +154,22 @@ ok(JSON.stringify(applySettlementEdits(bake, back).settlements) === JSON.stringi
   ok(dup.length === 0, `names: two living Moglins share a name (${[...new Set(dup)].join(', ')})`)
   const added = all.filter(s => /-x-/.test(s.id))
   ok(added.length === 4 && folkOf(added[0], 1).length > 0, 'names: the first added settlement has folk')
-  ok(added.slice(1).some(s => folkOf(s, 1).length < folkCount(s.id, 1)), 'names: past the free names an added settlement stands emptier')
+  ok(added.every(s => folkOf(s, 1).length === folkCount(s.id, 1)), 'names (120): four added settlements are full (the extended pool)')
   ok(added.every(s => folkOf(s, 1).every(f => addedFolkNames(s.id, 1).includes(f.name))), 'names: an added one names only from its free share')
   ok(added.every(s => burrfolkOf(s, 1)?.name === BURR_KIND), "names: an added settlement's Burrfolk goes by the kind")
-  const lastId = added[added.length - 1].id
-  ok(addedFolkNames(lastId, 1).length === 0 || addedFolkNames(nextAddedId(E2, bake), 1).length < folkCount(nextAddedId(E2, bake), 1), 'names: the free share runs out')
+  ok(addedFolkNames(`s1-x-${11 + 40}`, 1).length === 0, 'names: the free share runs out (past the 120, an add stands empty and the editor refuses it)')
+  // the extended pool (canon 'Extended 2026-11-27', 60 -> 120): word for word from the canon file, no name the 60 or the reserved hold
+  const canonTxt = readFileSync('/root/athernyx/CANON/game/shimmer-folds-settlements.md', 'utf8')
+  const ext = /Extended 2026-11-27[^\n]*?60 → 120\*\*[^:]*:\s*([^(]+)\(/.exec(canonTxt)?.[1].split('·').map(x => x.trim()).filter(Boolean) ?? []
+  ok(ext.length === 60 && JSON.stringify(ext) === JSON.stringify(EXTENDED_POOL), `names: EXTENDED_POOL = the canon block word for word (${ext.length} read)`)
+  ok(EXTENDED_POOL.every(n => !CANON_POOL.includes(n) && !RESERVED_NAMES.has(n)) && new Set(EXTENDED_POOL).size === 60, 'names: the extended 60 are new, unreserved, distinct')
+  // with 120, ten added settlements all have folk and still no two living Moglins share a name
+  let E3: SettlementEdits = []
+  for (let k = 0; k < 10; k++) E3 = addSettlementEdit(E3, bake, -2000 + k * 300, 1500).edits
+  const all3 = applySettlementEdits(bake, E3).settlements, liv3: string[] = []
+  for (const s of all3) { for (const f of folkOf(s, 1)) liv3.push(f.name); const b = burrfolkOf(s, 1); if (b && b.name !== BURR_KIND) liv3.push(b.name) }
+  ok(new Set(liv3).size === liv3.length, `names (120): two living Moglins share a name (${liv3.filter((x, i) => liv3.indexOf(x) !== i).join(', ')})`)
+  ok(all3.filter(s => /-x-/.test(s.id)).every(s => folkOf(s, 1).length > 0), 'names (120): every one of ten added settlements has folk')
   // the baked folk are untouched by the change (no baked Moglin renamed)
   ok(bake.settlements.every(s => JSON.stringify(folkOf(s, 1).map(f => f.name)) === JSON.stringify(folkOf(s, 1).map(f => f.name))) && addedFolkNames(bake.settlements[0].id, 1).length === 0, 'names: a baked settlement has no added share')
 }

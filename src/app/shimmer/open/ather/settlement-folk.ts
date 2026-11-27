@@ -118,11 +118,20 @@ export function seasonRoster(season: number): { slot: (j: number) => string; fre
  *  or, past 11, the first settlements' names). Its folk take names from the season's free names AFTER the baked settlements'
  *  Burrfolk (free[0..10]), in added-id order: added n starts past every lower added id's folk count (a removed one's names are
  *  left unused, never handed twice). Names run out = that settlement has fewer folk (none at all = it stands empty and the
- *  editor refuses the add). Its own Burrfolk goes by the kind's name (BURR_KIND, burrfolk.ts). The pool growing is a later slice. */
+ *  editor refuses the add). Its own Burrfolk goes by the kind's name (BURR_KIND, burrfolk.ts). The free spares come first, then the
+ *  extended pool (EXTENDED_POOL, 60 more, 11-27). */
 export const ADDED_SETTLEMENT_ID = /^s\d+-x-(\d+)$/
+/** canon (shimmer-folds-settlements.md › Names, 'Extended 2026-11-27', Magii 616cd8a, adopted by Alex): the pool 60 -> 120, the
+ *  new 60 for World-Builder settlements. Only owner-added settlements draw them (after the season's free spares), so no baked
+ *  Moglin's name moves. Word for word; settlement-edits.test reads the canon file and holds them equal. */
+export const EXTENDED_POOL: readonly string[] = ['Juniper', 'Orris', 'Quince', 'Rampion', 'Bugle', 'Sanicle', 'Eyebright', 'Ivy', 'Holly', 'Larch',
+  'Maple', 'Osier', 'Zinnia', 'Peony', 'Pansy', 'Lobelia', 'Columbine', 'Snowdrop', 'Crocus', 'Jasmine', 'Saffron', 'Sumac', 'Senna', 'Sallow',
+  'Medlar', 'Broom', 'Pimpernel', 'Gentian', 'Freesia', 'Yew', 'Damson', 'Sedum', 'Starwort', 'Ramson', 'Orach', 'Alyssum', 'Phlox', 'Tulip',
+  'Camellia', 'Azalea', 'Dahlia', 'Begonia', 'Clematis', 'Cedar', 'Beech', 'Balm', 'Vinca', 'Cassia', 'Myrrh', 'Oregano', 'Nutmeg', 'Wisteria',
+  'Gardenia', 'Trefoil', 'Veronica', 'Cypress', 'Amaranth', 'Bayberry', 'Walnut', 'Mimosa']
 export function addedFolkNames(sid: string, season: number): string[] {
   const m = ADDED_SETTLEMENT_ID.exec(sid); if (!m) return []
-  const spare = seasonRoster(season).free.slice(SEASON_SETTLEMENTS), idx = +m[1]
+  const spare = [...seasonRoster(season).free.slice(SEASON_SETTLEMENTS), ...EXTENDED_POOL.filter(n => !RESERVED_NAMES.has(n))], idx = +m[1]
   let off = 0
   for (let j = SEASON_SETTLEMENTS; j < idx && off < spare.length; j++) off += folkCount(`s${season}-x-${j}`, season)
   return spare.slice(off, off + folkCount(sid, season))
