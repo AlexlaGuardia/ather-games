@@ -48,7 +48,8 @@ function intercept(o: Page) {
 }
 const T = (o: Page) => o.evaluate(() => { const t = (window as W).__terrain; return { props: t.props(), place: t.place } }) as Promise<{ props: any[]; place: any }>
 const key = async (o: Page, c: string) => { await o.keyboard.press(c as any); await sleep(700) }
-const lock = async (o: Page) => { const b = (await (await o.$('[data-testid="fly-frame"]'))!.boundingBox())!; for (let i = 0; i < 4 && !(await o.evaluate(() => (window as W).__builderFly.locked())); i++) { await o.mouse.click(b.x + b.width / 2, b.y + b.height / 2 - 60); await sleep(1500) } }
+// s3: lock clicks the TOP of the small fly frame: the HUD's buttons (Save as stamp, Clear, the shelf) sit over its middle
+const lock = async (o: Page) => { const b = (await (await o.$('[data-testid="fly-frame"]'))!.boundingBox())!; for (let i = 0; i < 4 && !(await o.evaluate(() => (window as W).__builderFly.locked())); i++) { await o.mouse.click(b.x + b.width / 2, b.y + 30); await sleep(1500) } }
 const choose = async (o: Page, k: string) => { await key(o, 'KeyE'); await o.click(`[data-testid="place-item-${k}"]`); await sleep(400); await key(o, 'KeyE'); await sleep(1200); await lock(o) }
 const aim = async (o: Page, x: number, z: number) => { await o.evaluate((a: number, b: number) => { const t = (window as W).__terrain, h = t.heightAt(a, b); (window as W).__builderFly.setCam({ x: a, z: b + 10, y: (Number.isFinite(h) ? h : 5) + 7, yaw: 0, pitch: -0.6, top: false }) }, x, z); await sleep(1500) }
 const wheel = (o: Page, dy: number) => o.evaluate((d: number) => document.querySelector('[data-testid="fly-frame"] canvas')!.dispatchEvent(new WheelEvent('wheel', { deltaY: d, bubbles: true, cancelable: true })), dy)
@@ -100,7 +101,7 @@ try {
   // SAVE AS STAMP (the button)
   await ui(o, '[data-testid="stamp-save"]')
   let pl = await P(o)
-  ok(pl.stamps.length >= 1 && pl.stamps[pl.stamps.length - 1].pieces.length === 3, `3. "Save as stamp" puts a 3-piece stamp on the shelf (${pl.stamps.length} on it)`)
+  ok(pl.stamps.length === 1 && pl.stamps[0].pieces.length === 3, `3. "Save as stamp" puts a 3-piece stamp on the shelf (${pl.stamps.length} on it)`)
   const stamp = pl.stamps[pl.stamps.length - 1]
   // STAMP IT (the shelf button), twice: once as is, once turned 90°
   await ui(o, `[data-testid="stamp-${stamp.id}"]`)
@@ -169,7 +170,7 @@ try {
   const greg = { id: 'greg', tile: 'first-wilds', x: -300, y: 0, z: 300, biome: 0, made: 0 }
   for (let i = 0; i < 6 && (await A('zone')) !== 'wilds'; i++) { await A('travel', { kind: 'waymark', w: greg }); for (let k = 0; k < 30 && (await A('zone')) !== 'wilds'; k++) await sleep(1000) }
   ok((await A('zone')) === 'wilds', '9. a fresh keeper (390x844, no owner key) is in the Wilds')
-  await sleep(4000); await dismissStartCard(kp, 3000)
+  await sleep(4000); await dismissStartCard(kp).catch(e => console.log('  (start card: ' + String(e).slice(0, 80) + ')'))
   let sc: any = null
   for (let i = 0; i < 20; i++) { sc = await kp.evaluate(() => (window as W).__wildsScenery?.() ?? null); if (sc?.items?.length) break; await sleep(1000) }
   const mine = (sc?.items ?? []).filter((i: any) => all.some(p => p.id === i.id))
