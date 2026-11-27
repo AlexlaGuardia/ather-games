@@ -32,7 +32,7 @@ ok(decodeBoop({ x: 0.6, z: 0.8 }) !== null && decodeBoop(null) === null && decod
 // 4. cooldown + a stale punch never lands
 ok(throwPunch(10_000) && !throwPunch(10_000 + PUNCH_CD * 1000 - 1) && throwPunch(10_000 + PUNCH_CD * 1000 + 1), 'the punch cooldown')
 ok(takePunch(10_000 + PUNCH_CD * 1000 + 50) && !takePunch(10_000 + PUNCH_CD * 1000 + 60), 'a punch is taken once')
-throwPunch(20_000); ok(!takePunch(20_400), 'a punch combat never read for 400 ms does not land late')
+throwPunch(20_000); ok(!takePunch(21_200), 'a punch combat never read for 1.2 s does not land late')
 receiveBoop({ x: 1, z: 0 }); ok(takeBoop()?.x === 1 && takeBoop() === null, 'a boop is taken once')
 
 // 5. "not huge": the push is a small hop (simulate the ballistic flight launchKeeper starts)

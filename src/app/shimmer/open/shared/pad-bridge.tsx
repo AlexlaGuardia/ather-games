@@ -125,6 +125,9 @@ function moveCursor(dx: number, dy: number) {
 }
 /** A press of A on the pointer: the button under it (its own click), or the bare element there (a full mouse press). */
 function clickCursor() {
+  // a thumb is not a mouse: a pointer a few px off the ringed button's edge still means that button (the ring IS the aim)
+  const rg = ringed(), rr = rg?.getBoundingClientRect(), SNAP = 10
+  if (rg && rr && cur.x > rr.left - SNAP && cur.x < rr.right + SNAP && cur.y > rr.top - SNAP && cur.y < rr.bottom + SNAP) { rg.click(); return }
   const el = underCursor(); if (!el) return
   const btn = el.closest(FOCUSABLE) as HTMLElement | null
   if (btn && !(btn instanceof HTMLCanvasElement)) { ring(btn); btn.click(); return }

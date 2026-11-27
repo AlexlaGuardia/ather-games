@@ -72,8 +72,8 @@ export function throwPunch(now = performance.now()): boolean {
   if (now - S.lastPunch < PUNCH_CD * 1000) return false
   S.lastPunch = now; S.punch = { at: now }; return true
 }
-/** Combat's frame: the punch owed, at most 250 ms old (a paused combat never lands a stale one). */
-export function takePunch(now = performance.now()): boolean { const p = S.punch; S.punch = null; return !!p && now - p.at < 250 }
+/** Combat's frame: the punch owed, at most 1 s old (a weak GPU's slow frame still lands it; a paused combat never lands a stale one). */
+export function takePunch(now = performance.now()): boolean { const p = S.punch; S.punch = null; return !!p && now - p.at < 1000 }
 /** A boop reached this keeper (from the net, or a check): the walker takes it on its next frame. */
 export function receiveBoop(dir: { x: number; z: number }) { S.boop = dir }
 export function takeBoop(): { x: number; z: number } | null { const b = S.boop; S.boop = null; return b }

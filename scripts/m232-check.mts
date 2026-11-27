@@ -62,7 +62,8 @@ try {
   ok(await poll(() => A.evaluate((id: string) => (window as any).__mp.peers().some((p: any) => p.id === id), idB), 60000), `A sees B in the party (${CODE})`)
   ok(await poll(() => A.evaluate(() => (window as any).__ather.stance().kind === 'stowed' && (window as any).__pad.ctx().handsOut), 8000), 'A: hands out (stowed), the pad knows it')
 
-  // 1. a Hollow in front takes the fist
+  // 1. a Hollow in front takes the fist (A in front: a hidden tab runs no combat frames)
+  await A.bringToFront(); await sleep(500)
   await A.evaluate(() => { const a = (window as any).__ather; a.look(a.state().yaw, -0.05); a.spawn(0, -1.3, 'shambler') })
   await sleep(300)
   const before = await A.evaluate(() => (window as any).__fight.ids())
@@ -109,14 +110,14 @@ try {
   const tgt = await A.evaluate(() => {
     const bs = [...document.querySelectorAll<HTMLElement>('[data-panel] button')].filter(b => { const r = b.getBoundingClientRect(); return r.width > 8 && r.height > 8 && r.top > 0 && r.bottom < innerHeight })
     const b = bs[Math.min(1, bs.length - 1)]; if (!b) return null
-    const r = b.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, text: (b.textContent ?? '').trim().slice(0, 30) }
+    const r = b.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width, h: r.height, text: (b.textContent ?? '').trim().slice(0, 30) }
   })
   ok(!!tgt, `4. a button to aim at: ${JSON.stringify(tgt)}`)
-  const steer = async (t: { x: number; y: number }) => {
+  const steer = async (t: { x: number; y: number; w: number; h: number }) => {
     for (let i = 0; i < 150; i++) {
       const c = await A.evaluate(() => (window as any).__pad.cursor())
       const dx = t.x - c.x, dy = t.y - c.y
-      if (c.on && Math.hypot(dx, dy) < 5) break
+      if (c.on && (Math.hypot(dx, dy) < 3 || (Math.abs(dx) < t.w / 2 - 1 && Math.abs(dy) < t.h / 2 - 1))) break
       const k = (v: number) => Math.max(-1, Math.min(1, v / 120)), ax = c.on ? k(dx) : 0.5, ay = c.on ? k(dy) : 0
       await A.evaluate((a: number[]) => (window as any).__fake.axes(a), [Math.abs(ax) < 0.2 ? Math.sign(ax) * 0.2 : ax, Math.abs(ay) < 0.2 && Math.abs(dy) > 3 ? Math.sign(ay) * 0.2 : ay, 0, 0])
       await sleep(60)
@@ -137,9 +138,9 @@ try {
   // Options: the pointer clicks a tab there too
   await press(A, 'START')
   ok(await poll(() => A.evaluate(() => !!document.querySelector('[data-panel="options"]')), 6000), '4. START opened Options')
-  const ot = await A.evaluate(() => { const b = [...document.querySelectorAll<HTMLElement>('[data-panel="options"] button')].find(b => b.textContent?.trim() === 'Controls'); if (!b) return null; const r = b.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, text: 'Controls' } })
+  const ot = await A.evaluate(() => { const b = [...document.querySelectorAll<HTMLElement>('[data-panel="options"] button')].find(b => b.textContent?.trim() === 'Controls'); if (!b) return null; const r = b.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width, h: r.height, text: 'Controls' } })
   if (ot) {
-    await steer(ot); await A.evaluate(() => { (window as any).__clicked = [] }); await press(A, 'A')
+    const oc = await steer(ot); console.log(`· pointer at ${oc.x.toFixed(0)},${oc.y.toFixed(0)} for ${JSON.stringify(ot)}`); await A.evaluate(() => { (window as any).__clicked = [] }); await press(A, 'A')
     ok(await poll(() => A.evaluate(() => !!document.querySelector('[data-padbinds]')), 4000), `4. ✕ on the pointer opened Options › Controls (${JSON.stringify(await A.evaluate(() => (window as any).__clicked))})`)
   } else ok(false, '4. no Controls tab in Options')
   for (let i = 0; i < 4 && await A.evaluate(() => !!document.querySelector('[data-panel]')); i++) { await press(A, 'B'); await sleep(300) }
