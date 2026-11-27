@@ -27,6 +27,9 @@ import { WATER_PREFIX } from '../../open/ather/wilds-edits'
 import { isPlace } from '../../world/builder-props'
 import { PlaceLayer, GladeFixed, useCentre, aimed, type PlaceApi } from './place-mode'   // M153 s1a
 import { zonePartBoxes, type ZonePart } from '../../open/ather/zone-parts'
+import { WalkTest, CostProbe, CostMeter } from './walk-test-view'   // M87: walk test + cost meter
+import type { Sample } from './cost-meter'
+import type { Walk } from './walk-test'
 
 export interface FlyTile { name: string; ox: number; oz: number; nx: number; nz: number; cell: number; sizeX: number; sizeZ: number; h: Float32Array; waterY: number
   /** M83 s2a (the Glade): vertices that are not ground; a quad touching one is not drawn, so the islands float in the void */
@@ -129,7 +132,7 @@ function GladeDraft({ deltas, rev, heightAt, place }: { place?: PlaceApi; deltas
   return <><GladeWater layer={layer} /><GladeFixed heightAt={heightAt} rev={rev} place={place} trees={kept.current} /></>
 }
 
-function Rig({ heightAt, focus, camRef, pr }: { pr: React.MutableRefObject<Props>; heightAt: Props['heightAt']; focus: Props['focus']; camRef: React.MutableRefObject<Cam | null> }) {
+function Rig({ heightAt, focus, camRef, pr, walkRef }: { walkRef: React.MutableRefObject<Walk | null>; pr: React.MutableRefObject<Props>; heightAt: Props['heightAt']; focus: Props['focus']; camRef: React.MutableRefObject<Cam | null> }) {
   const { camera, gl } = useThree()
   const keys = useRef<Keys>({ ...NO_KEYS })
   if (!camRef.current) camRef.current = camOver(focus.x, focus.z, heightAt)
@@ -137,7 +140,7 @@ function Rig({ heightAt, focus, camRef, pr }: { pr: React.MutableRefObject<Props
     const down = (e: KeyboardEvent) => {
       if (typing(e) || e.ctrlKey || e.metaKey) return
       const k = KEYMAP[e.code]; if (k) { keys.current[k] = true; if (e.code === 'Space') e.preventDefault() }
-      if (e.code === 'KeyT' && !e.repeat && !pr.current.placing && camRef.current) camRef.current = toggleTop(camRef.current, heightAt)
+      if (e.code === 'KeyT' && !e.repeat && !pr.current.placing && !walkRef.current && camRef.current) camRef.current = toggleTop(camRef.current, heightAt)
     }
     const up = (e: KeyboardEvent) => { const k = KEYMAP[e.code]; if (k) keys.current[k] = false }
     const blur = () => { keys.current = { ...NO_KEYS } }
@@ -155,9 +158,9 @@ function Rig({ heightAt, focus, camRef, pr }: { pr: React.MutableRefObject<Props
       window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); window.removeEventListener('blur', blur)
       el.removeEventListener('pointerdown', pd); el.removeEventListener('pointermove', pm); el.removeEventListener('pointerup', pu); el.removeEventListener('contextmenu', cm); el.removeEventListener('wheel', wh)
     }
-  }, [gl, heightAt, camRef, pr])
+  }, [gl, heightAt, camRef, pr, walkRef])
   useFrame((_, dt) => {
-    const c = camRef.current; if (!c) return
+    const c = camRef.current; if (!c || walkRef.current) return   // M87: on foot, WalkTest moves the view
     const n = stepCam(c, keys.current, Math.min(dt, 0.1), heightAt); camRef.current = n
     camera.position.set(n.x, n.y, n.z)
     camera.rotation.set(n.pitch, n.yaw, 0, 'YXZ')
@@ -167,7 +170,7 @@ function Rig({ heightAt, focus, camRef, pr }: { pr: React.MutableRefObject<Props
 
 // M83: pointer lock. Click = lock; locked: mouse turns the camera, the brush target is the terrain at the screen centre, left = sculpt.
 const CENTRE = new THREE.Vector2(0, 0)
-function Lock({ camRef, hover, painting, pr, setLocked }: { camRef: React.MutableRefObject<Cam | null>; hover: React.MutableRefObject<{ x: number; z: number } | null>; painting: React.MutableRefObject<boolean>; pr: React.MutableRefObject<Props>; setLocked: (v: boolean) => void }) {
+function Lock({ camRef, hover, painting, pr, setLocked, walkRef }: { walkRef: React.MutableRefObject<Walk | null>; camRef: React.MutableRefObject<Cam | null>; hover: React.MutableRefObject<{ x: number; z: number } | null>; painting: React.MutableRefObject<boolean>; pr: React.MutableRefObject<Props>; setLocked: (v: boolean) => void }) {
   const { gl, camera, scene, raycaster } = useThree()
   const look = useCentre()
   const centreHit = useRef<() => { x: number; z: number } | null>(() => null)
@@ -184,6 +187,7 @@ function Lock({ camRef, hover, painting, pr, setLocked }: { camRef: React.Mutabl
     const isLocked = () => document.pointerLockElement === el
     const change = () => { const l = isLocked(); setLocked(l); pr.current.onLock?.(l); if (!l) { hover.current = null; if (painting.current) { painting.current = false; pr.current.onEnd() } } }
     const down = (e: PointerEvent) => {
+      if (walkRef.current) { if (e.button === 0 && !isLocked()) { try { const r = el.requestPointerLock() as unknown; if (r && typeof (r as Promise<void>).catch === 'function') (r as Promise<void>).catch(() => {}) } catch { /* cooldown */ } } return }   // M87: on foot a click only locks the mouse
       const P = pr.current.placing ? pr.current.place : undefined   // M153: Place mode always locks (the crosshair is the hand)
       if (P?.scatter && isLocked()) {   // M85 s2: the scatter brush: right paints, left / Shift / Alt + right erases; held = a stroke
         if (e.button !== 0 && e.button !== 2) return
@@ -205,12 +209,13 @@ function Lock({ camRef, hover, painting, pr, setLocked }: { camRef: React.Mutabl
       el.removeEventListener('pointerdown', down); document.removeEventListener('pointerup', up); document.removeEventListener('mousemove', move); document.removeEventListener('pointerlockchange', change); window.removeEventListener('keydown', esc)
       if (isLocked()) document.exitPointerLock()
     }
-  }, [gl, camRef, hover, painting, pr, setLocked, look])
+  }, [gl, camRef, hover, painting, pr, setLocked, look, walkRef])
   // lock turned off while locked: let go
   const lockLook = pr.current.lockLook || pr.current.placing
   useEffect(() => { if (!lockLook && document.pointerLockElement === gl.domElement) document.exitPointerLock() }, [lockLook, gl])
   useFrame(() => {
     if (document.pointerLockElement !== gl.domElement) return
+    if (walkRef.current) { hover.current = null; return }   // M87: no brush on foot
     const p = centreHit.current(); hover.current = p
     const st = stroke.current, P = pr.current.placing ? pr.current.place : undefined   // M85 s2: the stroke dabs again every half radius
     if (st && P?.scatter && p && (!st.last || Math.hypot(p.x - st.last.x, p.z - st.last.z) >= P.scatter.radius * 0.5)) { st.last = p; P.dab(p.x, p.z, st.erase, onLand) }
@@ -282,6 +287,8 @@ export default function BuilderFly(p: Props) {
   const painting = useRef(false)
   const pr = useRef(p); pr.current = p
   const [locked, setLocked] = useState(false)
+  const walkRef = useRef<Walk | null>(null), [walking, setWalking] = useState(false)   // M87: the walk test
+  const cost = useRef<Sample | null>(null)   // M87: the cost meter's last sample (the meter polls it: no re-render of the view)
   useEffect(() => {
     const up = () => { if (painting.current) { painting.current = false; pr.current.onEnd() } }
     window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up)
@@ -351,18 +358,21 @@ export default function BuilderFly(p: Props) {
       onCreated={({ scene }) => { sceneRef.current = scene; scene.background = new THREE.Color('#9fc4dd'); scene.fog = new THREE.Fog('#9fc4dd', 1500, 5000) }}>
       <hemisphereLight args={['#ffffff', '#5a6b4a', 0.9]} />
       <directionalLight position={[-300, 600, -200]} intensity={1.1} />
-      <Rig heightAt={p.heightAt} focus={p.focus} camRef={camRef} pr={pr} />
-      <Lock camRef={camRef} hover={hover} painting={painting} pr={pr} setLocked={setLocked} />
+      <Rig heightAt={p.heightAt} focus={p.focus} camRef={camRef} pr={pr} walkRef={walkRef} />
+      <Lock camRef={camRef} hover={hover} painting={painting} pr={pr} setLocked={setLocked} walkRef={walkRef} />
+      <WalkTest camRef={camRef} walkRef={walkRef} setWalking={setWalking} heightAt={p.heightAt} place={p.place} solids={solids} glade={!!p.fixed} />
+      <CostProbe sample={cost} />
       {p.tiles.map(t => <TileMesh key={t.name} t={t} deltas={p.deltas} rev={p.rev} onDown={onDown} onMoveP={onMoveP} />)}
       {/* the Glade (tiles with void) has no sea: its islands float in the cloud */}
       {p.tiles.length > 0 && !p.tiles.some(t => t.noSea) && <mesh rotation={[-Math.PI / 2, 0, 0]} position={[p.focus.x, waterY, p.focus.z]}><planeGeometry args={[3200, 3200]} /><meshLambertMaterial color="#3d6f99" transparent opacity={0.75} /></mesh>}
       {p.pool && <PoolWater heightAt={p.heightAt} rev={p.rev} />}
-      {!p.placing && <Cursor at={hover} radius={p.radius} heightAt={p.heightAt} />}
+      {!p.placing && !walking && <Cursor at={hover} radius={p.radius} heightAt={p.heightAt} />}
       {p.place && <PlaceLayer api={p.place} active={!!p.placing} heightAt={p.heightAt} rev={p.rev} label={labelTex} solids={solids} />}
       {p.fixed && <GladeDraft place={p.place} deltas={p.deltas} rev={p.rev} heightAt={p.heightAt} />}
       {p.overlay && <OverlayLayer overlay={p.overlay} heightAt={p.heightAt} rev={p.rev} />}
       {p.parts && <ZonePartsView parts={p.parts} />}
     </Canvas>
+    <CostMeter sample={cost} walking={walking} />
     {locked && <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none" data-testid="fly-crosshair">
       <div className="absolute left-1/2 top-1/2 w-5 h-0.5 -translate-x-1/2 -translate-y-1/2 bg-white/90 mix-blend-difference" />
       <div className="absolute left-1/2 top-1/2 w-0.5 h-5 -translate-x-1/2 -translate-y-1/2 bg-white/90 mix-blend-difference" />
