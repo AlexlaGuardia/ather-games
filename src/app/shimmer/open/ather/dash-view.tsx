@@ -114,10 +114,13 @@ function Follow({ at, phone }: { at: () => RunState; phone: boolean }) {
   return null
 }
 
+const SUB = 0.05, MAX_DT = 0.5
 function Stepper({ racers, states, rolls, onTick }: { racers: Entry[]; states: React.MutableRefObject<RunState[]>; rolls: (() => number)[]; onTick: (dt: number) => void }) {
   useFrame((_, raw) => {
-    const dt = Math.min(0.1, raw)
-    states.current = states.current.map((s, i) => step(racers[i], s, dt, rolls[i]))
+    // real time whatever the frame rate (a slow phone still races at the race's pace): sub-steps of at most SUB s, and a
+    // hitch longer than MAX_DT (a tab switch) is dropped rather than raced through
+    const dt = Math.min(MAX_DT, raw)
+    for (let left = dt; left > 1e-6; left -= SUB) { const h = Math.min(SUB, left); states.current = states.current.map((s, i) => step(racers[i], s, h, rolls[i])) }
     onTick(dt)
   })
   return null
