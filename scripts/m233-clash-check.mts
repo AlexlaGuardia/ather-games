@@ -1,7 +1,7 @@
 // M233 s3 prod check: CLASH, THE FAIR'S SPIRIT-BATTLE TENTS.
 //   Test keeper A (a base-form fox in her party, 1500 Marks) walks to the first EASY Clash tent: E opens its SIGN-UP panel (not
-//   'still pitching'); the line-up is three BASE forms; A enters her fox and fights every bout in the turn-based battle (Press each
-//   round, Continue between bouts) to a result. A win pays the easy prize into her purse once (server: fair_clash), and a second
+//   'still pitching'); the line-up is three BASE forms; A enters her fox: (v2a) a load screen, then the 3D ring + the line-up tree,
+//   the troupe's bout first, then hers, to a result; Back to the Fair. A win pays the easy prize into her purse once (server: fair_clash), and a second
 //   read of the tent says it is won. The first AVERAGE tent fields SECOND forms. The DIFFICULT tent shows HELD (no Enter).
 // ⚠ Writes the LIVE accounts db for a test keeper only (dummy_m233_a): her fair_clash rows are deleted at the start and the end.
 //   npx tsx scripts/m233-clash-check.mts [--phone] [--url https://ather.games] [--out /tmp/m233c]
@@ -10,6 +10,8 @@ import { mkdirSync, readFileSync } from 'fs'
 import { dismissStartCard } from './lib/start-card.mts'
 import { fairDoor, tentsOf, tentLabel, type Network } from '../src/app/shimmer/open/ather/network'
 import { CLASH_PRIZE } from '../src/app/shimmer/open/ather/fair-clash-rules'
+import { runFight, tentEntrant } from '../src/app/shimmer/open/ather/clash-fight'
+import { clashLineup } from '../src/app/shimmer/open/ather/fair-clash'
 if (!process.env.ATHER_SESSION_SECRET) {
   const m = readFileSync('.env', 'utf8').match(/^ATHER_SESSION_SECRET=(.*)$/m)
   if (m) process.env.ATHER_SESSION_SECRET = m[1].trim()
@@ -33,6 +35,15 @@ wipe()
 const net = await (await fetch(`${url}/open/wilds/network-s1.json`, { cache: 'no-store' })).json() as Network
 const clash = tentsOf(net).filter(x => x.contest === 'clash')
 const easyNo = clash.findIndex(x => x.level === 'easy'), avgNo = clash.findIndex(x => x.level === 'average'), hardNo = clash.findIndex(x => x.level === 'difficult')
+// v2a: the live engine is seeded per bout from ?clashseed (bout i = seed*1000 + i): pick a line where her fox wins both her
+// bouts with HP to spare, so the run is replayable (a fresh seed is a coin-flip-ish run by design: evened spirits)
+const LU = clashLineup(1, easyNo, 'easy'), EN = (i: number) => tentEntrant(LU[i].species, LU[i].element, 'easy'), FOX = () => tentEntrant('fox', 'base', 'easy')
+let SEED = 0
+for (let s = 1; s < 2000 && !SEED; s++) {
+  const t = runFight(EN(0), EN(1), s * 1000).winner === 0 ? 0 : 1, a = runFight(FOX(), EN(2), s * 1000 + 1), b = runFight(FOX(), EN(t), s * 1000 + 2)
+  if (a.winner === 0 && b.winner === 0 && a.hp[0] > 0.4 && b.hp[0] > 0.4) SEED = s
+}
+console.log(`   clash seed ${SEED} (line-up ${LU.map(f => f.species).join(' ')})`)
 ok(clash.length >= 5 && easyNo >= 0 && avgNo >= 0 && hardNo >= 0, `0. prod's season pitches ${clash.length} Clash tents (${clash.map(x => x.level).join(', ')})`)
 
 const br = await puppeteer.launch({ protocolTimeout: 300000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
@@ -58,7 +69,7 @@ try {
       localStorage.setItem(`${pre}ather.spiritStats.v1`, JSON.stringify({ 'vx-m233': { form: 'base', g: { agi: 10 }, plays: 0, xp: 0, grown: 0 } }))
     }
   }, { TUT, POTS, id: KA.id } as any)
-  await p.goto(`${url}/shimmer/open/ather?hour=14`, { waitUntil: 'load', timeout: 240000 })
+  await p.goto(`${url}/shimmer/open/ather?hour=14&clashx=8&clashseed=${SEED}`, { waitUntil: 'load', timeout: 240000 })
   await p.waitForFunction(() => !!(window as any).__ather?.travel, { timeout: 180000, polling: 1000 })
   await sleep(3000)
   try { await dismissStartCard(p) } catch (e) { await p.screenshot({ path: `${out}/0-start-stuck.png` }); for (let i = 0; i < 3; i++) { await p.keyboard.press('Escape'); await sleep(600) }; await dismissStartCard(p) }
@@ -106,26 +117,49 @@ try {
   ok(e1.info?.foes.length === 3 && e1.info.foes.every(f => f.endsWith(':base/base')), `3. the easy line-up: three BASE forms (${e1.info?.foes.join(' ')})`)
   await p.screenshot({ path: `${out}/1-clash-easy-signup.png` })
   const m0 = await marks()
-  let result: string | undefined, bouts = new Set<string>(), shots = 0, tries = 0
-  while (!result && tries < 3) {
+  // M233 v2a: Enter = the Clash LOAD screen, then THE RING (a WebGL canvas, both spirits' models) + the TOURNAMENT PANEL (the
+  // line-up tree); the troupe's bout runs first, the tree advances as each bout ends, then hers; a result card, Back to the Fair.
+  let result: string | undefined, tries = 0, sawLoad = false, ringInfo: any = null, order: string[] = [], keeperModels = '', advanced = false, oldScene = false, exited = false, cheer = ''
+  while (!result && tries < 4) {
     tries++
     await (await p.$('[data-signup-spirit="vx-m233"]'))!.click(); await sleep(300)
     await (await p.$('[data-signup-enter] button'))!.click()
-    await p.waitForSelector('[data-clash-bout]', { timeout: 10000 })
-    for (let i = 0; i < 1500; i++) {
-      result = await p.evaluate(() => (document.querySelector('[data-clash-result]') as HTMLElement | null)?.dataset.clashResult)
-      if (result) break
-      const b = await p.evaluate(() => (document.querySelector('[data-clash-bout]') as HTMLElement | null)?.dataset.clashBout)
-      if (b != null && !bouts.has(b)) { bouts.add(b); await sleep(2200); await p.screenshot({ path: `${out}/2-bout-${b}.png` }); shots++ }
-      const press = await p.$('[data-stance="press"]')
-      if (press) { await press.click().catch(() => {}); await sleep(400); continue }
-      const end = await p.$('[data-battle-end] button')
-      if (end) { await sleep(300); await end.click().catch(() => {}); await sleep(600); continue }
+    for (let i = 0; i < 40 && !sawLoad; i++) { sawLoad = !!(await p.$('[data-clash-load]')); if (!sawLoad) await sleep(100) }
+    if (tries === 1 && sawLoad) await p.screenshot({ path: `${out}/2a-load.png` })
+    await p.waitForSelector('[data-clash-ring="ring"]', { timeout: 20000 })
+    for (let i = 0; i < 600; i++) {
+      const st = await p.evaluate(() => {
+        const q = (s: string) => document.querySelector(s) as HTMLElement | null
+        return { res: q('[data-clash-ring-result]')?.dataset.clashRingResult, bout: q('[data-clash-bout]')?.dataset.clashBout, kb: q('[data-clash-bout]')?.dataset.clashKeeperBout,
+          models: (document.querySelector('[data-ring-models]') as HTMLElement | null)?.dataset.ringModels ?? '', canvas: !!document.querySelector('[data-clash-ring] canvas'),
+          tree: [...document.querySelectorAll('[data-bracket-bout]')].map(e => `${(e as HTMLElement).dataset.bracketBout}:${(e as HTMLElement).dataset.boutState}:${(e as HTMLElement).dataset.boutWinner}:${(e as HTMLElement).dataset.boutYou}`),
+          old: !!document.querySelector('[data-stance]') }
+      })
+      if (st.old) oldScene = true
+      if (!ringInfo && st.canvas && st.models.split(',').filter(Boolean).length >= 2) { ringInfo = st; await sleep(800); await p.screenshot({ path: `${out}/2b-ring-troupe-bout.png` }) }
+      if (st.bout != null && order[order.length - 1] !== `${st.bout}${st.kb === '1' ? 'you' : ''}`) {
+        order.push(`${st.bout}${st.kb === '1' ? 'you' : ''}`)
+        if (st.tree.some(t => t.startsWith('0:done')) && st.bout !== '0') advanced = true
+        if (st.kb === '1' && tries === 1) { await sleep(3000); await p.screenshot({ path: `${out}/2c-ring-your-bout-${st.bout}.png` }) }
+      }
+      if (st.kb === '1' && st.models.split(',').filter(Boolean).length >= 2) keeperModels = st.models
+      if (st.kb === '1' && !cheer) { const c = await p.$('[data-clash-cheer]'); if (c) { await c.click().catch(() => {}); await sleep(400); cheer = await p.evaluate(() => (document.querySelector('[data-clash-cheer]') as HTMLElement | null)?.dataset.cheerUsed ?? 'gone') } }
+      if (st.res) { result = st.res; break }
       await sleep(250)
     }
-    if (result === 'lost') { console.log('   lost a try; again'); result = undefined; await sleep(500) }
+    if (tries === 1 || result === 'won') await p.screenshot({ path: `${out}/2d-ring-result-${result}.png` })
+    const ex = await p.$('[data-clash-exit]'); if (ex) { await ex.click(); await sleep(800) }
+    exited = !(await p.$('[data-clash-ring]')) && !!(await p.$('[data-panel="clash"] [data-clash-result]'))
+    if (result === 'lost') { console.log(`   lost a run (${order.join(' ')}); again`); result = undefined; await sleep(500) }
   }
-  ok(result === 'won' && bouts.size === 3, `4. A's fox fought the line-up bout by bout (${[...bouts].join(',')}) to a result: ${result} (try ${tries})`)
+  ok(sawLoad, '4a. Enter shows the Clash LOAD screen')
+  ok(!!ringInfo && ringInfo.canvas && ringInfo.tree.length === 3, `4b. the RING mounts: a WebGL canvas, 2 spirit models (${ringInfo?.models}), the tournament panel's tree of 3 bouts (${ringInfo?.tree.join(' ')})`)
+  ok(order[0] === '0' && order.includes('1you') && advanced, `4c. bouts run one by one, the troupe's first, the tree advances, then hers (${order.join(' -> ')})`)
+  ok(/vulnyx/.test(keeperModels) && keeperModels.split(',').length >= 2, `4d. her bout shows her Vulnyx and her opponent in the ring (${keeperModels})`)
+  ok(cheer === '1' || cheer === 'gone', `4h. her bout has a CHEER button, spent after one press (${cheer})`)
+  ok(result === 'won', `4e. the keeper's run reaches a result: ${result} (try ${tries})`)
+  ok(!oldScene, '4f. the old turn-based battle is not reachable from the Clash panel')
+  ok(exited, '4g. Back to the Fair closes the ring and shows the result in the sign-up panel')
   for (let i = 0; i < 20 && !(await p.$('[data-clash-paid]')); i++) await sleep(500)
   const paid = await p.evaluate(() => Number((document.querySelector('[data-clash-paid]') as HTMLElement | null)?.dataset.clashPaid))
   const m1 = await marks()

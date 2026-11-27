@@ -388,6 +388,12 @@ export function SpiritStage({ sp, look, clip, meals }: { sp: Species; look: Spir
     </Canvas>
   )
 }
+/** M233 v2a: a spirit in the CLASH RING (clash-ring.tsx): the same SpiritModel, centred like the gallery's copy and playing the
+ *  clip it is given on the spot; the ring's group moves and turns her. Mount inside a Canvas. */
+export function SpiritFigure({ sp, look, clip }: { sp: Species; look: SpiritLook; clip: RigClip }) {
+  const L = rigLook(sp, look, useSpiritRig())
+  return <Suspense fallback={null}><SpiritModel key={L.url} sp={sp} look={L} gallery clip={clip} /></Suspense>
+}
 /** the gallery camera framed on a new spirit (her height, her rig's step back), as a fresh canvas used to be */
 function StageFrame({ h, far }: { h: number; far: number }) {
   const camera = useThree(s => s.camera), controls = useThree(s => s.controls) as { target: THREE.Vector3; update: () => void } | null

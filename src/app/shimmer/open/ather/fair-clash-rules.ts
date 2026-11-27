@@ -61,4 +61,18 @@ export const CLASH_UI = {
   signIn: 'Sign in to win the prize.',
   again: 'Fight again',
   wonTag: 'Won',
+  // M233 v2a: the load screen, the ring and its tournament panel
+  loading: 'Setting the ring...',
+  versus: 'The line-up',
+  bracket: 'The line-up tree',
+  round: (r: number, of: number) => (r === of - 1 ? 'Final' : `Round ${r + 1}`),
+  you: 'You',
+  yourBout: 'Your bout!',
+  live: 'Now',
+  next: 'Next',
+  out: 'Out',
+  exit: 'Back to the Fair',
+  cheer: 'Cheer!',
+  cheered: 'Cheered',
+  cue: { hit: 'Hit!', evaded: 'Dodged', guarded: 'Blocked', miss: 'Missed', cheer: 'Cheered on' } as Record<'hit' | 'evaded' | 'guarded' | 'miss' | 'cheer', string>,
 } as const

@@ -1,7 +1,8 @@
 'use client'
 // ── CLASH at the Thistledown Fair (BETA M233 s3). E at a Clash tent opens its SIGN-UP panel (fair-signup.tsx): pick ONE of your
-// party spirits and Enter. She fights the tent's PREGENERATED line-up (fair-clash.ts) one bout at a time in the turn-based
-// battle we already have (components/PartyBattleScene.tsx, 1v1), every spirit EVENED to the tent's level (power = choice).
+// party spirits and Enter. M233 v2a (Alex 11-27 rejected the turn-based battle for Clash): Enter opens THE CLASH RING
+// (clash-ring.tsx): a load card, then a 3D ring seen from above and the tournament panel's line-up tree (her spirit + the tent's
+// PREGENERATED line-up, fair-clash.ts); bouts run one by one until hers. Every spirit EVENED to the tent's level (power = choice).
 // Beat them all = the tent is won; the first win of the season pays its Marks prize (api/fair/clash, once per tent). No board.
 // The difficult tent (awakened) is HELD: it stays pitched and says it opens later. Labels: fair-clash-rules.ts CLASH_UI (@lark).
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
@@ -11,9 +12,9 @@ import { spiritFormName, type Element } from '../../spirits/spirit'
 import { speciesOf } from './spirit-seeds'
 import { useBook } from './spirit-panels'
 import { partyIds, subscribeParty } from './spirit-party'
-import PartyBattleScene from '../../components/PartyBattleScene'
+import { ClashRing, type RingEntrant } from './clash-ring'   // M233 v2a
 import { clashLineup, evenSpirit, foeName } from './fair-clash'
-import { CLASH_UI as L, CLASH_OPEN, CLASH_PRIZE, CLASH_AI, CLASH_TROUPE_MANA, CLASH_SEASON, TENT_LEVEL, type ClashTier, type ClashState, type ClashClaim } from './fair-clash-rules'
+import { CLASH_UI as L, CLASH_OPEN, CLASH_PRIZE, CLASH_SEASON, TENT_LEVEL, type ClashTier, type ClashState, type ClashClaim } from './fair-clash-rules'
 import { CLASH_LEVEL_LABEL } from './network'
 import type { Ledger } from '../trade'
 
@@ -30,7 +31,7 @@ export function ClashPanel({ tier, tent, ledger, setLedger, onClose }: { tier: C
   const lineup = useMemo(() => clashLineup(CLASH_SEASON, tent, tier), [tent, tier])
   const [pick, setPick] = useState<string | null>(null)
   const [state, setState] = useState<ClashState | null>(null)
-  const [bout, setBout] = useState<number | null>(null)          // the bout being fought (index into the line-up), null = none
+  const [bout, setBout] = useState<number | null>(null)          // M233 v2a: 0 while the ring is open (a run in progress), null = none
   const [result, setResult] = useState<null | { won: boolean; prize?: number; first?: boolean }>(null)
   const [msg, setMsg] = useState<string | null>(null)
   const load = useCallback(async () => {
@@ -46,13 +47,14 @@ export function ClashPanel({ tier, tent, ledger, setLedger, onClose }: { tier: C
   const canEnter = open && !!chosen && bout === null && lineup.length > 0
   const entrants: Entrant[] = [{ who: 'you', you: true, spirit: chosen?.name ?? null }]
 
-  // the battle Spirits, evened to the tent's level: hers (species + her form) and the line-up's
-  const mine = useMemo(() => chosen ? evenSpirit(chosen.sp, chosen.element, tier, chosen.name) : null, [chosen, tier])
-  const foes = useMemo(() => lineup.map(f => evenSpirit(f.species, f.element, tier)), [lineup, tier])
+  // the ring's entrants, evened to the tent's level: hers (species + her form) first, then the line-up (a fresh Spirit per bout)
+  const ring = useMemo<RingEntrant[] | null>(() => chosen ? [
+    { name: chosen.name, species: chosen.sp, element: chosen.element, spirit: () => evenSpirit(chosen.sp, chosen.element, tier, chosen.name) },
+    ...lineup.map(f => ({ name: foeName(f), species: f.species, element: f.element, spirit: () => evenSpirit(f.species, f.element, tier) })),
+  ] : null, [chosen, lineup, tier])
 
   const enter = () => { if (!canEnter) return; setResult(null); setMsg(null); setBout(0) }
   const won = async () => {
-    setBout(null)
     try {
       const x = await fetch('/api/fair/clash', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ tent, level: tier, spirit: chosen?.name }) })
       const j = await x.json().catch(() => ({}))
@@ -63,11 +65,8 @@ export function ClashPanel({ tier, tent, ledger, setLedger, onClose }: { tier: C
       setResult({ won: true, prize: c.prize, first: c.first })
     } catch { setResult({ won: true }); setMsg('Could not reach the troupe.') }
   }
-  const onEnd = (outcome: 'win' | 'lose') => {
-    if (bout === null) return
-    if (outcome === 'lose') { setBout(null); setResult({ won: false }); return }
-    if (bout + 1 < foes.length) setBout(bout + 1); else void won()
-  }
+  // the ring's run is over: a win claims the purse (server: once per tent per season); the ring stays up until 'Back to the Fair'
+  const onDone = useCallback((w: boolean) => { if (w) void won(); else setResult({ won: false }) }, [chosen, ledger, tent, tier])   // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <>
@@ -81,7 +80,7 @@ export function ClashPanel({ tier, tent, ledger, setLedger, onClose }: { tier: C
             <div style={{ fontWeight: 700, color: H.ink }}>{L.lineup}</div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               {lineup.map((f, i) => (
-                <div key={i} data-clash-foe={`${f.species}:${f.element}`} data-form={f.element === 'base' ? 'base' : 'second'} data-beaten={result?.won || (bout !== null && i < bout) ? '1' : '0'}
+                <div key={i} data-clash-foe={`${f.species}:${f.element}`} data-form={f.element === 'base' ? 'base' : 'second'} data-beaten={result?.won ? '1' : '0'}
                   style={{ padding: '4px 10px', borderRadius: 8, fontSize: 13, fontWeight: 700, color: H.ink, background: 'rgba(255,250,240,.6)', boxShadow: 'inset 0 0 0 1px rgba(58,39,22,.14)' }}>
                   {i + 1}. {foeName(f)}
                 </div>
@@ -99,14 +98,8 @@ export function ClashPanel({ tier, tent, ledger, setLedger, onClose }: { tier: C
           </>}
         </div>
       </FairSignup>
-      {bout !== null && mine && foes[bout] && (
-        <div data-clash-bout={bout} style={{ position: 'fixed', inset: 0, zIndex: 60, background: '#000' }}>
-          <PartyBattleScene key={bout} allySpirits={[mine]} enemySpirits={[foes[bout]]} zoneId="garden"
-            ai={CLASH_AI[tier]} mana={{ enemy: CLASH_TROUPE_MANA[tier] }}
-            introText={`${L.bout(bout + 1, foes.length)} · ${foes[bout].name}`}
-            endText={{ win: bout + 1 < foes.length ? `${foes[bout].name} is out. Next bout.` : L.won, lose: L.lost }}
-            onEnd={onEnd} />
-        </div>
+      {bout !== null && ring && (
+        <ClashRing key={`${tent}-${pick}`} tier={tier} title={L.title(CLASH_LEVEL_LABEL[tier])} entrants={ring} result={result} onDone={onDone} onExit={() => setBout(null)} />
       )}
     </>
   )
