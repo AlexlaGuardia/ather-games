@@ -54,7 +54,7 @@ try {
     for (const b of A) { const L = BASE_PREVIEW[b.sp]!, r = R.find(x => x.sp === b.sp)
       ok(!!r && Math.abs(r.h - L.h) < 1e-6 && got.includes(`${L.url.split('/').pop()} 200`), `A ${tag}: ${b.sp} draws ${L.name} (${L.url.split('/').pop()} ${got.includes(`${L.url.split('/').pop()} 200`) ? '200' : 'NOT LOADED'}, h ${r?.h.toFixed(4)} = ${L.h.toFixed(4)})`) }
     // Luminara hovers: sample her altitude for 8 s
-    const alts: number[] = await p.evaluate(async () => { const out: number[] = []; for (let k = 0; k < 40; k++) { for (const r of (window as any).__spiritModel.rigs.values()) if (r.sp === 'firefly') out.push(r.alt); await new Promise(z => setTimeout(z, 200)) } return out })
+    const alts: number[] = await p.evaluate(async () => { const out: number[] = []; for (let k = 0; k < 40; k++) { for (const r of ((window as any).__spiritModel?.rigs?.values() ?? [])) if (r.sp === 'firefly') out.push(r.alt); await new Promise(z => setTimeout(z, 200)) } return out })
     ok(alts.length > 10 && alts.every(a => a > 0.5), `A ${tag}: Luminara hovers (alt ${Math.min(...alts).toFixed(2)} .. ${Math.max(...alts).toFixed(2)} m, ${alts.length} samples)`)
     ok(!got.some(x => / [45]\d\d$/.test(x)), `A ${tag}: every spirit glb 200 (${[...new Set(got)].join(', ')})`)
     await shot(p, 'a-bases'); await p.close() }
@@ -63,7 +63,7 @@ try {
     const B: Bed[] = [...EL.map(el => ({ sp: 'owl' as Species, el })), ...EL.map(el => ({ sp: 'hummingbird' as Species, el })), { sp: 'axolotl', el: 'mana' }, { sp: 'fox', el: 'mana' }]
     const { p, got } = await open(B)
     ok(await gl(p, B.length), `B ${tag}: ${B.length} rigged bodies`); await sleep(6000)
-    const urls: Record<string, number> = await p.evaluate(() => ({ ...(window as any).__spiritModel.urls }))
+    const urls: Record<string, number> = await p.evaluate(() => ({ ...((window as any).__spiritModel?.urls ?? {}) }))
     const R = await rigs(p)
     for (const b of B.slice(0, 9)) { const f = formLook(b.sp, b.el)!; const file = f.url.split('/').pop()!
       ok(!!urls[f.url] && got.includes(`${file} 200`) && R.some(r => r.sp === b.sp && Math.abs(r.h - f.h) < 1e-6), `B ${tag}: ${b.sp}/${b.el} draws ${f.name} (${file} mounted ${urls[f.url] ?? 0}, h ${f.h.toFixed(4)})`) }
