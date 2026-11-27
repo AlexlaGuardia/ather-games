@@ -99,8 +99,8 @@ async function talkPhase(p: Page, desk: boolean, out: string, errs: string[]) {
     return false
   }
   const opts = () => p.evaluate(() => [...document.querySelectorAll('[data-talk-option]')].map(x => (x.textContent ?? '').replace('›', '').trim()))
-  const talk = async () => { for (let i = 0; i < 4; i++) { if (await aimHer()) { await sleep(1000); const o = await opts(); if (o.length) return o } await p.keyboard.press('Escape'); await sleep(400) } return [] as string[] }
-  const choose = async (re: RegExp) => p.evaluate((src: string) => { const b = [...document.querySelectorAll('[data-talk-option]')].find(x => new RegExp(src).test(x.textContent ?? '')) as HTMLElement | undefined; b?.click(); return !!b }, re.source)
+  const talk = async () => { for (let i = 0; i < 8; i++) { if (await aimHer()) { await sleep(1000); const o = await opts(); if (o.length) return o } await p.keyboard.press('Escape'); await sleep(400) } return [] as string[] }
+  const choose = async (re: RegExp) => p.evaluate((src: string) => { const b = [...document.querySelectorAll('[data-talk-option]')].find(x => new RegExp(src).test((x.textContent ?? '').replace('›', '').trim())) as HTMLElement | undefined; b?.click(); return !!b }, re.source)
 
   // ── W. one short of max
   await load()
