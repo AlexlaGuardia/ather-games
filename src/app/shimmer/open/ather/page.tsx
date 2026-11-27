@@ -1635,7 +1635,7 @@ function AtherSliceGame() {
         }
         setTut(tutGift(tut, 'grimoire').t); return true
       },
-    }), ww)
+    }), ww, tileOff)
     if (tut && foldC) return foldNode(tut, foldC, {
       grey: () => gardenRef.current.grey,
       pay: (t, grey) => { const g = { ...gardenRef.current, grey }; setGarden(g); saveGarden(g); setTut(t); hudSay(FOLD_TEXT.folded(grey), 'item') },   // garden first, then the flag

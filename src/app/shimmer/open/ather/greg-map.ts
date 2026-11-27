@@ -1,13 +1,15 @@
 // ── GREG'S WILDS MAP (BETA M236, Alex 11-27) ───────────────────────────────────────────────────────────────────────────────
 // While Greg explains the Wilds (glade-greg-talk.ts, the four signed greg.b1.wilds lines) a map of the WHOLE Ather shows beside
 // his talk and runs one stage per line: (0) every zone CLEAR, (1) the infection ripples zone by zone across it, (2) every zone
-// HOLLOW GROUND, (3) it fades to black = the newborn's own map (all Unseen). Display only: it never reads or writes the keeper's
-// spread map (spread-map.ts); it draws M235's zones (zones.ts) in M235's looks (STATE_LOOK) and names the state with the SIGNED
-// legend words (STATE_WORD). Stage pacing + ripple speed are Jin's (look calls for Alex).
+// HOLLOW GROUND, (3) it fades to the newborn's own map (all Unseen under the fold-mist). Display only: it never reads or writes the
+// keeper's spread map (spread-map.ts) or fog. M236 s2 (Alex 11-27: "why didnt we just use the same map"): the picture IS the real
+// Ather Wilds map, panels.tsx AreaView (the fold map's Ather side), round Greg's waymark tile, fed THIS file's display-only regions
+// in place of the keeper's; the signed legend under it (SpreadLegend). Stage pacing + ripple speed are Jin's (look calls for Alex).
 // ★ PURE. Build only: no canon place, no words of its own.
-import { fuseZones, mergePolys } from './zones'
-import { SUB, type Poly, type WildsNode } from './nodes'
+import { fuseZones, mergeRegions } from './zones'
+import { SUB, nodeRegions, type Poly, type WildsNode } from './nodes'
 import { sectionRoll, type LegendState } from './spread-map'
+import type { Region } from './tile-picture'
 import { GREG_WAYMARK } from './waymarks'
 
 export const GREG_MAP_STAGES = ['clear', 'ripple', 'hollow', 'dark'] as const
@@ -31,35 +33,47 @@ export function rippleCount(n: number, ms: number): number {
 }
 
 export interface IndexTile { name: string; tx: number; ty: number; nodes: { id: string; x: number; z: number; i: number; j: number; biome: WildsNode['biome'] }[] }
-export interface MapZone { id: string; /** SVG points, world metres */ pts: string; /** 0 = the first to turn */ rank: number }
-export interface GregMap { zones: MapZone[]; /** the zone count (a zone across a tile seam draws as several shapes) */ n: number; box: { x: number; z: number; w: number; h: number } }
+export interface GregRegion { id: string; /** tile-local metres, as the fold map's regions */ poly: Poly; /** 0 = the first to turn */ rank: number }
+export interface GregArea {
+  /** the tile the map is centred on (Greg's waymark tile) and its centre in world metres: AreaView's cx / cz */
+  tile: string; cx: number; cz: number
+  /** each tile of the 3 x 3 round it: its zone outlines (the fold map's own rule: nodeRegions + mergeRegions per tile) */
+  byTile: Map<string, GregRegion[]>
+  /** the zones drawn (a zone across a tile seam draws on each tile, one rank) */
+  n: number
+}
 
-/** Every zone of the Ather (the tile index, loaded or not) as outlines in world metres, each ranked by when the ripple reaches it:
- *  outward from the zone farthest from Greg's waymark (so it closes in on the Glade last), with a seeded wobble so the front is
- *  not a perfect circle. Same index -> same map. */
-export function buildGregMap(tiles: readonly IndexTile[], tileM: number): GregMap {
+/** The Ather Wilds map's ground round Greg's waymark (the 3 x 3 tiles the fold map shows from there), each zone ranked by when the
+ *  ripple reaches it: outward from the zone farthest from Greg's waymark (so it closes in on the Glade last), with a seeded wobble
+ *  so the front is not a perfect circle. Regions are built exactly as page.tsx builds the keeper's (regionsByTile). Same index ->
+ *  same area. */
+export function buildGregArea(tiles: readonly IndexTile[], tileM: number): GregArea {
   const raw: WildsNode[] = tiles.flatMap(t => t.nodes.map(n => ({ ...n, tile: t.name, x: n.x + t.tx * tileM, z: n.z + t.ty * tileM, gi: t.tx * SUB + n.i, gj: t.ty * SUB + n.j })))
-  const fused = fuseZones(raw)
-  const home = tiles.find(t => t.name === GREG_WAYMARK.tile), hx = GREG_WAYMARK.x + (home?.tx ?? 0) * tileM, hz = GREG_WAYMARK.z + (home?.ty ?? 0) * tileM
-  const far = fused.zones.reduce<WildsNode | null>((b, z) => (!b || Math.hypot(z.x - hx, z.z - hz) > Math.hypot(b.x - hx, b.z - hz) ? z : b), null)
-  const order = fused.zones.map(z => ({ id: z.id, d: far ? Math.hypot(z.x - far.x, z.z - far.z) + sectionRoll(236, 0, z.id) * tileM * 0.6 : 0 }))
+  const fused = fuseZones(raw), home = tiles.find(t => t.name === GREG_WAYMARK.tile)
+  const htx = home?.tx ?? 0, hty = home?.ty ?? 0, hx = GREG_WAYMARK.x + htx * tileM, hz = GREG_WAYMARK.z + hty * tileM
+  const near = tiles.filter(t => Math.abs(t.tx - htx) <= 1 && Math.abs(t.ty - hty) <= 1)
+  const byTile = new Map<string, GregRegion[]>(), ids = new Set<string>()
+  const cells = new Map<string, { id: string; poly: Poly }[]>()
+  for (const t of near) {
+    const local = raw.filter(n => n.tile === t.name).map(n => ({ ...n, x: n.x - t.tx * tileM, z: n.z - t.ty * tileM }))
+    const rs = mergeRegions(nodeRegions(local, tileM, tileM), id => fused.zoneOf.get(id) ?? id)
+    cells.set(t.name, rs); for (const r of rs) ids.add(r.id)
+  }
+  const at = new Map(fused.zones.map(z => [z.id, z]))
+  const far = [...ids].map(id => at.get(id)).reduce<WildsNode | null>((b, z) => (!z ? b : !b || Math.hypot(z.x - hx, z.z - hz) > Math.hypot(b.x - hx, b.z - hz) ? z : b), null)
+  const order = [...ids].map(id => { const z = at.get(id); return { id, d: z && far ? Math.hypot(z.x - far.x, z.z - far.z) + sectionRoll(236, 0, id) * tileM * 0.3 : 0 } })
     .sort((a, b) => a.d - b.d || (a.id < b.id ? -1 : 1))
   const rank = new Map(order.map((o, k) => [o.id, k]))
-  const zones: MapZone[] = []
-  let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity
-  // each section as its own subsection square (nodes.ts: SUB x SUB per tile, one node per LAND subsection), fused per zone: the
-  // land's own outline at 1/SUB of a tile, sea left out (a tile's Voronoi cells would paint its sea too)
-  const cell = tileM / SUB, sq = new Map<string, Poly[]>()
-  for (const t of tiles) {
-    const ox = t.tx * tileM - tileM / 2, oz = t.ty * tileM - tileM / 2
-    x0 = Math.min(x0, ox); x1 = Math.max(x1, ox + tileM); z0 = Math.min(z0, oz); z1 = Math.max(z1, oz + tileM)
-    for (const n of t.nodes) {
-      const a = ox + n.i * cell, b = oz + n.j * cell, z = fused.zoneOf.get(n.id) ?? n.id, l = sq.get(z) ?? []
-      l.push([{ x: a, z: b }, { x: a + cell, z: b }, { x: a + cell, z: b + cell }, { x: a, z: b + cell }]); sq.set(z, l)
-    }
-  }
-  for (const [id, polys] of [...sq].sort((p, q) => (p[0] < q[0] ? -1 : 1))) {
-    for (const poly of mergePolys(polys) ?? polys) zones.push({ id, rank: rank.get(id) ?? order.length, pts: poly.map(p => `${Math.round(p.x)},${Math.round(p.z)}`).join(' ') })
-  }
-  return { zones, n: order.length, box: tiles.length ? { x: x0, z: z0, w: x1 - x0, h: z1 - z0 } : { x: 0, z: 0, w: 1, h: 1 } }
+  for (const [name, rs] of cells) byTile.set(name, rs.map(r => ({ ...r, rank: rank.get(r.id) ?? order.length })))
+  return { tile: home?.name ?? GREG_WAYMARK.tile, cx: htx * tileM, cz: hty * tileM, byTile, n: order.length }
 }
+
+/** The display-only regions a stage shows, in the shape the Ather Wilds map takes (Map<tile, Region[]>): `turned` zones Hollow
+ *  ground (by rank), the rest Clear; the dark stage = every zone Unseen (the plain map under the fold-mist). Never the keeper's. */
+export function stageRegions(area: GregArea, stage: GregMapStage, turned: number): Map<string, Region[]> {
+  const out = new Map<string, Region[]>()
+  for (const [name, rs] of area.byTile) out.set(name, rs.map(r => ({ id: r.id, poly: r.poly, state: stage === 'dark' ? 'unseen' : r.rank < turned ? 'hollow' : 'clear' })))
+  return out
+}
+/** how many zones a stage shows turned when it is not rippling (clear: none, hollow + dark: all) */
+export const turnedAt = (stage: GregMapStage, n: number) => (stage === 'clear' ? 0 : stage === 'ripple' ? 0 : n)

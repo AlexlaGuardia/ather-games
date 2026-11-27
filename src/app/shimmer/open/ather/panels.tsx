@@ -38,8 +38,10 @@ const pin = (bg: string, size: number): React.CSSProperties => ({
   boxShadow: '0 0 0 2px rgba(20,24,28,0.75)', border: 0, padding: 0, cursor: 'pointer', ...PIN_KEEP,   // M100: same size on screen at any zoom
 })
 
-/** The streamed Wilds round you (your tile and its neighbours, 3 km), each tile composed exactly as the minimap does. */
-function AreaView({ world, regionsByTile, cx, cz, fog, tileOff, waymarks }: {
+/** The streamed Wilds round you (your tile and its neighbours, 3 km), each tile composed exactly as the minimap does.
+ *  ★ THE Ather Wilds map (Alex 11-27, M236 s2: "the Ather Wilds map is the TEMPLATE for every map"): the fold map draws it from the
+ *  keeper's spread state; Greg's tutorial map (greg-wilds-map.tsx) draws the SAME component from a display-only state. */
+export function AreaView({ world, regionsByTile, cx, cz, fog, tileOff, waymarks }: {
   world: WildsWorld; regionsByTile: Map<string, Region[]>; cx: number; cz: number; fog: Fog | null; tileOff: { x: number; z: number }; waymarks: Waymark[]
 }) {
   const ref = useRef<HTMLCanvasElement>(null)
@@ -60,7 +62,7 @@ function AreaView({ world, regionsByTile, cx, cz, fog, tileOff, waymarks }: {
   const tx0 = Math.round(cx / TILE_M), ty0 = Math.round(cz / TILE_M)
   const marks = [...regionsByTile].flatMap(([name, rs]) => { const t = world.byName.get(name); return t && Math.abs(t.tx - tx0) <= 1 && Math.abs(t.ty - ty0) <= 1 ? rs.filter(r => r.threat || r.state === 'lost').map(r => ({ ...r, key: `${name}|${r.id}|${r.poly[0]?.x}`, pts: r.poly.map(p => `${p.x + t.tx * TILE_M},${p.z + t.ty * TILE_M}`).join(' ') })) : [] })
   return (
-    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+    <div data-wilds-map style={{ position: 'relative', width: '100%', height: '100%' }}>
       <canvas ref={ref} style={{ width: '100%', height: '100%', display: 'block' }} />
       {marks.length > 0 && (
         <svg viewBox={`${(tx0 - 1.5) * TILE_M} ${(ty0 - 1.5) * TILE_M} ${3 * TILE_M} ${3 * TILE_M}`} preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
@@ -102,6 +104,16 @@ function FogLayer({ fog, W, cut = [] }: { fog: Fog; W: Wilds; /** M235 s1: uncov
     }
   }, [fog, fog.rev, W, cut])
   return <canvas ref={ref} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} />
+}
+
+/** M70 s2, M121 s2: the signed legend, word for word (batch 11-24d), one swatch per state in that state's own map look. Shared by the
+ *  fold map and Greg's tutorial map (M236 s2). */
+export function SpreadLegend({ style }: { style?: React.CSSProperties }) {
+  return (
+    <div data-spread-legend style={{ display: 'flex', flexWrap: 'wrap', gap: 4, fontSize: 11, margin: '2px 0 4px', ...style }}>
+      {AREA_STATES.map((s, k) => { const L = STATE_LOOK[s]; return <span key={s} data-legend-state={s}>{k > 0 ? ' · ' : ''}<span style={{ display: 'inline-block', width: 14, height: 14, marginRight: 4, verticalAlign: -2, borderRadius: 2, boxShadow: '0 0 0 1px rgba(58,39,22,.45)', background: `linear-gradient(${L.fill}, ${L.fill}), #c3d8a0`, border: `1.5px ${L.dash ? (L.dash[0] < 5 ? 'dotted' : 'dashed') : 'solid'} ${L.line}` }} />{STATE_WORD[s]}</span> })}
+    </div>
+  )
 }
 
 // BETA M73: The Dig's pulse (the flip button, then Rune Hold's door): an ember ring that breathes
@@ -208,10 +220,7 @@ export function FoldMap({ view, travel, W, fog, waymarks, infected, here, inWild
               <FriendDoor onGo={onClose} />   {/* M188 s4: the door under the Glade: friends online to visit, a brewing host's garden */}
               {stop("Gregory's waymark", 'the Wilds · meadow', { kind: 'waymark', w: GREG_WAYMARK }, '#e7c766')}
               {regions.length > 1 && (
-                <div data-spread-legend style={{ display: 'flex', flexWrap: 'wrap', gap: 4, fontSize: 11, margin: '2px 0 4px' }}>
-                  {/* M70 s2, M121 s2: the signed legend, word for word (batch 11-24d), one swatch per state in that state's own map look */}
-                  {AREA_STATES.map((s, k) => { const L = STATE_LOOK[s]; return <span key={s} data-legend-state={s}>{k > 0 ? ' · ' : ''}<span style={{ display: 'inline-block', width: 14, height: 14, marginRight: 4, verticalAlign: -2, borderRadius: 2, boxShadow: '0 0 0 1px rgba(58,39,22,.45)', background: `linear-gradient(${L.fill}, ${L.fill}), #c3d8a0`, border: `1.5px ${L.dash ? (L.dash[0] < 5 ? 'dotted' : 'dashed') : 'solid'} ${L.line}` }} />{STATE_WORD[s]}</span> })}
-                </div>
+                <SpreadLegend />
               )}
               {waymarks.map((w, k) => { const on = lit(w); return stop(`Waymark ${k + 1}`, `the Wilds · ${BIOME_NAME[w.biome]}${on ? '' : ` · ${UNLIT_LABEL}`}`, { kind: 'waymark', w }, on ? '#6fd3c4' : '#5c6066', { 'data-waymark-stop': w.id, 'data-lit': on ? '1' : '0' }) })}
               <div style={{ opacity: 0.6, fontSize: 11, marginTop: 6 }}>{waymarks.length} / {MAX_WAYMARKS} waymarks. {PLANT_HINT}</div>

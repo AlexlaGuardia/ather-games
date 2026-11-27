@@ -2,52 +2,64 @@
 
 // BETA M236: Greg's Wilds talk plays the map (greg-map.ts holds the rules). Sits in the talk's HUD panel slot (TalkNode.panel),
 // above the keeper's answers, so it closes with the talk (Esc / goodbye / walking off) and never touches the real spread map.
+// M236 s2 (Alex 11-27: "why didnt we just use the same map.. lets try and use the ather wilds map as a template"): the picture is
+// the REAL Ather Wilds map (panels.tsx AreaView, the fold map's Ather side, data-wilds-map) + its signed legend (SpreadLegend),
+// round Greg's waymark tile, fed a DISPLAY-ONLY state per stage (greg-map.ts stageRegions) instead of the keeper's. No drawing of
+// its own: the old blocky squares are retired.
 import { useEffect, useMemo, useState } from 'react'
-import { buildGregMap, rippleCount, stageState, FADE_MS, type GregMap, type GregMapStage, type IndexTile } from './greg-map'
-import { STATE_LOOK, STATE_WORD } from './spread-map'
+import { buildGregArea, rippleCount, stageRegions, stageState, turnedAt, FADE_MS, type GregArea, type GregMapStage } from './greg-map'
+import { STATE_WORD } from './spread-map'
+import { AreaView, SpreadLegend } from './panels'
+import { newFog, type Fog } from './explored'
 import type { TalkNode } from '../shared/npc-talk'
 import type { WildsWorld } from './wilds-world'
+import type { Region } from './tile-picture'
 
-const MEADOW = '#c3d8a0', SEA = '#5c70b2'
-const cache = new WeakMap<object, GregMap>()
+const cache = new WeakMap<object, GregArea>()
+let blank: Fog | null = null   // the newborn's fog: nothing walked (display only, never the keeper's)
 
-export function GregWildsMap({ stage, tiles, tileM }: { stage: GregMapStage; tiles: readonly IndexTile[]; tileM: number }) {
-  const map = useMemo(() => { let m = cache.get(tiles); if (!m) { m = buildGregMap(tiles, tileM); cache.set(tiles, m) } return m }, [tiles, tileM])
+export function GregWildsMap({ stage, world, tileOff }: { stage: GregMapStage; world: WildsWorld; tileOff: { x: number; z: number } }) {
+  const area = useMemo(() => { let a = cache.get(world.index); if (!a) { a = buildGregArea(world.index.tiles, world.index.tileM); cache.set(world.index, a) } return a }, [world])
   // the ripple: zones turn one rank at a time from the moment this stage shows (a timer, not rAF: it must run in a hidden tab too)
-  const [turned, setTurned] = useState(stage === 'clear' ? 0 : stage === 'ripple' ? 0 : map.n)
+  const [turned, setTurned] = useState(turnedAt(stage, area.n))
   useEffect(() => {
-    if (stage === 'clear') { setTurned(0); return }
-    if (stage !== 'ripple') { setTurned(map.n); return }
+    if (stage !== 'ripple') { setTurned(turnedAt(stage, area.n)); return }
     const t0 = performance.now(); setTurned(0)
-    const id = window.setInterval(() => { const k = rippleCount(map.n, performance.now() - t0); setTurned(k); if (k >= map.n) window.clearInterval(id) }, 70)
+    const id = window.setInterval(() => { const k = rippleCount(area.n, performance.now() - t0); setTurned(k); if (k >= area.n) window.clearInterval(id) }, 70)
     return () => window.clearInterval(id)
-  }, [stage, map.n])
-  const dark = stage === 'dark', shown = stageState(stage), { box } = map
+  }, [stage, area.n])
+  // the fade: the Unseen map is laid over the Hollow one and comes up over FADE_MS (mounted at 0, raised a beat later)
+  const dark = stage === 'dark'
+  const [up, setUp] = useState(false)
+  useEffect(() => { if (!dark) { setUp(false); return } const id = window.setTimeout(() => setUp(true), 40); return () => window.clearTimeout(id) }, [dark])
+  const under = useMemo(() => stageRegions(area, dark ? 'hollow' : stage, dark ? area.n : turned), [area, stage, dark, turned])
+  const over = useMemo(() => (dark ? stageRegions(area, 'dark', 0) : null), [area, dark])
+  const fog = useMemo(() => (dark ? (blank ??= newFog()) : null), [dark])
+  const hollow = dark ? 0 : Math.min(turned, area.n)
+  const view = (regionsByTile: Map<string, Region[]>, f: Fog | null) => (
+    <AreaView world={world} regionsByTile={regionsByTile} cx={area.cx} cz={area.cz} fog={f} tileOff={tileOff} waymarks={[]} />
+  )
   return (
-    <div data-greg-map={stage} data-greg-turned={turned} data-greg-zones={map.n} style={{ background: 'rgba(20,22,26,.82)', borderRadius: 10, padding: 6, boxShadow: '0 4px 14px rgba(0,0,0,.35)' }}>
-      <svg viewBox={`${box.x} ${box.z} ${box.w} ${box.h}`} style={{ width: '100%', maxHeight: '34vh', display: 'block', borderRadius: 6, background: SEA }}>
-        {map.zones.map((z, k) => {
-          const hollow = z.rank < turned, L = STATE_LOOK[hollow ? 'hollow' : 'clear']
-          return (
-            <g key={k} data-greg-zone={hollow ? 'hollow' : 'clear'}>
-              <polygon points={z.pts} fill={MEADOW} stroke="none" />
-              <polygon points={z.pts} vectorEffect="non-scaling-stroke" strokeWidth={1}
-                style={{ fill: L.fill, stroke: L.line, transition: 'fill .35s ease, stroke .35s ease' }} />
-            </g>
-          )
-        })}
-        <rect data-greg-dark={dark ? '1' : '0'} x={box.x} y={box.z} width={box.w} height={box.h}
-          style={{ fill: STATE_LOOK.unseen.fill, opacity: dark ? 1 : 0, transition: `opacity ${FADE_MS}ms ease-in` }} />
-      </svg>
-      <div data-greg-map-word style={{ marginTop: 4, textAlign: 'center', font: '700 10px system-ui', letterSpacing: '0.16em', textTransform: 'uppercase', color: 'rgba(243,227,195,.85)' }}>
-        {STATE_WORD[shown]}
+    <div data-greg-map={stage} data-greg-turned={turned} data-greg-zones={area.n} data-greg-hollow={hollow} data-greg-clear={dark ? 0 : area.n - hollow}
+      style={{ background: 'rgba(20,22,26,.82)', borderRadius: 10, padding: 6, boxShadow: '0 4px 14px rgba(0,0,0,.35)' }}>
+      <div data-greg-map-view style={{ position: 'relative', width: 'min(100%, 34vh)', aspectRatio: '1', margin: '0 auto', borderRadius: 6, overflow: 'hidden', background: '#334' }}>
+        {view(under, null)}
+        {over && fog && (
+          <div data-greg-dark={up ? '1' : '0'} style={{ position: 'absolute', inset: 0, opacity: up ? 1 : 0, transition: `opacity ${FADE_MS}ms ease-in` }}>
+            {view(over, fog)}
+          </div>
+        )}
       </div>
+      <div data-greg-map-word style={{ marginTop: 4, textAlign: 'center', font: '700 10px system-ui', letterSpacing: '0.16em', textTransform: 'uppercase', color: 'rgba(243,227,195,.85)' }}>
+        {STATE_WORD[stageState(stage)]}
+      </div>
+      <SpreadLegend style={{ justifyContent: 'center', color: 'rgba(243,227,195,.85)', margin: '2px 0 0' }} />
     </div>
   )
 }
 
 /** Greg's tutorial node, with the map in its panel slot when the line names a stage (and the Ather's index is in). */
-export function withGregMap(node: TalkNode & { mapStage?: GregMapStage }, ww: WildsWorld | null): TalkNode {
+export function withGregMap(node: TalkNode & { mapStage?: GregMapStage }, ww: WildsWorld | null, tileOff: { x: number; z: number }): TalkNode {
   if (!node.mapStage || !ww) return node
-  return { ...node, panel: <GregWildsMap stage={node.mapStage} tiles={ww.index.tiles} tileM={ww.index.tileM} /> }
+  return { ...node, panel: <GregWildsMap stage={node.mapStage} world={ww} tileOff={tileOff} /> }
 }

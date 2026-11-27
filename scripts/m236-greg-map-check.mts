@@ -6,6 +6,9 @@
 //     line 3 -> [hollow], pixels mostly GREY (+ the Bonn scene still rides it); line 4 -> [dark], pixels BLACK;
 //     every bubble is Greg's signed line word for word; the caption is the signed legend word (Clear / Hollow ground / Unseen);
 //     goodbye -> the map is gone; the keeper's real spread map is untouched (nothing uncovered = all Unseen); 0 page errors.
+//   s2 (Alex 11-27 "use the ather wilds map as a template"): the map beside Greg IS the in-game Ather Wilds map: the same component
+//     ([data-wilds-map], panels.tsx AreaView) + the same legend ([data-spread-legend]) the fold map shows; after the talk the real
+//     fold map opens and its own [data-wilds-map] looks like Greg's dark stage (the newborn's map: all Unseen). Shots side by side.
 import puppeteer, { type Page } from 'puppeteer-core'
 import sharp from 'sharp'
 import { mkdirSync } from 'node:fs'
@@ -34,10 +37,10 @@ try {
   const scene = () => p.evaluate(() => document.querySelector('[data-talk-bubble] [data-talk-scene]')?.textContent ?? '') as Promise<string>
   const opts = () => p.evaluate(() => [...document.querySelectorAll('[data-talk-option]')].map(e => (e.textContent ?? '').replace(/^›/, '').replace(/short$/i, '').trim())) as Promise<string[]>
   const pick = async (l: string) => { const did = await p.evaluate((l: string) => { const b = [...document.querySelectorAll<HTMLButtonElement>('[data-talk-option]')].find(e => (e.textContent ?? '').includes(l)); b?.click(); return !!b }, l); await sleep(600); return did }
-  const map = () => p.evaluate(() => { const m = document.querySelector<HTMLElement>('[data-greg-map]'); return m ? { stage: m.dataset.gregMap!, turned: +m.dataset.gregTurned!, n: +m.dataset.gregZones!, word: m.querySelector('[data-greg-map-word]')?.textContent ?? '', hollow: m.querySelectorAll('[data-greg-zone="hollow"]').length, clear: m.querySelectorAll('[data-greg-zone="clear"]').length } : null }) as Promise<{ stage: string; turned: number; n: number; word: string; hollow: number; clear: number } | null>
+  const map = () => p.evaluate(() => { const m = document.querySelector<HTMLElement>('[data-greg-map]'); return m ? { stage: m.dataset.gregMap!, turned: +m.dataset.gregTurned!, n: +m.dataset.gregZones!, word: m.querySelector('[data-greg-map-word]')?.textContent ?? '', hollow: +m.dataset.gregHollow!, clear: +m.dataset.gregClear!, shared: m.querySelectorAll('[data-wilds-map]').length, legend: [...m.querySelectorAll('[data-spread-legend] [data-legend-state]')].map(e => e.textContent?.replace(/^ · /, '') ?? '').join(' · ') } : null }) as Promise<{ stage: string; turned: number; n: number; word: string; hollow: number; clear: number; shared: number; legend: string } | null>
   /** the map's pixels by class: green (Clear), grey (Hollow ground), dark (Unseen), sea (the plain water) */
-  const pixels = async () => {
-    const el = await p.$('[data-greg-map] svg'); if (!el) return null
+  const pixels = async (sel = '[data-greg-map] [data-greg-map-view]') => {
+    const el = await p.$(sel); if (!el) return null
     const buf = await el.screenshot({ type: 'png' }) as Buffer
     const { data, info } = await sharp(buf).removeAlpha().raw().toBuffer({ resolveWithObject: true })
     let g = 0, gr = 0, d = 0, sea = 0, n = 0
@@ -82,8 +85,11 @@ try {
   await poll(async () => !!(await map()), 15000)
   let m = await map(), px = await pixels()
   ok(m?.stage === 'clear' && (await line()) === L('greg.b1.wilds.1'), `line 1 "${await line()}" -> map [${m?.stage}]`)
-  ok(m && m.n > 200 && m.hollow === 0 && m.word === 'Clear', `clear: ${m?.n} zones, ${m?.hollow} hollow, caption "${m?.word}"`)
-  ok(px && px.green > 0.25 && px.green > px.grey * 3, `clear pixels: green ${px?.green.toFixed(2)} grey ${px?.grey.toFixed(2)} dark ${px?.dark.toFixed(2)}`)
+  ok(m && m.n > 10 && m.hollow === 0 && m.clear === m.n && m.word === 'Clear', `clear: ${m?.n} zones, ${m?.hollow} hollow, caption "${m?.word}"`)
+  ok(m && m.shared >= 1, `s2: Greg's map IS the in-game Ather Wilds map component ([data-wilds-map] x${m?.shared})`)
+  ok(m?.legend === 'Unseen · Hollow ground · Clear', `s2: the fold map's own legend under it ("${m?.legend}")`)
+  const pxClear = px
+  ok(px && px.green > 0.25 && px.green > px.grey, `clear pixels: green ${px?.green.toFixed(2)} grey ${px?.grey.toFixed(2)} dark ${px?.dark.toFixed(2)}`)
   await shot('1-clear')
   await p.keyboard.press('Escape'); await sleep(800)
   ok(!(await map()) && !(await opts()).length, 'Esc mid-talk (skip): the map and the talk are gone')
@@ -106,20 +112,33 @@ try {
   m = await map(); px = await pixels()
   ok(m?.stage === 'hollow' && (await line()) === L('greg.b1.wilds.3') && (await scene()) === L('greg.b1.wilds.scene'), `line 3 "${await line()}" (+ scene) -> map [${m?.stage}]`)
   ok(m && m.hollow > 0 && m.clear === 0 && m.turned === m.n && m.word === 'Hollow ground', `hollow: every zone Hollow ground, caption "${m?.word}"`)
-  ok(px && px.grey > 0.25 && px.grey > px.green * 3, `hollow pixels: green ${px?.green.toFixed(2)} grey ${px?.grey.toFixed(2)} dark ${px?.dark.toFixed(2)}`)
+  ok(px && pxClear && px.grey > pxClear.grey + 0.2 && px.green < pxClear.green - 0.2, `hollow pixels greyer than clear: green ${pxClear?.green.toFixed(2)} -> ${px?.green.toFixed(2)}, grey ${pxClear?.grey.toFixed(2)} -> ${px?.grey.toFixed(2)}`)
   await shot('3-hollow')
   // ── line 4 -> dark ──
   await pick(ANSWERS.more); await sleep(2400)
   m = await map(); px = await pixels()
   ok(m?.stage === 'dark' && (await line()) === L('greg.b1.wilds.4') && m.word === 'Unseen', `line 4 "${await line()}" -> map [${m?.stage}], caption "${m?.word}"`)
-  ok(px && px.dark > 0.85, `dark pixels: dark ${px?.dark.toFixed(2)} green ${px?.green.toFixed(2)} grey ${px?.grey.toFixed(2)}`)
+  const pxDark = px
+  ok(px && px.green < 0.05 && px.grey < 0.1, `dark pixels: the green + grey gone under the mist (green ${px?.green.toFixed(2)} grey ${px?.grey.toFixed(2)} dark ${px?.dark.toFixed(2)} sea ${px?.sea.toFixed(2)})`)
   await shot('4-dark')
+  await (await p.$('[data-greg-map] [data-greg-map-view]'))?.screenshot({ path: `${out}/${tag}-side-a-greg-dark.png` })
   // ── goodbye: gone, real map Unseen ──
   await pick(ANSWERS.bye); await sleep(800)
   ok(!(await map()) && !(await opts()).length, 'goodbye: the map is gone with the talk')
   const t = JSON.parse(await store('open.tutorial.v1') ?? 'null')
   ok(t?.greg?.wilds === true, 'the Wilds are heard (the tutorial moves on as before)')
   ok((await seenNow()) === 0, 'the real spread map after: nothing uncovered (all Unseen)')
+  // ── s2: the real map, side by side ──
+  await A('open', 'gate')
+  const real = await poll(() => p.evaluate(() => !!document.querySelector('[data-panel="fold-map"] [data-wilds-map] canvas')), 15000); await sleep(1200)
+  ok(real, 'the real fold map opens on the same [data-wilds-map] component')
+  const rpx = await pixels('[data-panel="fold-map"] [data-wilds-map]')
+  const rstates = await p.evaluate(() => [...document.querySelectorAll('[data-panel="fold-map"] [data-area-state]')].map(e => (e as HTMLElement).dataset.areaState))
+  ok(rstates.every(s => s === 'unseen'), `the real map: no zone drawn out of Unseen (${rstates.length} marked)`)
+  ok(rpx && pxDark && Math.abs(rpx.green - pxDark.green) < 0.06 && Math.abs(rpx.grey - pxDark.grey) < 0.1 && Math.abs(rpx.dark - pxDark.dark) < 0.15,
+    `Greg's dark stage looks like the real newborn map: real green ${rpx?.green.toFixed(2)} grey ${rpx?.grey.toFixed(2)} dark ${rpx?.dark.toFixed(2)} sea ${rpx?.sea.toFixed(2)}`)
+  await shot('5-real-map')
+  await (await p.$('[data-panel="fold-map"] [data-wilds-map]'))?.screenshot({ path: `${out}/${tag}-side-b-real-map.png` })
 } catch (e) { ok(false, `crashed: ${(e as Error).message}`) }
 ok(errs.length === 0, `0 page errors (${errs.slice(0, 3).join(' | ')})`)
 await br.close()

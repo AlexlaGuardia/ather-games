@@ -1,9 +1,12 @@
 // Run: npx tsx src/app/shimmer/open/ather/greg-map.test.ts
 // M236: Greg's Wilds talk plays the map. One stage per signed Wilds line (clear -> ripple -> hollow -> dark), no map on any other
-// branch; the ripple turns zones 0 -> all over RIPPLE_MS and never falls back; the whole Ather's zones are drawn, each ranked once,
-// the ripple starts far from the Glade; the captions are the SIGNED legend words; the talk keeps its signed lines untouched.
+// branch; the ripple turns zones 0 -> all over RIPPLE_MS and never falls back; s2: the area is the real Ather Wilds map's (the 3 x 3
+// tiles round Greg's waymark, regions built by the fold map's own rule), each zone ranked once, the ripple starts far from the Glade;
+// each stage's display-only regions read clear / ripple / all Hollow ground / all Unseen; the captions are the SIGNED legend words; the talk keeps its signed lines untouched.
 import { readFileSync } from 'node:fs'
-import { stageOfLine, stageState, rippleCount, buildGregMap, GREG_MAP_STAGES, RIPPLE_MS, type IndexTile } from './greg-map'
+import { stageOfLine, stageState, rippleCount, buildGregArea, stageRegions, turnedAt, GREG_MAP_STAGES, RIPPLE_MS, type IndexTile } from './greg-map'
+import { fuseZones, mergeRegions } from './zones'
+import { SUB, nodeRegions, type WildsNode } from './nodes'
 import { tutNode, BRANCH_LINES } from './glade-greg-talk'
 import { freshTut } from './glade-tutorial'
 import { line } from './glade-tutorial-lines'
@@ -38,21 +41,40 @@ const mid = rippleCount(N, RIPPLE_MS / 2); ok(mid > N * 0.4 && mid < N * 0.6, `h
 let prev = 0, mono = true; for (let ms = 0; ms <= RIPPLE_MS + 100; ms += 70) { const k = rippleCount(N, ms); if (k < prev) mono = false; prev = k } ok(mono, 'never falls back')
 ok(rippleCount(0, 1000) === 0, 'no zones, nothing turns')
 
-// the whole Ather (the shipped index)
+// s2: the real Ather Wilds map's ground round Greg's waymark (the shipped index)
 const idx = JSON.parse(readFileSync('public/open/wilds/tiles.json', 'utf8')) as { tileM: number; tiles: IndexTile[] }
-const m = buildGregMap(idx.tiles, idx.tileM)
-const ids = new Set(m.zones.map(z => z.id))
-ok(m.n > 200 && ids.size === m.n, `every zone drawn (${ids.size} of ${m.n})`)
-const ranks = new Map<string, number>(); for (const z of m.zones) { const r = ranks.get(z.id); ok(r === undefined || r === z.rank, `${z.id} one rank`); ranks.set(z.id, z.rank) }
-ok(new Set(ranks.values()).size === m.n && Math.min(...ranks.values()) === 0 && Math.max(...ranks.values()) === m.n - 1, 'ranks are 0..n-1, once each')
-ok(m.zones.every(z => z.pts.split(' ').length >= 3), 'every outline is a shape')
-ok(m.box.w === (Math.max(...idx.tiles.map(t => t.tx)) - Math.min(...idx.tiles.map(t => t.tx)) + 1) * idx.tileM, 'the box spans every tile')
+const a = buildGregArea(idx.tiles, idx.tileM)
+const home = idx.tiles.find(t => t.name === GREG_WAYMARK.tile)!
+ok(a.tile === home.name && a.cx === home.tx * idx.tileM && a.cz === home.ty * idx.tileM, `centred on Greg's waymark tile (${a.tile})`)
+const want = idx.tiles.filter(t => Math.abs(t.tx - home.tx) <= 1 && Math.abs(t.ty - home.ty) <= 1).map(t => t.name).sort()
+ok(JSON.stringify([...a.byTile.keys()].sort()) === JSON.stringify(want), `the 3 x 3 tiles the fold map shows (${want.length})`)
+// the regions are the fold map's own (page.tsx regionsByTile: nodeRegions per tile, merged by zone), not a drawing of their own
+const raw: WildsNode[] = idx.tiles.flatMap(t => t.nodes.map(n => ({ ...n, tile: t.name, x: n.x + t.tx * idx.tileM, z: n.z + t.ty * idx.tileM, gi: t.tx * SUB + n.i, gj: t.ty * SUB + n.j })))
+const fused = fuseZones(raw)
+let same = true
+for (const t of idx.tiles.filter(t => want.includes(t.name))) {
+  const local = raw.filter(n => n.tile === t.name).map(n => ({ ...n, x: n.x - t.tx * idx.tileM, z: n.z - t.ty * idx.tileM }))
+  const real = mergeRegions(nodeRegions(local, idx.tileM, idx.tileM), id => fused.zoneOf.get(id) ?? id)
+  const mine = a.byTile.get(t.name)!
+  if (JSON.stringify(real.map(r => [r.id, r.poly])) !== JSON.stringify(mine.map(r => [r.id, r.poly]))) same = false
+}
+ok(same, 'every tile\'s outlines = the fold map\'s outlines for the same zones')
+const ranks = new Map<string, number>(); for (const rs of a.byTile.values()) for (const r of rs) { const q = ranks.get(r.id); ok(q === undefined || q === r.rank, `${r.id} one rank`); ranks.set(r.id, r.rank) }
+ok(a.n > 10 && ranks.size === a.n, `every zone drawn (${ranks.size} of ${a.n})`)
+ok(new Set(ranks.values()).size === a.n && Math.min(...ranks.values()) === 0 && Math.max(...ranks.values()) === a.n - 1, 'ranks are 0..n-1, once each')
 // the ripple reaches the Glade's own zone late (it starts far away)
-const ft = idx.tiles.find(t => t.name === GREG_WAYMARK.tile)!
-const near = [...ft.nodes].sort((a, b) => Math.hypot(a.x - GREG_WAYMARK.x, a.z - GREG_WAYMARK.z) - Math.hypot(b.x - GREG_WAYMARK.x, b.z - GREG_WAYMARK.z))[0]
-const homeZone = m.zones.find(z => z.id.startsWith('z') && z.pts && ranks.get(z.id) !== undefined && z.id === `z${Math.floor((ft.tx * 5 + near.i) / 2)},${Math.floor((ft.ty * 5 + near.j) / 2)}`)
-ok(homeZone && homeZone.rank > m.n * 0.5, `the Glade's zone turns in the later half (${homeZone?.rank} of ${m.n})`)
-const again = buildGregMap(idx.tiles, idx.tileM); ok(JSON.stringify(again) === JSON.stringify(m), 'same index, same map')
+const near = [...home.nodes].sort((p, q) => Math.hypot(p.x - GREG_WAYMARK.x, p.z - GREG_WAYMARK.z) - Math.hypot(q.x - GREG_WAYMARK.x, q.z - GREG_WAYMARK.z))[0]
+const homeRank = ranks.get(fused.zoneOf.get(near.id) ?? near.id)
+ok(homeRank !== undefined && homeRank > a.n * 0.5, `the Glade's zone turns in the later half (${homeRank} of ${a.n})`)
+ok(JSON.stringify([...buildGregArea(idx.tiles, idx.tileM).byTile]) === JSON.stringify([...a.byTile]), 'same index, same area')
+// each stage's display-only state
+const states = (st: (typeof GREG_MAP_STAGES)[number], k: number) => [...stageRegions(a, st, k).values()].flat().map(r => r.state)
+ok(states('clear', turnedAt('clear', a.n)).every(s => s === 'clear'), 'clear: every zone Clear')
+const half = Math.floor(a.n / 2), mid2 = new Set([...stageRegions(a, 'ripple', half).values()].flat().filter(r => r.state === 'hollow').map(r => r.id))
+ok(mid2.size === half && [...mid2].every(id => ranks.get(id)! < half), `ripple half way: the ${half} first-ranked zones Hollow ground, the rest Clear`)
+ok(states('hollow', turnedAt('hollow', a.n)).every(s => s === 'hollow'), 'hollow: every zone Hollow ground')
+ok(states('dark', turnedAt('dark', a.n)).every(s => s === 'unseen'), 'dark: every zone Unseen')
+ok(turnedAt('clear', 9) === 0 && turnedAt('ripple', 9) === 0 && turnedAt('hollow', 9) === 9 && turnedAt('dark', 9) === 9, 'turned outside the ripple')
 
 console.log(`greg-map: ${pass} passed, ${fail} failed`)
 if (fail) process.exit(1)
