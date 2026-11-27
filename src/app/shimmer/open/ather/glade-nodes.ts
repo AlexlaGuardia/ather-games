@@ -30,12 +30,15 @@ export const nodeTree = (kind: TreeKind) => ({ tall: 7.5 * BIG[kind], r: 2.2 * B
 export const NODE_CRYSTAL_S = 1.05
 
 export interface GladeNodes { trees: Tree[]; crystals: Crystal[]; treesNear(x: number, z: number, r: number): Tree[]; crystalsNear(x: number, z: number, r: number): Crystal[] }
-export function gladeNodes(props: readonly Prop[], ground: (x: number, z: number) => number): GladeNodes {
+/** M135 s1: a node placed in the WILDS (scenery.ts › WILDS_NODES) takes this prefix instead: not a keeper node, so it is the Wilds'
+ *  own tree (its timer in the garden's pruned save, its yield on the Wilds' ground, worked there), with the piece's wait. */
+export const WILDS_NODE = 'wnode:'
+export function gladeNodes(props: readonly Prop[], ground: (x: number, z: number) => number, prefix: string = KEEPER_NODE): GladeNodes {
   const trees: Tree[] = [], crystals: Crystal[] = []
   for (const p of props) {
     const kind = nodeKindOf(p.k), y = kind ? ground(p.x, p.z) : NaN
     if (!kind || !Number.isFinite(y)) continue
-    const at = { id: `${KEEPER_NODE}${p.id}:${kind}`, x: p.x, y, z: p.z, waitMs: nodeWaitH(p) * 3_600_000 }
+    const at = { id: `${prefix}${p.id}:${kind}`, x: p.x, y, z: p.z, waitMs: nodeWaitH(p) * 3_600_000 }
     if (isTreeKind(kind)) trees.push({ ...at, kind, ...nodeTree(kind) })
     else crystals.push({ ...at, kind, s: NODE_CRYSTAL_S, rot: -p.q * Math.PI / 2 })
   }

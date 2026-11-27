@@ -96,7 +96,7 @@ try {
   const count = async (id: string) => (await bag()).reduce((a, s) => a + (s.id === id ? s.n : 0), 0)
   const text = () => kp.evaluate(() => document.body.innerText)
   const saw = async (re: RegExp, n = 24) => { for (let i = 0; i < n; i++) { const m = (await text()).match(re); if (m) return m[0]; await frame(); await sleep(250) } return '' }
-  const idOf = (n: { id: string }) => `glade:${n.id}:tensacia`
+  const idOf = (n: { id: string }) => `wnode:${n.id}:tensacia`
   let last: unknown = null
   const aimed = async (n: { x: number; z: number; id: string }) => {
     for (let i = 0; i < 6; i++) {

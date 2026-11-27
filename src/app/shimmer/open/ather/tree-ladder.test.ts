@@ -14,7 +14,8 @@ import { itemDef, newInv, give, OPEN_ITEMS, ITEM_GROUP } from '../shared/invento
 import { REFINE } from './furniture'
 import { LOOK } from './wilds-scene'
 import { paletteOf, placeableOn, SCENERY_BY, wildsPublishedProps } from './scenery'
-import { gladeNodes } from './glade-nodes'
+import { gladeNodes, WILDS_NODE } from './glade-nodes'
+import { isKeeperNode } from './keeper-nodes'
 let pass = 0, fail = 0
 const ok = (c: unknown, m: string) => { if (c) pass++; else { fail++; console.log('FAIL', m) } }
 const eq = (id: string): EquippedTool => ({ toolId: id, usesRemaining: TOOL_DEFS[id].durability, xpBonus: TOOL_DEFS[id].xpBonus, speedBonus: TOOL_DEFS[id].speedBonus })
@@ -83,8 +84,9 @@ ok(grown === 0, 'no zone grows Tensacia (Alex places its coves)')
 ok(placeableOn('wilds', 'node:tensacia') && paletteOf('wilds').some(s => s.k === 'node:tensacia' && s.label === 'Tensacia node') && SCENERY_BY.get('node:tensacia')?.group === 'Nodes', 'the Wilds kit (Place mode) has the Tensacia node')
 ok(!placeableOn('wilds', 'node:goldwood') && !placeableOn('wilds', 'node:raw'), 'the other nodes stay Glade-only')
 const placed = wildsPublishedProps([{ id: 'n1', k: 'node:tensacia', x: 10, z: 20, q: 0, s: 1, w: 2 }, { id: 'n2', k: 'node:goldwood', x: 0, z: 0, q: 0, s: 1 }])
-const W = gladeNodes(placed, () => 3)
+const W = gladeNodes(placed, () => 3, WILDS_NODE)
 ok(W.trees.length === 1 && W.trees[0].kind === 'tensacia' && W.trees[0].waitMs === 2 * 3_600_000 && W.trees[0].y === 3, `a published Wilds Tensacia is a gatherable tree with the piece's own wait (${JSON.stringify(W.trees[0])})`)
+ok(W.trees[0].id === 'wnode:n1:tensacia' && !isKeeperNode(W.trees[0].id), 'a Wilds-placed node is the Wilds\' own (not a keeper node): worked there, yield on Wilds ground')
 ok(W.treesNear(10, 20, 5).length === 1, 'and the aim finds it')
 
 console.log(`tree-ladder: ${pass}/${fail}`)
