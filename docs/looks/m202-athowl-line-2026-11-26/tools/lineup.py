@@ -1,9 +1,11 @@
-"""blender -b -P lineup.py -- <out prefix> <w> <h> <glb>:<scale> ... : the line side by side at TRUE relative size (scale = her game
+"""(M202 Athowl line: this folder's look.py recipe with NO tint: no emissive add, no hull)
+blender -b -P lineup.py -- <out prefix> <w> <h> <glb>:<scale> ... : the line side by side at TRUE relative size (scale = her game
 metres per glb unit), in look.py's recipe (3-step toon, pale hull, unlit eyes); renders <out>_front.png and <out>_tq.png"""
 import bpy, sys, math, numpy as np
 from mathutils import Vector
 A = sys.argv[sys.argv.index('--') + 1:]; out, W, Hh = A[0], int(A[1]), int(A[2]); items = [(a.rsplit(':', 1)[0], float(a.rsplit(':', 1)[1])) for a in A[3:]]
-src = open('/root/ather-games/docs/looks/vulnyx-2026-11-24/tools/look.py').read(); exec(src[src.index('def mat'):src.index('ms = [o for o')])
+EM, HU = (0, 0, 0, 1), (1, 1, 1, 1)                          # NO tint on the lineup: her vertex colours only (the add is black, no hull)
+src = open(__import__('os').path.join(__import__('os').path.dirname(__import__('os').path.abspath(__file__)), 'look.py')).read(); exec(src[src.index('def mat'):src.index('ms = [o for o')])
 bpy.ops.wm.read_factory_settings(use_empty=True); sc = bpy.context.scene; x0 = 0.
 for k, (g, s) in enumerate(items):
     before = set(sc.objects); bpy.ops.import_scene.gltf(filepath=g); new = [o for o in sc.objects if o not in before]; ms = [o for o in new if o.type == 'MESH']
