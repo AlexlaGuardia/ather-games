@@ -14,7 +14,7 @@ import { smashWinner, type LobbyStart } from './fair-lobby'
 export const BELL_BEATS = { intro: 2400, walk: 2000, strike: 1000, gauge: 1700, score: 1900, crack: 2600 } as const
 export type BellBeat = keyof typeof BELL_BEATS
 export const BELL_FLOOR_MS = 400
-export const bellMs = (b: BellBeat, speed = 1) => Math.max(BELL_FLOOR_MS, Math.round(BELL_BEATS[b] / Math.max(1, speed)))
+export const bellMs = (b: BellBeat, speed = 1) => Math.max(BELL_FLOOR_MS, Math.round(BELL_BEATS[b] / Math.max(0.1, speed)))   // under 1 = slower (the shot pass)
 /** a contestant's beats in order (the crack only over 9000) */
 export const beatsFor = (score: number | null): BellBeat[] => (score !== null && cracks(score) ? ['intro', 'walk', 'strike', 'gauge', 'crack', 'score'] : ['intro', 'walk', 'strike', 'gauge', 'score'])
 /** where a contestant's show stands `ms` after it started: the beat, its progress 0..1, and whether her show is over */
@@ -33,7 +33,7 @@ export const SMASH_CAM: ClashCam = { height: 4.2, distance: 9.5, angle: 0, fov: 
 /** the camera's target (m): a little past the centre toward the bell, a little up */
 export const SMASH_LOOK = { y: 1.6, z: -2.2 } as const
 /** where things stand (m, z toward the camera is +): her walk from the near wall to the centre; the bell at the far end */
-export const SMASH_SPOT = { from: 6.2, at: 0.4, bell: -5.6 } as const
+export const SMASH_SPOT = { from: 4.2, at: 0.4, bell: -5.6 } as const
 /** facing the bell = facing -z: the model's yaw (models face +z at yaw 0) */
 export const FACE_BELL = Math.PI
 

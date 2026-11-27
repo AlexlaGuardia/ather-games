@@ -8,7 +8,7 @@
 //     scores, the same winner; back at the panel the same contest + champion.
 //   4 0 page errors.
 // ⚠ Writes the LIVE accounts db for the two test keepers only (their fair_smash rows + tries + saves wiped at start and end).
-//   OWNER_KEY=... npx tsx scripts/m246-smash-check.mts [--phone] [--part bench|world|all] [--x 1] [--url https://ather.games] [--out dir]
+//   OWNER_KEY=... npx tsx scripts/m246-smash-check.mts [--phone] [--part bench|world|all] [--x 2] [--shots] [--url https://ather.games] [--out dir]
 import puppeteer, { type Page, type Browser } from 'puppeteer-core'
 import { mkdirSync, readFileSync } from 'fs'
 import { dismissStartCard } from './lib/start-card.mts'
@@ -22,6 +22,8 @@ const { mintSession } = await import('../src/lib/accounts/session')
 
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), PHONE = process.argv.includes('--phone'), PART = flag('--part', 'all'), X = Number(flag('--x', '2'))
+/** --shots: a slow shot pass (?bellx=0.3: every beat several seconds, past the WebGL screenshot's lag) */
+const SHOTS = process.argv.includes('--shots'), BX = SHOTS ? '&bellx=0.3' : ''
 const out = flag('--out', '/tmp/m246') + (PHONE ? '-390' : '-desk'), KEY = process.env.OWNER_KEY
 mkdirSync(out, { recursive: true })
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
@@ -67,7 +69,7 @@ async function playOut(p: Page, shot: string | null, ms = 120000) {
   const seen = new Set<string>(), t0 = Date.now()
   while (Date.now() - t0 < ms) {
     const b = await p.evaluate(() => { const v = document.querySelector('[data-smash-bell-view]') as HTMLElement | null; return v ? `${v.dataset.bellBeat}:${v.dataset.bellI}` : null })
-    if (b && shot && !seen.has(b)) { seen.add(b); await sleep(b.startsWith('intro') || b.startsWith('walk') ? 900 : 350); await p.screenshot({ path: `${out}/${shot}-${b.replace(':', '')}.png` }) }
+    if (b && shot && !seen.has(b)) { seen.add(b); await sleep(b.startsWith('intro') ? 500 : 150); await p.screenshot({ path: `${out}/${shot}-${b.replace(':', '')}.png` }) }
     if (b?.startsWith('end')) return true
     await sleep(150)
   }
@@ -88,16 +90,18 @@ try {
       if (PHONE) await p.evaluateOnNewDocument(() => { try { localStorage.setItem('shimmer-inspector-collapsed', 'true') } catch { /* */ } })
       await p.goto(`${url}/owner?key=${encodeURIComponent(KEY)}`, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {})
       const bench = async (q: string) => {
-        await p.goto(`${url}/shimmer/dev?mode=fair&event=smash&clashx=${X}${q}`, { waitUntil: 'load', timeout: 240000 })
+        await p.goto(`${url}/shimmer/dev?mode=fair&clashx=${X}${BX}${q}`, { waitUntil: 'load', timeout: 240000 })
         await dismissStartCard(p, 3000).catch(() => false)
         await p.waitForSelector('[data-fair-dev]', { timeout: 120000 })
+        await p.click('[data-fair-tab="smash"]'); await sleep(500)
         await p.select('[data-fair-pick="you"] [data-fair-species]', 'frog'); await sleep(300)
+        await p.$eval('[data-fair-pick="you"] [data-fair-level]', e => { const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!; set.call(e, '1'); e.dispatchEvent(new Event('input', { bubbles: true })) }); await sleep(300)
         await p.click('[data-fair-run]')
         await p.waitForSelector('[data-smash-bell-view]', { timeout: 30000 })
       }
       // 1a a normal swing
       await bench('')
-      const end1 = await playOut(p, `bench-${tag}-normal`)
+      const end1 = await playOut(p, SHOTS ? `bench-${tag}-normal` : null)
       const r1 = await rec(p)
       const b1 = beatsIn(r1?.log ?? '', 0)
       ok(end1 && b1.join() === 'intro,walk,strike,gauge,score', `1a. bench: the beats play in order (${b1.join(' > ')})`)
@@ -106,7 +110,7 @@ try {
       await p.screenshot({ path: `${out}/bench-${tag}-normal-end.png` })
       // 1d the crafted 9001
       await bench('&smashscore=9001')
-      const end2 = await playOut(p, `bench-${tag}-9001`)
+      const end2 = await playOut(p, SHOTS ? `bench-${tag}-9001` : null)
       const r2 = await rec(p)
       const b2 = beatsIn(r2?.log ?? '', 0)
       ok(end2 && b2.join() === 'intro,walk,strike,gauge,crack,score' && r2?.score === '9001', `1d. a crafted 9001: gauge -> CRACK -> score (${b2.join(' > ')}; score ${r2?.score})`)
@@ -142,7 +146,7 @@ try {
           localStorage.setItem(`${pre}ather.spiritStats.v1`, JSON.stringify({ [s.pot]: { form: 'base', g: { pwr: 10 }, plays: 0, xp: 0, grown: 12 } }))
         }
       }, { TUT, id: k.id, pot, chord: CHORD, seed, sp: seed.replace('mana_seed_', '') } as any)
-      await p.goto(`${url}/shimmer/open/ather?hour=14&clashx=${X}`, { waitUntil: 'load', timeout: 240000 })
+      await p.goto(`${url}/shimmer/open/ather?hour=14&clashx=${X}${BX}`, { waitUntil: 'load', timeout: 240000 })
       await p.waitForFunction(() => !!(window as any).__ather?.travel, { timeout: 180000, polling: 1000 })
       await sleep(3000)
       try { await dismissStartCard(p) } catch { for (let i = 0; i < 3; i++) { await p.keyboard.press('Escape'); await sleep(600) }; await dismissStartCard(p).catch(() => {}) }
@@ -175,7 +179,7 @@ try {
     ok(opened && !!(await pa.$('[data-smash-tries="3"]')) && !(await pa.$('[data-smash-pole]')), '2a. E at Smash: the sign-up panel, three tries, no old pole')
     await clickIn(pa, '[data-signup-enter]')
     const view = await pa.waitForSelector('[data-smash-bell-view]', { timeout: 20000 }).catch(() => null)
-    const endA = view ? await playOut(pa, X <= 1 ? `world-${tag}` : null) : false
+    const endA = view ? await playOut(pa, SHOTS ? `world-${tag}` : null, 240000) : false
     const ra = await rec(pa), ba = beatsIn(ra?.log ?? '', 0)
     ok(!!view && endA && ba.join() === 'intro,walk,strike,gauge,score', `2b. Enter -> the bell show in the ring: ${ba.join(' > ')}`)
     ok(/keeper/i.test(ra?.shout ?? '') && ra?.backStrike.length > 0 && ra.backStrike.every((x: string) => x === '1'), `2c. the shout-out to her keeper ("${ra?.shout}"); she strikes with her back to the camera`)
@@ -198,7 +202,7 @@ try {
     await pa.evaluate(() => { (window as any).__bell.logs = []; (window as any).__bell.winner = ''; (window as any).__bell.order = '' })
     await clickIn(pb, '[data-lobby-ready]'); await sleep(1200); await clickIn(pa, '[data-lobby-ready]')
     const [va, vb] = await Promise.all([pa.waitForSelector('[data-smash-bell-view]', { timeout: 30000 }).catch(() => null), pb.waitForSelector('[data-smash-bell-view]', { timeout: 30000 }).catch(() => null)])
-    const [ea, eb] = await Promise.all([playOut(pa, X <= 1 ? `lobby-${tag}-a` : null, 180000), playOut(pb, null, 180000)])
+    const [ea, eb] = await Promise.all([playOut(pa, SHOTS ? `lobby-${tag}-a` : null, 300000), playOut(pb, null, 300000)])
     const [qa, qb] = [await rec(pa), await rec(pb)]
     await pa.screenshot({ path: `${out}/lobby-${tag}-a-end.png` }); await pb.screenshot({ path: `${out}/lobby-${tag}-b-end.png` })
     ok(!!va && !!vb && ea && eb, '3b. both keepers play the bell show to its end')

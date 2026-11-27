@@ -55,7 +55,8 @@ export default function FairDev() {
   const [dashFoes, setDashFoes] = useState<Pick[]>(() => randomFoes('easy', 2, 4).concat([{ species: 'turtle', element: 'base', level: 12 }]).slice(0, 4))
   const [seed, setSeed] = useState(1)
   const [speed, setSpeed] = useState<number>(1)
-  const [crafted, setCrafted] = useState<number | null>(() => { try { return cleanCraftedScore(new URLSearchParams(window.location.search).get('smashscore')) } catch { return null } })   // M246 test hook: a crafted score (the bench never writes)
+  const [crafted, setCrafted] = useState<number | null>(null)   // M246 test hook: a crafted score, ?smashscore=N (the bench never writes)
+  useEffect(() => { try { setCrafted(cleanCraftedScore(new URLSearchParams(window.location.search).get('smashscore'))) } catch { /* no URL: off */ } }, [])
   const [cam, setCam] = useState<ClashCam>(CLASH_CAM)   // M233 v2d: the ring's camera, tuned live over a running ring
   const [run, setRun] = useState<{ id: number; tab: Tab; seed: number } | null>(null)
   const [result, setResult] = useState<{ tab: Tab; seed: number; sig: string; text: string } | null>(null)

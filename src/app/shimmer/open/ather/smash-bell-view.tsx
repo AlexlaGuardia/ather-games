@@ -24,7 +24,8 @@ import { beatAt, showMs, bellMs, SMASH_CAM, SMASH_LOOK, SMASH_SPOT, FACE_BELL, B
 
 const FIG = 1.8
 const BELL_Y = 3.9, BELL_H = 2.3, BELL_R = 1.25
-const speedDial = () => { try { const v = Number(new URLSearchParams(window.location.search).get('clashx')); return v >= 1 && v <= 20 ? v : 1 } catch { return 1 } }
+// `?bellx=N` (0.1..20) paces the show alone (a slow shot pass: the WebGL screenshot lags); else `?clashx=N` (1..20) as the ring
+const speedDial = () => { try { const q = new URLSearchParams(window.location.search), b = Number(q.get('bellx')), v = Number(q.get('clashx')); return b >= 0.1 && b <= 20 ? b : v >= 1 && v <= 20 ? v : 1 } catch { return 1 } }
 const ease = (k: number) => 1 - (1 - k) * (1 - k)
 
 interface Now { i: number; beat: BellBeat | 'end'; k: number; c: BellContestant | null; noSwing: boolean }
@@ -37,12 +38,13 @@ export function SmashBellView({ contestants, over = true, speed, title, onExit, 
 }) {
   const x = useMemo(() => speed ?? speedDial(), [speed])
   const [i, setI] = useState(0)
-  const startAt = useRef(0), [tick, setTick] = useState(0)
+  const startAt = useRef<number | null>(null), [tick, setTick] = useState(0)
+  if (startAt.current === null) startAt.current = performance.now()   // her show starts at the first render (never 0: a 0 start reads as long over)
   const log = useRef<string[]>([]), lastBeat = useRef('')
   const noSwing = useRef<Set<number>>(new Set())
-  useEffect(() => { startAt.current = performance.now(); const t = setInterval(() => setTick(n => n + 1), 50); return () => clearInterval(t) }, [])
+  useEffect(() => { const t = setInterval(() => setTick(n => n + 1), 50); return () => clearInterval(t) }, [])
   const c = i < contestants.length ? contestants[i] : null
-  const ms = performance.now() - startAt.current
+  const ms = performance.now() - (startAt.current ?? performance.now())
   let st: Now = { i, beat: 'end', k: 1, c: null, noSwing: false }
   if (c) {
     if (c.score === null) {
@@ -67,7 +69,9 @@ export function SmashBellView({ contestants, over = true, speed, title, onExit, 
   const shown = !c || c.score === null ? null : st.beat === 'gauge' ? Math.round(c.score * ease(st.k)) : st.beat === 'crack' || st.beat === 'score' ? c.score : null
   const winner = st.beat === 'end' && contestants.length > 1 ? showWinner(contestants) : null
   const phone = useNarrow()
-  const live = useRef(st); live.current = st
+  // the bell keeps the last swing's needle + crack under the end card
+  const last = contestants.length ? contestants[contestants.length - 1] : null
+  const live = useRef(st); live.current = st.beat === 'end' && last && last.score !== null ? { ...st, beat: 'score', k: 1, c: last } : st
   const skip = () => { setI(contestants.length); startAt.current = performance.now() }
 
   return (
@@ -81,6 +85,7 @@ export function SmashBellView({ contestants, over = true, speed, title, onExit, 
         <Arena />
         <Bell live={live} />
         {c && <Striker key={`${c.key}:${i}`} c={c} live={live} />}
+        {!c && last && <Striker key={`end:${last.key}`} c={last} live={live} />}
         <BellCamera cam={cam} />
       </Canvas>
 
@@ -88,7 +93,7 @@ export function SmashBellView({ contestants, over = true, speed, title, onExit, 
 
       {/* INTRO: her card + the shout-out to her keeper */}
       {c && st.beat === 'intro' && (
-        <div data-bell-intro={c.keeper} style={{ position: 'absolute', left: '50%', bottom: phone ? 70 : 60, transform: 'translateX(-50%)', width: phone ? 'calc(100% - 32px)' : 360, padding: '12px 16px', borderRadius: 14, background: H.paper, boxShadow: '0 8px 26px rgba(0,0,0,.45)', textAlign: 'center', animation: 'bellup .4s ease-out both' }}>
+        <div data-bell-intro={c.keeper} style={{ position: 'absolute', left: '50%', top: phone ? 40 : 34, transform: 'translateX(-50%)', width: phone ? 'calc(100% - 32px)' : 360, padding: '12px 16px', borderRadius: 14, background: H.paper, boxShadow: '0 8px 26px rgba(0,0,0,.45)', textAlign: 'center', animation: 'bellup .4s ease-out both' }}>
           <div style={{ fontSize: 11, fontWeight: 800, color: H.inkSoft, textTransform: 'uppercase', letterSpacing: '.06em' }}>{L.upNext}</div>
           <div style={{ fontSize: phone ? 24 : 28, fontWeight: 900, color: c.you ? H.ember : H.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name}</div>
           <div style={{ fontSize: 12, fontWeight: 700, color: H.inkSoft }}>{L.form(c.element)}{c.move ? ` · ${c.move}` : ''}</div>
@@ -106,7 +111,7 @@ export function SmashBellView({ contestants, over = true, speed, title, onExit, 
       )}
       {/* CRACK: the bell cracked; the Moglin judge yells */}
       {cracked && (
-        <div data-bell-judge style={{ position: 'absolute', left: '50%', bottom: phone ? 70 : 60, transform: 'translateX(-50%)', width: phone ? 'calc(100% - 32px)' : 400, padding: '12px 16px', borderRadius: 14, background: H.paper, boxShadow: '0 8px 26px rgba(0,0,0,.5)', textAlign: 'center', animation: 'bellpop .35s ease-out both' }}>
+        <div data-bell-judge style={{ position: 'absolute', left: 0, right: 0, margin: '0 auto', bottom: phone ? 70 : 60, width: phone ? 'calc(100% - 32px)' : 400, boxSizing: 'border-box', padding: '12px 16px', borderRadius: 14, background: H.paper, boxShadow: '0 8px 26px rgba(0,0,0,.5)', textAlign: 'center', animation: 'bellpop .35s ease-out both' }}>
           <div style={{ fontSize: 20, fontWeight: 900, color: H.rust }}>{L.cracked}</div>
           <div style={{ marginTop: 4, fontSize: 11, fontWeight: 800, color: H.inkSoft, textTransform: 'uppercase', letterSpacing: '.06em' }}>{L.judge}</div>
           <div data-bell-judge-line style={{ fontSize: phone ? 17 : 19, fontWeight: 800, color: H.ink }}>{L.judgeLine}</div>
@@ -114,7 +119,7 @@ export function SmashBellView({ contestants, over = true, speed, title, onExit, 
       )}
       {/* END: the winner (lobby) + Back */}
       {st.beat === 'end' && (
-        <div data-bell-end style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', width: 'min(340px, calc(100% - 32px))', padding: 18, borderRadius: 14, background: H.paper, boxShadow: '0 8px 30px rgba(0,0,0,.45)', textAlign: 'center' }}>
+        <div data-bell-end style={{ position: 'absolute', left: '50%', top: '66%', transform: 'translate(-50%,-50%)', width: 'min(340px, calc(100% - 32px))', padding: 18, borderRadius: 14, background: H.paper, boxShadow: '0 8px 30px rgba(0,0,0,.45)', textAlign: 'center' }}>
           {winner !== null && contestants[winner].score !== null && <div data-bell-champion style={{ fontSize: 18, fontWeight: 900, color: H.ember }}>{L.winner(contestants[winner].name, contestants[winner].keeper, contestants[winner].score!)}</div>}
           {contestants.map((q, k) => (
             <div key={q.key} data-bell-row={q.keeper} data-bell-row-score={q.score ?? ''} style={{ display: 'flex', gap: 8, fontSize: 14, fontWeight: k === winner ? 900 : 600, marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>
