@@ -297,7 +297,8 @@ export function GameHud({ size, pose, marks, vitals, mana, tools, skills, entrie
   const T = mounted ? (tools ?? ownTools) : noTools, S = (mounted && skills) || basicSkills
   // M194: a newborn's first tool in hand = its dial glows + one line in the prompt slot, until a tool panel opens
   const hint = useToolBeat(T, OPEN_TOOL_FAMILIES, picked, mounted), padKind = usePadKind()
-  const allPrompts: readonly HudPromptLine[] = hint && !picked
+  // M233 s3b: the line keeps out while a menu/panel holds the input (at 390 it sat over the Clash result); the dial still glows
+  const allPrompts: readonly HudPromptLine[] = hint && !picked && input
     ? [...prompts, { text: toolBeatLine(size === 'phone' ? 'touch' : padKind ? 'pad' : 'mouse'), data: { 'tool-beat': hint } }] : prompts
   const readouts = T.current && S.current ? OPEN_TOOL_FAMILIES.map(f => toolReadout(T.current!, S.current!, f, null)) : []
   const box = hudMapBox(size)

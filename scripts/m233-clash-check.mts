@@ -132,10 +132,25 @@ try {
   // the purse is cloud-saved (a rerun hydrates the last run's balance), so the assert reads the CHANGE
   ok(paid === CLASH_PRIZE.easy && m1.some((v, i) => v - (m0[i] ?? 0) === CLASH_PRIZE.easy), `5. the prize lands: +${paid} Marks, purse ${m0.join('/')} -> ${m1.join('/')}`)
   await p.screenshot({ path: `${out}/3-clash-won.png` })
+  // M233 s3b: the first win reads as a win (no 'already won' note beside the +prize), and the tool-beat hint never covers the result
+  const firstNote = await p.evaluate(() => ({ flag: (document.querySelector('[data-clash-already]') as HTMLElement | null)?.dataset.clashAlready, txt: (document.querySelector('[data-panel="clash"]') as HTMLElement | null)?.innerText ?? '' }))
+  ok(firstNote.flag === '0' && !/already won/i.test(firstNote.txt), `11. the first win shows no 'already won' note (flag ${firstNote.flag})`)
+  const boxes = await p.evaluate(() => {
+    const r = (e: Element | null | undefined) => { if (!e) return null; const b = e.getBoundingClientRect(); return b.width && b.height ? { x: b.x, y: b.y, w: b.width, h: b.height } : null }
+    const hintEl = [...document.querySelectorAll('[data-tool-beat], body *')].find(e => e.children.length === 0 && /Tap the glowing dial|glowing dial/.test((e as HTMLElement).innerText ?? '')) ?? document.querySelector('[data-tool-beat]')
+    return { hint: r(hintEl), res: r(document.querySelector('[data-clash-result]')) }
+  })
+  const hit = (a: any, b: any) => !!a && !!b && a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h
+  ok(!!boxes.res && !hit(boxes.hint, boxes.res), `12. the dial hint does not cover the Clash result line (hint ${JSON.stringify(boxes.hint)}, result ${JSON.stringify(boxes.res)})`)
   const srv = await (await fetch(`${url}/api/fair/clash`, { headers: { cookie: `ather_session=${mintSession(KA.id, KA.name)}` } })).json() as { won: number[]; signedIn: boolean }
   ok(srv.signedIn && srv.won.includes(easyNo), `6. the server holds the win (won ${JSON.stringify(srv.won)}), so the prize pays once a season`)
   const again = await (await fetch(`${url}/api/fair/clash`, { method: 'POST', headers: { 'content-type': 'application/json', cookie: `ather_session=${mintSession(KA.id, KA.name)}` }, body: JSON.stringify({ tent: easyNo, level: 'easy', spirit: 'Vulnyx' }) })).json() as { first: boolean; prize: number }
   ok(again.first === false && again.prize === 0, `7. a second win at the same tent pays nothing (${JSON.stringify(again)})`)
+
+  const e2 = await openTent(easyNo)
+  const later = await p.evaluate(() => ({ flag: (document.querySelector('[data-clash-already]') as HTMLElement | null)?.dataset.clashAlready, txt: (document.querySelector('[data-panel="clash"]') as HTMLElement | null)?.innerText ?? '' }))
+  ok(e2.info?.won === '1' && later.flag === '1' && /already won/i.test(later.txt), `13. a later visit to the won tent says it is already won (flag ${later.flag})`)
+  await p.screenshot({ path: `${out}/6-clash-later-visit.png` })
 
   ok(errs.length === 0, `10. no page errors (${errs.slice(0, 2).join(' | ')})`)
 } finally {

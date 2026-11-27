@@ -41,6 +41,8 @@ export function ClashPanel({ tier, tent, ledger, setLedger, onClose }: { tier: C
 
   const chosen = spirits.find(s => s.id === pick) ?? null
   const wonHere = !!state?.won.includes(tent)
+  // M233 s3b: the win that just paid the purse reads as a win; 'already won' only on a later visit / a second win
+  const alreadyNote = wonHere && !(result?.won && result.first)
   const canEnter = open && !!chosen && bout === null && lineup.length > 0
   const entrants: Entrant[] = [{ who: 'you', you: true, spirit: chosen?.name ?? null }]
 
@@ -71,7 +73,7 @@ export function ClashPanel({ tier, tent, ledger, setLedger, onClose }: { tier: C
     <>
       <FairSignup title={L.title(CLASH_LEVEL_LABEL[tier])} dataPanel="clash" onClose={onClose} spirits={open ? spirits : []} pick={pick} onPick={setPick}
         entrants={entrants} canEnter={canEnter} onEnter={enter}
-        note={open ? <span data-clash-prize={CLASH_PRIZE[tier]} style={{ fontSize: 12, color: H.inkFaint }}>{wonHere ? L.already : L.prize(CLASH_PRIZE[tier])}</span> : null}>
+        note={open ? <span data-clash-prize={CLASH_PRIZE[tier]} data-clash-already={alreadyNote ? '1' : '0'} style={{ fontSize: 12, color: H.inkFaint }}>{alreadyNote ? L.already : L.prize(CLASH_PRIZE[tier])}</span> : null}>
         <div data-clash-tier={tier} data-clash-tent={tent} data-clash-open={open ? '1' : '0'} data-clash-won={wonHere ? '1' : '0'} style={{ marginTop: 10, display: 'grid', gap: 6 }}>
           {!open && <div data-clash-held style={{ fontSize: 14, fontWeight: 700, color: H.ink }}>{L.held}</div>}
           {open && <>
