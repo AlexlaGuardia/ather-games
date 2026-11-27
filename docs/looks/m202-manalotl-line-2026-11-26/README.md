@@ -9,7 +9,7 @@ Players always see the base until M201 evolves her (the stat gate on that elemen
 | | silhouette | gills | tail | marks |
 |---|---|---|---|---|
 | Marlotl (water) | long, slim, low, a dorsal crest | 3 a side, webbed fin blades | a tall paddle fin standing up | pale spots |
-| Aurlotl (mana) | the TALL one: short pear, chest carried high, broad haunches; sits UP (the art's stance) | 3 a side, long ARCING plumes (dark stalk, dense lilac feathers), a crown | a stub | gold rune rings + a brow sigil |
+| Aurlotl (mana) | the TALL one: short pear, chest carried high, broad haunches; sits UP (the art's stance) | 3 a side, long ARCING plumes (dark stalk, dense lilac feathers), a crown | a stub | gold infusion markings: flowing glyph panels (brow, chest, flanks, shoulders, arms), never a sigil (2026-11-27, see m202-aurlotl-glyphs-2026-11-27) |
 | Arclotl (storm) | the ROUND one: a barrel with a big low belly, stumpy legs | 3 a side, straight saw-tooth SPIKES with two forked tendrils off each tip | thick, flattening into a wide FLAT paddle on the ground | crackle veins, a spark on the brow, cream belly |
 | Craglotl (earth) | the WIDE, LOW one: head and body one dome, the widest stance of the line | 4 a side, short flat LEAF blades with notched (flame) edges, hugging the head | short, thick, laid on the ground | stones in the crown + back, moss, warm belly |
 The test asserts no two of the three new forms share a length:height + width:height read.
@@ -19,9 +19,9 @@ The test asserts no two of the three new forms share a length:height + width:hei
   four (a waddle) and their **sit** is the upright stance (Aurlotl's sit reads as the art; Arclotl's sit is only a slight
   lean: a full upright sit on her round low belly lifted her onto stretched legs, so it is held low, see Rig). A real biped
   plan is a separate slice if he wants them upright while walking.
-- Aurlotl's runes are rings + simple strokes, a placeholder pattern: no canon sigil is named for her.
+- Aurlotl's marks: RULED (Magii 0d6d577) pattern only, no sigil ever. Redrawn 2026-11-27 as glyph panels: docs/looks/m202-aurlotl-glyphs-2026-11-27.
 - Tails where the art hides them (Aurlotl's stub, Craglotl's short tail); back stones on Craglotl; claws on all feet.
-- Glow (M204 effects slice): runes lit, tendril sparks, belly glow. The hull/emissive colours reuse the Vulnyx line's per
+- Glow (M204 effects slice): markings lit, tendril sparks, belly glow. The hull/emissive colours reuse the Vulnyx line's per
   element (violet / blue / warm orange); canon Earth is brown: Craglotl's emissive is the same orange as Vulnore's.
 
 ## Size

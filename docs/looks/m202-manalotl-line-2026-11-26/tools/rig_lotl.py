@@ -51,10 +51,17 @@ D = dict(pitch=0, neck=.5, tail=['tail1', 'tail2', 'tail3', 'tail4'], idletail=[
 # gait, faster, with a deeper swing (no gallop: her legs are short and splayed)
 WALK = dict(v=.30, duty=.66, reach=.070, lift=.035, toe=.4, phase=dict(hl=0, fr=.08, hr=.5, fl=.58), beats=2, bob0=.4, bob=.004, dy=-.018, n=24, over=.25, wave=.13, tsw=.16)
 RUN = dict(v=.95, duty=.46, reach=.085, lift=.045, toe=.5, phase=dict(hl=0, fr=0, hr=.5, fl=.5), beats=2, bob0=.4, bob=.006, dy=-.024, n=20, over=.25, wave=.20, tsw=.22)
+def eye_weights(E, V0, W, head):
+    """the 'eyes' part: eyes, smile and brow marks ride the head bone; a mark on the body (Aurlotl's chest / flank / arm panels)
+    takes the weights of the body vertex under it, so it moves with the skin it is drawn on"""
+    out = np.zeros((len(E), W.shape[1])); out[:, head] = 1
+    for i in range(0, len(E), 2000):
+        j = np.argmin(((E[i:i + 2000, None] - V0[None]) ** 2).sum(-1), 1); w = W[j]; body = w[:, head] < .5; out[i:i + 2000][body] = w[body]
+    return out
 live = K.Glb(IN).meshes(); parts = {}; m = live['body']; V0 = m['POSITION'].astype(float)
 w = K.skin_weights(V0, m['F'], B, 7, RIG); W = np.zeros((len(V0), len(nb)))
 for i, n in enumerate(nm): W[:, nb.index(n)] += w[:, i]
-W = K.four(W); parts['body'] = dict(m, W=W); e = np.zeros((len(live['eyes']['POSITION']), len(nb))); e[:, nb.index('head')] = 1; parts['eyes'] = dict(live['eyes'], W=e)
+W = K.four(W); parts['body'] = dict(m, W=W); parts['eyes'] = dict(live['eyes'], W=eye_weights(live['eyes']['POSITION'].astype(float), V0, W, nb.index('head')))
 LEGS = ('fl', 'fr', 'hl', 'hr'); SOLE = {f: V0[(W[:, nb.index(f + '_paw')] > .5) & (V0[:, 1] < .10)] - np.array(SK[f + '_paw'][1]) for f in LEGS}
 LEN = {f: sum(np.linalg.norm(np.array(SK[f + a][1]) - np.array(SK[f + b][1])) for a, b in (('_up', '_lo'), ('_lo', '_paw'))) for f in LEGS}
 def clear(f, R):

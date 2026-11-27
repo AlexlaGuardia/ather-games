@@ -292,7 +292,7 @@ const marlotl = (): SpiritLook => {
 /** her glb's height standing (the idle clip's mean), glb units (rig metrics) */
 export const MARLOTL_GLB_TALL = 0.735
 // M202 the rest of the Manalotl line (docs/looks/m202-manalotl-line-2026-11-26): Aurlotl (Mana: tall pear, chest high, a crown of
-// arcing feather plumes, gold runes, a tail stub), Arclotl (Storm: round barrel, saw-tooth gill spikes with forked tendrils, a flat
+// arcing feather plumes, gold glyph-panel infusion markings (no sigil: Magii 0d6d577), a tail stub), Arclotl (Storm: round barrel, saw-tooth gill spikes with forked tendrils, a flat
 // paddle tail, crackle veins), Craglotl (Earth: the widest and lowest, head and body one dome, stones in her back, moss, short leaf
 // gills). Each her own skeleton (rig_lotl.py, the M132 quadruped plan from her own landmarks). All four forms are sculpted in ONE
 // number space (Marlotl's), so they share Marlotl's world scale (her dial 1.4 over the Manalotl's 0.90 m) and read at true relative

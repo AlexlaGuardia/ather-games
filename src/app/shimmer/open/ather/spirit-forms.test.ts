@@ -91,6 +91,22 @@ for (const el of SPIRIT_ELEMENTS) {
   // her own silhouette: no two forms of the line share a length:height + width:height read (a reskin would)
   ok(new Set(sizes).size === 3, `axolotl: three distinct silhouettes ${sizes}`)
   ok(new Set(SPIRIT_ELEMENTS.map(e => formLook('axolotl', e)!.url)).size === 4, 'axolotl: four distinct forms') }
+// ── M202 Aurlotl's gold marks = second-form INFUSION MARKINGS, pattern only, never a sigil (Magii RULED-AFK, athernyx 0d6d577):
+// flowing glyph panels drawn as unlit gold geometry in her 'eyes' part. The brow panel rides the head; the chest / flank / arm
+// panels must ride the BODY's bones (else they float off her skin when she walks or sits). The old placeholder was one brow
+// sigil and nothing gold off the head bone. ──
+{ const b = fs.readFileSync('public/open/spirits/aurlotl-rigged.glb'), jl = b.readUInt32LE(12), j = JSON.parse(b.subarray(20, 20 + jl).toString()), bin = b.subarray(20 + jl + 8)
+  const at = (i: number) => { const a = j.accessors[i], v = j.bufferViews[a.bufferView], o = (v.byteOffset ?? 0) + (a.byteOffset ?? 0); return bin.subarray(o, o + a.count * 4) }
+  const e = j.meshes.find((m: { name: string }) => m.name === 'eyes').primitives[0].attributes, n = j.accessors[e.COLOR_0].count
+  const col = at(e.COLOR_0), jt = at(e.JOINTS_0), wt = at(e.WEIGHTS_0), head = (j.skins[0].joints as number[]).map(i => j.nodes[i].name).indexOf('b_head')
+  let onHead = 0, onBody = 0
+  for (let i = 0; i < n; i++) {
+    const r = col[i * 4], g = col[i * 4 + 1], bb = col[i * 4 + 2]; if (!(r > 150 && g > 90 && bb < 60)) continue   // gold (linear bytes)
+    let top = 0; for (let k = 1; k < 4; k++) if (wt[i * 4 + k] > wt[i * 4 + top]) top = k
+    if (jt[i * 4 + top] === head) onHead++; else onBody++
+  }
+  ok(head >= 0 && onHead > 300, `aurlotl: the brow panel rides the head (${onHead} gold verts)`)
+  ok(onBody > 2 * onHead, `aurlotl: chest / flank / arm panels ride the body bones (${onBody} gold verts off the head)`) }
 // ── M202 CRAGBEAR: Dewbear's Earth form, her OWN creature and her own skeleton (not the Dewbear's), dial 1.4 by height ──
 { const L = formLook('water-bear', 'earth')!, b = SPIRIT_RIGS['water-bear']!
   ok(!!L && L.name === 'cragbear' && L.url === '/open/spirits/cragbear-rigged.glb' && L.form === 'earth', `water-bear earth: Cragbear ${L?.url}`)

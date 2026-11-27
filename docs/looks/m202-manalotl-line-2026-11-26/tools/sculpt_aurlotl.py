@@ -9,11 +9,15 @@ What the picture shows -> what this body carries as SHAPE:
   - six huge feathered gills sweeping up and out like a crown of horns        -> three gills a side, each a LONG curved dark stalk
                                                                               arcing up and back, dense feather fronds along it (no web:
                                                                               Marlotl's were fins, Craglotl's are leaves, these are plumes)
-  - gold runes: a sigil on the brow, marks on the belly and shoulders         -> gold rune rings + strokes (colour + unlit geometry)
+  - gold infusion markings: an oval panel on the brow, a round panel mid-chest, -> flowing glyph PANELS: interlaced knot strokes
+    two knot panels on the belly flanks, arcs on the shoulders, an oval on      (a trefoil-knot line) inside oval/round outlines,
+    each upper arm                                                              colour cuts on the body, unlit geometry on the brow
   - short arms, dark clawed feet                                              -> dark claws, three a foot
   - violet coat, a paler glowing belly                                        -> violet coat, a pale lilac belly (the glow is M204's)
-Where the art is silent: the tail stub (the art hides her back); claws on all four feet. The rune shapes are rings and simple
-strokes, not any canon sigil (no canon sigil is named for her): a placeholder pattern, listed in the README."""
+Where the art is silent: the tail stub (the art hides her back); claws on all four feet.
+Marks (Magii RULED-AFK 2026-11-26, athernyx 0d6d577, CANON_GAPS): NO sigil, ever (sigils are weapon crystals). Her gold marks are
+the INFUSION MARKINGS a second form arrives with (design-briefs/base-forms.md:15): pattern only, flowing glyph panels in her
+element's look, spelling no named rune. So: no cross, no letter; every panel is the same flowing interlace (a trefoil-knot line)."""
 import sys, os
 import numpy as np
 HERE = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, HERE)
@@ -77,8 +81,14 @@ def body(P):
     return su(b, tail(P), .05)
 def field(P): return su(body(P), gills(P), .016)
 
-PAL = dict(lo='#5a4aa6', hi='#8f80d8', belly='#c4b2f0', gill='#d6a6ea', gtip='#f2cdf2', stalk='#4a3a86', claw='#352a62', blush='#e6a6d6', rune='#e7bd4c')
+PAL = dict(lo='#5a4aa6', hi='#8f80d8', belly='#c4b2f0', gill='#d6a6ea', gtip='#f2cdf2', stalk='#4a3a86', claw='#352a62', blush='#e6a6d6')
+GOLD = (231, 189, 76)
 def ring(A, y, z, cx, cy, r, w, zmin): return np.where(z > zmin, w - np.abs(np.sqrt((A - cx) ** 2 + (y - cy) ** 2) - r), -1.)
+def knot(n=180, rot=0.):
+    """the glyph line: a trefoil-knot projection (one closed, flowing, self-interlacing stroke; no straight bar, no letter), unit radius"""
+    t = np.linspace(0, 2 * np.pi, n, endpoint=False); x = np.sin(t) + 2 * np.sin(2 * t); y = np.cos(t) - 2 * np.cos(2 * t)
+    c, s = np.cos(rot), np.sin(rot); return np.c_[c * x - s * y, s * x + c * y] / 3.
+KNOT = knot()
 def classes(V):
     x, y, z = V.T; A = np.abs(x); out = []
     out.append(np.where((z > -.05) & (z < .36), .11 - np.sqrt((x / 1.4) ** 2 + ((y - .25) / 1.3) ** 2), -1.))     # the pale belly (front, middle)
@@ -86,20 +96,32 @@ def classes(V):
     out.append(np.where(gf < .006, 1., -1.)); out.append(np.where(gf < .006, gt - .70, -1.)); out.append(np.where((gf < .006) & (gd < .018), 1., -1.))   # plumes, paler tips, dark stalk
     out.append(np.where((y < .03) & ((A > .22) | (z > .28)), 1., -1.))
     out.append(.028 - np.sqrt(((A - .175) * .9) ** 2 + ((y - .445) * 1.6) ** 2 + (z - .52) ** 2 * .3))
-    r = np.full(len(V), -1.)
-    r = np.maximum(r, ring(A, y, z, 0, .300, .055, .0065, .10))                                                           # the belly ring
-    r = np.maximum(r, np.where(z > .05, ring(A, y, z, .150, .300, .034, .0055, .05), -1.))                                             # two smaller rings beside it
-    r = np.maximum(r, np.where((z > .0) & (z < .25) & (y > .385), .007 - np.abs(np.sqrt((A - .105) ** 2 + (y - .395) ** 2) - .05), -1.))   # the shoulder arcs
-    out.append(r)
     return out
-ORDER = ('belly', 'gill', 'gtip', 'stalk', 'claw', 'blush', 'rune')
+ORDER = ('belly', 'gill', 'gtip', 'stalk', 'claw', 'blush')
+def oval(rx, ry, n): t = np.linspace(0, 2 * np.pi, n, endpoint=False); return np.c_[rx * np.cos(t), ry * np.sin(t)]
+def even(pts, step, closed=True):
+    """resample a polyline to one point per `step` of arc length, so the dots touch and read as one stroke"""
+    P = np.vstack([pts, pts[:1]]) if closed else pts; L = np.r_[0, np.cumsum(np.linalg.norm(np.diff(P, axis=0), axis=1))]
+    u = np.arange(0, L[-1] - (step * .5 if closed else 0), step); return np.c_[np.interp(u, L, P[:, 0]), np.interp(u, L, P[:, 1])]
 def EXTRA_EYES(lens, project, grad):
-    """the brow sigil: a gold ring with a cross through it, unlit geometry on the head bone (a cut that thin breaks into dashes)"""
-    for a in np.linspace(0, 2 * np.pi, 26, endpoint=False):
-        q = project((.042 * np.cos(a), .640 + .036 * np.sin(a), .95)); lens(q, .0068, .45, grad(q), (231, 189, 76), 1)
-    for s in np.linspace(-.034, .034, 9):
-        for q0 in ((s, .640, .95), (0, .640 + s, .95)):
-            q = project(q0); lens(q, .0060, .45, grad(q), (231, 189, 76), 1)
+    """Her infusion markings, all as unlit gold geometry on the surface (a colour cut this thin on an 8k-tri body breaks into
+    blobs and dashes). The game skins the 'eyes' part per vertex, so rig_lotl.py hands each mark the weights of the body under
+    it (head marks stay on the head bone). No cross, no letter: the old placeholder sigil is gone (Magii 0d6d577).
+      brow: an oval outline (wider than tall, as the art) round the knot   chest: a round outline round the knot, below the chin
+      shoulders: an arc over each side of the chest panel                  flanks: a bigger knot, no outline, between the legs
+      upper arms: a small oval on the outside of each foreleg"""
+    def dots(uv, put, r, axis, mirror=False, sub=1):
+        for u, w in uv:
+            q = project(put(u, w), axis); g = grad(q); lens(q + g * .001, r, .45, g, GOLD, sub)
+            if mirror: lens((q + g * .001) * [-1, 1, 1], r, .45, g * [-1, 1, 1], GOLD, sub)
+    dots(even(oval(.058, .034, 200), .0075), lambda u, w: (u, .640 + w, .95), .0062, 2)                           # brow outline
+    dots(even(KNOT * [.040, .024], .0062), lambda u, w: (u, .640 + w, .95), .0052, 2)                             # brow knot
+    dots(even(oval(.054, .054, 200), .0072), lambda u, w: (u, .235 + w, .95), .0062, 2)                            # chest outline
+    dots(even(KNOT * .035, .0060), lambda u, w: (u, .235 + w, .95), .0052, 2)                                      # chest knot
+    arc = np.c_[.135 + .05 * np.cos(np.linspace(.55, 2.6, 60)), .265 + .05 * np.sin(np.linspace(.55, 2.6, 60))]
+    dots(even(arc, .0070, False), lambda u, w: (u, w, .95), .0060, 2, True)                                       # shoulder arcs
+    dots(even(KNOT[:, ::-1] * [.070, .062], .0072), lambda u, w: (.95, .240 + w, -.010 + u), .0062, 0, True)       # flank knots
+    dots(even(oval(.024, .024, 100), .0066), lambda u, w: (.95, .235 + w, .195 + u), .0056, 0, True)               # upper-arm ovals
 
 if __name__ == '__main__':
     run(sys.modules[__name__], 'aurlotl')
