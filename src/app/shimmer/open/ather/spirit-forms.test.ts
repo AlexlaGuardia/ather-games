@@ -5,7 +5,7 @@
 import * as fs from 'fs'
 import { BASE_PREVIEW } from './spirit-base-preview'
 import { SHELL_GLB_TALL } from './spirit-models'   // M202 the Shellmere line
-import { type SpiritElement, CROAK_GLB_TALL, AURLOTL_RIG, ARCLOTL_RIG, CRAGLOTL_RIG, LOTL_GLB_TALL, BEAR_GLB_TALL, LUMEBEAR_RIG, VOLTBEAR_RIG, TIDEBEAR_RIG, NOCT_GLB_TALL, NOCTARC_RIG, NOCTARA_RIG, NOCTORE_RIG, NOCTIX_RIG, NOCTYX_RIG, OWL_GLB_TALL, MYSTOWL_RIG, VOLTOWL_RIG, CRAGOWL_RIG, TIDEOWL_RIG, ATHOWL_RIG, HOV_GLB_TALL, VOLTARI_RIG, LUMARI_RIG, OBSIDARI_RIG, TIDARI_RIG, HOVARI_RIG, CRAGBEAR_GLB_TALL, CRAGBEAR_RIG, MARLOTL_RIG, SECOND_FORMS, formGrow, SPIRIT_ELEMENTS, SPIRIT_MODELS, SPIRIT_RIGS, formLook, rigLook, spiritModelFor } from './spirit-models'
+import { type SpiritElement, CROAK_GLB_TALL, AURLOTL_RIG, ARCLOTL_RIG, CRAGLOTL_RIG, LOTL_GLB_TALL, BEAR_GLB_TALL, LUMEBEAR_RIG, VOLTBEAR_RIG, TIDEBEAR_RIG, NOCT_GLB_TALL, NOCTARC_RIG, NOCTARA_RIG, NOCTORE_RIG, NOCTIX_RIG, NOCTYX_RIG, OWL_GLB_TALL, MYSTOWL_RIG, VOLTOWL_RIG, CRAGOWL_RIG, TIDEOWL_RIG, ATHOWL_RIG, HOV_GLB_TALL, VOLTARI_RIG, LUMARI_RIG, OBSIDARI_RIG, TIDARI_RIG, HOVARI_RIG, CRAGBEAR_GLB_TALL, CRAGBEAR_RIG, MARLOTL_RIG, CROAKARC_RIG, SECOND_FORMS, formGrow, SPIRIT_ELEMENTS, SPIRIT_MODELS, SPIRIT_RIGS, formLook, rigLook, spiritModelFor } from './spirit-models'
 
 let pass = 0
 const fails: string[] = []
@@ -263,7 +263,8 @@ ok(new Set(SPIRIT_ELEMENTS.map(e => formLook('hummingbird', e)!.url)).size === 4
     ok(L.skin.emissive !== b.skin.emissive && L.hull.color !== b.hull.color, `frog ${el}: her element's tints`)
     ok(fs.existsSync('public' + L.url), `frog ${el}: ${L.url} shipped`)
     const { j, col, n } = glb(L.url), names = (j.nodes as { name: string }[]).map(x => x.name), clips = (j.animations as { name: string }[]).map(a => a.name)
-    ok(['body', 'eyes', 'b_root', 'b_neck', 'b_head', 'b_lids', 'b_lids_r', 'b_throat', 'b_lure', 'b_lure2', 'b_lure3', 'b_arm_l', 'b_foot_r'].every(x => names.includes(x)) && j.skins?.[0]?.joints?.length === 19, `frog ${el}: nodes + 19 bones`)
+    if (el === 'storm') ok(['body', 'eyes', 'b_root', 'b_neck', 'b_head', 'b_pelvis', 'b_spine', 'b_fl_up', 'b_hr_paw', 'b_tail1', 'b_tail4'].every(x => names.includes(x)) && !names.includes('b_lure') && j.skins?.[0]?.joints?.length === 24 && L.rig === CROAKARC_RIG, `frog storm: Croakarc a skink on her OWN 24-bone sprawl skeleton (four legs, four tail bones, no lure)`)
+    else ok(['body', 'eyes', 'b_root', 'b_neck', 'b_head', 'b_lids', 'b_lids_r', 'b_throat', 'b_lure', 'b_lure2', 'b_lure3', 'b_arm_l', 'b_foot_r'].every(x => names.includes(x)) && j.skins?.[0]?.joints?.length === 19, `frog ${el}: nodes + 19 bones`)
     ok(['idle', 'walk', 'run', 'sit', 'lie'].every(c => clips.includes(c)), `frog ${el}: clips ${clips}`)
     const p = prof(L.url); ok(Math.abs((p.max[1] - p.min[1]) / CROAK_GLB_TALL[name] - 1) < 0.08, `frog ${el}: body ${(p.max[1] - p.min[1]).toFixed(3)} ~ CROAK_GLB_TALL ${CROAK_GLB_TALL[name]}`)
     const [r, g, bb] = mean(col, n)
@@ -271,6 +272,7 @@ ok(new Set(SPIRIT_ELEMENTS.map(e => formLook('hummingbird', e)!.url)).size === 4
   }
   const [base, rill, ara, ore, arc] = [b.url, ...FROGS.map(x => formLook('frog', x[0])!.url)].map(prof)
   ok(arc.min[2] < Math.min(base.min[2], rill.min[2], ara.min[2], ore.min[2]) - 0.3, `Croakarc: a skink's tail, the longest back by far (${arc.min[2].toFixed(3)})`)
+  ok(arc.max[1] - arc.min[1] < 0.70 * (base.max[1] - base.min[1]) && arc.max[2] - arc.min[2] > 1.9, `Croakarc: LOW and long, a lizard (${(arc.max[1] - arc.min[1]).toFixed(3)} tall x ${(arc.max[2] - arc.min[2]).toFixed(3)} long)`)
   ok(arc.emax[1] < arc.max[1] + 0.05 && [base, rill, ara, ore].every(x => x.emax[1] > x.max[1] + 0.1), `Croakarc: no lure (the others' lure arches over the body)`)
   ok([base, rill, arc].every(x => ara.max[0] > x.max[0] + 0.05), `Croakara: the widest squat (${ara.max[0].toFixed(3)})`)
   ok([base, ara, ore].every(x => rill.max[1] - rill.min[1] > x.max[1] - x.min[1]), `Croakrill: the tallest frog body (${(rill.max[1] - rill.min[1]).toFixed(3)})`)

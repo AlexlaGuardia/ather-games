@@ -385,9 +385,9 @@ export const HOV_GLB_TALL: Readonly<Record<string, number>> = { voltari: 1.328, 
 // Croakarc (Storm: a SKINK, no lure (grimoire-ledger divergence note), a long curling tail, a pointed crest, dorsal spines, lightning veins,
 // a violet brow gem). Each is the BASE Croakling's sculpt + rig modules re-shaped by name (tools/croak_common.py, rig_croak.py), so the
 // base (M174, public since M226; its data lives in spirit-base-preview.ts) flows into all four on a rebuild. The line builds off
-// BASE_PREVIEW.frog (= SPIRIT_RIGS.frog); the forms are OWNER PREVIEW (not in spirit-public.ts PUBLIC_FORMS until Alex OKs). Croakarc's
-// tail rides the base's three lure bones (re-seated along it). CROAK_GLB_TALL = each body's idle mean height (lure not counted).
-export const CROAK_GLB_TALL: Readonly<Record<string, number>> = { croakrill: 0.854, croakara: 0.794, croakore: 0.776, croakarc: 0.908 }
+// BASE_PREVIEW.frog (= SPIRIT_RIGS.frog); the forms are OWNER PREVIEW (not in spirit-public.ts PUBLIC_FORMS until Alex OKs). Croakarc
+// left the frog's sculpt + rig in pass 2 (CROAKARC_RIG below). CROAK_GLB_TALL = each body's idle mean height (lure not counted).
+export const CROAK_GLB_TALL: Readonly<Record<string, number>> = { croakrill: 0.854, croakara: 0.794, croakore: 0.776, croakarc: 0.512 }
 // glbLen = her nose to haunch (tail tip) and hRig = the metres per glb unit her clips were timed at (rig metrics height_m), so her clips
 // play 1:1 at the base's 0.55 / 2.4 m/s in her own glb units
 const croakForm = (el: SpiritElement, name: string, emissive: string, hull: string, glbLen: number, hRig: number): SpiritLook => {
@@ -395,6 +395,15 @@ const croakForm = (el: SpiritElement, name: string, emissive: string, hull: stri
   return { ...b, name, form: el, url: `/open/spirits/${name}-rigged.glb`, h: b.h * g, skin: { emissive, emissiveI: 0.14 }, hull: { color: hull, opacity: 0.38 },
     trot: grownTrot(b.trot, b.h, b.h * g), rig: { ...b.rig!, glbLen, clipV: { walk: 0.55 / hRig, run: 2.4 / hRig } } }
 }
+// M202 pass 2 (Alex 11-27): Croakarc LOW and lizard-like, walking like one. She leaves the frog's sculpt + rig: her own skink body and
+// her own skeleton (docs/looks/m202-croakling-pass2-2026-11-27/tools/rig_croakarc.py: the M132 quadruped plan, 24 bones, a sprawl walk
+// + scurry, sit, lie), still in the croak unit space (h = the base's x her dial, so she stands at true size by her sisters). Her
+// lightning veins are unlit tubes on her eyes part (they glow), skinned to the body. glbLen = her nose to tail tip, glb units.
+export const CROAKARC_RIG: RigLook = {
+  glbLen: 2.067, pivot: { x: 0, z: 0 }, clipV: { walk: 0.40 / 0.5606, run: 1.30 / 0.5606 }, runAt: [0.9, 0.75], hull: 0.024,
+  neck: 'b_neck', head: 'b_head', lie: true, cadence: 12, avatar: { z: -0.35, far: 1.8 },
+}
+function croakarc(): SpiritLook { return { ...croakForm('storm', 'croakarc', '#a8d2ff', '#dcecff', CROAKARC_RIG.glbLen, 0.5606), rig: CROAKARC_RIG } }
 // M202 the Shellmere line (docs/looks/m202-shellmere-line-2026-11-27): Mesamere (Earth, his natural form: a great stone tortoise, a tall
 // dome of heavy plates, moss along the lip, an amber crown crystal, pillar legs; dial 1.5), Aurmere (Mana: a high round violet dome with
 // the canon rune-light rings grown over every scute, longer antennae), Voltmere (Storm: a wide low blocky pale-blue shell with lightning
@@ -419,7 +428,7 @@ export const SECOND_FORMS: Partial<Record<Species, Partial<Record<SpiritElement,
     water: croakForm('water', 'croakrill', '#3fc4c0', '#b4f0ea', 0.896, 0.3793),
     mana: croakForm('mana', 'croakara', '#b49cff', '#e8dcff', 0.769, 0.4020),
     earth: croakForm('earth', 'croakore', '#ffae4a', '#ffe2b4', 0.846, 0.4160),
-    storm: croakForm('storm', 'croakarc', '#a8d2ff', '#dcecff', 1.351, 0.4398),
+    storm: croakarc(),
   },
   axolotl: {
     water: marlotl(),
