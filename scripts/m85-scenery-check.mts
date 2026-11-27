@@ -74,7 +74,7 @@ try {
   await key(o, 'KeyE')
   const items = await o.$$eval('[data-testid^="place-item-"]', a => a.map(e => (e as HTMLElement).dataset.testid!.slice(11)))
   const want = paletteOf('wilds').map(s => s.k)
-  ok(items.length === want.length && !items.some(k => k.startsWith('node:') || k.startsWith('room:') || k === 'filler:lily-pads'), `1. the inventory is the Wilds kit (${items.length} kinds; no nodes, rooms, lilies)`)
+  ok(items.length === want.length && !items.some(k => (k.startsWith('node:') && k !== 'node:tensacia') || k.startsWith('room:') || k === 'filler:lily-pads'), `1. the inventory is the Wilds kit (${items.length} kinds; no nodes but Tensacia (M135), rooms, lilies)`)
   await o.screenshot({ path: `${out}/a-palette.png` }).catch(() => {})
   await key(o, 'KeyE'); await sleep(1000); await lock(o)
   // place: the rock (at its first spot), the fence, the sign; snap 0.5 m

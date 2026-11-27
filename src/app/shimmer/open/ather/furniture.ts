@@ -23,6 +23,7 @@ export const REFINE: readonly Job[] = [
   { id: 'starwillow-sap', label: 'Tap the sap', in: [{ id: 'starwillow_log', n: 1 }], out: { id: 'starwillow_sap', n: 1 } },
   { id: 'dawnwood-plank', label: 'Saw into planks', in: [{ id: 'dawnwood_log', n: 1 }], out: { id: 'dawnwood_plank', n: 2 } },
   { id: 'dawnwood-sap', label: 'Take the old sap', in: [{ id: 'dawnwood_log', n: 1 }], out: { id: 'crystallized_sap', n: 1 } },
+  { id: 'tensacia-plank', label: 'Saw into planks', in: [{ id: 'tensacia_log', n: 1 }], out: { id: 'tensacia_plank', n: 2 } },   // M135 s1
 ]
 
 /** The Stonery's refining (M37 slice 4): the building parts a house plan spends. Blankstone is the plain stone prospecting

@@ -142,11 +142,12 @@ function Ground({ W, focus, off }: { W: Wilds; focus: Focus; off: { x: number; z
 
 // The Ather's four trees, each its own look (canon: game/shimmer-skilling.md › Tree Types). A pruned tree stands
 // thinned (a smaller, duller crown) until it regrows: forestry.ts keeps the timers, this only draws them.
-export const LOOK: Record<TreeKind, { trunk: string; crown: string; emissive?: string; trunkW: number; shape: 'round' | 'dome' | 'weep' | 'giant' }> = {
+export const LOOK: Record<TreeKind, { trunk: string; crown: string; emissive?: string; trunkW: number; shape: 'round' | 'dome' | 'weep' | 'giant' | 'spire' }> = {
   goldwood:   { trunk: '#8a6a45', crown: '#c9c25e', trunkW: 1, shape: 'round' },     // warm golden bark, round canopy
   shimmeroak: { trunk: '#5f4430', crown: '#6f9b4f', trunkW: 1.35, shape: 'dome' },   // larger, harder bark, rich grain
   starwillow: { trunk: '#9a8160', crown: '#e7d78e', emissive: '#f2e3a0', trunkW: 0.8, shape: 'weep' },   // weeping, glowing tips
   dawnwood:   { trunk: '#6e4a2c', crown: '#d79b45', trunkW: 2, shape: 'giant' },    // ancient thick trunk, amber-gold
+  tensacia:   { trunk: '#1f8a5a', crown: '#2f7f4c', trunkW: 1.8, shape: 'spire' },  // M135 s1 (canon 4d65536): emerald bark; a heavy trunk under a broad, tall spire
 }
 /** Trees past the fog are not drawn (Alex 11-16: "the lag hits pretty hard here"). The day fog ends at DAY.fogFar
  *  and the night and the gloom only pull it closer, so a crown past this ring is painted fog colour anyway. Before
@@ -174,7 +175,7 @@ function TreeKindMesh({ trees, kind, focus, off }: { trees: Tree[]; kind: TreeKi
       const cut = isPruned(t.id, now), w = L.trunkW, cr = crownOf(t, cut ? 0.55 : 1), h = cr.trunkH
       p.set(t.x, t.y + h / 2, t.z); s.set(w, h, w); tm.setMatrixAt(j, m.compose(p, q, s))
       // a crown's BOTTOM sits above the keeper's eye (crownOf; the willow's skirt hangs low on purpose)
-      const sy = L.shape === 'weep' ? cr.hh * 2 : cr.hh
+      const sy = L.shape === 'weep' || L.shape === 'spire' ? cr.hh * 2 : cr.hh
       p.set(t.x, cr.cy, t.z); s.set(cr.r, sy, cr.r)
       base.current[j] = { x: t.x, y: cr.cy, z: t.z, sx: cr.r, sy, id: t.id, bottom: cr.cy - cr.hh }
       cm.setMatrixAt(j, m.compose(p, q, s))
@@ -216,7 +217,7 @@ function TreeKindMesh({ trees, kind, focus, off }: { trees: Tree[]; kind: TreeKi
         <cylinderGeometry args={[0.24, 0.32, 1, 6]} /><meshLambertMaterial color={L.trunk} flatShading />
       </instancedMesh>
       <instancedMesh frustumCulled={false} ref={crown} args={[undefined, undefined, trees.length]}>
-        {L.shape === 'weep' ? <coneGeometry args={[1, 1, 9, 1, true]} /> : L.shape === 'dome' ? <dodecahedronGeometry args={[1, 0]} /> : <icosahedronGeometry args={[1, 0]} />}
+        {L.shape === 'weep' ? <coneGeometry args={[1, 1, 9, 1, true]} /> : L.shape === 'spire' ? <coneGeometry args={[1, 1, 7, 3]} /> : L.shape === 'dome' ? <dodecahedronGeometry args={[1, 0]} /> : <icosahedronGeometry args={[1, 0]} />}
         <meshLambertMaterial flatShading side={L.shape === 'weep' ? THREE.DoubleSide : THREE.FrontSide} emissive={L.emissive ?? '#000000'} emissiveIntensity={L.emissive ? 0.22 : 0} />
       </instancedMesh>
     </>

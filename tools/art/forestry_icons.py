@@ -23,6 +23,8 @@ W = {
     'shimmeroak': dict(face='#8f5d38', dark='#4e301b', grain='#b8865a', end='#b88a5e', ring='#6a4426', bark='#5f4430', crown='#6f9b4f', crown2='#557d3b'),
     'starwillow': dict(face='#d9c48c', dark='#7c6a4e', grain='#bfa66c', end='#f4ecc4', ring='#a8a07a', bark='#a8a08a', crown='#e7d78e', crown2='#cbb86c'),
     'dawnwood':   dict(face='#c98a3a', dark='#6e4320', grain='#a86c2a', end='#e0a95c', ring='#8a5524', bark='#6e4a2c', crown='#d79b45', crown2='#b47a30'),
+    # M135 s1 (RULED athernyx 4d65536): emerald bark, pale green planks
+    'tensacia':   dict(face='#cfe6b4', dark='#4e6e3e', grain='#b2d094', end='#e2f0cc', ring='#8db070', bark='#1f8a5a', crown='#2f7f4c', crown2='#24663c'),
 }
 
 
@@ -146,6 +148,22 @@ def crystal_sap():
     return g, '  ' + body + '\n'
 
 
+def greenscale():
+    """M135 s1: the Tensacia's fruit (canon 98e7f1c): green, of overlapping scales. A living thing: soft light round it."""
+    rows = ''
+    for i, (y, n, w) in enumerate([(9, 3, 3.2), (13, 4, 3.4), (17, 4, 3.4), (21, 3, 3.2)]):
+        x0 = 16 - (n - 1) * w / 2   # rows of 3 and 4 alternate, so the scales overlap like shingles
+        for j in range(n):
+            x = x0 + j * w
+            rows += (f'<path d="M{x-1.8:.1f} {y-1.2} Q{x:.1f} {y+2.6} {x+1.8:.1f} {y-1.2}" fill="#5fae5a" stroke="#2c6a34" stroke-width=".6"/>')
+    body = ('<ellipse cx="16" cy="16" rx="9.2" ry="11" fill="#cde9a0" opacity=".2"/>'
+            '<ellipse cx="16" cy="16" rx="7.4" ry="9.6" fill="#3f8f45" stroke="#24552b" stroke-width=".8"/>'
+            + rows +
+            '<path d="M16 6.4 L16 3.6 M16 4.6 q2.4 -1.6 4 -.6" fill="none" stroke="#5a4a2e" stroke-width=".9" stroke-linecap="round"/>'
+            '<path d="M12.2 10 q-1 3 0 6" fill="none" stroke="#e6f6c8" stroke-width=".8" opacity=".6" stroke-linecap="round"/>')
+    return '  ' + body + '\n'
+
+
 def main():
     icons: dict[str, str] = {}
     gw, so, sw, dw = W['goldwood'], W['shimmeroak'], W['starwillow'], W['dawnwood']
@@ -160,9 +178,13 @@ def main():
     icons['dawnwood_plank'] = svg('Dawnwood Plank: thick old boards, deep amber-gold, dense growth rings.', plank_bundle(dw, 2, rings=True, thick=3.2))
     g, b = crystal_sap()
     icons['crystallized_sap'] = svg('Crystallized Sap: an amber nugget mid-transition, resin outside, crystal core lit within.', b, g)
+    tn = W['tensacia']
+    icons['tensacia_plank'] = svg('Tensacia Plank: heavy pale green boards (worked: no light).', plank_bundle(tn, 2, thick=3))
+    icons['greenscale'] = svg('Greenscale: the Tensacia fruit, green, of overlapping scales.', greenscale())
     for k, c in W.items():
         glow = {'starwillow': '#fff2a8', 'dawnwood': '#ffcf7a'}.get(k, c['end'])
         icons[f'{k}_log'] = svg(f'{k.title()} Log: three short logs, cut ends out, cord round them (raw but cut: faint at the cut faces).', logs(c, glow))
+        if k == 'tensacia': continue   # no Tensacia sapling (canon names none)
         icons[f'{k}_sapling'] = svg(f'{k.title()} Sapling: a young {k}, root ball in cloth and tied (alive: soft light at the crown).', sapling(c, k))
     OUT.mkdir(parents=True, exist_ok=True)
     for k, s in icons.items():

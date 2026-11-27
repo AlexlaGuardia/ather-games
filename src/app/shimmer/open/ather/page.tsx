@@ -885,6 +885,10 @@ function AtherSliceGame() {
   const wildsScenerySig = wildsSceneryNow.map(p => `${p.id}:${p.k}@${p.x},${p.z},${p.q},${p.s},${p.y.toFixed(2)},${p.solid ?? ''}`).join()
   const wildsScenery = useMemo(() => wildsSceneryNow, [wildsScenerySig])   // eslint-disable-line react-hooks/exhaustive-deps
   const wildsSceneryBoxes = useMemo(() => sceneryBoxes(wildsScenery), [wildsScenery])
+  // M135 s1: a placed Wilds node (Tensacia's coves, scenery.ts › WILDS_NODES) is a real tree there: drawn by the Wilds' meshes, aimed + worked by ForestryFX
+  const wildsOwnNodes = useMemo(() => gladeNodes(wildsScenery, ww ? ww.heightAt : () => NaN), [wildsScenery, ww])
+  const wildsDecor = useMemo(() => wildsScenery.filter(p => !isNode(p)), [wildsScenery])
+  const wildsTrees = useMemo(() => ww && { treesNear: (x: number, z: number, r: number) => { const a = ww.treesNear(x, z, r); return wildsOwnNodes.trees.length ? [...a, ...wildsOwnNodes.treesNear(x, z, r)] : a } }, [ww, wildsOwnNodes])
   useEffect(() => { setWildsPartBoxes([...zonePartBoxes(wildsParts), ...wildsSceneryBoxes]); return () => setWildsPartBoxes([]) }, [wildsParts, wildsSceneryBoxes])   // M117 s3
   useEffect(() => { (window as unknown as { __wildsScenery?: unknown }).__wildsScenery = () => ({ items: wildsScenery.map(p => ({ id: p.id, k: p.k, x: p.x, z: p.z, y: p.y, q: p.q, s: p.s })), boxes: wildsSceneryBoxes }) }, [wildsScenery, wildsSceneryBoxes])   // read-only probe (m85-scenery-check)
   const wildsDoors = useMemo(() => wildsZones.flatMap(z => { const u = zoneUse(z); return u ? [{ id: z.id, ...zoneDoor(z), u }] : [] }), [wildsZones])
@@ -1868,7 +1872,8 @@ function AtherSliceGame() {
         <ProgramKeeper />
         {zone.kind === 'wilds' && <WarmProxies key={epoch} />}   {/* M44: late-mounting shader variants, compiled behind the arrival veil */}
         {zone.kind === 'wilds' && <ZonePartsView parts={wildsParts} />}   {/* M84 s3b */}
-        {zone.kind === 'wilds' && wildsScenery.length > 0 && <SceneryView items={wildsScenery} />}   {/* M85 s1 */}
+        {zone.kind === 'wilds' && wildsDecor.length > 0 && <SceneryView items={wildsDecor} />}
+        {zone.kind === 'wilds' && wildsOwnNodes.trees.length > 0 && <GladeNodesView nodes={wildsOwnNodes} focus={poseRef} />}   {/* M85 s1 */}
         <OpenHands ref={handsApi} held={rodOut ? <HeldRod /> : <HeldItem id={stance.kind === 'item' ? held : null} />} />
         <FpGun ref={gunApi} />
         <ThirdPersonBody drive={dollDrive} camRef={camRef} />
@@ -1884,7 +1889,7 @@ function AtherSliceGame() {
         {zone.kind === 'glade' && <><GladeNodesView nodes={gladeOwnNodes} focus={poseRef} /><ForestryFX ww={gladeOwnNodes} aim={aimRef} fx={fxRef} ground={ground} /><ChannelFocus focus={focusRef} /><GatherTether ref={tetherRef} /><ProspectingFX ww={gladeOwnNodes} aim={cAimRef} fx={cFxRef} ground={ground} mineable={c => mineCheck(c.kind, c.id).ok} /><GroundLoot place="glade" keeper={lootKeeper} ground={ground} can={lootCan} /></>}   {/* M153 s1b */}
         {(zone.kind === 'wilds' || plotMp) && <RemoteKeepers peers={mp.peers} me={() => poseRef.current} />}
         {zone.kind === 'plot' && cover !== 'none' && <GroundCover cover={cover} ground={ground} skip={coverSkip} focus={poseRef} />}
-        {zone.kind === 'wilds' && ww && <ForestryFX ww={ww} aim={aimRef} fx={fxRef} ground={ground} />}
+        {zone.kind === 'wilds' && wildsTrees && <ForestryFX ww={wildsTrees} aim={aimRef} fx={fxRef} ground={ground} />}
         {zone.kind === 'wilds' && <><ChannelFocus focus={focusRef} /><GatherTether ref={tetherRef} /></>}
         {zone.kind === 'wilds' && ww && <ProspectingFX ww={ww} aim={cAimRef} fx={cFxRef} ground={ground} mineable={c => mineCheck(c.kind, c.id).ok} />}
         {zone.kind === 'wilds' && ww && <RinningFX ease={easeOf(toolsRef.current.rinning)} waterY={WILDS_WATER_Y} isWater={rinWaterAt} roll={rinRoll} rarer={rinRarer} api={rinApi} holding={reelHold} out={held === BAIT && !!toolsRef.current.rinning} onCatch={onCatch} onGone={onGone} />}

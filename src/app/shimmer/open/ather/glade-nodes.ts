@@ -25,7 +25,7 @@ export const nodeKindOf = (k: string): TreeKind | Exclude<CrystalKind, 'egg'> | 
 }
 export const isTreeKind = (k: string): k is TreeKind => (NODE_TREES as string[]).includes(k)
 /** true size: the middle of what the Wilds grow (wilds.ts: tall 5..10, r 1.6..2.8, x the kind's own; crystals 0.8..1.3) */
-const BIG: Record<TreeKind, number> = { goldwood: 1, shimmeroak: 1.2, starwillow: 0.95, dawnwood: 1.55 }
+const BIG: Record<TreeKind, number> = { goldwood: 1, shimmeroak: 1.2, starwillow: 0.95, dawnwood: 1.55, tensacia: 1.4 }
 export const nodeTree = (kind: TreeKind) => ({ tall: 7.5 * BIG[kind], r: 2.2 * BIG[kind] })
 export const NODE_CRYSTAL_S = 1.05
 

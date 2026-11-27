@@ -20,7 +20,7 @@ import { fightSlot } from '../shared/spirit-fight'
 
 const ME = 'keeper', FLY_S = 0.4, FALL_MS = 450, SAY_S = 0.9, MAX = 48, SEE_M = 70
 export const LOOT_FULL = 'Your bag is full.'   // the wording the bag already uses (melee-view, shipyard-plot)
-const LOGS: Record<string, string> = { goldwood_log: '#b88a4e', shimmeroak_log: '#7a5636', starwillow_log: '#cdb27a', dawnwood_log: '#9a5e2e' }
+const LOGS: Record<string, string> = { goldwood_log: '#b88a4e', shimmeroak_log: '#7a5636', starwillow_log: '#cdb27a', dawnwood_log: '#9a5e2e', tensacia_log: '#1f8a5a' }
 const SHARD: Record<string, string> = Object.fromEntries(Object.entries(CRYSTAL_ITEM).map(([k, id]) => [id, CRYSTAL_LOOK[k as Exclude<CrystalKind, 'egg'>].color]))
 /** which shape, which colour: a log, a gem, or a small lump (sapling, mast, blankstone, what a perk found) */
 const lookOf = (id: string): { m: 0 | 1 | 2 | 3; c: string } => id === DEWL ? { m: 3, c: '#4fc3ee' } : LOGS[id] ? { m: 0, c: LOGS[id] } : SHARD[id] ? { m: 1, c: SHARD[id] } : { m: 2, c: id.endsWith('_sapling') ? '#7fbf5a' : id === 'mast' ? '#8a5a34' : id === 'blankstone' ? '#a7a39b' : '#d9b65c' }

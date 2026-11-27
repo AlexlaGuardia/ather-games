@@ -15,6 +15,10 @@ export const TREE_DIAL = {
   shimmeroak: { need: 1, drain: 3,  mana: 10, low: [300, 900], respawnMs: min(8) },
   starwillow: { need: 2, drain: 8,  mana: 20, low: [300, 900], respawnMs: min(15) },
   dawnwood:   { need: 3, drain: 10, mana: 30, low: [300, 900], respawnMs: min(30) },
+  // M135 s1: Tensacia, rung 4 = the Starwillow Pruner with a Smithy edge (M134). M136's agreed 12/s 42 mana; one rung short (the bare
+  // Starwillow) = 300, slow, doable; two short = past one cycle's pool + regen. Reset 45 min (Jin's, mirrors the Ather crystal) so
+  // two-low is 1400, like that crystal's. A PLACED Tensacia (World Builder node) uses the piece's own wait instead.
+  tensacia:   { need: 4, drain: 12, mana: 42, low: [300, 1400], respawnMs: min(45) },
 } as const satisfies Record<string, GatherDial>
 /** by crystal tier (prospecting.ts › TIER, canon's grade: XP, reset, dewls): [0] unused · raw · Aqual + Dinloid · pure · ather.
  *  The two high gems have their own dial (HIGH_GEM_DIAL) at the same grade: prospecting.ts › crystalDial picks.

@@ -18,7 +18,7 @@ for (const f of ['forestry', 'prospecting', 'rinning']) {
 // worn: stage 0, never wears, the canon name, rung 1
 const worn = toolPanel({ forestry: eq('worn_blade') }, 'forestry')
 ok(worn.held && worn.stage === 0 && worn.name === 'Worn Pruner' && worn.uses === null && worn.durability === null && worn.rung === 1, `worn pruner ${JSON.stringify(worn).slice(0, 200)}`)
-ok(worn.rows.map(r => r.name).join() === 'Goldwood,Shimmeroak,Starwillow,Dawnwood', `four trees (${worn.rows.map(r => r.name)})`)
+ok(worn.rows.map(r => r.name).join() === 'Goldwood,Shimmeroak,Starwillow,Dawnwood,Tensacia', `five trees (${worn.rows.map(r => r.name)})`)
 // every number is the dial's own, for the rung the game uses (focuses.ts › rungOf)
 for (const [id, fam] of [['worn_blade', 'forestry'], ['goldwood_blade', 'forestry'], ['shimmeroak_blade', 'forestry'], ['starwillow_blade', 'forestry']] as const) {
   const p = toolPanel({ [fam]: eq(id, 7) }, fam), r = rungOf(eq(id))
@@ -39,7 +39,9 @@ for (const d of [...Object.values(TREE_DIAL), ...CRYSTAL_DIAL.slice(1), HIGH_GEM
   ok(v === want, `verdict need ${d.need} rung ${r}: ${v} want ${want}`)
 }
 // the top tier is never too weak for anything
-ok([...treeRows(3), ...crystalRows(4)].every(r => r.verdict === 'ok'), 'the top rung (pruner 3, spike 4) ok everywhere')
+// M135 s1 (moved): the top CRAFTED pruner (rung 3) is ok everywhere but Tensacia, which wants a Smithy edge (rung 4): one short = slow, never weak
+ok([...treeRows(4), ...crystalRows(4)].every(r => r.verdict === 'ok'), 'the top rung (edged pruner 4, spike 4) ok everywhere')
+ok(treeRows(3).every(r => r.verdict === (r.name === 'Tensacia' ? 'slow' : 'ok')), 'the bare Starwillow Pruner: ok everywhere but Tensacia (slow)')
 // the spike (M185 s1): one row per node kind, the four gems each their own; every number the dial of the kind's tier
 const spAll = toolPanel({ prospecting: eq('worn_spike') }, 'prospecting')
 // M185 s2: the three mana seeps follow Raw Mana; they pay shards only (no blankstone), their own dial

@@ -47,7 +47,7 @@ async function main() {
   ok(tree.id === `glade:${ps[1].id}:goldwood` && cry.id === `glade:${ps[2].id}:raw` && tree.waitMs === 24 * H && cry.waitMs === 6 * H && tree.y === 2, 'id, wait, ground')
   ok(N.gladeNodes(moved, flat).trees[0].id === tree.id && N.gladeNodes(back, flat).trees[0].id === tree.id, 'moved or republished: the same id')
   ok(N.gladeNodes([{ ...ps[1], k: 'node:dawnwood' }], flat).trees[0].id !== tree.id, 'another kind is another node')
-  ok(N.NODE_TREES.length === 4 && N.NODE_CRYSTALS.length === 7 && [...N.NODE_TREES, ...N.NODE_CRYSTALS].every(k => S.SCENERY_BY.get(`node:${k}`)?.group === 'Nodes'), 'all 4 trees and 7 crystals in the palette')
+  ok(N.NODE_TREES.length === 5 && N.NODE_CRYSTALS.length === 7 && [...N.NODE_TREES, ...N.NODE_CRYSTALS].every(k => S.SCENERY_BY.get(`node:${k}`)?.group === 'Nodes'), 'all 5 trees (M135: + Tensacia) and 7 crystals in the palette')
   ok(S.sceneryBoxes(S.sceneryPlaced([ps[1]], flat)).length === 1 && S.sceneryBoxes(S.sceneryPlaced([ps[2]], flat)).length === 0, 'the trunk blocks, the crystal does not (as in the Wilds)')
   ok(W.treesNear(3, 4, 5).length === 1 && W.treesNear(50, 4, 5).length === 0, 'near')
 

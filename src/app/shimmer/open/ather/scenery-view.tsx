@@ -84,8 +84,8 @@ function bakeNode(kind: string): Part[] {
   if (!isTreeKind(kind)) { const ps = bakeCrystal(kind as CrystalKind); ps.forEach((p, i) => { p.geometry.translate(0, i ? -0.05 : -0.08, 0); p.geometry.scale(NODE_CRYSTAL_S, NODE_CRYSTAL_S * (!i && (kind === 'ather' || kind === 'pure') ? 1.15 : 1), NODE_CRYSTAL_S) }); return ps }
   const L = TREE_LOOK[kind], c = crownOf({ ...nodeTree(kind), y: 0, kind }), trunk = new THREE.CylinderGeometry(0.24, 0.32, 1, 6)
   trunk.scale(L.trunkW, c.trunkH, L.trunkW); trunk.translate(0, c.trunkH / 2, 0)
-  const crown = L.shape === 'weep' ? new THREE.ConeGeometry(1, 1, 9, 1, true) : L.shape === 'dome' ? new THREE.DodecahedronGeometry(1, 0) : new THREE.IcosahedronGeometry(1, 0)
-  crown.scale(c.r, L.shape === 'weep' ? c.hh * 2 : c.hh, c.r); crown.translate(0, c.cy, 0)
+  const crown = L.shape === 'weep' ? new THREE.ConeGeometry(1, 1, 9, 1, true) : L.shape === 'spire' ? new THREE.ConeGeometry(1, 1, 7, 3) : L.shape === 'dome' ? new THREE.DodecahedronGeometry(1, 0) : new THREE.IcosahedronGeometry(1, 0)
+  crown.scale(c.r, L.shape === 'weep' || L.shape === 'spire' ? c.hh * 2 : c.hh, c.r); crown.translate(0, c.cy, 0)
   return [
     { geometry: trunk, material: new THREE.MeshLambertMaterial({ color: L.trunk, flatShading: true }) },
     { geometry: crown, material: new THREE.MeshLambertMaterial({ color: L.crown, flatShading: true, side: L.shape === 'weep' ? THREE.DoubleSide : THREE.FrontSide, emissive: L.emissive ?? '#000000', emissiveIntensity: L.emissive ? 0.22 : 0 }) },

@@ -34,11 +34,15 @@ export type Zone = 'meadows' | 'thicket' | 'springs' | 'trails' | 'arid' | 'cave
 export const ZONE_NAME: Record<Zone, string> = {
   meadows: 'Spirit Meadows', thicket: 'Twilight Thicket', springs: 'Mana Springs', trails: 'Wooded Trails', arid: 'the Scald', caverns: 'the caverns',
 }
-export type TreeKind = 'goldwood' | 'shimmeroak' | 'starwillow' | 'dawnwood'
-export const TREE_KINDS: TreeKind[] = ['goldwood', 'shimmeroak', 'starwillow', 'dawnwood']
-export const TREE_NAME: Record<TreeKind, string> = { goldwood: 'Goldwood', shimmeroak: 'Shimmeroak', starwillow: 'Starwillow', dawnwood: 'Dawnwood' }
-/** Trunk radius for the walker's bump box (a dawnwood is an ancient, thick trunk). */
-export const TRUNK: Record<TreeKind, number> = { goldwood: 0.35, shimmeroak: 0.45, starwillow: 0.32, dawnwood: 0.7 }
+// ★ M135 s1 (RULED athernyx 4d65536): TENSACIA, the ladder's fifth tree (emerald bark, pale green planks, its fruit the GREENSCALE,
+//   signed 98e7f1c). It grows in NO zone (treeFor never rolls it): Alex places its coves himself (M137, the Sadlands' oases) as a
+//   World Builder node (scenery.ts › placeableOn lets `node:tensacia` onto the Wilds). Its need is rung 4 (gather-dials.ts): the
+//   Starwillow Pruner with a Smithy edge (M134), one rung short = M136's slow 300 mana, never a hard wall.
+export type TreeKind = 'goldwood' | 'shimmeroak' | 'starwillow' | 'dawnwood' | 'tensacia'
+export const TREE_KINDS: TreeKind[] = ['goldwood', 'shimmeroak', 'starwillow', 'dawnwood', 'tensacia']
+export const TREE_NAME: Record<TreeKind, string> = { goldwood: 'Goldwood', shimmeroak: 'Shimmeroak', starwillow: 'Starwillow', dawnwood: 'Dawnwood', tensacia: 'Tensacia' }
+/** Trunk radius for the walker's bump box (a dawnwood is an ancient, thick trunk; a tensacia nearly as heavy). */
+export const TRUNK: Record<TreeKind, number> = { goldwood: 0.35, shimmeroak: 0.45, starwillow: 0.32, dawnwood: 0.7, tensacia: 0.6 }
 
 // biome ids, matched to wilds.ts › BIOME (kept literal so this file does not import the tile parser)
 const SHORE = 1, MEADOW = 2, WOODS = 3
@@ -116,7 +120,11 @@ export const isPruned = (id: string, now = Date.now()) => regrowIn(id, now) > 0
 
 export const PRUNE_RANGE = 10
 /** Sapling odds per prune (build; tree-node.ts's felling odds are 0.35 / 0.28 / … and a pruned tree comes back). */
-export const SAPLING_CHANCE: Record<TreeKind, number> = { goldwood: 0.08, shimmeroak: 0.06, starwillow: 0.05, dawnwood: 0.04 }
+export const SAPLING_CHANCE: Record<TreeKind, number> = { goldwood: 0.08, shimmeroak: 0.06, starwillow: 0.05, dawnwood: 0.04, tensacia: 0 }   // M135: no Tensacia sapling (canon names none; it grows only where Alex places it)
+/** M135 s1: the Tensacia's fruit (canon 98e7f1c, a food ingredient), now and then with the logs. Placeholder odds (Jin's). */
+export const GREENSCALE = 'greenscale', GREENSCALE_CHANCE = 0.3
+/** Forestry XP per tree: the node table's (world/resources.ts); Tensacia is not in that (voxel-world) table, so its own here. */
+export const TREE_XP: Record<TreeKind, number> = { ...Object.fromEntries((['goldwood', 'shimmeroak', 'starwillow', 'dawnwood'] as const).map(k => [k, NODE_DEFS[k].xp])) as Record<Exclude<TreeKind, 'tensacia'>, number>, tensacia: 450 }
 /** Mast per prune (BETA M6e; canon 017be29: any pruned Ather tree): bait's floor for a keeper out of bait with nothing landed. 2 bait each, ~3 prunes = a few casts. */
 export const MAST_CHANCE = 0.35
 export const logItem =(k: TreeKind) => `${k}_log`
@@ -131,6 +139,7 @@ export type PruneVerdict =
 export function crownOf(t: { y: number; tall: number; r: number; kind: TreeKind }, f = 1): { cy: number; hh: number; r: number; trunkH: number } {
   if (t.kind === 'starwillow') { const hh = t.tall * 0.45 * f; return { cy: t.y + 1.3 + hh, hh, r: t.r * 1.15 * f, trunkH: 2.8 } }   // the weeping skirt hangs low
   if (t.kind === 'dawnwood') { const hh = t.tall * 0.34 * f; return { cy: t.y + 3.8 + hh, hh, r: t.r * 1.1 * f, trunkH: 4.2 } }
+  if (t.kind === 'tensacia') { const hh = t.tall * 0.4 * f; return { cy: t.y + 3.4 + hh, hh, r: t.r * 1.05 * f, trunkH: 3.6 } }   // M135: a tall, broad spire on a heavy trunk
   const hh = t.tall * 0.3 * f
   return { cy: t.y + 2.4 + hh, hh, r: t.r * f, trunkH: 2.8 }
 }
@@ -158,20 +167,21 @@ export function prune(kind: TreeKind, id: string, rand: () => number = Math.rand
 /** What a tree gives (rolled, nothing changes): rolled at the first touch, paid whole at the end (channel.ts). */
 export function prunePlan(kind: TreeKind, rand: () => number = Math.random): { id: string; n: number }[] {
   const drops = [{ id: logItem(kind), n: 2 + Math.floor(rand() * 3) }]
-  if (rand() < SAPLING_CHANCE[kind]) drops.push({ id: saplingItem(kind), n: 1 })
+  if (SAPLING_CHANCE[kind] > 0 && rand() < SAPLING_CHANCE[kind]) drops.push({ id: saplingItem(kind), n: 1 })
+  if (kind === 'tensacia' && rand() < GREENSCALE_CHANCE) drops.push({ id: GREENSCALE, n: 1 })   // M135 s1: the fruit
   if (rand() < MAST_CHANCE) drops.push({ id: 'mast', n: 1 })   // bait's floor (inventory.ts › BAIT_FROM)
   drops.push(...rollHerb(TREE_HERB[kind], rand))   // M204: now and then an element herb at its foot (infusions.ts)
   return drops
 }
 /** The tree is done: XP lands on Forestry and it stays spent till `until` (M136: this cycle's reset, counted from the first touch). */
 export function pruneCommit(kind: TreeKind, id: string, now = Date.now(), until = now + TREE_DIAL[kind].respawnMs): { xp: number; levelUp: number | null } {
-  const def = NODE_DEFS[kind]
+  const xp = TREE_XP[kind]
   load()
-  const n = scaled(def.xp), r = addSkillXP(skills.forestry, n)   // mutates the skill in place (engine/skills.ts)
+  const n = scaled(xp), r = addSkillXP(skills.forestry, n)   // mutates the skill in place (engine/skills.ts)
   if (isKeeperNode(id)) setSpent(id, until, now); else pruned[id] = until
   save(now); bump()
   emitXp(skills.forestry, n, r.leveled)   // the HUD's XP bar (M21)
-  return { xp: def.xp, levelUp: r.leveled ? r.newLevel : null }
+  return { xp, levelUp: r.leveled ? r.newLevel : null }
 }
 
 /** Test hook: set any open-world skill's level (prospecting.test, rinning checks). */

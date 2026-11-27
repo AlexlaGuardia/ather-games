@@ -62,6 +62,10 @@ const FORESTRY = {
   shimmeroak_sapling: wood('Shimmeroak Sapling', 'A young shimmeroak, already stubborn. It will grow where you plant it.'),
   starwillow_sapling: wood('Starwillow Sapling', 'A young starwillow, tips faintly lit. It will grow where you plant it.'),
   dawnwood_sapling: wood('Dawnwood Sapling', 'A dawnwood seedling. Rare, and slow, and worth it.'),
+  // M135 s1 (RULED athernyx 4d65536 / signed 98e7f1c): Tensacia's yield. Blurbs: plain placeholders from the glossary, for @lark
+  tensacia_log: wood('Tensacia Log', 'Emerald green bark. Saw it into planks.'),
+  tensacia_plank: wood('Tensacia Plank', 'Pale green planks.'),
+  greenscale: wood('Greenscale', 'The Tensacia fruit. A food ingredient.'),
 } satisfies Record<string, ItemDef>
 for (const [id, def] of Object.entries(FORESTRY)) def.icon = `/open/icons/${id.replace(/_/g, '-')}.svg`
 for (const id of Object.keys(FORESTRY)) ITEM_GROUP[id] = 'forestry'

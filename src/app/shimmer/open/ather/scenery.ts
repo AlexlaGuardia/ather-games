@@ -97,9 +97,12 @@ export const SCENERY_BY: ReadonlyMap<string, SceneryKind> = new Map(SCENERY.map(
 //    palette, the same sizes, the same blocking. The Glade keeps every kind.
 export type SceneryMap = 'glade' | 'wilds'
 export const SCENERY_MAPS: readonly SceneryMap[] = ['glade', 'wilds']
+/** M135 s1: the node kinds the Wilds DO take, so Alex can place them himself (Tensacia's coves, the Sadlands' oases, M137). Each is a
+ *  real gatherable node there (page.tsx: gladeNodes over the Wilds' published pieces), with the piece's own wait. */
+export const WILDS_NODES: readonly string[] = [`${NODE_PREFIX}tensacia`]
 export function placeableOn(map: SceneryMap, k: string): boolean {
   const K = SCENERY_BY.get(k); if (!K) return false
-  return map === 'glade' || (K.group !== 'Nodes' && K.group !== 'Rooms' && !K.floats)
+  return map === 'glade' || WILDS_NODES.includes(k) || (K.group !== 'Nodes' && K.group !== 'Rooms' && !K.floats)
 }
 export const paletteOf = (map: SceneryMap): readonly SceneryKind[] => SCENERY.filter(s => placeableOn(map, s.k))
 /** the PUBLISHED Wilds layer's raw `props` (the live wilds-edits.json, passed through untouched by its route): cleaned the builder's

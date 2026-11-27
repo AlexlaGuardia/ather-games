@@ -11,7 +11,7 @@ import { toolDial } from '../../ui/tool-stage'
 import { TREE_DIAL, manaNeed, gatherSecs, cycleBudget, type GatherDial } from './gather-dials'
 import { rungOf } from './focuses'
 import { easeOf } from './rinsticks'
-import { TREE_KINDS, TREE_NAME, SAPLING_CHANCE, MAST_CHANCE, logItem, saplingItem } from './forestry'
+import { TREE_KINDS, TREE_NAME, SAPLING_CHANCE, MAST_CHANCE, GREENSCALE, GREENSCALE_CHANCE, logItem, saplingItem } from './forestry'
 import { CRYSTAL_KINDS, CRYSTAL_NAME, TIER, BLANKSTONE, CRYSTAL_ITEM, crystalDial, isSeep, isStone, SEEP_SHARDS, STONE_BLANKS } from './prospecting'
 import { DEWL, DEWLS_BY_TIER } from './dewl'
 import { edgeDial, edgeXp, edgeOn, edgeLeft, EDGE, type EdgeMetal } from './edges'
@@ -50,7 +50,7 @@ const row = (name: string, d: GatherDial, rung: number, drops: string): NodeRow 
 
 export function treeRows(rung: number, t?: EquippedTool): NodeRow[] {
   return TREE_KINDS.map(k => row(TREE_NAME[k], edgeDial(TREE_DIAL[k], t), rung,
-    `${nm(logItem(k))} 2-4 · ${nm(saplingItem(k))} ${pct(SAPLING_CHANCE[k])} · ${nm('mast')} ${pct(MAST_CHANCE)}`))
+    `${nm(logItem(k))} 2-4 · ${SAPLING_CHANCE[k] > 0 ? `${nm(saplingItem(k))} ${pct(SAPLING_CHANCE[k])}` : `${nm(GREENSCALE)} ${pct(GREENSCALE_CHANCE)}`} · ${nm('mast')} ${pct(MAST_CHANCE)}`))   // M135: Tensacia has no sapling, it has its fruit
 }
 export function crystalRows(rung: number, t?: EquippedTool): NodeRow[] {
   // M185 s1: one row per node kind, so the four gems (Aqual, Dinloid, Fuli, Rhyloid) each have their own line, in ladder order;

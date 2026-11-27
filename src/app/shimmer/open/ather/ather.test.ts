@@ -664,7 +664,7 @@ const worldDone = (async () => {
   ok(g.ok && g.drops.some(d => d.id === 'goldwood_sapling'), 'prune: a roll of 0 is under the sapling chance and paid none')
   const hi = prune('goldwood', 'test:hi', () => 0.99, now)
   ok(hi.ok && hi.drops.length === 1 && hi.drops[0].id === 'goldwood_log' && hi.drops[0].n === 4, 'prune: a high roll paid a sapling or not 4 logs')
-  ok(Object.values(SAPLING_CHANCE).every(c => c > 0 && c <= 0.1), 'prune: a sapling chance is not SMALL (a pruned tree regrows in minutes)')
+  ok(Object.entries(SAPLING_CHANCE).every(([k, c]) => (k === 'tensacia' ? c === 0 : c > 0) && c <= 0.1), 'prune: a sapling chance is not SMALL (a pruned tree regrows in minutes); M135: Tensacia has none')
   // BETA M6e: mast is bait's floor (a keeper out of bait with nothing landed): a roll of 0 pays one, a high roll none
   ok(g.ok && g.drops.some(d => d.id === 'mast' && d.n === 1) && hi.ok && !hi.drops.some(d => d.id === 'mast'), 'prune: mast did not drop under its chance (or dropped over it)')
   ok(MAST_CHANCE >= 0.2 && MAST_CHANCE <= 0.5, 'prune: mast is too rare to be a floor or common enough to farm')
