@@ -64,6 +64,7 @@ ok(/withZoneParts\(withPieces\(ww\.shape\), \[\.\.\.zonePartBoxes\(wildsParts\),
 ok(/setWildsPartBoxes\(\[\.\.\.zonePartBoxes\(wildsParts\), \.\.\.wildsSceneryBoxes\]\)/.test(page), 'page: Hollows steer round them, shots stop on them')
 ok(/zone\.kind === 'wilds' && wildsDecor\.length > 0 && <SceneryView items=\{wildsDecor\} \/>/.test(page) && /wildsDecor = useMemo\(\(\) => wildsScenery\.filter\(p => !isNode\(p\)\)/.test(page), 'page: the Wilds scene draws them (M135: all but the nodes)')
 ok(/zone\.kind === 'wilds' && wildsOwnNodes\.trees\.length > 0 && <GladeNodesView nodes=\{wildsOwnNodes\}/.test(page) && /<ForestryFX ww=\{wildsTrees\}/.test(page), 'page: M135 a placed Wilds node is drawn as a tree and aimed by ForestryFX')
+ok(/const atNode = [^\n]*zoneRef0\.current === 'wilds' && wildsNodeIds\.current\.has\(id\)/.test(page) && /const own = gladeOwn\(ch\.w\.id\)/.test(page), 'page: M135 a placed Wilds node can be worked IN the Wilds, and its yield lands on Wilds ground')
 const ed = readFileSync(new URL('../../dev/editors/TerrainEditor.tsx', import.meta.url), 'utf8')
 ok(/const canPlace = glade \|\| map === 'wilds'/.test(ed) && /usePlace\(placing, propList, setPropList, setStatus, water, glade \? 'glade' : 'wilds'\)/.test(ed), 'editor: Scenery mode opens on the Wilds with the Wilds palette')
 console.log(fails ? `\n${fails} FAILED` : '\nall pass'); process.exit(fails ? 1 : 0)

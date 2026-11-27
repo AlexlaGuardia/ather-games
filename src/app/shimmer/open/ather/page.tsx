@@ -888,6 +888,7 @@ function AtherSliceGame() {
   // M135 s1: a placed Wilds node (Tensacia's coves, scenery.ts › WILDS_NODES) is a real tree there: drawn by the Wilds' meshes, aimed + worked by ForestryFX
   const wildsOwnNodes = useMemo(() => gladeNodes(wildsScenery, ww ? ww.heightAt : () => NaN), [wildsScenery, ww])
   const wildsDecor = useMemo(() => wildsScenery.filter(p => !isNode(p)), [wildsScenery])
+  const wildsNodeIds = useRef(new Set<string>()); wildsNodeIds.current = new Set(wildsOwnNodes.trees.map(t => t.id))
   const wildsTrees = useMemo(() => ww && { treesNear: (x: number, z: number, r: number) => { const a = ww.treesNear(x, z, r); return wildsOwnNodes.trees.length ? [...a, ...wildsOwnNodes.treesNear(x, z, r)] : a } }, [ww, wildsOwnNodes])
   useEffect(() => { setWildsPartBoxes([...zonePartBoxes(wildsParts), ...wildsSceneryBoxes]); return () => setWildsPartBoxes([]) }, [wildsParts, wildsSceneryBoxes])   // M117 s3
   useEffect(() => { (window as unknown as { __wildsScenery?: unknown }).__wildsScenery = () => ({ items: wildsScenery.map(p => ({ id: p.id, k: p.k, x: p.x, z: p.z, y: p.y, q: p.q, s: p.s })), boxes: wildsSceneryBoxes }) }, [wildsScenery, wildsSceneryBoxes])   // read-only probe (m85-scenery-check)
@@ -1200,9 +1201,10 @@ function AtherSliceGame() {
   const chanName = (ch: Chan) => (ch.node === 'tree' ? TREE_NAME[ch.t.kind] : CRYSTAL_NAME[ch.c.kind])
   // M185 s1: the gem's own dial; M134 s1: with the fitted edge / tip (Venium faster, Eurleen cheaper)
   const treeDial = (t: Tree) => edgeDial(TREE_DIAL[t.kind], toolsRef.current.forestry), crystalDial = (c: Crystal) => edgeDial(crystalDialOf(c.kind), toolsRef.current.prospecting)
-  const atNode = (id: string) => (isKeeperNode(id) ? zoneRef0.current === 'glade' : zoneRef0.current === 'wilds')   // M153 s1b: the Glade's own nodes there, the Wilds' there
+  const atNode = (id: string) => (isKeeperNode(id) ? zoneRef0.current === 'glade' || (zoneRef0.current === 'wilds' && wildsNodeIds.current.has(id)) : zoneRef0.current === 'wilds')   // M153 s1b: the Glade's own nodes there, the Wilds' there; M135 s1: a node placed in the Wilds there
+  const gladeOwn = (id: string) => isKeeperNode(id) && zoneRef0.current === 'glade'   // M135 s1: a placed node in the Glade (not one placed in the Wilds)
   const rung = (node: 'tree' | 'crystal') => rungOf(toolsRef.current[node === 'tree' ? 'forestry' : 'prospecting'])
-  const nodeTry = (id: string, node: 'tree' | 'crystal', regrowMs: number, need: number) => ({ firstSteps: peekFirstSteps(), tutorial: isKeeperNode(id), tool: !!toolsRef.current[node === 'tree' ? 'forestry' : 'prospecting'], regrowMs, need, rung: rung(node) })   // M155 s2
+  const nodeTry = (id: string, node: 'tree' | 'crystal', regrowMs: number, need: number) => ({ firstSteps: peekFirstSteps(), tutorial: gladeOwn(id), tool: !!toolsRef.current[node === 'tree' ? 'forestry' : 'prospecting'], regrowMs, need, rung: rung(node) })   // M155 s2
   const pruneAimed = useCallback(() => {
     const t = aimRef.current.tree
     if (!t || !atNode(t.id)) return
@@ -1265,7 +1267,7 @@ function AtherSliceGame() {
     }
     // done: the whole roll on the ground beside the node (M141, ground-loot.ts); XP and the level land now, the goods on pick-up
     const fin = finishWork(ch.w); if (!fin) { stopChannel(); return }
-    const own = isKeeperNode(ch.w.id), hAt = own ? gladeShape.ground : (x: number, z: number) => ww?.heightAt(x, z) ?? -Infinity
+    const own = gladeOwn(ch.w.id), hAt = own ? gladeShape.ground : (x: number, z: number) => ww?.heightAt(x, z) ?? -Infinity
     const V = voidsRef.current, dry = (x: number, z: number) => { const y = ww?.heightAt(x, z) ?? -Infinity; return Number.isFinite(y) && !ww!.shape.water(x, y, z, x, y, z).some(b => x >= b.x0 && x <= b.x1 && z >= b.z0 && z <= b.z1 && y < b.y1) }
     const free = (x: number, z: number) => own ? hAt(x, z) > 0.1 && !bodyBlocked((x0, z0, x1, z1) => gladeShape.solids(x0, -50, z0, x1, 90, z1), x, hAt(x, z), z, 0.35) : !!ww && ww.walkable(x, z, 0.35) && (V?.weight(x, z) ?? 0) < FALL_LIP / 2 && dry(x, z) && !bodyBlocked(wildsStructures, x, ww.heightAt(x, z), z, 0.35)
     const feet = { x: px, y: dollDrive.current.y, z: pz }, yieldNow = (ch.node === 'crystal' ? withDewls(ch.w.drops, CRYSTAL_TIER[ch.c.kind]) : ch.w.drops).filter(d => d.n > 0)
