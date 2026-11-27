@@ -20,7 +20,7 @@ const CASES = [
   ['/', '--font-display', 'h1', 'cormorant-garamond'],
   ['/', '--font-body', 'body', 'inter'],
   ['/nolmir', '--font-game', '', 'chakra-petch'],   // /nolmir's root wears it under font-mono; no visible text resolves to it
-  ['/nolmir/starforge', '--font-game', 'h1', 'chakra-petch'],
+  ['/arcade/all', '--font-game', 'h2.gx-title', 'chakra-petch'],   // a heading that wears the game face (gx-title)
   ['/shimmer/open/ather?hour=14', '--font-hearth-display', '', 'fraunces'],
   ['/shimmer/open/ather?hour=14', '--font-hearth-body', '', 'nunito'],
 ] as const
@@ -67,7 +67,7 @@ for (const [path, v, sel, label] of CASES) {
     return { srcs: [...new Set(srcs)], fam, first, tag: el ? `${el.tagName.toLowerCase()}${el.id ? '#' + el.id : ''} "${(el.textContent ?? '').trim().slice(0, 24)}"` : '(none)', cf, w, loaded, media }
   }, v, sel)
   console.log(`  ${path} ${v} = ${res.fam.slice(0, 80)}`)
-  if (path === '/nolmir') console.log(`  (/nolmir: computed-family assert runs on /nolmir/starforge h1; here the face is checked by file)`)
+  if (path === '/nolmir') console.log(`  (/nolmir: computed-family assert runs on /arcade/all h2.gx-title; here the face is checked by file)`)
   else ok(!!res.first && res.cf.split(',')[0].trim().replace(/^["']|["']$/g, '') === res.first, `${path}: ${label}: ${res.tag} computed font-family "${res.cf.slice(0, 70)}" leads with ${res.first}`)
   ok(res.loaded > 0, `${path}: ${label} face loads (weight ${res.w}, ${res.loaded} face(s))`)
   const served: string[] = []
