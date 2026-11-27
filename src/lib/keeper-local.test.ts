@@ -132,6 +132,7 @@ const DEVICE_KEYS = [
   'shimmer-inspector-collapsed',  // a dev panel remembering it was collapsed
   'worktable.hotbar',             // the structure worktable's nine slots (creative mode, 09-16).
   'builder.placeSlots',           // the World Builder's Place mode hotbar (M153 s1a, owner tool, this device).
+  'builder.stamps',               // M85 s3: the World Builder's saved stamps (owner tool, owner-gated page, this device), beside the hotbar.
                                   // A builder's tool layout, owner-gated dev page, one author per
                                   // box — a device convenience, not progress anyone earned.
   'ather:device',                 // M12.5: this browser's id for the cloud-save write lease (open/cloud-sync.tsx)

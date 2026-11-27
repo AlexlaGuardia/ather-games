@@ -10,6 +10,8 @@
 // s1c-3: the four garden rooms (Rooms group) are palette pieces: true size, no toggle, level on a pad; display only.
 // M168 s2: a floating piece (a lily) goes on water only, at its level: the crosshair takes the water's surface, dry ground is refused.
 // Water erased under it: not drawn (here or in the game), kept in the list, back with the water.
+// M85 s3: STAMPS + COPY / PASTE (world/stamps.ts): Shift + left selects, "Save as stamp" shelves it, a shelf button or Ctrl+V holds it on
+// the crosshair (a ghost of every piece on the ground), R turns it as one, right places new pieces, X / Q puts it away; Ctrl+C copies.
 // This file never saves: TerrainEditor owns the list (draft, autosave, Publish), BuilderFly draws.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
@@ -20,6 +22,7 @@ import { BuildIcon } from '../../open/ather/build-icon'   // M169
 import { SCENERY, SCENERY_BY, SCENERY_GROUPS, paletteOf, placeableOn, type SceneryMap, endSnap, floats, floatSpot, type Water, fenceTilt, isSolid, sceneryBoxes, sceneryPlaced, type PlacedProp } from '../../open/ather/scenery'
 import { SceneryView } from '../../open/ather/scenery-view'
 import { SCATTER_KINDS, SCATTER_DEFAULT_MIX, SCATTER_MAX, DENSITY_STEPS, RADIUS_STEP, clampRadius, eraseScatter, paintScatter, scatterCount } from '../../world/scatter-brush'   // M85 s2
+import { STAMPS_KEY, addStamp, loadStamps, placeStamp, stampOf, stampSpots, stampable, type Stamp, type StampPiece } from '../../world/stamps'   // M85 s3
 import { tiltMatrix } from '../../open/ather/scenery-filler'
 import { GladeLots, useGladeStanding } from '../../open/ather/glade-lots-view'
 import { GladeHome } from '../../open/ather/glade-home-view'
@@ -43,7 +46,10 @@ export interface Hand { k: string; q: number; s: number; solid?: boolean; /** s1
 const stepWait = (w: number, back: boolean) => { const a = NODE_WAITS as readonly number[]; return back ? [...a].reverse().find(v => v < w) ?? a[a.length - 1] : a.find(v => v > w) ?? a[0] }
 export interface PlaceApi {
   props: readonly Prop[]; hand: Hand | null; moving: string | null; snap: number
-  put: (x: number, z: number) => void; pick: (id: string) => void; wheel: (dy: number) => void
+  /** M85 s3: `ok` = may a stamped piece stand there (on land) */
+  put: (x: number, z: number, ok?: (x: number, z: number) => boolean) => void; pick: (id: string) => void; wheel: (dy: number) => void
+  /** M85 s3: Shift + left adds / removes the piece under the crosshair to the selection; a stamp (or a paste) in hand follows the crosshair */
+  select: (id: string) => void; selected: readonly string[]; stamp: { pieces: readonly StampPiece[]; q: number } | null
   /** BuilderFly reports the piece under the crosshair */
   setTarget: (id: string | null) => void
   /** M168 s2: the draft's water, as drawn */
@@ -79,13 +85,26 @@ export function usePlace(on: boolean, props: readonly Prop[], setProps: (ps: Pro
   const [held, setHeld] = useState<Omit<Hand, 'k'>>({ q: 0, s: 1 })
   // M85 s2: the scatter brush (K): its own dials, its mix of kinds
   const [scat, setScat] = useState(false), [sRadius, setSRadius] = useState(3), [sDensity, setSDensity] = useState(0.5), [sKinds, setSKinds] = useState<string[]>([...SCATTER_DEFAULT_MIX])
+  // M85 s3: the selection (ids), the copy buffer, the stamps shelf (this device, per owner: the builder is owner-only) and the stamp in hand
+  const [selS, setSel] = useState<string[]>([]), [clip, setClip] = useState<StampPiece[] | null>(null), [stamps, setStampsS] = useState<Stamp[]>([])
+  const [sHand, setSHand] = useState<{ name: string; pieces: StampPiece[]; q: number } | null>(null)
+  useEffect(() => { try { setStampsS(loadStamps(localStorage.getItem(STAMPS_KEY))) } catch { /* */ } }, [])
+  const setStamps = useCallback((f: (s: Stamp[]) => Stamp[]) => setStampsS(s => { const n = f(s); try { localStorage.setItem(STAMPS_KEY, JSON.stringify(n)) } catch { /* */ } return n }), [])
+  const sel = useMemo(() => selS.filter(id => props.some(p => p.id === id)), [selS, props])   // a piece undone / deleted leaves the selection
   const mp = moving ? props.find(p => p.id === moving) ?? personPiece(moving) : null
-  const sk = slots[slot], k = scat ? null : mp ? mp.k : sk && placeableOn(map, sk) ? sk : null   // M85: a Glade-only kind in a slot is an empty slot on the Wilds
+  const sk = slots[slot], k = scat || sHand ? null : mp ? mp.k : sk && placeableOn(map, sk) ? sk : null   // M85: a Glade-only kind in a slot is an empty slot on the Wilds
   const hand = useMemo<Hand | null>(() => (k ? { k, ...held, ...(isNode({ k }) || isRoom({ k }) || isStanding({ k }) ? { s: 1, solid: undefined } : {}) } : null), [k, held])
-  const S = useRef({ props, slots, slot, snap, turn, moving, target, held, hand, inv, scat, sRadius, sDensity, sKinds }); S.current = { props, slots, slot, snap, turn, moving, target, held, hand, inv, scat, sRadius, sDensity, sKinds }
+  const S = useRef({ props, slots, slot, snap, turn, moving, target, held, hand, inv, scat, sRadius, sDensity, sKinds, sel, clip, sHand }); S.current = { props, slots, slot, snap, turn, moving, target, held, hand, inv, scat, sRadius, sDensity, sKinds, sel, clip, sHand }
   const go = useRef({ setProps, say, water }); go.current = { setProps, say, water }
-  const put = useCallback((x: number, z: number) => {
-    const c = S.current; if (!c.hand) { go.current.say('this slot is empty: E opens the inventory'); return }
+  const put = useCallback((x: number, z: number, ok?: (x: number, z: number) => boolean) => {
+    const c = S.current
+    if (c.sHand) {   // M85 s3: stamp it (it stays in hand: stamp again elsewhere)
+      const r = placeStamp(c.props, c.sHand.pieces, snapXZ(x, c.snap), snapXZ(z, c.snap), c.sHand.q, ok)
+      if (!r) { go.current.say(`no room: the map holds ${PROPS_MAX} pieces (and ${SCATTER_MAX} scattered) at most`); return }
+      if (r.added.length) { S.current = { ...c, props: r.props }; go.current.setProps(r.props) }
+      go.current.say(`${c.sHand.name}: ${r.added.length} piece${r.added.length === 1 ? '' : 's'} placed${r.added.length < c.sHand.pieces.length ? ` (${c.sHand.pieces.length - r.added.length} off the land left out)` : ''}`); return
+    }
+    if (!c.hand) { go.current.say('this slot is empty: E opens the inventory'); return }
     const w = c.moving ? whoOf(c.hand.k) : null
     if (w) { go.current.setProps(putWho(c.props, w, { ...spotFor(c.props, c.hand, c.moving, c.snap, x, z), q: c.hand.q, ...(c.hand.turned ? { turned: true } : {}) })); setMoving(null); setHeld({ q: 0, s: 1 }); return }
     const pl = c.moving ? placeOf(c.hand.k) : null
@@ -111,18 +130,37 @@ export function usePlace(on: boolean, props: readonly Prop[], setProps: (ps: Pro
     else if (!erase && !c.sKinds.length) go.current.say('the scatter mix is empty: 1-8 pick its kinds')
     else if (!erase && scatterCount(c.props) >= SCATTER_MAX) go.current.say(`the map holds ${SCATTER_MAX} scattered pieces at most`)
   }, [])
+  const select = useCallback((id: string) => {   // M85 s3
+    const p = S.current.props.find(q => q.id === id)
+    if (!p || !stampable(p)) { go.current.say('people, houses and nodes are not copied'); return }
+    setSel(s => (s.includes(id) ? s.filter(v => v !== id) : [...s, id]))
+  }, [])
+  const saveStamp = useCallback(() => { const ps = stampOf(S.current.props, S.current.sel); if (!ps.length) { go.current.say('Shift + left selects pieces first'); return } setStamps(s => addStamp(s, ps)); go.current.say(`stamp saved: ${ps.length} pieces`) }, [setStamps])
+  const takeStamp = useCallback((st: Stamp) => { setSHand({ name: st.name, pieces: st.pieces, q: 0 }); setScat(false); setMoving(null) }, [])
+  const dropStamp = useCallback((id: string) => setStamps(s => s.filter(v => v.id !== id)), [setStamps])
   const wheel = useCallback((dy: number) => { if (S.current.scat) { setSRadius(r => clampRadius(r + (dy < 0 ? RADIUS_STEP : -RADIUS_STEP))); return } const kk = S.current.hand?.k; setHeld(h => ({ ...h, s: scaleBy(h.s, dy, kk) })) }, [])   // M85: the outcrops scale to 10
   const choose = useCallback((kk: string) => { setSlots(s => s.map((v, i) => (i === S.current.slot ? kk : v))); setHeld(h => ({ q: h.q, s: 1 })); setMoving(null) }, [setSlots])
   // a piece undone / rolled back away while it is being moved: let go of it
   useEffect(() => { if (moving && !mp) { setMoving(null); setHeld({ q: 0, s: 1 }) } }, [moving, mp])
-  useEffect(() => { if (!on) { setInv(false); setMoving(null); setScat(false) } }, [on])
+  useEffect(() => { if (!on) { setInv(false); setMoving(null); setScat(false); setSHand(null); setSel([]) } }, [on])
   useEffect(() => {
     if (!on) return
     const key = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement | null
-      if ((el && /^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName)) || e.ctrlKey || e.metaKey || e.repeat) return
+      if ((el && /^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName)) || e.repeat) return
       const c = S.current
-      if (e.code === 'KeyK') { setScat(v => !v); setMoving(null); return }   // M85 s2
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && (e.code === 'KeyC' || e.code === 'KeyV')) {   // M85 s3: copy / paste
+        e.preventDefault()
+        if (e.code === 'KeyC') { const ps = stampOf(c.props, c.sel); if (ps.length) { setClip(ps); go.current.say(`copied ${ps.length} piece${ps.length === 1 ? '' : 's'}: Ctrl+V holds them on the crosshair`) } else go.current.say('Shift + left selects pieces first') }
+        else if (c.clip) { setSHand({ name: 'paste', pieces: c.clip, q: 0 }); setScat(false); setMoving(null) }
+        else go.current.say('nothing copied yet: select, then Ctrl+C')
+        return
+      }
+      if (e.ctrlKey || e.metaKey) return
+      if (e.code === 'KeyK') { setScat(v => !v); setMoving(null); setSHand(null); return }   // M85 s2
+      if (c.sHand && e.code === 'KeyR') { setSHand(h => h && { ...h, q: turnBy(h.q, c.turn) }); return }   // M85 s3: the stamp turns as one
+      if (c.sHand && (e.code === 'KeyX' || e.code === 'Delete' || e.code === 'KeyQ')) { setSHand(null); return }   // put it away
+      if (c.sHand && /^Digit[1-9]$/.test(e.code)) setSHand(null)
       if (c.scat) {   // the brush's own keys: 1-8 = a kind in or out of the mix, , . = density
         const i = /^Digit[1-8]$/.test(e.code) ? +e.code.slice(5) - 1 : -1
         if (i >= 0 && SCATTER_KINDS[i]) { const kk = SCATTER_KINDS[i]; setSKinds(a => (a.includes(kk) ? a.filter(v => v !== kk) : [...a, kk])) }
@@ -151,9 +189,10 @@ export function usePlace(on: boolean, props: readonly Prop[], setProps: (ps: Pro
     window.addEventListener('keydown', key); return () => window.removeEventListener('keydown', key)
   }, [on])
   const scatter = useMemo(() => (scat ? { radius: sRadius } : null), [scat, sRadius])
-  const api = useMemo<PlaceApi>(() => ({ props, hand, moving, snap, put, pick, wheel, setTarget, water, scatter, dab }), [props, hand, moving, snap, put, pick, wheel, water, scatter, dab])
+  const stampHeld = useMemo(() => (sHand ? { pieces: sHand.pieces, q: sHand.q } : null), [sHand])
+  const api = useMemo<PlaceApi>(() => ({ props, hand, moving, snap, put, pick, wheel, setTarget, water, scatter, dab, select, selected: sel, stamp: stampHeld }), [props, hand, moving, snap, put, pick, wheel, water, scatter, dab, select, sel, stampHeld])
   const toggleKind = useCallback((kk: string) => setSKinds(a => (a.includes(kk) ? a.filter(v => v !== kk) : [...a, kk])), [])
-  return { api, slots, slot, setSlot, snap, turn, inv, setInv, choose, target, held, hand, map, scat, setScat, sRadius, sDensity, setSDensity, sKinds, toggleKind }
+  return { api, slots, slot, setSlot, snap, turn, inv, setInv, choose, target, held, hand, map, scat, setScat, sRadius, sDensity, setSDensity, sKinds, toggleKind, sel, setSel, clip, stamps, sHand, setSHand, saveStamp, takeStamp, dropStamp }
 }
 
 // ── in the Canvas ──
@@ -179,11 +218,18 @@ export function PlaceLayer({ api, active, heightAt, rev, label, solids }: { soli
   const gk = active ? api?.hand?.k : undefined
   const ghostItems = useMemo<PlacedProp[]>(() => (gk ? [{ id: 'ghost', k: gk, x: 0, y: 0, z: 0, q: 0, s: 1 }] : []), [gk])
   const { gl } = useThree()
+  // M85 s3: the stamp (or paste) in hand: a ghost of every piece, each on the ground where it would land (asked again when the aim moves)
+  const [stampAt, setStampAt] = useState<{ x: number; z: number } | null>(null), stampKey = useRef('')
+  const st = active ? api?.stamp ?? null : null
+  const stampGhost = useMemo<PlacedProp[]>(() => (st && stampAt ? stampSpots(st.pieces, stampAt.x, stampAt.z, st.q).map((p, i) => ({ id: `stamp${i}`, k: p.k, x: p.x, y: heightAt(p.x, p.z), z: p.z, q: p.q, s: p.s })).filter(p => Number.isFinite(p.y)) : []), [st, stampAt, heightAt, rev])   // eslint-disable-line react-hooks/exhaustive-deps
+  const selItems = useMemo(() => (api?.selected.length ? items.filter(p => api.selected.includes(p.id)) : []), [api, items])
   // a room's ghost at the level it will stand at, asked again only when it moved
   const topAt = useRef({ key: '', y: NaN }), roomTop = (r: NonNullable<ReturnType<typeof roomPad>>) => { const key = `${r.room}/${r.x}/${r.z}/${r.yaw}/${rev}`; if (topAt.current.key !== key) topAt.current = { key, y: padLevel(r, heightAt).top }; return topAt.current.y }
   useFrame(() => {
     const on = active && !!api && document.pointerLockElement === gl.domElement, c = on ? centre() : null
     if (api && (c?.id ?? null) !== last.current) { last.current = c?.id ?? null; api.setTarget(last.current) }
+    { const g0 = st && c?.ground ? { x: snapXZ(c.ground.x, api!.snap || 0.1), z: snapXZ(c.ground.z, api!.snap || 0.1) } : null, key = g0 ? `${g0.x}/${g0.z}` : ''   // M85 s3
+      if (key !== stampKey.current) { stampKey.current = key; setStampAt(g0) } }
     const rg = ring.current, sr = api?.scatter?.radius   // M85 s2: the brush's ring on the ground under the crosshair
     if (rg) { const at = sr && c?.ground ? c.ground : null, y = at ? heightAt(at.x, at.z) : NaN; rg.visible = !!at && Number.isFinite(y); if (rg.visible && at) { rg.position.set(at.x, y + 0.15, at.z); rg.scale.setScalar(sr!) } }
     const g = ghost.current
@@ -210,6 +256,8 @@ export function PlaceLayer({ api, active, heightAt, rev, label, solids }: { soli
       <sprite position-y={K.h + 0.6} scale={[0.55 * tags[i].aspect, 0.55, 1]} renderOrder={4} raycast={() => {}}><spriteMaterial map={tags[i].tex} depthTest={false} /></sprite>
       <mesh rotation-x={-Math.PI / 2} position-y={0.12} raycast={() => {}}><ringGeometry args={[1.25, 1.5, 32]} /><meshBasicMaterial color="#8ef0c0" transparent opacity={0.85} depthWrite={false} /></mesh>
     </group> })}
+    {stampGhost.length > 0 && <group name="stamp-ghost"><SceneryView items={stampGhost} ghost /></group>}
+    {selItems.map(p => { const K = SCENERY_BY.get(p.k), r = Math.max(0.5, Math.max(K?.w ?? 1, K?.d ?? 1) * p.s * 0.6); return <mesh key={p.id} position={[p.x, p.y + 0.12, p.z]} rotation-x={-Math.PI / 2} renderOrder={5} raycast={() => {}} userData={{ selected: p.id }}><ringGeometry args={[r * 0.85, r, 32]} /><meshBasicMaterial color="#38bdf8" depthTest={false} transparent opacity={0.9} /></mesh> })}
     <mesh ref={ring} rotation-x={-Math.PI / 2} visible={false} renderOrder={5} raycast={() => {}} name="scatter-ring"><ringGeometry args={[0.96, 1, 64]} /><meshBasicMaterial color="#fbbf24" depthTest={false} transparent opacity={0.9} /></mesh>
     <lineSegments ref={frame} geometry={edges} visible={false} renderOrder={5}><lineBasicMaterial color="#fbbf24" depthTest={false} transparent /></lineSegments>
   </group>
@@ -312,7 +360,7 @@ export function GladeFixed({ heightAt, rev = 0, place, trees = GLADE_FRAME.meado
 // ── the screen: hotbar, status line, inventory ──
 const COLOR: Record<string, string> = { Nodes: '#8ef0c0', Rooms: '#d8a85c', Trees: '#4f9a5f', Bushes: '#8fb35a', Plants: '#a9c763', 'Rocks and logs': '#8b857b', 'Fences and signs': '#a5834f', Crystals: '#9a8ae0', Props: '#b98a4e', Build: '#c9a36a', Furniture: '#7fa6c4' }
 export function PlaceHud({ place, locked, count, status }: { place: ReturnType<typeof usePlace>; locked: boolean; count: number; status?: string }) {
-  const { slots, slot, setSlot, snap, turn, inv, setInv, choose, held, hand, api, target, map, scat, setScat, sRadius, sDensity, sKinds, toggleKind } = place
+  const { slots, slot, setSlot, snap, turn, inv, setInv, choose, held, hand, api, target, map, scat, setScat, sRadius, sDensity, sKinds, toggleKind, sel, setSel, clip, stamps, sHand, setSHand, saveStamp, takeStamp, dropStamp } = place
   const PAL = paletteOf(map)   // M85 s1
   const dry = useMemo(() => api.props.filter(p => floats(p) && api.water(p.x, p.z) === null).length, [api.props, api.water])
   const tp = target ? api.props.find(p => p.id === target) ?? personPiece(target) : null, name = (k: string | null | undefined) => (k && isStanding({ k }) ? personName(k) : k ? SCENERY_BY.get(k)?.label ?? k : 'empty')
@@ -343,11 +391,27 @@ export function PlaceHud({ place, locked, count, status }: { place: ReturnType<t
         <button key={kk} onClick={() => toggleKind(kk)} data-testid={`scatter-kind-${kk}`} className={`min-w-0 h-9 rounded border text-[10px] leading-tight px-2 ${sKinds.includes(kk) ? 'border-amber-400 bg-amber-500/25 text-white' : 'border-white/20 bg-black/60 text-white/60'}`}>
           <span className="text-white/40 mr-1">{i + 1}</span>{SCENERY_BY.get(kk)?.label ?? kk}</button>)}
         <button onClick={() => setScat(false)} className="h-9 rounded border border-white/20 bg-black/60 text-white/70 text-[10px] px-2">Placing (K)</button></div>}
-      {!scat && <div className="rounded bg-black/70 px-2 py-1 text-[11px] font-mono text-white/80 tabular-nums text-center">
+      {!scat && sHand && <div className="rounded bg-black/70 px-2 py-1 text-[11px] font-mono text-white/80 tabular-nums text-center" data-testid="stamp-hud">
+        {sHand.name === 'paste' ? 'pasting' : `stamp ${sHand.name}`} · {sHand.pieces.length} piece{sHand.pieces.length === 1 ? '' : 's'} · right places · turn {Math.round(sHand.q * 90)}° (R, step {turn}° T) · snap {snap || 'free'} (G) · X or Q puts it away
+        {status && <span className="block text-amber-200">{status}</span>}
+        {!locked && <span className="block text-white/55">click the view to place · Esc frees the mouse</span>}
+      </div>}
+      {!scat && !sHand && sel.length > 0 && <div className="flex flex-wrap items-center justify-center gap-1 rounded bg-black/70 px-2 py-1 text-[11px] font-mono text-sky-200 pointer-events-auto" data-testid="select-hud">
+        <span>{sel.length} selected · Shift + left adds or removes · Ctrl+C copies{clip ? ' · Ctrl+V pastes' : ''}</span>
+        <button onClick={saveStamp} data-testid="stamp-save" className="h-7 rounded border border-sky-400/60 bg-sky-500/20 px-2 text-white">Save as stamp</button>
+        <button onClick={() => setSel([])} data-testid="select-clear" className="h-7 rounded border border-white/20 bg-black/60 px-2 text-white/70">Clear</button>
+      </div>}
+      {!scat && stamps.length > 0 && <div className="flex flex-wrap justify-center gap-1 pointer-events-auto w-full max-w-[720px]" data-testid="stamp-shelf">
+        <span className="h-8 leading-8 text-[10px] uppercase tracking-[0.18em] text-white/40 px-1">Stamps</span>
+        {stamps.map(st => <span key={st.id} className={`flex h-8 items-stretch rounded border text-[10px] ${sHand?.name === st.name ? 'border-amber-400 bg-amber-500/25' : 'border-white/20 bg-black/60'}`}>
+          <button onClick={() => (sHand?.name === st.name ? setSHand(null) : takeStamp(st))} data-testid={`stamp-${st.id}`} className="px-2 text-white/80">{st.name} · {st.pieces.length}</button>
+          <button onClick={() => dropStamp(st.id)} data-testid={`stamp-del-${st.id}`} aria-label={`delete ${st.name}`} className="px-1.5 text-white/40 hover:text-white border-l border-white/15">×</button></span>)}
+      </div>}
+      {!scat && !sHand && <div className="rounded bg-black/70 px-2 py-1 text-[11px] font-mono text-white/80 tabular-nums text-center">
         {api.moving ? 'moving ' : ''}{name(hand?.k)} · {hand && isStanding(hand) ? 'right puts down' : hand && isNode(hand) ? `true size · grows back in ${nodeWaitH(hand)} h (N)` : hand && isRoom(hand) ? 'true size' : `size ${held.s.toFixed(2)} (wheel)`} · turn {Math.round(held.q * 90)}° (R, step {turn}° T) · snap {snap || 'free'} (G){hand && floats(hand) ? ' · on water' : hand && !isNode(hand) && !isRoom(hand) && !isStanding(hand) ? ` · ${isSolid(hand) ? 'blocks' : 'walk through'} (B)` : ''} · {count}/{PROPS_MAX}{dry ? ` · ${dry} not drawn: no water` : ''}
         {tp && <span className="block text-amber-200">{name(tp.k)} · {isStanding(tp) ? 'left or M moves · X back to the first spot' : 'left pick up · M move · X delete'} {isStanding(tp) ? '' : '· '}{isStanding(tp) ? '' : isNode(tp) ? `N grows back in ${nodeWaitH(tp)} h` : isRoom(tp) ? 'true size' : floats(tp) ? 'on water' : `B ${isSolid(tp) ? 'blocks' : 'walk through'}`}</span>}
         {status && <span className="block text-amber-200">{status}</span>}
-        {!locked && <span className="block text-white/55">click the view: right places, left picks up · E inventory · K scatter brush · Esc frees the mouse</span>}
+        {!locked && <span className="block text-white/55">click the view: right places, left picks up, Shift + left selects · E inventory · K scatter brush · Esc frees the mouse</span>}
       </div>}
       {!scat && <div className="flex gap-1 pointer-events-auto w-full max-w-[620px]">{slots.map((k, i) =>
         <button key={i} onClick={() => setSlot(i)} data-testid={`place-slot-${i + 1}`} className={`flex-1 min-w-0 h-11 rounded border text-[9px] leading-tight px-1 text-center overflow-hidden ${i === slot ? 'border-amber-400 bg-amber-500/25 text-white' : 'border-white/20 bg-black/60 text-white/70'}`}>

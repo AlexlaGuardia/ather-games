@@ -190,7 +190,7 @@ function Lock({ camRef, hover, painting, pr, setLocked }: { camRef: React.Mutabl
         const to = centreHit.current(); const erase = e.button === 0 || e.shiftKey || e.altKey
         stroke.current = { erase, last: to }; if (to) P.dab(to.x, to.z, erase, onLand); return
       }
-      if (P && isLocked()) { const c = look(); const to = aimed(c, P.hand); if (e.button === 2 && to) P.put(to.x, to.z); else if (e.button === 0 && c.id) P.pick(c.id); return }
+      if (P && isLocked()) { const c = look(); const to = aimed(c, P.hand); if (e.button === 2 && to) P.put(to.x, to.z, onLand); else if (e.button === 0 && c.id && !P.stamp) { if (e.shiftKey) P.select(c.id); else P.pick(c.id) } return }   // M85 s3: Shift + left selects; a stamp in hand stamps on the land only
       if (e.button !== 0 || (!pr.current.lockLook && !P)) return
       if (!isLocked()) { try { const r = el.requestPointerLock() as unknown; if (r && typeof (r as Promise<void>).catch === 'function') (r as Promise<void>).catch(() => {}) } catch { /* cooldown after an Esc */ } return }
       const p = centreHit.current(); if (!p) return

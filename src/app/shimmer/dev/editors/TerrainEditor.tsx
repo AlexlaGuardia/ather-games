@@ -41,6 +41,7 @@ import { flattenZone, normRect, bigEnough, overlapping, zoneAt, newZoneId, zoneO
 import { choicesFor, type Choice } from './zone-choices'
 import { PROPS_KEY, pieceCount, propsToStore, propsOfStore, type Prop } from '../../world/builder-props'   // M153 s1a: Place mode
 import { usePlace, PlaceHud } from './place-mode'
+import { flushInit } from '../../world/builder-flush'   // M85 s3
 import { setGladePeople } from '../../open/ather/glade-people'   // M153 s1c-1
 import { gladePeople } from '../../open/ather/glade-cluster'
 import { peopleProblems, placeProblems } from '../../open/ather/glade-people-check'
@@ -612,7 +613,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
   const layerRef = useRef(() => layerOf()); layerRef.current = () => layerOf()
   useEffect(() => () => {
     if (!dirtyRef.current.size) return
-    try { fetch('/shimmer/save-builder', { method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ map, action: 'draft', layer: layerRef.current() }) }) } catch { /* */ }
+    try { fetch('/shimmer/save-builder', flushInit(JSON.stringify({ map, action: 'draft', layer: layerRef.current() }))).catch(() => {}) } catch { /* */ }   // M85 s3: keepalive only under its 64 KiB quota (builder-flush.ts)
   }, [map])
   // never lose a sculpt to a closed tab
   useEffect(() => {
@@ -671,7 +672,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
       zones: () => zonesRef.current.map(z => ({ id: z.id, x0: z.x0, z0: z.z0, x1: z.x1, z1: z.z1, h: z.h, tag: z.tag, n: Object.values(z.prev).reduce((a, m) => a + Object.keys(m).length, 0), build: z.build ?? [] })),
       selZone, deleteZone, tagZone, setBrush,
       /** M153 s1a: the placed pieces in the draft, what the hand holds, and the layer a save would send */
-      props: () => propsOfStore(edits.current[PROPS_KEY]), place: { on: placing, slot: place.slot, slots: place.slots, snap: place.snap, turn: place.turn, hand: place.hand, target: place.target, moving: place.api.moving, inv: place.inv, put: place.api.put, /** M85 s2 */ scat: place.scat, setScat: place.setScat, radius: place.sRadius, density: place.sDensity, kinds: place.sKinds, dab: place.api.dab }, layer: () => layerRef.current(),
+      props: () => propsOfStore(edits.current[PROPS_KEY]), place: { on: placing, slot: place.slot, slots: place.slots, snap: place.snap, turn: place.turn, hand: place.hand, target: place.target, moving: place.api.moving, inv: place.inv, put: place.api.put, /** M85 s2 */ scat: place.scat, setScat: place.setScat, radius: place.sRadius, density: place.sDensity, kinds: place.sKinds, dab: place.api.dab, /** M85 s3 */ sel: place.sel, stamps: place.stamps, stampHand: place.sHand, clip: place.clip }, layer: () => layerRef.current(),
     }
   }, [ready, tile, map, heightAt, brushTiles, undo, redo, save, publish, rollback, snapB, savedAt, strength, radius, brush, lockLook, showOv, ovAll, ovDoors, voidRev, status, glade, nyx, selZone, placing, place])
 
