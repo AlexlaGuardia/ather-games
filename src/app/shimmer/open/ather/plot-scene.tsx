@@ -102,16 +102,41 @@ function MistGroup({ pts, sale, ring }: { pts: { x: number; y: number; z: number
 
 /** The island alone (ground, grid, underside, threshold, gate, Gregory, mist): your plot, or a cluster-mate's set at
  *  their place (ather/cluster-scene.tsx). The sky round it is PlotScene's, drawn once. */
-export function PlotIsland({ owned, pages, lift, place, gate = true }: { owned: ReadonlySet<string>; pages: number; lift?: Lift | null; place?: Place; gate?: boolean }) {
+/** BETA M193: an island's ground with its place BAKED into the vertices (world space, drawn with no parent transform). A mate's
+ *  island used to draw inside a turned <group>, so the GPU computed its seam vertices through a different matrix than the
+ *  meadow's identical ones: off by float rounding, the shared edge opened sub-pixel cracks the sky showed through at grazing
+ *  angles. Gardens turn by quarter-turns only, so the bake is an exact swap/negate: every seam vertex is bit-identical to the
+ *  meadow's. Same convention as three's rotation-y (and glade-layer.ts liftGeometry): world = place + (lx c + lz s, -lx s + lz c). */
+export function bakePlace(g: THREE.BufferGeometry, place: Place): THREE.BufferGeometry {
+  const q = ((Math.round(place.rot / (Math.PI / 2)) % 4) + 4) % 4, p = g.getAttribute('position') as THREE.BufferAttribute
+  for (let k = 0; k < p.count; k++) {
+    const lx = p.getX(k), lz = p.getZ(k)
+    const [rx, rz] = q === 0 ? [lx, lz] : q === 1 ? [lz, -lx] : q === 2 ? [-lx, -lz] : [-lz, lx]
+    p.setXYZ(k, place.x + rx, p.getY(k), place.z + rz)
+  }
+  p.needsUpdate = true
+  g.computeVertexNormals(); g.computeBoundingSphere()
+  return g
+}
+export function PlotGround({ lift, place }: { lift?: Lift | null; place?: Place }) {
   // M83 s2b: in the Glade the builder layer's delta displaces the baked island (glade-layer.ts); place = where a mate's island sits
-  const geo = useMemo(() => (lift ? liftGeometry(plotGeometry(), lift, place) : plotGeometry()), [lift, place])
+  // M193: with a place the geometry is baked to world space first, so the lift reads world points with no place of its own
+  const geo = useMemo(() => {
+    const g = place ? bakePlace(plotGeometry(), place) : plotGeometry()
+    return lift ? liftGeometry(g, lift) : g
+  }, [lift, place])
   // M9 (11-22): it goes to <mesh geometry={...}> as a prop, which R3F never disposes. PlotIsland remounts on every return home,
   // so each trip left the old island (~40k verts) and grid in the renderer's binding cache: ~2 MB a trip, 63 MB after 34
   useEffect(() => () => geo.dispose(), [geo])
   const ground = useGroundMaterial()
+  return <mesh geometry={geo} material={ground} userData={GROUND_TAG} />
+}
+
+/** `ground={false}`: the caller draws the island's ground itself (a mate's, baked to world space: PlotGround). */
+export function PlotIsland({ owned, pages, lift, gate = true, ground = true }: { owned: ReadonlySet<string>; pages: number; lift?: Lift | null; gate?: boolean; ground?: boolean }) {
   return (
     <>
-      <mesh geometry={geo} material={ground} userData={GROUND_TAG} />
+      {ground && <PlotGround lift={lift} />}
       <mesh position-y={-20} rotation-x={Math.PI}><coneGeometry args={[PLOT_R * 1.05, 34, 12, 2]} /><meshLambertMaterial color={P.under} flatShading /></mesh>
       <mesh position={[THRESHOLD.x, plotHeightAt(THRESHOLD.x, THRESHOLD.z) + 0.03, THRESHOLD.z]} rotation-x={-Math.PI / 2} renderOrder={groundOrder('mark')}>
         <ringGeometry args={[1.1, 1.45, 18]} /><meshBasicMaterial color="#efe0a8" {...groundMat('mark')} />

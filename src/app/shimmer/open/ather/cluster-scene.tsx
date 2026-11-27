@@ -8,7 +8,7 @@
 
 import { useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
-import { PlotIsland } from './plot-scene'
+import { PlotIsland, PlotGround } from './plot-scene'
 import { MIDDLE_Y, type Frame } from './cluster'
 import { MEADOW_CELL, type Meadow } from './meadow'
 import { P } from './palette'
@@ -103,7 +103,7 @@ export function ClusterScene({ frame, lift }: { frame: Frame; lift?: Lift | null
   const geo = useMemo(() => (m ? (lift ? liftGeometry(meadowGeometry(m), lift) : meadowGeometry(m)) : null), [m, lift])
   const ground = useGroundMaterial()
   useEffect(() => () => geo?.dispose(), [geo])
-  const places = useMemo(() => frame.mates.map(mt => ({ x: mt.x, z: mt.z, rot: mt.rot })), [frame])   // stable, or each render re-lifts
+  const places = useMemo(() => frame.mates.map(mt => ({ x: mt.x, z: mt.z, rot: mt.rot })), [frame])   // stable, or each render re-bakes
   if (!frame.linked || !frame.middle || !m || !geo) return null
   const mid = frame.middle, span = (m.n - 1) * MEADOW_CELL
   return (
@@ -114,9 +114,14 @@ export function ClusterScene({ frame, lift }: { frame: Frame; lift?: Lift | null
       <mesh position={[mid.x, MIDDLE_Y + 0.04, mid.z]} rotation-x={-Math.PI / 2} renderOrder={groundOrder('mark')}><ringGeometry args={[5, 6.2, 28]} /><meshBasicMaterial color="#efe0a8" {...groundMat('mark')} /></mesh>
       {/* the cluster's underside: one stone root under the whole meadow, as each island has its own */}
       <mesh position={[mid.x, -34, mid.z]} rotation={[Math.PI, Math.PI / 4, 0]}><coneGeometry args={[span * 0.62, 60, 8, 2]} /><meshLambertMaterial color={P.under} flatShading /></mesh>
+      {/* M193: each mate's ground is drawn baked to world space (PlotGround), never through the turned group, so its seam with
+          the meadow is watertight; the rest of the island (mist, mark, underside) still stands in the group */}
       {frame.mates.map((mt, n) => (
-        <group key={mt.quarter} position={[mt.x, 0, mt.z]} rotation-y={mt.rot}>
-          <PlotIsland owned={new Set(mt.owned)} pages={0} lift={lift} place={lift ? places[n] : undefined} gate={false} />
+        <group key={mt.quarter}>
+          <PlotGround lift={lift} place={places[n]} />
+          <group position={[mt.x, 0, mt.z]} rotation-y={mt.rot}>
+            <PlotIsland owned={new Set(mt.owned)} pages={0} gate={false} ground={false} />
+          </group>
         </group>
       ))}
     </>
