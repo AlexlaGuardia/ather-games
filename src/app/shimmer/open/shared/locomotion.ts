@@ -265,6 +265,10 @@ export const STEP_CAPTURE = 0.55
 /** The most a FALLING keeper lands up onto in one frame: a 46° slope at a 12 m/s hop rises ~0.21 m per 1/60 s. Above it
  *  is a lip, which belongs to the ledge grab. */
 export const AIR_STEP_RISE = 0.25
+/** Land steeper than this is not a floor you walk UP: it blocks like a wall (and climbs, if tall). The voxel grid never
+ *  needed it (a cell is flat or it is a face). ~46 deg. terrain-world.ts applies it to land; the tick reads it for M222's
+ *  rising sliver (see `stepped`). */
+export const MAX_WALK_GRADIENT = 1.035
 
 // ── ★ STEP SMOOTHING (2026-08-11, Alex: walking up half slabs "feels jagged") ────────────────
 // A step-up is a TELEPORT and has to be: the body cannot be halfway inside the slab for a few
@@ -924,12 +928,23 @@ export function tickLocomotion(s: LocoState, input: LocoInput, world: CellProbe 
     // to slide jump ... I'm catching something on the jump and it's canceling out the momentum"). Coming down on an
     // uphill slope, the land reaches the feet a frame before the vertical step lands them, and that read as a WALL: the
     // axis zeroed and the air bank collapsed. floorAt only offers WALKABLE land above the feet, so a cliff still stops a
-    // hop. Rising keepers keep the old rule: a jump does not snap up onto a ledge mid-climb (that is the vault's).
+    // hop. (Rising keepers were held to a no-step rule here until M222, below.)
     // ⚠ Only the sliver a SLOPE rises in one frame (AIR_STEP_RISE): a real lip is still the ledge grab's, and a falling
     // keeper must hang from it, not pop up onto it (voxel3d locomotion.test 'a held Space still grabs').
-    if (s.airborne && s.vy > 0) return false
+    // ★ M222 (Alex 11-26: "it cancels momentum instead of pushing you forward, you stop and hop up"): the RISING half had
+    // the same defect. The jump tick sets vy but does not move the feet, so on the first airborne tick the body still
+    // stands at take-off height; on ANY upslope the land a frame ahead is a sliver above the feet, the guard below read it
+    // as a wall, the axis zeroed, the air bank collapsed to 0 and the air branch fell back to RUN_SPEED * 0.5: a running
+    // jump in the Wilds left the ground at half speed (and a jump up a steep bank stopped dead when the bank caught it on
+    // the way up). Now a rising keeper rides a sliver no taller than walkable LAND can rise over this step (the step's
+    // length x MAX_WALK_GRADIENT) plus THIS tick's own lift (vy * dt): a slope under or overtaking the jump never stops it,
+    // while a lip (a vertical face: a big rise over a tiny step, the hang's, voxel3d locomotion.test 'a held Space still
+    // grabs') still blocks exactly as before. tests: open/jump-momentum.test.ts.
     const ft = w.floorAt(tx, tz, s.py, STEP_CAPTURE)
-    if (ft === null || ft <= s.py || ft - s.py > (s.airborne ? AIR_STEP_RISE : 0.5) + 1e-6) return false
+    const airRise = s.vy > 0
+      ? Math.min(AIR_STEP_RISE, s.vy * dt + MAX_WALK_GRADIENT * Math.hypot(tx - s.px, tz - s.pz))
+      : AIR_STEP_RISE
+    if (ft === null || ft <= s.py || ft - s.py > (s.airborne ? airRise : 0.5) + 1e-6) return false
     if (!w.bodyFree(tx, tz, ft)) return false
     // The feet snap (see STEP_SMOOTH_HALF_LIFE) and the eye owes the difference.
     stepDebt(s, ft - s.py)

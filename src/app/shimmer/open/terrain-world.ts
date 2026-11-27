@@ -13,7 +13,7 @@
 // world without cells, never a new number.
 
 import {
-  BODY_R, BODY_H, VAULT_REACH, MANTLE_REACH, LADDER_REACH,
+  BODY_R, BODY_H, VAULT_REACH, MANTLE_REACH, LADDER_REACH, MAX_WALK_GRADIENT,
   type LocoWorld, type CellProbe, CELL_SOLID, CELL_WATER, CELL_HALF,
 } from './shared/locomotion'
 
@@ -36,9 +36,9 @@ const LIP_MIN = STEP_MAX + 0.05  // a walkable step never grabs — the voxel li
 const FLOOR_LOOK_DOWN = 1.4   // floorProbe scans this far below the feet
 const FACE_SAMPLES = [BODY_R + 0.05, BODY_R + 0.35, BODY_R + 0.7]  // how far past the body a face counts as "beside"
 const FACE_LO = 0.5, FACE_HI = 1.3  // waist and head: both solid = a face too tall to vault (climb country)
-/** Land steeper than this is not a floor you walk UP — it blocks like a wall (and climbs, if tall).
- *  The voxel grid never needed it: a cell is flat or it is a face. ~46°. */
-export const MAX_WALK_GRADIENT = 1.035
+/** Land steeper than this is not a floor you walk UP: it blocks like a wall (and climbs, if tall). The number lives in
+ *  shared/locomotion.ts since M222 (a rising jump rides at most this steep a sliver of land); re-exported here for its readers. */
+export { MAX_WALK_GRADIENT }
 const SLOPE_H = 0.25
 
 const inside = (b: Box, x: number, y: number, z: number) =>
