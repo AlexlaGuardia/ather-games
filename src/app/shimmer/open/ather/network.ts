@@ -9,7 +9,7 @@
 
 import { LINGSTON, LINGSTON_CLEAR } from './lingston'
 import { GLADE } from './moonwell-glade'
-import { applySettlementEdits } from './settlement-edits'   // M237
+import { applySettlementEdits, type SettlementEdits } from './settlement-edits'   // M237
 import { ensureEdits, settlementEditsLive } from './wilds-edits'
 export const SEASON = 1   // until the season clock exists, the network is season 1's
 export type SettlementBiome = 'shore' | 'meadow' | 'woods' | 'rock'
@@ -68,6 +68,12 @@ export async function loadNetwork(season = SEASON, base = '/open/wilds', layer =
     if (typeof window !== 'undefined') (window as unknown as { __atherNet?: () => Network }).__atherNet = () => m   // checks: READ only
     return m
   } catch { return null }
+}
+
+/** M237 s4 (World Builder): the bake + a DRAFT's settlement edits routed the way the game routes the published layer (the same
+ *  withRoutes: spurs to moved/added settlements, pads), so the builder draws the paths the game will. No edits = the bake. */
+export async function routeSettlementEdits(baked: Network, edits: SettlementEdits | null | undefined, base = '/open/wilds'): Promise<Network> {
+  return (await withRoutes(baked, applySettlementEdits(baked, edits), base)).m
 }
 
 /** M237 s3: the raw tiles round the owner's moved/added settlements (and its tent asks) are fetched, and settlement-routes.ts

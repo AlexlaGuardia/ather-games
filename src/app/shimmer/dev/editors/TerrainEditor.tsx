@@ -14,7 +14,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { loadWilds, type WildsMeta } from '../../open/ather/wilds'
 import { loadIndex, makeWorld, zonesOf, tileOf, TILE_M, type WildsWorld } from '../../open/ather/wilds-world'
-import { loadNetwork, clearing, roadField } from '../../open/ather/network'
+import { loadNetwork, clearing, roadField, routeSettlementEdits } from '../../open/ather/network'
 import { makeVoids, type IndexLike } from '../../open/ather/wilds-voids'
 import { paintVoids, cellKey, cellOf, VCELL, type VoidEdits } from '../../open/ather/void-edits'
 import { paintNodeZones, zoneCode, zoneOf, nzCell, nzKey, NZ_CELL, NZ_STEPS, FOREST_PER_CELL, CRYSTAL_PER_CELL, KIND_PER_CELL, NODE_KIND_ZONES, isKindZone, type NodeZoneType, type NodeKindZone } from '../../open/ather/node-zones'   // M86
@@ -34,7 +34,7 @@ import { NYX_REGION, NYX_WATER_Y, nyxBrushTile, nyxTiles, sampleNyxTile, nyxN, n
 import BuilderOverview from './BuilderOverview'
 import type { OvTile, OvSource } from './builder-overview'
 import { loadRegion, type Region } from '../../open/region'
-import { wildsOverlay, gladeOverlay, nyxOverlay, poisIn, roadsIn, POI_COLOR, ROAD_COLOR, EMPTY_OVERLAY, type Overlay } from './builder-pois'
+import { wildsOverlay, wildsPathRoads, gladeOverlay, nyxOverlay, poisIn, roadsIn, POI_COLOR, ROAD_COLOR, EMPTY_OVERLAY, type Overlay, type OvRoad } from './builder-pois'
 import { GLADE_TILE_CENTER, GLADE_SIZE } from '../../world/glade-builder'
 import { NYX_TILE_M } from '../../world/nyx-builder'
 import { zoneParts } from '../../open/ather/zone-parts'   // M84 s3: Fly shows each zone's build
@@ -165,13 +165,25 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
   const settleList = useMemo(() => (baseNet ? applySettlementEdits(baseNet, settles).settlements as EditedSettlement[] : []), [baseNet, settles])
   const settleListRef = useRef(settleList); settleListRef.current = settleList
   const selSettleRef = useRef(selSettle); selSettleRef.current = selSettle
+  // M237 s4: the paths as the game will route them with the DRAFT's settlements (network.ts routeSettlementEdits = the game's own
+  // withRoutes: spurs to moved/added ones); drawn like the baked paths in every view. null = no edits (the bake's paths stand).
+  const [routedRoads, setRoutedRoads] = useState<OvRoad[] | null>(null)
+  useEffect(() => {
+    if (glade || nyx || !baseNet || !settles.length) { setRoutedRoads(null); return }
+    let dead = false
+    const t = setTimeout(() => { routeSettlementEdits(baseNet, settles).then(n => { if (!dead) setRoutedRoads(n === baseNet ? null : wildsPathRoads(n)) }).catch(() => { /* the bake's paths stand */ }) }, 350)   // a drag settles first
+    return () => { dead = true; clearTimeout(t) }
+  }, [baseNet, settles, glade, nyx])
   const [selZone, setSelZone] = useState<string | null>(null)   // the zone whose tag popup is open
   const [buildZone, setBuildZone] = useState<string | null>(null)   // M84 s2: the zone whose build is open
   const zoneDrag = useRef<{ ax: number; az: number; bx: number; bz: number } | null>(null)
   const [zoneBox, setZoneBox] = useState<{ x0: number; z0: number; x1: number; z1: number } | null>(null)   // the rectangle being dragged
   const [zoneNet, setZoneNet] = useState<Network | null>(null)   // the Wilds' season network: its Moglins fill the Home list
   // M84 s1: the zones (a marker named by the tag + the rectangle) ride on the M105 overlay, in all three views
-  const ovAll = useMemo((): Overlay => { if (!zones.length) return ovData; const z = zoneOverlay(zones); return { pois: [...ovData.pois, ...z.pois], roads: [...ovData.roads, ...z.roads] } }, [ovData, zones])
+  const ovAll = useMemo((): Overlay => {
+    const ov = routedRoads ? { pois: ovData.pois, roads: [...ovData.roads.filter(r => r.kind !== 'path'), ...routedRoads] } : ovData   // M237 s4
+    if (!zones.length) return ov; const z = zoneOverlay(zones); return { pois: [...ov.pois, ...z.pois], roads: [...ov.roads, ...z.roads] }
+  }, [ovData, zones, routedRoads])
 
   const worldRef = useRef<WildsWorld | null>(null)
   const gridRef = useRef<Grid | null>(null)       // the Wilds' world, or the Nyx continent's virtual tiles
@@ -800,8 +812,8 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
           </svg>
         )}
         {showOv && tileOv && B && (
-          <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox={`${B.ox - B.meta.sizeX / 2} ${B.oz - B.meta.sizeZ / 2} ${B.meta.sizeX} ${B.meta.sizeZ}`} preserveAspectRatio="none" data-testid="ov-tile">
-            {tileOv.roads.map((r, k) => <polyline key={k} points={r.pts.map(q => `${q[0]},${q[1]}`).join(' ')} fill="none" stroke={ROAD_COLOR} strokeOpacity={0.9} strokeWidth={2} vectorEffect="non-scaling-stroke" strokeDasharray={r.kind === 'ferry' ? '6 4' : undefined} data-road={r.kind} />)}
+          <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox={`${B.ox - B.meta.sizeX / 2} ${B.oz - B.meta.sizeZ / 2} ${B.meta.sizeX} ${B.meta.sizeZ}`} preserveAspectRatio="none" data-testid="ov-tile" data-routed={routedRoads ? routedRoads.length : 0}>
+            {tileOv.roads.map((r, k) => <polyline key={k} points={r.pts.map(q => `${q[0]},${q[1]}`).join(' ')} fill="none" stroke={ROAD_COLOR} strokeOpacity={0.9} strokeWidth={2} vectorEffect="non-scaling-stroke" strokeDasharray={r.kind === 'ferry' ? '6 4' : undefined} data-road={r.kind} data-path={r.id} />)}
             {tileOv.pois.map((p, k) => { const m = B.meta.sizeX / 760; return (
               <g key={k} data-poi={p.kind} data-name={p.name} data-x={p.x} data-z={p.z}>
                 <circle cx={p.x} cy={p.z} r={5 * m} fill={POI_COLOR[p.kind]} stroke="black" strokeWidth={1.2} vectorEffect="non-scaling-stroke" />

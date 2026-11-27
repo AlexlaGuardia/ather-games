@@ -21,7 +21,7 @@ import { isPitstop } from '../../open/continent/pitstops'
 
 export type PoiKind = 'settlement' | 'fair' | 'arrival' | 'neck' | 'crossing' | 'moonwell' | 'gate' | 'garden' | 'folk' | 'lot' | 'stop' | 'place' | 'shop' | 'zone'   // zone: M84 s1 building zones (world/builder-zones.ts), drawn on this overlay
 export interface Poi { kind: PoiKind; name: string; x: number; z: number }
-export interface OvRoad { kind: string; pts: [number, number][] }
+export interface OvRoad { kind: string; pts: [number, number][]; /** M237 s4: a Wilds path's ends `a>b` (checks read it) */ id?: string }
 export interface Overlay { pois: Poi[]; roads: OvRoad[] }
 export const EMPTY_OVERLAY: Overlay = { pois: [], roads: [] }
 
@@ -43,9 +43,10 @@ export function wildsOverlay(net: Network | null, crossings: readonly Crossing[]
   }
   pois.push({ kind: 'arrival', name: 'arrival (Greg\'s waymark)', x: ARRIVAL.x, z: ARRIVAL.z })
   for (const c of crossings ?? []) pois.push({ kind: c.kind === 'neck' ? 'neck' : 'crossing', name: c.kind === 'neck' ? 'cooled neck' : 'path crossing', x: c.x, z: c.z })
-  const roads: OvRoad[] = (net?.paths ?? []).map(p => ({ kind: 'path', pts: p.pts.map(q => [q[0], q[1]] as [number, number]) }))
-  return { pois, roads }
+  return { pois, roads: wildsPathRoads(net) }
 }
+/** the Wilds network's paths as overlay roads (M237 s4: also the builder draft's ROUTED network, network.ts routeSettlementEdits) */
+export const wildsPathRoads = (net: Pick<Network, 'paths'> | null): OvRoad[] => (net?.paths ?? []).map(p => ({ kind: 'path', id: `${p.a}>${p.b}`, pts: p.pts.map(q => [q[0], q[1]] as [number, number]) }))
 
 /** Moonwell Glade (the closed cluster): every placed thing the Glade's own modules export */
 export function gladeOverlay(): Overlay {
