@@ -14,6 +14,7 @@ import { VOIDED_W, type VoidField } from './wilds-voids'
 import { relieve, outcropsIn, outcropRoll } from './relief'
 import { addEdits, ponds as pondsOf, fallSheets, fallLines, type TileEdits, type WaterMap, type PondCell, type FallMap, type Sheet } from './wilds-edits'
 import type { RoadField } from './network'
+import { NZ_CELL, NZ_NONE, nzCell, nzKey, zoneOf, slotLive, SLOTS_MAX, type NodeZones } from './node-zones'   // BETA M86
 
 /** Biome ids, matched to export_wilds.py. What a biome is FOR: what you gather there, what a waymark there sends
  *  home. The numbers are the file format; the names are build vocabulary, not canon place names. */
@@ -58,6 +59,8 @@ export interface Wilds {
 }
 
 const TRUNK_R = 0.35
+/** a tree's size by kind: a dawnwood is an old giant, a starwillow a slim weeping one */
+const bigOf = (k: TreeKind) => (k === 'dawnwood' ? 1.55 : k === 'shimmeroak' ? 1.2 : k === 'starwillow' ? 0.95 : 1)
 /** The tile's edge: a wall the walker leans on, never a fall (a fall is the PLOT's edge, and it means home). */
 const BORDER = 2, BORDER_H = 400
 
@@ -71,7 +74,7 @@ const hash = (a: number, b: number, s = 0) => {
 /** `clear(x, z)` in WORLD coords (tile-local + the tile's centre): no tree stands there (the path network: paths,
  *  settlements, the fair's ground). Ids are counted as if it stood, so a prune saved before the paths still finds its
  *  tree, and crystals still dodge it, so no crystal moved either. */
-type ParseArgs = [meta: WildsMeta, dm: Int16Array, biomes: Uint8Array, zoneAt?: (i: number, j: number) => Zone, clear?: (x: number, z: number) => boolean, relief?: boolean, roads?: RoadField | null, voids?: VoidField | null, edits?: TileEdits | null, water?: WaterMap | null, falls?: FallMap | null]
+type ParseArgs = [meta: WildsMeta, dm: Int16Array, biomes: Uint8Array, zoneAt?: (i: number, j: number) => Zone, clear?: (x: number, z: number) => boolean, relief?: boolean, roads?: RoadField | null, voids?: VoidField | null, edits?: TileEdits | null, water?: WaterMap | null, falls?: FallMap | null, nodeZones?: NodeZones | null]
 export function parseWilds(...a: ParseArgs): Wilds {
   const g = parseSteps(...a)
   for (;;) { const r = g.next(); if (r.done) return r.value }
@@ -90,7 +93,7 @@ export async function parseWildsSliced(a: ParseArgs, budgetMs = 6): Promise<Wild
   }
 }
 /** The parse, as a generator that yields after each row of its heavy loops (relief + void carve, voids, trees, crystals). */
-function* parseSteps(meta: WildsMeta, dm: Int16Array, biomes: Uint8Array, zoneAt: (i: number, j: number) => Zone = () => 'meadows', clear?: (x: number, z: number) => boolean, relief = true, roads?: RoadField | null, voids?: VoidField | null, edits?: TileEdits | null, waterMap?: WaterMap | null, fallMap?: FallMap | null): Generator<void, Wilds, void> {
+function* parseSteps(meta: WildsMeta, dm: Int16Array, biomes: Uint8Array, zoneAt: (i: number, j: number) => Zone = () => 'meadows', clear?: (x: number, z: number) => boolean, relief = true, roads?: RoadField | null, voids?: VoidField | null, edits?: TileEdits | null, waterMap?: WaterMap | null, fallMap?: FallMap | null, nodeZones?: NodeZones | null): Generator<void, Wilds, void> {
   const { nx, nz, cell, sizeX, sizeZ } = meta
   if (dm.length !== nx * nz) throw new Error(`wilds ${meta.name}: ${dm.length} heights, want ${nx * nz}`)
   if (biomes.length !== (nx - 1) * (nz - 1)) throw new Error(`wilds ${meta.name}: ${biomes.length} biome cells, want ${(nx - 1) * (nz - 1)}`)
@@ -171,7 +174,7 @@ function* parseSteps(meta: WildsMeta, dm: Int16Array, biomes: Uint8Array, zoneAt
     // which trees COUNT is decided on the raw land (ids stable); where they stand is the relieved land
     if (slopeOf(rawAt, x, z) > 0.6 || rawAt(x, z) < meta.waterY + 1) continue
     const y = heightAt(x, z)
-    const big = t.kind === 'dawnwood' ? 1.55 : t.kind === 'shimmeroak' ? 1.2 : t.kind === 'starwillow' ? 0.95 : 1
+    const big = bigOf(t.kind)
     const id = `${meta.name}:${stood.length}`; stood.push({ x, z })
     if (voids && voids.weight(x + ox, z + oz) > 0) continue   // M41: none on the lip of a cloud void
     if (voids && voids.weight(x + ox, z + oz) > 0) continue   // M41: none on the lip of a cloud void
@@ -245,6 +248,50 @@ function* parseSteps(meta: WildsMeta, dm: Int16Array, biomes: Uint8Array, zoneAt
     }
   }
 
+  // ★ BETA M86: the owner's NODE ZONES (node-zones.ts), after everything generated stood. Skipped whole when there are none, so
+  // a layer without zones parses to exactly today's nodes (node-zones.test.ts holds the digest). NO NODES cells drop what stands
+  // in them (their ids simply stop existing); DENSE cells add new nodes in their own id namespace (zt / zc), never renumbering.
+  if (nodeZones) yield* zoneNodes(nodeZones)
+  function* zoneNodes(Z: NodeZones): Generator<void, void, void> {
+    if (!Object.keys(Z).length) return
+    const at = (x: number, z: number) => Z[nzKey(nzCell(x + ox), nzCell(z + oz))]
+    const keep = <T extends { x: number; z: number }>(a: T[]) => { let w = 0; for (const n of a) if (at(n.x, n.z) !== NZ_NONE) a[w++] = n; a.length = w }
+    keep(trees); keep(crystals)
+    // spacing: no new node within GAP of any node (a trunk's box is <= 0.7 m, so a thick forest may close its crowns)
+    const GAP = 1.8, taken = new Map<string, { x: number; z: number }[]>(), q = (x: number, z: number) => `${Math.floor(x / GAP)},${Math.floor(z / GAP)}`
+    const take = (x: number, z: number) => { const k = q(x, z), a = taken.get(k); if (a) a.push({ x, z }); else taken.set(k, [{ x, z }]) }
+    const near = (x: number, z: number) => { const i = Math.floor(x / GAP), j = Math.floor(z / GAP); for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (const p of taken.get(`${i + a},${j + b}`) ?? []) if (Math.hypot(p.x - x, p.z - z) < GAP) return true; return false }
+    for (const n of trees) take(n.x, n.z)
+    for (const n of crystals) take(n.x, n.z)
+    const i0 = nzCell(-hx + ox), i1 = nzCell(hx + ox - 1e-6), j0 = nzCell(-hz + oz), j1 = nzCell(hz + oz - 1e-6)
+    for (let cj = j0; cj <= j1; cj++) {
+      yield
+      for (let ci = i0; ci <= i1; ci++) {
+        const zn = zoneOf(Z[nzKey(ci, cj)]); if (!zn || zn.type === 'none') continue
+        const forest = zn.type === 'forest'
+        for (let k = 0; k < SLOTS_MAX; k++) {
+          const s = 500 + k * 16 + (forest ? 0 : 8)
+          if (!slotLive(k, zn.perCell, hash(ci, cj, s))) continue
+          const x = (ci + 0.1 + hash(ci, cj, s + 1) * 0.8) * NZ_CELL - ox, z = (cj + 0.1 + hash(ci, cj, s + 2) * 0.8) * NZ_CELL - oz
+          if (Math.abs(x) > hx - 2 || Math.abs(z) > hz - 2) continue
+          const zone = zoneAt(Math.min(4, Math.max(0, Math.floor((x + hx) / NODE_M))), Math.min(4, Math.max(0, Math.floor((z + hz) / NODE_M))))
+          if (rawAt(x, z) < meta.waterY + (forest ? 1 : 0.4) || slopeOf(heightAt, x, z) > 0.9 || near(x, z)) continue
+          if ((voids && voids.weight(x + ox, z + oz) > 0) || clear?.(x + ox, z + oz) || (voided && voided[cellOf(x, z)])) continue
+          const roll = hash(ci, cj, s + 3)
+          if (forest) {
+            const t = treeFor(zone, BIOME.woods, 1, roll); if (!t) continue
+            const big = bigOf(t.kind)
+            trees.push({ x, z, y: heightAt(x, z), tall: (5 + hash(ci, cj, s + 4) * 5) * big, r: (1.6 + hash(ci, cj, s + 5) * 1.2) * big, kind: t.kind, id: `${meta.name}:zt${ci}_${cj}_${k}` })
+          } else {
+            const c = crystalFor(zone, BIOME.rock, roll); if (!c) continue
+            crystals.push({ x, z, y: heightAt(x, z), kind: c.kind, s: 0.8 + hash(ci, cj, s + 4) * 0.5, rot: hash(ci, cj, s + 5) * Math.PI * 2, id: `${meta.name}:zc${ci}_${cj}_${k}` })
+          }
+          take(x, z)
+        }
+      }
+    }
+  }
+
   // Trunk boxes in a cell grid for `solids` (the walker asks a small box many times a frame).
   const G = 16, gw = Math.ceil(sizeX / G), gh = Math.ceil(sizeZ / G)
   const grid: Box[][] = Array.from({ length: gw * gh }, () => [])
@@ -282,13 +329,13 @@ function* parseSteps(meta: WildsMeta, dm: Int16Array, biomes: Uint8Array, zoneAt
 }
 
 /** Browser loader: the three files export_wilds.py writes. */
-export async function loadWilds(name: string, base = '/open/wilds', zoneAt?: (i: number, j: number) => Zone, clear?: (x: number, z: number) => boolean, roads?: RoadField | null, voids?: VoidField | null, edits?: TileEdits | null, water?: WaterMap | null, falls?: FallMap | null): Promise<Wilds> {
+export async function loadWilds(name: string, base = '/open/wilds', zoneAt?: (i: number, j: number) => Zone, clear?: (x: number, z: number) => boolean, roads?: RoadField | null, voids?: VoidField | null, edits?: TileEdits | null, water?: WaterMap | null, falls?: FallMap | null, nodeZones?: NodeZones | null): Promise<Wilds> {
   const [meta, bin, bio] = await Promise.all([
     meteredFetch(`${base}/${name}.json`, 'wilds').then(r => { if (!r.ok) throw new Error(`wilds ${name}.json ${r.status}`); return r.json() as Promise<WildsMeta> }),
     meteredFetch(`${base}/${name}.bin`, 'wilds').then(r => { if (!r.ok) throw new Error(`wilds ${name}.bin ${r.status}`); return r.arrayBuffer() }),
     meteredFetch(`${base}/${name}.biome`, 'wilds').then(r => { if (!r.ok) throw new Error(`wilds ${name}.biome ${r.status}`); return r.arrayBuffer() }),
   ])
-  return parseWildsSliced([meta, new Int16Array(bin), new Uint8Array(bio), zoneAt, clear, true, roads, voids, edits, water, falls])
+  return parseWildsSliced([meta, new Int16Array(bin), new Uint8Array(bio), zoneAt, clear, true, roads, voids, edits, water, falls, nodeZones])
 }
 
 /** The tile's centre in CONTINENT world coordinates (continent.json: origin at the centre, 10 m per source px).

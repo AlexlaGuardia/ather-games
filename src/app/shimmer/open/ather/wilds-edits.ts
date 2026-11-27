@@ -9,6 +9,7 @@
 //
 // ★ The brush math and the undo history below are PURE (no React, no three, no fetch): node tests drive them (wilds-edits.test.ts).
 
+import { cleanNodeZones, type NodeZones } from './node-zones'   // M86
 import { cleanVoids, type VoidEdits } from './void-edits'
 
 export type TileEdits = Record<string, number>          // vertex k -> delta (dm)
@@ -315,6 +316,7 @@ let WATER: Record<string, WaterMap> = {}
 let FALLS: Record<string, FallMap> = {}
 let VOIDS: VoidEdits = {}
 let PROPS: unknown = null   // M85 s1: the published layer's raw `props` (scenery.ts wildsPublishedProps cleans them)
+let NODES: NodeZones = {}   // M86: the published layer's node zones (node-zones.ts), cleaned
 let ZONES: unknown = null   // M84 s3b: the published layer's raw `zones` (zone-parts.ts publishedZones cleans them; kept raw here so this file needs no builder import)
 let loading: Promise<void> | null = null
 export const editsFor = (name: string): TileEdits | null => EDITS[name] ?? null
@@ -326,17 +328,19 @@ export const voidEditsLive = (): VoidEdits => VOIDS
 export const zonesJsonLive = (): { zones: unknown } => ({ zones: ZONES })
 /** M85 s1: the published layer's placed scenery, raw (scenery.ts wildsPublishedProps); call after ensureEdits() */
 export const propsJsonLive = (): unknown => PROPS
-export interface Layer { edits: Edits; water: Record<string, WaterMap>; falls: Record<string, FallMap>; voids: VoidEdits; zones?: unknown; props?: unknown }
+/** M86: the published layer's node zones (wilds.ts parse takes them); call after ensureEdits() */
+export const nodeZonesLive = (): NodeZones => NODES
+export interface Layer { edits: Edits; water: Record<string, WaterMap>; falls: Record<string, FallMap>; voids: VoidEdits; zones?: unknown; props?: unknown; nodes?: NodeZones }
 export async function fetchLayer(): Promise<Layer> {
   try {
     const r = await fetch('/shimmer/open/wilds-edits', { cache: 'no-store' })
     if (!r.ok) return { edits: {}, water: {}, falls: {}, voids: {} }
-    const j = await r.json(); return { edits: cleanEdits(j), water: cleanWaters(j), falls: cleanFallss(j), voids: cleanVoids(j), zones: (j as { zones?: unknown } | null)?.zones ?? null, props: (j as { props?: unknown } | null)?.props ?? null }
+    const j = await r.json(); return { edits: cleanEdits(j), water: cleanWaters(j), falls: cleanFallss(j), voids: cleanVoids(j), zones: (j as { zones?: unknown } | null)?.zones ?? null, props: (j as { props?: unknown } | null)?.props ?? null, nodes: cleanNodeZones(j) }
   } catch { return { edits: {}, water: {}, falls: {}, voids: {} } }   // no layer = the exported land, exactly
 }
 export function ensureEdits(): Promise<void> {
   if (typeof fetch !== 'function' || typeof window === 'undefined') return Promise.resolve()   // node tests: no layer
-  return (loading ??= fetchLayer().then(l => { EDITS = l.edits; WATER = l.water; FALLS = l.falls; VOIDS = l.voids; ZONES = l.zones ?? null; PROPS = l.props ?? null }))
+  return (loading ??= fetchLayer().then(l => { EDITS = l.edits; WATER = l.water; FALLS = l.falls; VOIDS = l.voids; ZONES = l.zones ?? null; PROPS = l.props ?? null; NODES = l.nodes ?? {} }))
 }
 /** Owner only (the route 403s anyone else). Saves each named tile's WHOLE height map and/or water map (empty = remove it) in ONE
  *  request, so the route does one read-modify-write (parallel per-tile POSTs raced: M62 check, 11-21). */

@@ -17,7 +17,7 @@ import { parseWilds, loadWilds, BIOME, type BiomeId, type Wilds, type Tree, type
 import type { Zone } from './forestry'
 import type { RoadField } from './network'
 import type { VoidField } from './wilds-voids'
-import { editsFor, waterFor, fallsFor, ensureEdits } from './wilds-edits'
+import { editsFor, waterFor, fallsFor, ensureEdits, nodeZonesLive } from './wilds-edits'
 
 export const TILE_M = 1000
 export const SEA_FLOOR = -20
@@ -153,8 +153,10 @@ export function zonesOf(w: WildsWorld, name: string): (i: number, j: number) => 
   return (i, j) => m.get(`${i},${j}`) ?? 'meadows'
 }
 
-export async function stream(w: WildsWorld, x: number, z: number, load: (name: string) => Promise<Wilds> = n => loadWilds(n, '/open/wilds', zonesOf(w, n), w.clear, w.roads, w.voids, editsFor(n), waterFor(n), fallsFor(n))): Promise<boolean> {
+export async function stream(w: WildsWorld, x: number, z: number, load: (name: string) => Promise<Wilds> = n => loadWilds(n, '/open/wilds', zonesOf(w, n), w.clear, w.roads, w.voids, editsFor(n), waterFor(n), fallsFor(n), nodeZonesLive())): Promise<boolean> {
   await ensureEdits()   // BETA M62: the owner's terrain edits, fetched once before the first tile parses
+  // read-only probe (M86 node-zones check): the gatherable nodes the game holds near a world point
+  if (typeof window !== 'undefined') (window as unknown as { __wildsNodes?: unknown }).__wildsNodes = (px: number, pz: number, r: number) => ({ trees: w.treesNear(px, pz, r).map(t => ({ id: t.id, x: t.x, z: t.z, kind: t.kind })), crystals: w.crystalsNear(px, pz, r).map(c => ({ id: c.id, x: c.x, z: c.z, kind: c.kind })) })
   const want = new Set(wanted(w, x, z)), keep = new Set(wanted(w, x, z, 2))
   let changed = false
   for (const name of [...w.loaded.keys()]) if (!keep.has(name)) { w.loaded.delete(name); changed = true }
