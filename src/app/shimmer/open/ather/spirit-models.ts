@@ -478,10 +478,13 @@ export const SECOND_FORMS: Partial<Record<Species, Partial<Record<SpiritElement,
 // M244 s1c (Alex 11-27): Vulnamyr's EIGHT crystal tails, each its own lofted piece on its own three-bone chain (b_tail_<k>_1..3), swaying
 // on its own beat, every clip's lift solved off the mesh (clear of the ground; in the sit below her head, behind her rump). Vulnalys keeps
 // Vulnara's fox build, heavier like a dire wolf (deeper chest, thick legs, big paws, a broader head): 1.5x her body length, 1.4x her height.
-export const AWAKEN_LEN: Readonly<Record<string, number>> = { vulnarok: 1.463, vulnalys: 1.487, vulnavex: 1.87, vulnamyr: 1.283 }
-export const AWAKEN_GROW: Readonly<Record<string, number>> = { vulnarok: 1.8, vulnalys: 1.7, vulnavex: 1.65, vulnamyr: 1.75 }
-const awakened = (name: string, glbLen: number, aura: string, far: number): SpiritLook => {
-  const b = SECOND_FORMS.fox!.mana!, h = VRIG_H * AWAKEN_GROW[name]
+// M244 sheet 2 (sprites, 11-27): VULNARC's four (Storm), owner preview, same tools (sculpt_awaken.py kor / celle / arcvex / ceth;
+// Vulnarkor on the biped rig, rig_biped.py), Vulnarc's own look as the base: Vulnarkor a crystal-shard mantle + bolts round her,
+// Vulnarcelle a big crackling mane, Arcvex a jagged crest + two ice-white copies that run, Vulnarceth her storm cloud + two discs.
+export const AWAKEN_LEN: Readonly<Record<string, number>> = { vulnarok: 1.463, vulnalys: 1.487, vulnavex: 1.87, vulnamyr: 1.283, vulnarkor: 1.393, vulnarcelle: 1.351, arcvex: 1.817, vulnarceth: 1.377 }
+export const AWAKEN_GROW: Readonly<Record<string, number>> = { vulnarok: 1.8, vulnalys: 1.7, vulnavex: 1.65, vulnamyr: 1.75, vulnarkor: 1.8, vulnarcelle: 1.75, arcvex: 1.8, vulnarceth: 1.75 }
+const awakened = (name: string, glbLen: number, aura: string, far: number, el: 'mana' | 'storm' = 'mana'): SpiritLook => {
+  const b = SECOND_FORMS.fox![el]!, h = VRIG_H * AWAKEN_GROW[name]
   return { ...b, name, url: `/open/spirits/${name}-rigged.glb`, h, trot: grownTrot(b.trot, b.h, h), rig: { ...b.rig!, glbLen, avatar: { z: b.rig!.avatar.z, far } },
     glow: { part: 'aura', emissive: aura, lo: 0.35, hi: 0.7, hz: 0.35 } }
 }
@@ -491,6 +494,10 @@ export const AWAKENED_FORMS: Readonly<Record<string, SpiritLook>> = {
   vulnalys: awakened('vulnalys', AWAKEN_LEN.vulnalys, '#b48cff', 1.7),
   vulnavex: awakened('vulnavex', AWAKEN_LEN.vulnavex, '#ffcf5a', 2.6),
   vulnamyr: awakened('vulnamyr', AWAKEN_LEN.vulnamyr, '#ffcf5a', 1.9),
+  vulnarkor: awakened('vulnarkor', AWAKEN_LEN.vulnarkor, '#9fe6ff', 2.0, 'storm'),
+  vulnarcelle: awakened('vulnarcelle', AWAKEN_LEN.vulnarcelle, '#9fe6ff', 1.8, 'storm'),
+  arcvex: awakened('arcvex', AWAKEN_LEN.arcvex, '#cdeeff', 2.6, 'storm'),
+  vulnarceth: awakened('vulnarceth', AWAKEN_LEN.vulnarceth, '#a8e4ff', 1.9, 'storm'),
 }
 /** M202: her second form's look when she has evolved (`element` set) and her species has its forms modelled, else null */
 export const formLook = (s: Species | null | undefined, el: SpiritElement | null | undefined): SpiritLook | null =>

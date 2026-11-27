@@ -7,12 +7,15 @@ let pass = 0; const fails: string[] = []
 const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
 const names = AWAKENED_BRANCHES.map(b => AWAKENED_NAMES.vulnara![b].toLowerCase())
 ok(names.join() === 'vulnarok,vulnalys,vulnavex,vulnamyr', `the four names in branch order (${names})`)
-ok(Object.keys(AWAKENED_FORMS).sort().join() === [...names].sort().join(), 'one look per name, no more')
-const vulnara = SECOND_FORMS.fox!.mana!
-for (const n of names) {
+// M244 sheet 2: Vulnarc's (Storm) four, canon-named a00621e
+const stormNames = AWAKENED_BRANCHES.map(b => AWAKENED_NAMES.vulnarc![b].toLowerCase())
+ok(stormNames.join() === 'vulnarkor,vulnarcelle,arcvex,vulnarceth', `Vulnarc's four in branch order (${stormNames})`)
+ok(Object.keys(AWAKENED_FORMS).sort().join() === [...names, ...stormNames].sort().join(), 'one look per name, no more')
+for (const [el, list] of [['mana', names], ['storm', stormNames]] as const) for (const n of list) {
+  const vulnara = SECOND_FORMS.fox![el]!, parent = el === 'mana' ? 'vulnara' : 'vulnarc'
   const L = AWAKENED_FORMS[n]
-  ok(L.name === n && L.url === `/open/spirits/${n}-rigged.glb` && L.form === 'mana', `${n}: her own glb + a form look (rigLook keeps it)`)
-  ok(AWAKEN_GROW[n] > formGrow('vulnara') && L.h > vulnara.h * 1.15, `${n}: grown past Vulnara (dial ${AWAKEN_GROW[n]} vs ${formGrow('vulnara')}, h ${L.h.toFixed(3)} vs ${vulnara.h.toFixed(3)})`)
+  ok(L.name === n && L.url === `/open/spirits/${n}-rigged.glb` && L.form === el, `${n}: her own glb + a form look (rigLook keeps it)`)
+  ok(AWAKEN_GROW[n] > formGrow(parent) && L.h > vulnara.h * 1.15, `${n}: grown past ${parent} (dial ${AWAKEN_GROW[n]} vs ${formGrow(parent)}, h ${L.h.toFixed(3)} vs ${vulnara.h.toFixed(3)})`)
   ok(L.glow?.part === 'aura', `${n}: her aura part drawn as the glow part`)
   const f = `public${L.url}`; ok(existsSync(f), `${f} exists`)
   if (existsSync(f)) {
@@ -70,6 +73,30 @@ const body = (n: string) => {   // the 'body' mesh's rest positions + skin, read
   ok(['fl', 'fr', 'hl', 'hr'].every(l => ['up', 'lo', 'paw'].every(b => nodes.includes(`b_${l}_${b}`))) && !nodes.some(x => /^b_leg_/.test(x)), 'vulnalys: four-legged (fox rig, four leg chains)')
   const L = body('vulnalys'), V = body('vulnara'), k = AWAKEN_GROW.vulnalys / formGrow('vulnara')
   ok(L.len * k >= 1.25 * V.len && L.tall * k >= 1.25 * V.tall, `vulnalys: dire-wolf size vs Vulnara as drawn: body length x${(L.len * k / V.len).toFixed(2)}, height x${(L.tall * k / V.tall).toFixed(2)} (>= 1.25)`)
+}
+// M244 sheet 2: Vulnarkor on the biped rig (no echoes), Arcvex's copies run, Vulnarceth's cloud on its own bone, every clip clear of the ground
+{
+  const j = glbJson('vulnarkor'), nodes: string[] = j.nodes.map((x: { name?: string }) => x.name)
+  for (const s of ['l', 'r']) ok(['up', 'lo', 'mt', 'paw'].every(b => nodes.includes(`b_leg_${s}_${b}`)) && ['arm_' + s + '_up', 'arm_' + s + '_lo', 'hand_' + s].every(b => nodes.includes('b_' + b)), `vulnarkor: ${s} leg chain + ${s} arm (upright, the biped rig)`)
+  ok(!nodes.some(x => /^b_(fl|fr|hl|hr)_/.test(x)) && !nodes.some(x => /^b_e\d_/.test(x)), 'vulnarkor: no quadruped legs, no echoes (that is Vulnarok)')
+}
+{
+  const j = glbJson('arcvex'), nodes: string[] = j.nodes.map((x: { name?: string }) => x.name), run = j.animations.find((a: { name: string }) => a.name === 'run')
+  ok(run.channels.some((c: { target: { node: number; path: string } }) => c.target.node === nodes.indexOf('b_e0_root') && c.target.path === 'scale') && run.channels.some((c: { target: { node: number } }) => c.target.node === nodes.indexOf('b_e1_fl_up')), 'arcvex: two copies that run, drift + fade (as the pure Ace)')
+}
+for (const n of ['vulnarcelle', 'vulnarceth', 'arcvex']) {
+  const nodes: string[] = glbJson(n).nodes.map((x: { name?: string }) => x.name)
+  ok(['fl', 'fr', 'hl', 'hr'].every(l => nodes.includes(`b_${l}_paw`)) && !nodes.some(x => /^b_leg_/.test(x)), `${n}: four-legged (the art is not upright)`)
+}
+{
+  const j = glbJson('vulnarceth'), nodes: string[] = j.nodes.map((x: { name?: string }) => x.name), lie = j.animations.find((a: { name: string }) => a.name === 'lie')
+  ok(nodes.includes('b_cloud') && lie.channels.some((c: { target: { node: number; path: string } }) => c.target.node === nodes.indexOf('b_cloud') && c.target.path === 'translation'), 'vulnarceth: her cloud + discs ride their own bone, held on the ground (a track in the lie)')
+}
+for (const n of stormNames) {
+  const m = JSON.parse(readFileSync(`docs/looks/m244-vulnarc-2026-11-27/${n}-metrics.json`, 'utf8'))
+  for (const c of ['idle', 'walk', 'run', 'sit', 'lie']) ok(m[c].lowest_m >= -0.0015, `${n}: ${c} lowest point ${m[c].lowest_m} m (clears the ground)`)
+  const L = body(n), V = body('vulnarc'), k = AWAKEN_GROW[n] / formGrow('vulnarc')
+  ok(L.tall * k >= 1.2 * V.tall, `${n}: bigger than Vulnarc as drawn (height x${(L.tall * k / V.tall).toFixed(2)})`)
 }
 console.log(`spirit-awakened: ${pass} pass, ${fails.length} fail`)
 if (fails.length) { for (const f of fails) console.log('  FAIL', f); process.exit(1) }

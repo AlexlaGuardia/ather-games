@@ -1,0 +1,117 @@
+{
+ "bones": 26,
+ "bones_with_echoes": 26,
+ "glb_bytes": 406396,
+ "solved": {
+  "sit": {
+   "drop": -0.4248968839645387,
+   "tail": 0.8276797533035278
+  },
+  "lie": {
+   "drop": -0.34328799247741704,
+   "tail": -0.10314278602600091
+  }
+ },
+ "legs": [
+  "leg_l_up",
+  "leg_l_lo",
+  "leg_l_mt",
+  "leg_l_paw",
+  "leg_r_up",
+  "leg_r_lo",
+  "leg_r_mt",
+  "leg_r_paw"
+ ],
+ "arms": [
+  "arm_l_up",
+  "arm_l_lo",
+  "hand_l",
+  "arm_r_up",
+  "arm_r_lo",
+  "hand_r"
+ ],
+ "walk": {
+  "dur_s": 0.636,
+  "lowest_m": -0.0001,
+  "height_m": 1.166,
+  "length_m": 0.994,
+  "lead_l_minus_r_z": [
+   0.25,
+   0.2,
+   -0.056,
+   -0.25,
+   -0.2,
+   0.056
+  ],
+  "feet_alternate": true,
+  "echo0_head_travel": 0.023,
+  "leg_reach_ratio_max": 0.85
+ },
+ "run": {
+  "dur_s": 0.45,
+  "lowest_m": 0.0006,
+  "height_m": 1.087,
+  "length_m": 0.967,
+  "lead_l_minus_r_z": [
+   0.466,
+   -0.053,
+   -0.509,
+   -0.466,
+   0.053,
+   0.509
+  ],
+  "feet_alternate": true,
+  "echo0_head_travel": 0.038,
+  "leg_reach_ratio_max": 0.89
+ },
+ "idle": {
+  "dur_s": 4.8,
+  "lowest_m": -0.0,
+  "height_m": 1.18,
+  "length_m": 0.975,
+  "lead_l_minus_r_z": [
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0
+  ],
+  "feet_alternate": false,
+  "echo0_head_travel": 0.014
+ },
+ "sit": {
+  "dur_s": 5.0,
+  "lowest_m": -0.0,
+  "height_m": 0.886,
+  "length_m": 0.904,
+  "lead_l_minus_r_z": [
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0
+  ],
+  "feet_alternate": false,
+  "echo0_head_travel": 0.003,
+  "leg_reach_ratio_max": 0.63
+ },
+ "lie": {
+  "dur_s": 5.6,
+  "lowest_m": -0.0007,
+  "height_m": 0.641,
+  "length_m": 1.266,
+  "lead_l_minus_r_z": [
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0
+  ],
+  "feet_alternate": false,
+  "echo0_head_travel": 0.001,
+  "leg_reach_ratio_max": 1.0
+ }
+}

@@ -1,10 +1,12 @@
 """BETA M244 s1b: VULNAROK on the FIRST BIPED RIG (plans/biped.py in rig-2026-11-24/tools), her four gold self-echoes rebuilt as
 rigged copies (echoes.py) that play her clip a beat behind her, each from her own place. The worked example of the biped plan:
 landmarks from sculpt_awaken.py's rok entry -> skeleton(); skin capsules + gates for the mesh; Plan(...).clips(); echoes; write; metrics.
-    uv run --no-project --with numpy,scipy,trimesh,networkx,fast_simplification python rig_biped.py <in.glb> <out-rigged.glb> <metrics.json>"""
+    uv run --no-project --with numpy,scipy,trimesh,networkx,fast_simplification python rig_biped.py <in.glb> <out-rigged.glb> <metrics.json>
+M244 sheet 2: AWAKEN=kor rigs VULNARKOR (Vulnarc's Champion) on the same plan: no echoes, her lightning ('aura') rides her chest."""
 import sys, os, json
 HERE = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, os.path.join(HERE, '../../rig-2026-11-24/tools')); sys.dont_write_bytecode = True
-sys.argv = [sys.argv[0], 'rok', *sys.argv[1:]]
+BF = os.environ.get('AWAKEN', 'rok'); assert BF in ('rok', 'kor'), BF
+sys.argv = [sys.argv[0], BF, *sys.argv[1:]]
 import numpy as np, rigcore as K
 sys.path.insert(0, HERE); import sculpt_awaken as SV, echoes as E
 from plans import biped as B
@@ -45,10 +47,12 @@ plan = B.Plan(SK, low=low, masks=MASKS)
 C, T, ST, FEET, SOLVED = plan.clips(H); print('solved', SOLVED, 'reach', ST)
 # ── the four echoes: where the sculpt stood them, each playing her clip a beat behind (left and right a beat apart) ──
 SPECS = [dict(off=(-.50, 0, -.46), s=.80, delay=.10), dict(off=(.50, 0, -.46), s=.80, delay=.16), dict(off=(-.90, 0, -.80), s=.70, delay=.22), dict(off=(.90, 0, -.80), s=.70, delay=.28)]
-SK2, aura = E.build(SK, V0, m['F'], W, nb, SPECS)
+if BF == 'rok':
+    SK2, aura = E.build(SK, V0, m['F'], W, nb, SPECS); C2 = E.clips(SK, SK2, C, SPECS)
+else:   # Vulnarkor: her crackling bolts ride her chest
+    SK2, C2 = SK, C; aura = dict(live['aura'], W=np.zeros((len(live['aura']['POSITION']), len(nb)))); aura['W'][:, nb.index('chest')] = 1
 parts = {'body': dict(m, W=E.pad(W, nb, SK2))}
 e = np.zeros((len(live['eyes']['POSITION']), len(SK2))); e[:, nb.index('head')] = 1; parts['eyes'] = dict(live['eyes'], W=e); parts['aura'] = aura
-C2 = E.clips(SK, SK2, C, SPECS)
 K.write(OUT, parts, SK2, C2, {c: (len(v) - 1) / T[c] for c, v in C2.items()})
 # ── metrics: read the FILE back (three's way) ──
 P = K.Player(OUT); pos = P.m['body']['POSITION']; ww, JJ = P.m['body']['WEIGHTS_0'] / 255., P.m['body']['JOINTS_0']
@@ -58,7 +62,7 @@ for c in C2:
     N = 60; d = dict(dur_s=round(T[c], 3)); lo, hi, ln = 9, 0, 0; fl, fr, eo = [], [], []
     for k in range(N):
         M = P.globals(c, T[c] * k / N); b = P.verts('body', M); ey = P.verts('eyes', M); lo = min(lo, b[:, 1].min()); hi += max(b[:, 1].max(), ey[:, 1].max()) / N; ln += (b[:, 2].max() - b[:, 2].min()) / N
-        fl.append(bone_at(M, 'leg_l_paw')); fr.append(bone_at(M, 'leg_r_paw')); eo.append(bone_at(M, 'e0_head'))
+        fl.append(bone_at(M, 'leg_l_paw')); fr.append(bone_at(M, 'leg_r_paw')); eo.append(bone_at(M, 'e0_head' if 'e0_head' in SK2 else 'head'))
     fl, fr, eo = np.array(fl), np.array(fr), np.array(eo)
     d |= dict(lowest_m=round(lo * H, 4), height_m=round(hi * H, 3), length_m=round(ln * H, 3), lead_l_minus_r_z=[round(float(x), 3) for x in (fl[:, 2] - fr[:, 2])[::10]],
               feet_alternate=bool((fl[:, 2] - fr[:, 2]).max() > .05 and (fl[:, 2] - fr[:, 2]).min() < -.05), echo0_head_travel=round(float(np.linalg.norm(eo - eo.mean(0), axis=1).max()), 3))

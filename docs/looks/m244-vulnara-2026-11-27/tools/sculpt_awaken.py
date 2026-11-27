@@ -13,7 +13,19 @@ lines / chevrons), never a rune or sigil.
                   WHOLE GOLD COPIES of her where she just ran, behind and to one side ('aura', copies not smoke)
   myr  Vulnamyr   regal and still: a deep chest with a big violet CRYSTAL CHEST-GEM, gold chevrons down legs and shoulders, EIGHT
                   separate CRYSTAL TAILS (s1c: each its own closed piece + bones), a GOLD CROWN-HALO over her head ('aura', head-borne)
-Number space = Vulnara's (sculpt_v2's head at its place + HO), so the eyes / face classes / rig plan carry over."""
+Number space = Vulnara's (sculpt_v2's head at its place + HO), so the eyes / face classes / rig plan carry over.
+
+M244 SHEET 2 (2026-11-27): VULNARC's (Storm) four awakened forms, canon Magii a00621e (Alex), built off the concept art (athernyx
+assets/stage3/vulnarc-*, private) + the rulings (be0f937: looks = pose + motif, all four Storm-lightning). Vulnarc's palette: pale
+ice / steel blue, cream-white ruff, ice-crystal facets, cyan lightning marks (infusion pattern, no rune / sigil), violet brow gem + eyes.
+  kor     Vulnarkor   (Champion, upright: the BIPED rig, rig_biped.py) a snarling war-form, a mantle of crystal SHARDS over neck +
+                      shoulders, heavy arms + claws, a big brush swept up behind; lightning bolts crackling round her ('aura', chest-borne)
+  celle   Vulnarcelle (Virtuoso, RERUN) a big CRACKLING MANE of crystal points round her head + shoulders, the head carried high,
+                      a plume up behind; bolts crackling in the mane ('aura', head-borne)
+  arcvex  Arcvex      (Ace, the PURE branch) a long low racer, a jagged crystal crest down her spine, a brush kinked like a bolt;
+                      two ice-white copies where she just ran (rig_awaken.py, as Vulnavex's)
+  ceth    Vulnarceth  (Enigma) huge ears, a full chest ruff, the brush curled up behind; she stands in her STORM CLOUD, two floating
+                      STORM-CRYSTAL DISCS either side of her ('aura': the cloud stays on the ground, rig_awaken.py's own bone)"""
 import sys, os
 import numpy as np
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -21,7 +33,7 @@ for p in ('../../vulnyx-2026-11-24/tools', '../../m202-vulnyx-2026-11-26/tools',
 import sculpt_v2 as S
 import sculpt_forms as SF
 V3, su, ss, ell, cone, rx, zig, C = S.V3, S.su, S.ss, S.ell, S.cone, S.rx, S.zig, SF.C
-FORM = sys.argv[1] if len(sys.argv) > 1 and sys.argv[1] in ('rok', 'lys', 'vex', 'myr') else os.environ.get('AWAKEN', 'rok')
+FORM = sys.argv[1] if len(sys.argv) > 1 and sys.argv[1] in ('rok', 'lys', 'vex', 'myr', 'kor', 'celle', 'arcvex', 'ceth') else os.environ.get('AWAKEN', 'rok')
 
 # ── per form: head offset, landmarks, limb radii, trunk ──
 FORMS = dict(
@@ -63,6 +75,22 @@ FORMS = dict(
              tail=[(0, .48, -.22), (0, .52, -.32), (0, .60, -.42), (0, .70, -.50), (0, .80, -.56), (0, .90, -.60), (0, .98, -.62), (0, 1.03, -.63), (0, 1.05, -.63)],
              tailr=[.04, .05, .055, .055, .05, .045, .035, .02, .004]),
 )
+# ── M244 sheet 2: Vulnarc's four (Storm) ──
+FORMS['kor'] = dict(FORMS['rok'], ear=((.128, .655, .222), (.262, 1.09, .150)),
+                    tail=[(0, .55, -.17), (0, .45, -.30), (0, .41, -.45), (0, .45, -.60), (0, .56, -.72), (0, .70, -.79), (0, .84, -.80), (0, .94, -.76), (0, .99, -.72)],
+                    tailr=[.06, .10, .16, .21, .225, .205, .16, .085, .004])
+FORMS['celle'] = dict(FORMS['lys'], hk=1.08, ear=((.128, .655, .222), (.236, 1.02, .160)),
+                      f=[(.090, .48, .205), (.092, .255, .185), (.094, .048, .205)], fr=(.070, .047, .040), paw=1.15,
+                      h=[(.090, .47, -.235), (.106, .31, -.155), (.098, .145, -.29), (.098, .042, -.255)], hr=(.090, .058, .043),
+                      tail=[(0, .52, -.31), (0, .58, -.41), (0, .70, -.49), (0, .85, -.53), (0, 1.00, -.53), (0, 1.12, -.49), (0, 1.20, -.43), (0, 1.24, -.37), (0, 1.25, -.33)],
+                      tailr=[.06, .095, .14, .18, .20, .19, .15, .085, .004])
+FORMS['arcvex'] = dict(FORMS['vex'], ear=((.128, .655, .222), (.262, .960, .060)),
+                       tail=[(0, .40, -.33), (0, .43, -.45), (0, .49, -.57), (0, .44, -.70), (0, .51, -.84), (0, .57, -.97), (0, .52, -1.09), (0, .57, -1.19), (0, .58, -1.26)],
+                       tailr=[.05, .08, .115, .135, .135, .125, .095, .05, .004])
+FORMS['ceth'] = dict(FORMS['myr'], ear=((.128, .655, .222), (.300, 1.13, .130)),
+                     tail=[(0, .48, -.22), (0, .50, -.34), (0, .56, -.46), (0, .66, -.56), (0, .80, -.62), (0, .94, -.62), (0, 1.04, -.57), (0, 1.10, -.50), (0, 1.12, -.45)],
+                     tailr=[.05, .085, .13, .17, .19, .18, .14, .08, .004])
+STORM = FORM in ('kor', 'celle', 'arcvex', 'ceth')
 G = FORMS[FORM]; HO = V3(*G['HO'])
 S.EAR_A, S.EAR_T = V3(*G['ear'][0]), V3(*G['ear'][1])
 L = dict(head=tuple(V3(0, .565, .255) + HO), chest=G['chest'], pelvis=G['pelvis'], f=G['f'], h=G['h'], tail=G['tail'], tailr=G['tailr'], HO=G['HO'])
@@ -173,28 +201,61 @@ def ruff(P):
         d = np.minimum(d, cone(M, o, tip, .060 * big, .004))
     return d
 
+# ── M244 sheet 2: Vulnarc's motifs (crystal shards: four-sided l1cone points, the Storm crystal) ──
+def _fib(n):
+    i = np.arange(n) + .5; ph = np.arccos(1 - 2 * i / n); th = np.pi * (1 + 5 ** .5) * i
+    return np.c_[np.sin(ph) * np.cos(th), np.cos(ph), np.sin(ph) * np.sin(th)]
+SHARDS = []
+if FORM == 'celle':   # the crackling MANE: a round mass of crystal points round her head + shoulders, the face left open
+    MC = V3(0, .62, .20) + V3(0, HO[1] - .10, HO[2] - .08); MR = V3(.25, .25, .21)   # the mane's mass (behind the face, round the head)
+    for d in _fib(70):
+        if d[2] > .42 or (d[1] < -.6 and abs(d[0]) < .45): continue
+        ln = .13 + .045 * np.sin(7 * d[0] + 5 * d[1]) + (.03 if d[1] < .1 else 0); o = d * (1 - .25 * max(d[2], 0))
+        SHARDS.append((MC + MR * o * .75, MC + MR * o + o * ln, .085 if d[1] > -.2 else .075))
+elif FORM == 'kor':   # a mantle of crystal shards over neck + shoulders, swept back (the art's spiky crest)
+    for d in _fib(40):
+        if d[2] > .25 or d[1] < -.15: continue
+        c = V3(0, 1.02, -.02); r0 = V3(.20, .09, .14) * d; ln = .12 + .04 * np.sin(9 * d[0] + 4 * d[2])
+        SHARDS.append((c + r0 * .6, c + r0 + (d + V3(0, .25, -.45)) / np.linalg.norm(d + V3(0, .25, -.45)) * ln, .045))
+elif FORM in ('arcvex', 'ceth'):   # the jagged crest from the crown down the spine (Vulnarc's own)
+    crest = [(.62, .30, .07, .028), (.56, .20, .075, .03), (.49, .08, .08, .03), (.47, -.04, .075, .03), (.45, -.15, .065, .028), (.43, -.24, .05, .024)] if FORM == 'arcvex' else \
+            [(.70, .30, .06, .026), (.64, .22, .065, .028), (.56, .12, .065, .028), (.54, .02, .06, .026), (.53, -.08, .055, .024), (.51, -.16, .045, .02)]
+    for y, z, ln, r in crest: SHARDS.append((V3(0, y - .03, z), V3(0, y + ln, z - .035), r))
+MANE = lambda P: ell(P, MC, MR) if FORM == 'celle' else np.full(P.shape[:-1], 9.)
+def storm(P):
+    d = np.full(P.shape[:-1], 9.)
+    for a, b, r in SHARDS: d = np.minimum(d, l1cone(P, a, b, r, .004))
+    return su(d, MANE(P), .04) if FORM == 'celle' else d
+
 def body(P):
     M = np.stack([np.abs(P[..., 0]), P[..., 1], P[..., 2]], -1)
     a, b, ra, rb = G['trunk']; bd = cone(P, a, b, ra, rb)
     bd = su(bd, ell(P, *G['chestE']), .05)
     bd = ss(bd, ell(P, *G['tuck']), .07)
     n0, n1, nr = G['neck']; bd = su(bd, cone(P, n0, n1, nr, nr), .06)
-    if FORM == 'rok':   # pecs, a heavy back, hips
+    if FORM in ('rok', 'kor'):   # pecs, a heavy back, hips
         bd = su(bd, ell(M, (.068, .95, .115), (.075, .082, .055)), .04); bd = su(bd, ell(P, (0, .92, -.08), (.16, .17, .11)), .06)
         bd = su(bd, ell(P, (0, .62, -.07), (.150, .12, .12)), .05)
     if FORM == 'myr':   # a ruff of pale fur over the chest, above the gem
         for x, y, z, tx, ty, tz, r in ((0, .52, .23, 0, .44, .30, .055), (.06, .53, .21, .085, .44, .27, .05), (.10, .52, .17, .135, .43, .22, .045)):
             bd = su(bd, cone(M, (x, y, z), (tx, ty, tz), r, .004), .03)
+    if FORM == 'ceth':  # a full pale ruff of fur points over her chest
+        for x, y, z, tx, ty, tz, r in ((0, .53, .23, 0, .40, .31, .06), (.06, .54, .21, .10, .41, .28, .055), (.11, .53, .17, .16, .41, .22, .05), (.13, .56, .12, .20, .47, .12, .045)):
+            bd = su(bd, cone(M, (x, y, z), (tx, ty, tz), r, .004), .03)
     f, h = legs(P); bd = su(bd, f, .02 if G.get('biped') else .045); bd = su(bd, h, .05)
     if FORM != 'myr': bd = su(bd, tail(P), .035)    # Vulnamyr's tails are their own pieces (TAILS), joined after meshing
-    return su(su(bd, head(P), .03), ruff(P), .02)
+    return su(su(su(bd, head(P), .03), ruff(P), .02), storm(P), .012)
 
 # ── crystal facet plates (the ledger's 'violet crystal facets'): low four-sided pyramids proud of the coat ──
 PLATES_AT = dict(
     rok=[((.20, .99, .02), .040), ((.25, .86, -.01), .032), ((.27, .69, .02), .030), ((.15, .80, -.06), .040), ((.17, .50, -.01), .036), ((.14, .28, -.01), .030), ((.13, .95, -.10), .034)],
     lys=[((.13, .48, .15), .036), ((.13, .51, -.01), .040), ((.13, .46, -.17), .042), ((.12, .31, -.17), .030), ((.12, .28, .17), .026)],
     vex=[((.11, .40, .10), .030), ((.11, .41, -.03), .034), ((.11, .39, -.17), .036), ((.10, .27, -.18), .026), ((.10, .25, .15), .022)],
-    myr=[((.12, .48, .07), .032), ((.12, .48, -.05), .034), ((.12, .44, -.16), .036), ((.11, .29, -.11), .026)])[FORM]
+    myr=[((.12, .48, .07), .032), ((.12, .48, -.05), .034), ((.12, .44, -.16), .036), ((.11, .29, -.11), .026)],
+    kor=[((.25, .86, -.01), .034), ((.27, .69, .02), .032), ((.15, .80, -.06), .042), ((.17, .50, -.01), .038), ((.14, .28, -.01), .032), ((.13, .70, -.10), .036)],
+    celle=[((.12, .47, .10), .034), ((.12, .50, -.03), .040), ((.12, .46, -.17), .042), ((.11, .31, -.17), .030), ((.11, .28, .17), .026)],
+    arcvex=[((.11, .40, .10), .032), ((.11, .41, -.03), .036), ((.11, .39, -.17), .038), ((.10, .27, -.18), .028), ((.10, .25, .15), .024)],
+    ceth=[((.12, .47, .04), .034), ((.12, .47, -.08), .036), ((.11, .29, -.11), .028), ((.10, .27, .14), .024)])[FORM]
 def _frame(n):
     e1 = np.cross(n, V3(0, 1, 0)); e1 /= np.linalg.norm(e1); return e1, np.cross(n, e1)
 def _plates():
@@ -234,6 +295,20 @@ def seg_band(V, pts, w):
     for a, b in zip(pts[:-1], pts[1:]):
         a, b = V3(*a), V3(*b); ab = b - a; t = np.clip(((V - a) @ ab) / (ab @ ab), 0, 1); out = np.maximum(out, w - np.linalg.norm(V - a - t[:, None] * ab, axis=1))
     return out
+_BOLTS = []
+def _bolts():
+    """the lightning forks as polylines laid ON the coat (each point found on the surface from the side), computed once"""
+    if _BOLTS: return _BOLTS
+    def bolt(a, b, n=6, amp=.022):
+        a, b = V3(*a), V3(*b); pts = [a + (b - a) * t + V3(0, 0, amp * (1 if i % 2 else -1) * (0 < i < n)) for i, t in enumerate(np.linspace(0, 1, n + 1))]
+        return [_surf(body, (.55, q[1], q[2]), (1, 0, 0)) for q in pts]
+    if FORM == 'kor': segs = (((.25, .95, .05), (.268, .62, .08)), ((.15, .62, .07), (.14, .25, .10)), ((.10, .92, .15), (.06, .72, .15)))
+    else:
+        f, h = G['f'], G['h']
+        segs = (((0, G['chest'][1] + .03, G['chest'][2] - .02), (0, G['pelvis'][1] - .02, G['pelvis'][2] + .10)), ((0, f[0][1] - .08, f[0][2] + .01), (0, f[1][1] - .06, f[1][2] + .01)),
+                ((0, h[1][1] + .06, h[1][2] - .04), (0, h[2][1] - .01, h[2][2] - .02)))
+    for a, b in segs: _BOLTS.append((bolt(a, b), .010))
+    return _BOLTS
 def marks(V):
     """gold infusion marks: flowing lines / chevrons laid on the coat (a band either side of a polyline), mirrored. No rune, no sigil."""
     M = np.c_[np.abs(V[:, 0]), V[:, 1], V[:, 2]]; out = np.full(len(V), -1.)
@@ -246,6 +321,8 @@ def marks(V):
         for pts in ([(.13, .47, -.02), (.14, .45, -.09), (.13, .47, -.16)],): out = np.maximum(out, seg_band(M, pts, .009))
     elif FORM == 'vex':   # swept speed lines along the flank
         for pts in ([(.11, .44, .05), (.115, .42, -.06), (.11, .38, -.16)], [(.11, .36, .07), (.115, .34, -.04)]): out = np.maximum(out, seg_band(M, pts, .008))
+    elif STORM:           # M244 sheet 2: cyan LIGHTNING forks down the flank + the legs (an infusion pattern, no rune / sigil)
+        for pts, w in _bolts(): out = np.maximum(out, seg_band(M, pts, w))
     else:                 # chevrons down the legs and shoulders + brow marks
         f, h = G['f'], G['h']
         for c, w in ((f[0], .05), (f[1], .03), ((f[1][0], .14, f[1][2] + .01), .025), (h[1], .035), (h[2], .028)):
@@ -253,7 +330,8 @@ def marks(V):
             out = np.maximum(out, seg_band(M, [c + V3(.02, .025, -w), c + V3(.03, -.012, 0), c + V3(.02, .025, w)], .009))
         out = np.maximum(out, seg_band(M, [(.035, .70 + HO[1], .37 + HO[2]), (.05, .72 + HO[1], .33 + HO[2])], .006))
     return out
-PAL = dict(rok=('#3f3388', '#7f6cc8'), lys=('#3d3d92', '#7e7cd2'), vex=('#3c3a8c', '#7672c8'), myr=('#4c4496', '#9a8cda'))[FORM]
+PAL = dict(rok=('#3f3388', '#7f6cc8'), lys=('#3d3d92', '#7e7cd2'), vex=('#3c3a8c', '#7672c8'), myr=('#4c4496', '#9a8cda'),
+           kor=('#33609c', '#86b2e0'), celle=('#3a68a6', '#90bce6'), arcvex=('#36629e', '#88b4e2'), ceth=('#3e6aa8', '#94bee8'))[FORM]   # Vulnarc's steel -> ice blue
 def classes(V):
     w = np.clip((.62 - np.linalg.norm(V - HC, axis=1)) / .2, 0, 1)[:, None]          # the face classes follow the grown head
     out = S.classes(V + w * (hm(V) - V) - HO); x, y, z = V.T
@@ -261,15 +339,18 @@ def classes(V):
     out[2] = np.where(np.abs(V[:, 0]) < .1, out[2], -1.) if FORM != 'myr' else np.full(len(V), -1.)    # bib only between the forelegs
     out[3] = (np.where(z < -.40, (s - .70) - .06 * zig(np.arctan2(x, y - TC[i, 1]) / (2 * np.pi) + .5, 7), -1.) * .5) if FORM != 'myr' else np.full(len(V), -1.)  # pale brush tip
     out.append(.005 - plates(V))                    # 7 crystal plates
-    out.append(.004 - ruff(V))                      # 8 gold ruff
+    out.append(np.maximum(.004 - ruff(V), .005 - storm(V)))   # 8 gold ruff (sheet 2: the crystal shards / mane / crest)
     out.append(marks(V))                            # 9 gold marks
     out.append(.006 - chest_gem(V))                 # 10 chest gem
     out.append(.013 - tail(V) if FORM == 'myr' else np.full(len(V), -1.))   # 11 crystal tails
     return out
 def palette():
+    if STORM:   # Vulnarc: pale ice coat lights, cream-white ruff, ice crystal, cyan lightning, violet gem
+        return [C('#dff0ff'), C('#f6fafd'), C('#f6fafd'), C('#e6f0fa'), C('#e6a8a4'), C('#f6fafd'), C('#1c2030'), C('#bfe6ff'), C('#d8f2ff'), C('#7fe6ff'), C('#c46ad8'), C('#bfe6ff')]
     gold = C('#e3b23c'); return [C('#cfc6ea'), C('#efeafb'), C('#efeafb'), C('#d9d2f4'), C('#e9a3b4'), C('#efeafb'), C('#2a1a2e'),
                                  C('#9a7ce6'), gold, gold, C('#c46ad8'), C('#8f7fe0')]
 CRYSTAL = (C('#9a7ce6'), C('#6e52c4'), C('#cdbcff')), (C('#8f7fe0'), C('#6a5cc8'), C('#d8d0ff')), (C('#c46ad8'), C('#8a3cb0'), C('#f2b8ff'))
+if STORM: CRYSTAL = (C('#bfe6ff'), C('#6aa8dc'), C('#eefaff')), (C('#d8f2ff'), C('#7cb6e4'), C('#ffffff'))
 
 # ── the aura part (drawn as the look's glow part): echoes, spirals, halo ──
 def tube(path, r):
@@ -284,13 +365,36 @@ def tube(path, r):
 def aura(Vb, Fb):
     """returns (V, F, colour) or None"""
     parts = []
-    if FORM in ('rok', 'vex'):
+    if FORM in ('kor', 'celle'):   # lightning crackling round her (kor: about her chest; celle: through the mane)
+        rng = np.random.default_rng(7 if FORM == 'kor' else 11)
+        c0 = V3(0, .90, -.02) if FORM == 'kor' else MC
+        for k in range(7 if FORM == 'kor' else 8):
+            a = 2 * np.pi * k / (7 if FORM == 'kor' else 8) + .3; d = V3(np.cos(a), np.sin(a) * .9, -.35 + .25 * np.sin(3 * a)); d /= np.linalg.norm(d)
+            r0, r1 = (.30, .52) if FORM == 'kor' else (.24, .42); pts = [c0 + d * (r0 + (r1 - r0) * t) + rng.normal(0, .025, 3) * (0 < i < 5) for i, t in enumerate(np.linspace(0, 1, 6))]
+            pts = np.array(pts); pts[:, 1] = np.maximum(pts[:, 1], .05); parts.append(tube(pts, lambda u: .009 * (1 - u) + .003))
+        col = '#9fe6ff'
+    elif FORM == 'ceth':           # her storm cloud (puffs round her paws, on the ground) + two floating storm-crystal discs
+        def puff(c, r):
+            import trimesh; s_ = trimesh.creation.icosphere(2, r); q = np.asarray(s_.vertices) * V3(1, .62, 1) + c; return q, np.asarray(s_.faces)
+        f, h = G['f'], G['h']
+        for x, z, r in ((0, .02, .15), (0, -.12, .14), (.17, .22, .10), (-.17, .22, .10), (.17, -.22, .11), (-.17, -.22, .11), (.25, 0, .10), (-.25, 0, .10), (0, .26, .10), (0, -.30, .10), (.12, .34, .08), (-.12, .34, .08)):
+            parts.append(puff(V3(x, max(.016 + r * .62, .06), z), r))
+        for sx in (1, -1):   # a six-sided crystal disc: a flat prism, tilted to face out + forward, edges bevelled to a point
+            c = V3(sx * .44, .80, .14); n = V3(sx * .85, .15, .5); n /= np.linalg.norm(n); e1 = np.cross(n, V3(0, 1, 0)); e1 /= np.linalg.norm(e1); e2 = np.cross(n, e1)
+            ring = [c + (e1 * np.cos(a) + e2 * np.sin(a)) * .12 for a in np.linspace(0, 2 * np.pi, 7)[:-1]]
+            V = np.array(ring + [c + n * .035, c - n * .035, *[c + (e1 * np.cos(a) + e2 * np.sin(a)) * .05 + n * .05 for a in np.linspace(0, 2 * np.pi, 7)[:-1]]])
+            F = [(j, (j + 1) % 6, 6) for j in range(6)] + [((j + 1) % 6, j, 7) for j in range(6)]
+            parts.append((V[:8], np.array(F)))
+            parts.append(tube(np.array([c + n * .02, c + n * .06, c + n * .09]), lambda u: .03 * (1 - u) + .003))   # the charge humming at its core
+        col = '#a8e4ff'
+    elif FORM in ('rok', 'vex', 'arcvex'):
         import fast_simplification as fs
         v, f = fs.simplify(np.asarray(Vb, np.float32), np.asarray(Fb, np.int32), target_count=1600)
         at = [((-.48, 0, -.42), .80), ((.48, 0, -.42), .80), ((-.86, 0, -.74), .70), ((.86, 0, -.74), .70)] if FORM == 'rok' else [((-.38, .05, -1.02), .84), ((-.74, .10, -1.90), .70)]
+        if FORM == 'arcvex': at = [((-.38, .05, -1.10), .84), ((.40, .10, -1.95), .70)]
         for o, s in at:
             q = np.asarray(v, float) * s; q[:, 1] -= q[:, 1].min() - o[1]; q += V3(o[0], 0, o[2]); parts.append((q, np.asarray(f)))
-        col = '#f2c54a'
+        col = '#cdeeff' if FORM == 'arcvex' else '#f2c54a'
     elif FORM == 'lys':
         for sx in (1, -1):
             c = V3(sx * .40 * HK, .80 + HO[1], .26 + HO[2]); th = np.linspace(0, 5.2 * np.pi, 90); r = .012 + .095 * th / th[-1]
@@ -356,7 +460,7 @@ if __name__ == '__main__':
     S.field = lambda P: field(fwd(P + HO)) / HK         # SF.eyes lays the eyes on the face at Vulnara's place: shifted back by HO (+ the head's growth)
     SF.F = dict(SF.FORMS['mana'], form='mana', lo=PAL[0], hi=PAL[1])
     xr = .52
-    lo = V3(-xr, -.033, min(-1.36, TC[:, 2].min() - .25)); hi = V3(xr, 1.80 if FORM == 'rok' else 1.30 if FORM in ('lys', 'myr') else 1.20, .80 if FORM == 'lys' else .66)
+    lo = V3(-xr, -.033, min(-1.36, TC[:, 2].min() - .25)); hi = V3(xr, 1.80 if FORM in ('rok', 'kor') else 1.48 if FORM in ('celle', 'ceth') else 1.30 if FORM in ('lys', 'myr') else 1.20, .80 if FORM in ('lys', 'celle') else .66)
     def piece(fld, lo, hi, h, n):
         Vr, Fr = surface(fld, lo, hi, h); m = trimesh.Trimesh(Vr, Fr, process=False); print('raw', len(Fr), 'closed', m.is_watertight, 'parts', m.body_count)
         k = max(m.split(only_watertight=False), key=lambda c: len(c.faces)); t = decimate(k.vertices, k.faces, n)

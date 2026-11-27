@@ -2,7 +2,9 @@
 same clips), every joint placed from sculpt_awaken.py's landmarks for that form; her 'aura' part (echoes / spirals / halo) rides
 the root (Vulnarok's + Vulnavex's echoes stand where they are) or the head (Vulnalys's spirals, Vulnamyr's halo).
     uv run --no-project --with numpy,scipy,trimesh,networkx,fast_simplification python rig_awaken.py <form> <in.glb> <out-rigged.glb> <metrics.json>
-The sit height is SOLVED per form (rump just down) as well as the brush lift."""
+The sit height is SOLVED per form (rump just down) as well as the brush lift.
+M244 sheet 2 (Vulnarc's): celle / arcvex / ceth here (kor = rig_biped.py). Arcvex's two ice-white copies run as Vulnavex's do;
+Vulnarceth's cloud + discs ride their own 'cloud' bone under the root that cancels the root's motion, so the cloud stays on the ground."""
 import sys, os, json
 HERE = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, os.path.join(HERE, '../../rig-2026-11-24/tools')); sys.dont_write_bytecode = True
 import numpy as np, rigcore as K
@@ -10,7 +12,7 @@ sys.path.insert(0, HERE); import sculpt_awaken as SV
 FORM = SV.FORM; ARGS = sys.argv[2:]; IN, OUT, MET = [os.path.abspath(x) for x in ARGS[:3]]
 G = SV.G; HO = np.array(G['HO']); vh = lambda p: tuple(float(c) for c in SV.fwd(np.array(p) + HO))   # Vulnara's head space -> world (the grown head, M244 s1c)
 f_, h_ = G['f'], G['h']; T0 = np.array(SV.L['tail'][0]); v = lambda *a: tuple(float(x) for x in np.array(a[0]) + (np.array(a[1]) if len(a) > 1 else 0))
-FZ = .10 if FORM == 'rok' else .02; TZ = dict(rok=-.27, lys=-.31, vex=-.33, myr=-.25)[FORM]
+FZ = .10 if FORM == 'rok' else .02; TZ = dict(rok=-.27, lys=-.31, vex=-.33, myr=-.25, celle=-.31, arcvex=-.33, ceth=-.25)[FORM]
 shellfree = lambda V, m=.012: np.ones(len(V), bool)        # no carapace: every vertex is free
 from plans import quadruped as Q
 from rigcore import Pose
@@ -66,7 +68,8 @@ if FORM == 'myr':   # each tail vertex rides its own tail's chain by how far alo
             W[r, nb.index(b[i])] += max(wv, 0)
         W[r] /= W[r].sum()
 W = K.four(W); parts['body'] = dict(m, W=W); e = np.zeros((len(live['eyes']['POSITION']), len(nb))); e[:, nb.index('head')] = 1; parts['eyes'] = dict(live['eyes'], W=e)
-if 'aura' in live and FORM != 'vex': a = np.zeros((len(live['aura']['POSITION']), len(nb))); a[:, nb.index('head' if FORM in ('lys', 'myr') else 'root')] = 1; parts['aura'] = dict(live['aura'], W=a)
+if FORM == 'ceth': SK['cloud'] = ('root', (0, 0, 0)); nb = list(SK); W = np.c_[W, np.zeros(len(W))]; parts['body'] = dict(m, W=W); parts['eyes'] = dict(live['eyes'], W=np.c_[e, np.zeros(len(e))])
+if 'aura' in live and FORM not in ('vex', 'arcvex'): a = np.zeros((len(live['aura']['POSITION']), len(nb))); a[:, nb.index('head' if FORM in ('lys', 'myr', 'celle') else 'cloud' if FORM == 'ceth' else 'root')] = 1; parts['aura'] = dict(live['aura'], W=a)
 LEGS = ('fl', 'fr', 'hl', 'hr'); SOLE = {f: V0[(W[:, nb.index(f + '_paw')] > .5) & (V0[:, 1] < .10)] - np.array(SK[f + '_paw'][1]) for f in LEGS}
 LEN = {f: sum(np.linalg.norm(np.array(SK[f + a][1]) - np.array(SK[f + b][1])) for a, b in (('_up', '_lo'), ('_lo', '_paw'))) for f in LEGS}
 def clear(f, R):
@@ -137,11 +140,11 @@ def solve(f, a, b):
     for _ in range(22):
         c = (a + b) / 2; a, b = (a, c) if f(c) > 0 else (c, b)
     return b
-SITX = .185 if FORM == 'lys' else .150; SITA = .88; SITY = -.03; SITT = [0, -.12, -.05, 0]; LIEY = -.2; LIET = 0
+SITX = .185 if FORM == 'lys' else .17 if FORM == 'celle' else .150; SITA = .88; SITY = -.03; SITT = [0, -.12, -.05, 0]; LIEY = -.2; LIET = 0
 RUMP = W[:, [nb.index('pelvis'), nb.index('spine')]].sum(1) > .5
 def _sy(v): global SITY; SITY = v; p = sitpose(0); sitpost(p, 0); return low(p, RUMP) - .006
 SITY = solve(_sy, -.45, .25)
-if FORM in ('myr', 'lys'):   # M244 s1b (+ s1c the dire-wolf Lys): her haunch (hr_up) sat 28 mm under the ground once the fan cleared: nothing but the paws may be lower
+if FORM in ('myr', 'lys', 'celle', 'ceth'):   # M244 s1b (+ s1c the dire-wolf Lys): her haunch (hr_up) sat 28 mm under the ground once the fan cleared: nothing but the paws may be lower
     NOPAW = (W[:, [nb.index(b) for b in nb if b.endswith('_paw')]].sum(1) < .3) & (W[:, [nb.index(b) for b in nb if b.startswith('tail')]].sum(1) < .5)   # s1c: tails clear on their own
     def _sy2(v): global SITY; SITY = v; p = sitpose(0); sitpost(p, 0); return low(p, NOPAW) - .002
     s0 = SITY; SITY = max(s0, solve(_sy2, -.45, .25))
@@ -181,7 +184,10 @@ if FORM == 'myr':   # M244 s1c: the eight tails' own motion over every clip, the
         n = len(clips[c]) - 1
         for i, p in enumerate(clips[c]): tails(p, c, (i % n) / n, LIFT[c])
     print('tail lifts', {c: round(float(v), 3) for c, v in LIFT.items()})
-if FORM == 'vex':   # M244 s1b (Alex 11-27): her two gold copies RUN: each plays her run a beat behind, left where she just ran (drifting back
+if FORM == 'ceth':   # sheet 2: the cloud bone undoes the root's motion every frame (the root drops her into the lie)
+    for c in clips:
+        for p in clips[c]: p.T['cloud'] = -np.asarray(p.T['root'], float)
+if FORM in ('vex', 'arcvex'):   # M244 s1b (Alex 11-27): her two gold copies RUN: each plays her run a beat behind, left where she just ran (drifting back
     import echoes as E   # at her own run speed, 4 glb/s), and shrinks away (the fade; the glow material is opaque); hidden when she is not running
     def trail(k):
         def mv(c, u):
@@ -189,7 +195,7 @@ if FORM == 'vex':   # M244 s1b (Alex 11-27): her two gold copies RUN: each plays
             q = (u + k * .5) % 1; return -.20 - (RUN['v'] / H) * T['run'] * q, sm(0, .08, q) * (1 - q) ** .8
         return mv
     SPECS = [dict(off=(-.16, 0, 0), s=.92, delay=.12, move=trail(0)), dict(off=(-.30, 0, 0), s=.84, delay=.30, move=trail(1))]
-    SK2, aura = E.build(SK, V0, m['F'], W, nb, SPECS)
+    SK2, aura = E.build(SK, V0, m['F'], W, nb, SPECS, **(dict(color=(205, 238, 255)) if FORM == 'arcvex' else {}))
     for k in ('body', 'eyes'): parts[k] = dict(parts[k], W=E.pad(parts[k]['W'], nb, SK2))
     parts['aura'] = aura; clips = E.clips(SK, SK2, clips, SPECS); SK = SK2
 path = OUT; K.write(path, parts, SK, clips, {c: (len(v) - 1) / T[c] for c, v in clips.items()})

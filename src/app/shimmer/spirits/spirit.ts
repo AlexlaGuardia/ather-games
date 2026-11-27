@@ -137,6 +137,8 @@ export type AwakenedBranch = 'champion' | 'virtuoso' | 'ace' | 'enigma'
 export const AWAKENED_BRANCHES: readonly AwakenedBranch[] = ['champion', 'virtuoso', 'ace', 'enigma']
 export const AWAKENED_NAMES: Readonly<Partial<Record<string, Readonly<Record<AwakenedBranch, string>>>>> = {
   vulnara: { champion: 'Vulnarok', virtuoso: 'Vulnalys', ace: 'Vulnavex', enigma: 'Vulnamyr' },
+  // M244 sheet 2: Vulnarc (Storm), canon spirits-species.md 'Named — Vulnyx › Vulnarc (Storm)' (Magii a00621e, Alex 11-27); art pending lock
+  vulnarc: { champion: 'Vulnarkor', virtuoso: 'Vulnarcelle', ace: 'Arcvex', enigma: 'Vulnarceth' },
 }
 
 /** Get second form name, or null if base element */

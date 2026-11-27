@@ -14,10 +14,10 @@ const CANON = '/root/athernyx/CANON/world/spirits-species.md'
 ok(existsSync(LEDGER), `ledger present (${LEDGER})`)
 ok(existsSync(CANON), `canon base table present (${CANON})`)
 
-ok(GALLERY.length === 54, `54 rows: 10 base + 40 forms + 4 awakened (got ${GALLERY.length})`)
+ok(GALLERY.length === 58, `58 rows: 10 base + 40 forms + 8 awakened (got ${GALLERY.length})`)
 GALLERY.forEach((r, i) => ok(r.num === i + 1, `row ${i} numbered ${i + 1} (got ${r.num})`))
 ok(GALLERY.slice(0, 10).every(r => r.el === null) && GALLERY.slice(10).every(r => r.el !== null), 'base 10 first, then the 40 forms')
-ok(new Set(GALLERY.map(r => r.name)).size === 54, 'every name unique')
+ok(new Set(GALLERY.map(r => r.name)).size === 58, 'every name unique')
 ok(new Set(DISCOVERY.map(([s, e]) => `${s}/${e}`)).size === 40, 'every species x element once')
 
 if (existsSync(LEDGER)) {
@@ -62,12 +62,17 @@ ok(steepAdd(steepAdd(STEEP_NONE, 'mana', 8), 'storm', 5).storm === 2, 'add is he
 {
   const L3 = '/root/athernyx/assets/stage3/grimoire-ledger-stage3.json'
   const locks = (JSON.parse(readFileSync(L3, 'utf8')).locks as { n: number; name: string; branch_name: string; second_form: string }[]).slice().sort((a, b) => a.n - b.n)
-  const aw = GALLERY.filter(r => r.aw)
+  const aw = GALLERY.filter(r => r.aw && r.el === 'mana')
   ok(aw.length === 4 && aw.every((r, i) => r.num === 51 + i), `awakened rows #051-#054 (got ${aw.map(r => r.num)})`)
   locks.slice(0, 4).forEach((l, i) => ok(aw[i]?.name === l.name && aw[i]?.aw?.branch === l.branch_name.toLowerCase() && l.second_form === 'Vulnara', `awakened #${51 + i} = stage-3 n${l.n} ${l.name} ${l.branch_name} (got ${aw[i]?.name} ${aw[i]?.aw?.branch})`))
   const line = readFileSync(CANON, 'utf8').split('\n').find(x => x.includes('Locked so far') && x.includes('Vulnara')) ?? ''
   for (const r of aw) ok(line.includes(`**${r.name}** (${r.aw!.branch[0].toUpperCase()}${r.aw!.branch.slice(1)})`), `canon line names ${r.name} (${r.aw!.branch})`)
   ok(aw.every(r => r.icon.startsWith('/open/spirits/') && !r.icon.includes('stage3')), 'awakened icons are our renders, not the private art')
+  // M244 sheet 2: Vulnarc's four (#055-#058, art pending lock) = the canon's 'Named — Vulnyx › Vulnarc (Storm)' line, word for word
+  const st = GALLERY.filter(r => r.aw && r.el === 'storm'), named = readFileSync(CANON, 'utf8').split('\n').find(x => x.includes('Named') && x.includes('Vulnarc (Storm)')) ?? ''
+  ok(st.length === 4 && st.every((r, i) => r.num === 55 + i), `Vulnarc's awakened rows #055-#058 (got ${st.map(r => r.num)})`)
+  for (const r of st) ok(named.includes(`**${r.name}** (${r.aw!.branch[0].toUpperCase()}${r.aw!.branch.slice(1)}`), `canon names ${r.name} (${r.aw!.branch})`)
+  ok(st.every(r => r.icon.startsWith('/open/spirits/') && !r.icon.includes('stage3')), 'Vulnarc awakened icons are our renders')
 }
 console.log(`spirit-gallery: ${pass} pass, ${fails.length} fail`)
 if (fails.length) { for (const f of fails) console.log('  FAIL', f); process.exit(1) }
