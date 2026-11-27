@@ -10,7 +10,8 @@ import { fpGunAds } from '../shared/fp-gun'
 import { viewFov, adsLookScale } from '../shared/optics'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
-import { createLoco, tickLocomotion, eyeY, WALK_SPEED, SPEED_CAP, type LocoWorld } from '../shared/locomotion'
+import { createLoco, tickLocomotion, eyeY, launchKeeper, WALK_SPEED, SPEED_CAP, type LocoWorld } from '../shared/locomotion'
+import { takeBoop, boopOutcome, noteBoop, PUSH_FWD, PUSH_UP } from '../shared/boop'   // M232
 import { tickFeet, setListener } from '../shared/sfx'
 import { liftCarry } from './lift'
 import { GROUND_Y } from './plot'
@@ -52,6 +53,7 @@ export function Walker({ world, ground, spawn, locked, fallY, onFall, onTick, fr
   const keys = useRef(new Set<string>())
   const look = useRef({ yaw: spawn.yaw, pitch: -0.05 })
   const pinned = useRef(false)   // __ather.pin (check-only)
+  const flinch = useRef<{ at: number; side: number } | null>(null)   // M232: the last boop's tilt
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => { keys.current.add(e.code); if (e.code === 'Space') e.preventDefault() }
@@ -120,6 +122,14 @@ export function Walker({ world, ground, spawn, locked, fallY, onFall, onTick, fr
     if (pinned.current) { camera.position.set(lc.px, eyeY(lc), lc.pz); camera.rotation.set(pitch, yaw, 0, 'YXZ'); return }
     const sk = sink?.current
     if (sk) { sk(lc, dt); camera.position.set(lc.px, eyeY(lc), lc.pz); camera.rotation.set(pitch, yaw, 0, 'YXZ'); onTick(lc, yaw, dt); return }
+    // M232: a boop reached this keeper (shared/boop.ts): caught standing still = a small hop away, on the move = a tap
+    const bp = takeBoop()
+    if (bp) {
+      const o = boopOutcome(Math.hypot(lc.hvx, lc.hvz), !!lc.airborne)
+      if (o === 'push') launchKeeper(lc, bp.x, bp.z, PUSH_FWD, PUSH_UP)
+      flinch.current = { at: performance.now(), side: Math.sign(bp.x * Math.cos(yaw) - bp.z * Math.sin(yaw)) || 1 }
+      noteBoop('me', o)
+    }
     tickLocomotion(lc, {
       mvX: wish.x, mvZ: wish.z, fwdX: fwd.x, fwdZ: fwd.z, rightX: right.x, rightZ: right.z,
       jumpKey: k.has('Space'), crouchKey: k.has('ShiftLeft') || k.has('ShiftRight') || k.has('KeyC'), dt,
@@ -129,7 +139,8 @@ export function Walker({ world, ground, spawn, locked, fallY, onFall, onTick, fr
     tickFeet(lc, dt)   // footsteps / jump / land: silent until the sound is voted yay
 
     camera.position.set(lc.px, eyeY(lc), lc.pz)
-    camera.rotation.set(pitch, yaw, 0, 'YXZ')
+    { const fl = flinch.current, a = fl ? (performance.now() - fl.at) / 320 : 1   // M232: the hit reaction, a quick tilt that settles
+      camera.rotation.set(pitch, yaw, a < 1 ? fl!.side * 0.07 * Math.sin(a * Math.PI) * (1 - a) : 0, 'YXZ') }
     setListener({ x: lc.px, y: eyeY(lc), z: lc.pz }, { x: fwd.x, y: 0, z: fwd.z })   // M99: positional sounds hear from the keeper (nothing set it before: every `at` panned from the world origin)
     const speed = Math.hypot(lc.hvx, lc.hvz), cam = camera as THREE.PerspectiveCamera
     const st = getSettings()

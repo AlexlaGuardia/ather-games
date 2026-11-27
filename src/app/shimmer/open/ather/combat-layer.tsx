@@ -15,7 +15,7 @@ import { armedGun, sigilKey } from '../shared/gun-sigil'   // M93 s4: the fitted
 import { useLoadout } from '../shared/loadout'
 import { useBirth } from '../birth-gate'
 import { weaponDef } from '../../engine/weapons'
-import { newCombat, stepCombat, applyNetHit, applyNetHurt, skinOf, fire, reload, populate, revive, spawnHollow, SETTLE, topUpDue, HEAD_Y, fxOn, SHAMBLER, FLOATER, CRAWLER, crawlerScale, type Combat, type Terrain, type CombatEvent, type Hollow, type HollowKind, stepTrigger, dropBurst, swapGun, stepAway, canReload, heldGun, M151 } from './combat'
+import { newCombat, stepCombat, punchHollow, applyNetHit, applyNetHurt, skinOf, fire, reload, populate, revive, spawnHollow, SETTLE, topUpDue, HEAD_Y, fxOn, SHAMBLER, FLOATER, CRAWLER, crawlerScale, type Combat, type Terrain, type CombatEvent, type Hollow, type HollowKind, stepTrigger, dropBurst, swapGun, stepAway, canReload, heldGun, M151 } from './combat'
 import { live as liveSolids } from './dynamic-solids'
 import { noteCombat } from '../shared/idle-mode'
 import { noteHollowNear, SKIT } from '../shared/idle-skits'   // M126 s2
@@ -38,6 +38,7 @@ import { sprout, poseSprout, lumpyGeometry, type SproutKind } from './hollow-bod
 import { makeWalker, poseWalker, spillGeometry, walkerGeometry, WALKER_CORE } from './walker-body'   // M163 s1   // M34: no light of its own; borrows the ground
 import { poseFlit, flitMats, flitGeometry, geoTris, wingLift, FLIT, FLIT_HIT_R, type FlitPose } from './flit-body'   // M120 s3: the floater's own body
 import { borrowedSky } from '../../voxel3d/sky-env'
+import { takePunch, noteBoop } from '../shared/boop'   // M232
 import { dayProgress, daylight } from '../../engine/day-cycle'
 
 export interface CombatHud {
@@ -834,6 +835,11 @@ export function CombatLayer({ T, locked, frozen, active, safe, onEvents, onHud, 
     }
     stepCombat(C, T, feet, dt)
     C.events.push(...heard)
+    if (takePunch() && C.keeper.hp > 0) {   // M232: a bare-handed punch (shared/boop.ts; the page's BoopLayer throws it)
+      camera.getWorldDirection(aim)
+      const p = punchHollow(C, T, feet, Math.atan2(-aim.x, -aim.z))
+      if (p) noteBoop('hollow', p.outcome, String(p.id))
+    }
     if (SF && hp0) noteKeeper(SF, C, hp0)
     if (C.hollows.some(h => Math.hypot(h.x - feet.x, h.z - feet.z) < SKIT.hollowR)) noteHollowNear()   // M126 s2: Hollows about = no idle skits
     // slice 3: the host tells the party about every new drop (its kills and guests' kills alike); each keeper lays its own.

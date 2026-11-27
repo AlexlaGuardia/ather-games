@@ -175,6 +175,7 @@ import { loadMap, saveMap, freshMap, startRule, rollSections, areaState, uncover
 import { TouchControls, type TouchAction } from '../shared/touch-controls'
 import { isTouchOnly, pressKey, touch } from '../shared/touch'
 import { PadBridge, usePadKind, usePadGlyph, padPrompt } from '../shared/pad-bridge'
+import { BoopLayer } from './boop-layer'   // M232
 import { useMenuLock } from '../shared/menu-lock'
 import { BirthGate, useBirthGateUp, BORN_EVENT } from '../birth-gate'
 import { MorelBubble } from '../shared/morel-bubble'   // BETA M33: the glove's gem speaks (ammo)
@@ -2032,6 +2033,7 @@ function AtherSliceGame() {
         <TouchControls showFire={zone.kind === 'wilds'} actions={touchActions} holds={SKIN_HOLDS} />
       )}
       <PadBridge menuOpen={panel !== null || optionsOpen || birthUp || building || !!tour?.talk} />
+      <BoopLayer stowed={() => stanceRef.current.kind === 'stowed'} holding={() => stanceRef.current.kind === 'item'} pose={() => poseRef.current} />{/* M232: R2 / right-click punch, the boop */}
       {/* M179: the card closes on the CLICK, not on pointerdown: closing on pointerdown let the tap's click land on the pill
           under it (E · use at the waymark opened the fold map, gun-fit-check phone leg, 11-25) */}
       {isTouch && !introSeen && !panel && !building && (

@@ -10,7 +10,7 @@ import { load as loadBindings, save as saveBindings, type BindingMap } from '@/l
 import { PAD, type PadButton } from '@/lib/input/actions'
 import { padName, hintFor } from '@/lib/input/hints'
 import { touch, TOUCH_LOOK_SENS } from './touch'
-import { newPadState, padStep, releaseAll, padActed, padPrompt, PAD_HINTS, PAD_MENU_HINTS, SOUND_OFF_NOTE, type PadEffect, type PadState } from './pad'
+import { newPadState, padStep, releaseAll, padActed, padPrompt, PAD_HINTS, PAD_MENU_HINTS, SOUND_OFF_NOTE, type PadEffect, type PadState, type PadCtx } from './pad'
 import { audio, audioState } from './gun-sound'
 
 // ── "a pad is in use" (for the hint and the click-to-play card) ───────────────────────────────────────────────────
@@ -39,6 +39,12 @@ export const padCapture = (f: ((b: PadButton) => void) | null) => { capture = f 
 let mapVer = 0
 /** Save a rebound map (the 08-28 BindingMap, shimmer.voxel.bindings.v1) and make the live bridge use it. */
 export function savePadMap(m: BindingMap) { saveBindings(m); mapVer++; seenSubs.forEach(f => f()) }
+
+// ── M232: what the hands hold (the page says: nothing drawn = R2 punches, an item = L2 uses it) and whether the d-pad has
+// a hotbar slot lit (game-hud says: then the use button holds it). Read by padStep every tick.
+const ctx: PadCtx = { handsOut: false, holding: false, browsing: false }
+export function setPadHands(handsOut: boolean, holding: boolean) { ctx.handsOut = handsOut; ctx.holding = holding }
+export function setPadBrowsing(on: boolean) { ctx.browsing = on }
 
 /** A world prompt as the player's device names it ('E · Gregory' / '□ · Gregory'). */
 export { padPrompt }
@@ -103,6 +109,30 @@ function navigate(dir: 'up' | 'down' | 'left' | 'right') {
 }
 const ARROW = { up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight' } as const
 
+// ── M232: the menu POINTER (Alex 11-27: 'controller also needs to have a cursor in menus'). The left stick moves it; the
+// button under it gets the ring (so the d-pad's focus-hopping and the pointer are ONE selection, never two); A clicks
+// what the pointer is on. The d-pad moving the ring brings the pointer along. Shown only once the stick has moved.
+const cur = { x: 0, y: 0, on: false, el: null as HTMLDivElement | null }
+function drawCursor() { const el = cur.el; if (!el) return; el.style.display = cur.on ? 'block' : 'none'; el.style.transform = `translate(${cur.x - 7}px, ${cur.y - 7}px)` }
+function cursorOff() { cur.on = false; drawCursor() }
+function underCursor(): Element | null { return document.elementFromPoint(cur.x, cur.y) }
+function moveCursor(dx: number, dy: number) {
+  if (!cur.on) { const r = ringed()?.getBoundingClientRect(); cur.x = r ? r.left + r.width / 2 : innerWidth / 2; cur.y = r ? r.top + r.height / 2 : innerHeight / 2; cur.on = true }
+  cur.x = Math.max(0, Math.min(innerWidth - 1, cur.x + dx)); cur.y = Math.max(0, Math.min(innerHeight - 1, cur.y + dy))
+  drawCursor()
+  const hit = underCursor()?.closest(FOCUSABLE) as HTMLElement | null
+  if (hit && hit !== ringed() && !(hit instanceof HTMLCanvasElement) && visible(hit)) ring(hit)
+}
+/** A press of A on the pointer: the button under it (its own click), or the bare element there (a full mouse press). */
+function clickCursor() {
+  const el = underCursor(); if (!el) return
+  const btn = el.closest(FOCUSABLE) as HTMLElement | null
+  if (btn && !(btn instanceof HTMLCanvasElement)) { ring(btn); btn.click(); return }
+  const o = { bubbles: true, cancelable: true, clientX: cur.x, clientY: cur.y, button: 0 }
+  el.dispatchEvent(new PointerEvent('pointerdown', o)); el.dispatchEvent(new MouseEvent('mousedown', o))
+  el.dispatchEvent(new PointerEvent('pointerup', o)); el.dispatchEvent(new MouseEvent('mouseup', o)); el.dispatchEvent(new MouseEvent('click', o))
+}
+
 let fireSeq = 0, firing = () => false
 function apply(e: PadEffect) {
   switch (e.t) {
@@ -123,13 +153,16 @@ function apply(e: PadEffect) {
       const code = ARROW[e.dir]
       const free = key('keydown', code); key('keyup', code)
       if (free) navigate(e.dir)     // nobody took the arrow (a talk or the birth gate would have): move the ring
+      if (free && cur.on) { const r = ringed()?.getBoundingClientRect(); if (r) { cur.x = r.left + r.width / 2; cur.y = r.top + r.height / 2; drawCursor() } }   // M232: the pointer follows
       return
     }
     case 'accept': {
       const free = key('keydown', 'Enter'); key('keyup', 'Enter')
-      if (free) ringed()?.click()
+      if (free) { if (cur.on) clickCursor(); else ringed()?.click() }   // M232: the pointer, once the stick has moved it
       return
     }
+    case 'cursor': moveCursor(e.dx, e.dy); return
+    case 'hold': window.dispatchEvent(new CustomEvent('pad:hold')); return
   }
 }
 
@@ -138,6 +171,7 @@ export function PadBridge({ menuOpen }: { menuOpen: boolean }) {
   const kind = usePadKind()
   useEffect(() => {
     if (!menuOpen) ring(null)
+    cursorOff()   // M232: a menu opens (or shuts) with the pointer hidden until the stick moves it
   }, [menuOpen])
   useEffect(() => {
     const s: PadState = newPadState()
@@ -170,7 +204,7 @@ export function PadBridge({ menuOpen }: { menuOpen: boolean }) {
       }
       setActive(pad && padOwns ? pad.kind : null)
       if (++n % 8 === 0) setLocked(readLocked())
-      for (const e of padStep(s, pad, map, menu.current, dt)) apply(e)
+      for (const e of padStep(s, pad, map, menu.current, dt, ctx)) apply(e)
     }
     const id = setInterval(tick, 16)
     const handBack = () => { padOwns = false; setActive(null) }
@@ -187,9 +221,10 @@ export function PadBridge({ menuOpen }: { menuOpen: boolean }) {
     const blur = () => { for (const e of releaseAll(s)) apply(e); resetEdges() }
     const wake = () => { map = loadBindings() }     // a pad plugged in (or rebinds saved in voxel3d's panel): re-read the map
     window.addEventListener('blur', blur); window.addEventListener('gamepadconnected', wake)
-    ;(window as unknown as { __pad?: unknown }).__pad = { kind: () => activeKind, held: () => [...s.down.values()], menu: () => menu.current, map: () => map }   // read-only probe (m186-pad-check)
+    ;(window as unknown as { __pad?: unknown }).__pad = { kind: () => activeKind, held: () => [...s.down.values()], menu: () => menu.current, map: () => map,
+      ctx: () => ({ ...ctx }), cursor: () => ({ x: cur.x, y: cur.y, on: cur.on }), ringed: () => ringed()?.textContent?.slice(0, 40) ?? null }   // M232 probes   // read-only probe (m186-pad-check)
     return () => {
-      clearInterval(id); blur(); setActive(null); ring(null)
+      clearInterval(id); blur(); setActive(null); ring(null); cursorOff()
       for (const g of GESTURES) window.removeEventListener(g, gesture, { capture: true })
       window.removeEventListener('mousemove', moved, { capture: true })
       window.removeEventListener('blur', blur); window.removeEventListener('gamepadconnected', wake)
@@ -210,6 +245,8 @@ export function PadBridge({ menuOpen }: { menuOpen: boolean }) {
           {touchy ? SOUND_OFF_NOTE.tap : SOUND_OFF_NOTE.click}
         </div>
       )}
+      {/* M232: the menu pointer (drawn imperatively by the bridge's tick; hidden until the stick moves it) */}
+      <div data-pad-cursor ref={el => { cur.el = el; drawCursor() }} style={{ position: 'fixed', left: 0, top: 0, width: 14, height: 14, borderRadius: 999, zIndex: 2147483000, pointerEvents: 'none', display: 'none', background: 'rgba(244,239,226,0.92)', border: '2px solid #d4a843', boxShadow: '0 1px 4px rgba(0,0,0,.5)' }} />
       <div data-pad-hint style={{ position: 'fixed', left: 8, top: 8, zIndex: 40, display: 'flex', gap: 10, padding: '3px 10px', borderRadius: 999, background: 'rgba(12,16,20,0.55)', color: '#eef3f6', font: '600 10px system-ui, sans-serif', letterSpacing: '0.06em', pointerEvents: 'none', whiteSpace: 'nowrap' }}>
         {hints.map(h => <span key={h.key}><span style={{ color: '#d4a843' }}>{h.glyph}</span> {h.label}</span>)}
       </div>

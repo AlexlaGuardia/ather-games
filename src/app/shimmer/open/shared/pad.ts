@@ -65,6 +65,19 @@ export type PadEffect =
   | { t: 'hotbar'; dir: 1 | -1 }
   | { t: 'nav'; dir: 'up' | 'down' | 'left' | 'right' }   // the menu's arrow: arrow key first, focus ring if unclaimed
   | { t: 'accept' }                                    // the menu's A: Enter first, click the ringed button if unclaimed
+  | { t: 'cursor'; dx: number; dy: number }           // M232: the menu's pointer, px this frame (left stick)
+  | { t: 'hold' }                                      // M232: put the browsed hotbar slot in hand (game-hud's wheel click)
+
+/** M232: what the page says about the hands, read by padStep each frame (pad-bridge keeps it).
+ *  handsOut = nothing drawn or held: the fire button PUNCHES (taps 'Melee'). holding = a non-gun item in hand: the sights
+ *  button USES / PLACES it (taps E, the key that already does both). browsing = the d-pad lit a hotbar slot: the use
+ *  button HOLDS that slot instead of using. All three ride on the buttons the player bound (fire, aim, use: M189's list). */
+export interface PadCtx { handsOut: boolean; holding: boolean; browsing: boolean }
+export const NO_CTX: PadCtx = { handsOut: false, holding: false, browsing: false }
+/** M232: full stick moves the menu pointer this many px a second (squared curve, like the look). */
+export const PAD_CURSOR_PX_S = 900
+/** The interact action, whose button holds a browsed slot (M232). */
+export const USE_ACTION: ActionId = 'world.interact'
 
 const anyDown = (map: BindingMap, id: ActionId, pad: PadSample) =>
   map[id].pad.some(b => pad.down.has(b)) || (chordOf(map[id]).length > 0 && chordOf(map[id]).every(b => pad.down.has(b)))
@@ -81,7 +94,7 @@ export function releaseAll(s: PadState): PadEffect[] {
 }
 
 /** One frame of controller → open world. Mutates `s` (what is held), returns what to do. */
-export function padStep(s: PadState, pad: PadSample | null, map: BindingMap, menuOpen: boolean, dt: number): PadEffect[] {
+export function padStep(s: PadState, pad: PadSample | null, map: BindingMap, menuOpen: boolean, dt: number, ctx: PadCtx = NO_CTX): PadEffect[] {
   if (!pad) return releaseAll(s)
   const out: PadEffect[] = []
   const pressed = padPressed(map, pad)
@@ -101,12 +114,16 @@ export function padStep(s: PadState, pad: PadSample | null, map: BindingMap, men
     if (edge('DRIGHT')) out.push({ t: 'nav', dir: 'right' })
     if (edge('A')) out.push({ t: 'accept' })
     if (edge('LB') || edge('RB')) out.push({ t: 'tap', code: 'Tab' })
+    // M232: the left stick moves a pointer over the menu (A clicks what it is on: pad-bridge)
+    if (pad.lx || pad.ly) { const k = PAD_CURSOR_PX_S * dt; out.push({ t: 'cursor', dx: pad.lx * Math.abs(pad.lx) * k, dy: pad.ly * Math.abs(pad.ly) * k }) }
     return out
   }
 
   // buttons → keys: down on the edge (a chord's trigger is eaten by padPressed), up when its buttons let go
   for (const id of pressed) {
     const code = OPEN_CODE[id]; if (!code) continue
+    // M232: a lit hotbar slot + the use button = hold that slot (the wheel's click), not a use
+    if (id === USE_ACTION && ctx.browsing && map[id].pad.some(edge)) { out.push({ t: 'hold' }); continue }
     if (chordOf(map[id]).length >= 2 && !map[id].pad.some(b => pad.pressed.has(b))) { out.push({ t: 'tap', code }); continue }
     if (s.down.has(id)) continue
     s.down.set(id, code); out.push({ t: 'keydown', code })
@@ -115,10 +132,15 @@ export function padStep(s: PadState, pad: PadSample | null, map: BindingMap, men
 
   // the gun: RT is the trigger (set on the press only, so a semi-auto the combat clears does not refire while held), LT the sights
   const fireNow = map[FIRE_ACTION].pad.some(b => pad.down.has(b))
-  if (fireNow && map[FIRE_ACTION].pad.some(edge)) { s.fire = true; out.push({ t: 'fire', on: true }) }
+  // M232: hands out (nothing drawn), the trigger is a PUNCH (the 'Melee' key the phone's hit button already sends)
+  if (ctx.handsOut && fireNow && map[FIRE_ACTION].pad.some(edge)) out.push({ t: 'tap', code: 'Melee' })
+  else if (ctx.handsOut) { if (s.fire) { s.fire = false; out.push({ t: 'fire', on: false }) } }
+  else if (fireNow && map[FIRE_ACTION].pad.some(edge)) { s.fire = true; out.push({ t: 'fire', on: true }) }
   else if (!fireNow && s.fire) { s.fire = false; out.push({ t: 'fire', on: false }) }
   const aimNow = map[AIM_ACTION].pad.some(b => pad.down.has(b))
-  if (aimNow !== s.aim) { s.aim = aimNow; out.push({ t: 'aim', on: aimNow }) }
+  // M232: an item in hand (no gun), the sights button uses / places it: E, the key that already does both
+  if (ctx.holding) { if (aimNow && map[AIM_ACTION].pad.some(edge)) out.push({ t: 'tap', code: 'KeyE' }); if (s.aim) { s.aim = false; out.push({ t: 'aim', on: false }) } }
+  else if (aimNow !== s.aim) { s.aim = aimNow; out.push({ t: 'aim', on: aimNow }) }
 
   if (edge('DLEFT')) out.push({ t: 'hotbar', dir: -1 })
   if (edge('DRIGHT')) out.push({ t: 'hotbar', dir: 1 })
@@ -136,8 +158,8 @@ export function padStep(s: PadState, pad: PadSample | null, map: BindingMap, men
 
 /** The small on-screen legend while a pad is in use, by ACTION (M189: it names whatever button the player bound). Placeholder words (for @lark). */
 export const PAD_HINTS: { id: ActionId; label: string }[] = [
-  { id: 'move.jump', label: 'jump' }, { id: 'world.interact', label: 'use' }, { id: 'item.draw', label: 'draw' }, { id: 'world.mine', label: 'fire' },
-  { id: 'world.place', label: 'aim' }, { id: 'ui.inventory', label: 'bag' }, { id: 'ui.map', label: 'map' }, { id: 'ui.settings', label: 'options' },
+  { id: 'move.jump', label: 'jump' }, { id: 'world.interact', label: 'use' }, { id: 'item.draw', label: 'draw' }, { id: 'world.mine', label: 'fire · punch' },
+  { id: 'world.place', label: 'aim · use' }, { id: 'ui.inventory', label: 'bag' }, { id: 'ui.map', label: 'map' }, { id: 'ui.settings', label: 'options' },
 ]
 export const PAD_MENU_HINTS: { b: PadButton; label: string }[] = [{ b: 'A', label: 'pick' }, { b: 'B', label: 'close' }]
 

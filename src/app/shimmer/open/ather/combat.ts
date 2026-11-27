@@ -20,6 +20,7 @@ import { easeRemote } from '../shared/fight-share'   // M28: a non-host's Hollow
 import { ECON, payReload } from '../shared/vitals-economy'
 import { stepFlit, flitHit, type FlitStep } from './flit-pose'
 import { bodyBlocked, segmentHit, lineOfSight, steer, type Structures, type SteerMem } from './obstacles'
+import { pickPunchTarget, hollowOutcome, pushDir, FIST_DMG, PUSH_HOLLOW_M, type BoopOutcome } from '../shared/boop'   // M232: the bare fist
 
 export interface Terrain {
   heightAt: (x: number, z: number) => number
@@ -462,6 +463,27 @@ function shoveBody(c: Combat, T: Terrain, h: Hollow, r: Round) {
   const nx = h.x + r.vx / l * m, nz = h.z + r.vz / l * m, sfree = structFree(T, h, h.kind === 'crawler' ? CRAWLER.radius : SHAMBLER.radius)
   if (!T.walkable(nx, nz) || solidTop(c, nx, nz) !== null || (sfree && !sfree(nx, nz)) || holdsBorder(c, h, nx, nz)) return
   h.x = nx; h.z = nz; (c.shoved ??= new Map()).set(h.id, SHOVE_MAX - left + m)
+}
+
+/** M232: the bare fist on a Hollow in reach (shared/boop.ts rules). The fist's damage, a stagger, and a SMALL shove only
+ *  when the Hollow was standing still (a moving one just flinches). A guest's punch is feedback + a net hit, the host
+ *  decides (same as a round, M28). Returns what it did, or null when nothing was in reach. Call AFTER stepCombat (its
+ *  events reset at the step's start); a Hollow taken to 0 here dies on the next step (kill event + drop). */
+export function punchHollow(c: Combat, T: Terrain, feet: { x: number; y: number; z: number }, yaw: number): { id: number; outcome: BoopOutcome } | null {
+  const cands = c.hollows.filter(h => h.hp > 0).map(h => ({ id: String(h.id), x: h.x, z: h.z, y: h.y, h }))
+  const t = pickPunchTarget({ x: feet.x, z: feet.z, y: feet.y, yaw }, cands); if (!t) return null
+  const h = t.h, outcome = hollowOutcome(h.state)
+  h.hitFlash = 0.12
+  if (c.remote) { (c.netHits ??= []).push({ id: h.id, dmg: FIST_DMG, head: false }); c.events.push({ kind: 'hit', id: h.id, head: false, killed: false }); return { id: h.id, outcome } }
+  h.hp -= FIST_DMG
+  if (h.state !== 'lunge' && h.state !== 'charge') { h.state = 'stagger'; h.t = h.kind === 'floater' ? SHAMBLER.stagger : walkerOf(h).stagger }
+  if (outcome === 'push') {
+    const d = pushDir({ x: feet.x, z: feet.z, yaw }, h), m = PUSH_HOLLOW_M / weightOf(h)
+    const nx = h.x + d.x * m, nz = h.z + d.z * m, sfree = structFree(T, h, h.kind === 'crawler' ? CRAWLER.radius : SHAMBLER.radius)
+    if (T.walkable(nx, nz) && solidTop(c, nx, nz) === null && !(sfree && !sfree(nx, nz)) && !holdsBorder(c, h, nx, nz)) { h.x = nx; h.z = nz }
+  }
+  c.events.push({ kind: 'hit', id: h.id, head: false, killed: false })   // a kill is the next step's (its sweep: event + ONE drop)
+  return { id: h.id, outcome }
 }
 
 /** Pull the trigger along an aim (unit vector). Returns false when the gun cannot fire. */

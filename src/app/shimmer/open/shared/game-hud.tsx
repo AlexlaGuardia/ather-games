@@ -48,7 +48,7 @@ import { toolPanel } from '../ather/tool-panel'
 import { ToolPanelView } from './tool-panel-view'
 import { useToolBeat } from '../ather/use-tool-beat'   // BETA M194: the tutorial points at the dial
 import { toolBeatLine } from '../ather/tool-beat'
-import { usePadKind } from './pad-bridge'
+import { usePadKind, usePadGlyph, setPadBrowsing } from './pad-bridge'
 import { ChordBars } from './chord-bars'   // BETA M188 s1: chordmates' health over your own
 import { createSkillSet, type SkillSet } from '../../engine/skills'
 import type { Vitals } from '../../engine/vitals'
@@ -337,15 +337,33 @@ export function GameHud({ size, pose, marks, vitals, mana, tools, skills, entrie
       setCursor(null); equipRef.current(c)
     }
     // M186: the controller's d-pad left / right steps the hotbar one slot (shared/pad-bridge.tsx; the wheel needs pointer lock)
-    const padStep = (e: Event) => { if (!inputRef.current) return; const d = (e as CustomEvent<number>).detail; setCursor(null); onSelect((Math.max(0, selRef.current) + d + n) % n) }
-    addEventListener('keydown', key); addEventListener('wheel', wheel, { passive: true }); addEventListener('mousedown', click); addEventListener('pad:hotbar', padStep)
-    return () => { removeEventListener('keydown', key); removeEventListener('wheel', wheel); removeEventListener('mousedown', click); removeEventListener('pad:hotbar', padStep); if (idle.current) clearTimeout(idle.current) }
+    // M232 (Alex 11-27: 'the right and left dpad should move the hotbar highlighting the item press square to hold the
+    // highlighted item'): with a hand to fill (onEquip) the d-pad BROWSES like the wheel (lights a slot, nothing in hand),
+    // and the use button (□ by default) holds the lit slot: pad-bridge turns that press into 'pad:hold' while one is lit.
+    const padStep = (e: Event) => {
+      if (!inputRef.current) return
+      const d = (e as CustomEvent<number>).detail
+      if (!equipRef.current) { setCursor(null); onSelect((Math.max(0, selRef.current) + d + n) % n); return }
+      const next = ((cursorRef.current ?? Math.max(0, selRef.current)) + d + n) % n
+      setCursor(next)
+      if (idle.current) clearTimeout(idle.current)
+      idle.current = setTimeout(() => setCursor(null), BROWSE_MS)
+    }
+    const padHold = () => {
+      const c = cursorRef.current; if (c === null || !inputRef.current || !equipRef.current) return
+      if (idle.current) clearTimeout(idle.current)
+      setCursor(null); equipRef.current(c)
+    }
+    addEventListener('keydown', key); addEventListener('wheel', wheel, { passive: true }); addEventListener('mousedown', click); addEventListener('pad:hotbar', padStep); addEventListener('pad:hold', padHold)
+    return () => { removeEventListener('keydown', key); removeEventListener('wheel', wheel); removeEventListener('mousedown', click); removeEventListener('pad:hotbar', padStep); removeEventListener('pad:hold', padHold); if (idle.current) clearTimeout(idle.current) }
   }, [onSelect, n])
   const shown = cursor ?? sel
+  useEffect(() => { setPadBrowsing(cursor !== null); return () => setPadBrowsing(false) }, [cursor])   // M232: the use button holds a lit slot
+  const padGlyph = usePadGlyph()
   // say the lit slot's name (an empty slot says nothing), never on mount
   const first = useRef(true)
   const selName = useMemo(() => { const e = entries[shown]; return e ? e.name ?? e.itemId : null }, [entries, shown])
-  useEffect(() => { if (first.current) { first.current = false; return } if (selName) hudSay(cursor !== null ? `${selName} · click the wheel to hold` : selName, 'item') }, [shown]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (first.current) { first.current = false; return } if (selName) hudSay(cursor !== null ? (padGlyph ? `${selName} · ${padGlyph} to hold` : `${selName} · click the wheel to hold`) : selName, 'item') }, [shown]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const statusTop = box.top + box.size + 40
   const phoneCompassX = Math.min(vw / 2, vw - box.right - box.size - 8 - compassWidth('phone') / 2 - 6)

@@ -179,5 +179,49 @@ const has = (fx: PadEffect[], e: PadEffect) => fx.some(f => JSON.stringify(f) ==
   ok(/<PadBindings \/>/.test(opts) && /padCapture\(/.test(opts) && /padReset\(/.test(opts), 'Options lists the controller and rebinds through the bridge')
 }
 
+// M232: hands out = R2 punches, an item in hand = L2 uses it, a lit hotbar slot = □ holds it, the stick moves a menu pointer
+{
+  const hands = { handsOut: true, holding: false, browsing: false }
+  let s = newPadState(), p = pad()
+  let fx = padStep(s, p(['RT']), map, false, 1 / 60, hands)
+  ok(has(fx, { t: 'tap', code: 'Melee' }) && !fx.some(f => f.t === 'fire'), 'hands out: RT taps Melee (a punch), never fires')
+  fx = padStep(s, p(['RT']), map, false, 1 / 60, hands)
+  ok(!fx.some(f => f.t === 'tap'), 'hands out: RT held punches once (the press, not every frame)')
+  s = newPadState(); p = pad()
+  fx = padStep(s, p(['RT']), map, false, 1 / 60)
+  ok(has(fx, { t: 'fire', on: true }) && !fx.some(f => f.t === 'tap'), 'a gun out: RT still fires')
+  // rebinding fire moves the punch with it (M189 list)
+  const moved = padBind(map, 'world.mine', 'R3')!.map
+  s = newPadState(); p = pad()
+  ok(has(padStep(s, p(['R3']), moved, false, 0, hands), { t: 'tap', code: 'Melee' }), 'the punch follows fire onto a rebound button')
+  // L2 with an item in hand: E on the press, no sights
+  const item = { handsOut: false, holding: true, browsing: false }
+  s = newPadState(); p = pad()
+  fx = padStep(s, p(['LT']), map, false, 0, item)
+  ok(has(fx, { t: 'tap', code: 'KeyE' }) && !fx.some(f => f.t === 'aim' && f.on), 'item in hand: LT taps E (use / place), no sights')
+  s = newPadState(); p = pad()
+  ok(has(padStep(s, p(['LT']), map, false, 0), { t: 'aim', on: true }), 'no item: LT is still the sights')
+  // □ (X, the use button) holds a lit slot instead of using
+  const browse = { handsOut: true, holding: false, browsing: true }
+  s = newPadState(); p = pad()
+  fx = padStep(s, p(['X']), map, false, 0, browse)
+  ok(has(fx, { t: 'hold' }) && !fx.some(f => f.t === 'keydown' && f.code === 'KeyE'), 'a lit slot: □ holds it, no E')
+  s = newPadState(); p = pad()
+  ok(has(padStep(s, p(['X']), map, false, 0, hands), { t: 'keydown', code: 'KeyE' }), 'no lit slot: □ is use (E) as before')
+  s = newPadState(); p = pad()
+  ok(has(padStep(s, p(['DRIGHT']), map, false, 0, hands), { t: 'hotbar', dir: 1 }) && has(padStep(newPadState(), pad()(['DLEFT']), map, false, 0, hands), { t: 'hotbar', dir: -1 }), 'd-pad right / left step the hotbar')
+  // the menu pointer: stick → cursor px; d-pad + A unchanged
+  s = newPadState(); p = pad()
+  fx = padStep(s, p([], { lx: 1, ly: 0 }), map, true, 0.1)
+  const c = fx.find(f => f.t === 'cursor') as { dx: number; dy: number } | undefined
+  ok(!!c && Math.abs(c.dx - 90) < 1e-6 && c.dy === 0, 'menu: full stick right moves the pointer 900 px/s')
+  ok(!padStep(newPadState(), pad()([], { lx: 1 }), map, true, 0.1).some(f => f.t === 'move'), 'menu: the stick never walks')
+  s = newPadState(); p = pad()
+  ok(has(padStep(s, p(['DLEFT']), map, true, 0), { t: 'nav', dir: 'left' }) && has(padStep(newPadState(), pad()(['A']), map, true, 0), { t: 'accept' }), 'menu: d-pad still hops the ring, A still accepts')
+  const bridge = readFileSync('src/app/shimmer/open/shared/pad-bridge.tsx', 'utf8'), hud = readFileSync('src/app/shimmer/open/shared/game-hud.tsx', 'utf8')
+  ok(/if \(cur\.on\) clickCursor\(\); else ringed\(\)\?\.click\(\)/.test(bridge), 'A clicks under the pointer once it moved, else the ringed button')
+  ok(/addEventListener\('pad:hold', padHold\)/.test(hud) && /setPadBrowsing\(cursor !== null\)/.test(hud), 'GameHud: the d-pad browses, pad:hold equips, the bridge knows a slot is lit')
+}
+
 console.log(`pad: ${pass} ok, ${fails.length} fail`)
 if (fails.length) { for (const f of fails) console.log('  FAIL ' + f); process.exit(1) }
