@@ -10,6 +10,10 @@ import { mkdirSync, readFileSync } from 'fs'
 import { gunzipSync } from 'zlib'
 import { dismissStartCard } from './lib/start-card.mts'
 import { LINGSTON, COUNTER, toWorld } from '../src/app/shimmer/open/ather/lingston'
+if (!process.env.ATHER_SESSION_SECRET) {   // the same secret prod signs with (else a minted cookie reads as signed out)
+  const m = readFileSync('.env', 'utf8').match(/^ATHER_SESSION_SECRET=(.*)$/m)
+  if (m) process.env.ATHER_SESSION_SECRET = m[1].trim()
+}
 const { upsertGoogleAccount, claimUsername, accountsDb } = await import('../src/lib/accounts/db')
 const { mintSession } = await import('../src/lib/accounts/session')
 const X = await import('../src/lib/accounts/exchange')
