@@ -45,7 +45,7 @@ import { HeldRod } from '../shared/held-rod'   // M82 s2: the rinstick in the mi
 import { ACTIONS, oneShot } from '../shared/fp-actions'
 import { FpGun, ScopeRing, fpGunAds, ADS_TIGHT, type FpGunApi } from '../shared/fp-gun'
 import { RANGE_GUNS } from '../shared/gunplay'
-import { ThirdPersonBody, dollAction, pullBack, newDrive } from '../shared/third-person'
+import { ThirdPersonBody, dollAction, pullBack, newDrive, THIRD } from '../shared/third-person'
 import { Vector3, type Camera, type Scene, type WebGLRenderer } from 'three'
 import { VoxelDayNight } from '../shared/day-night'
 import { terrainWorld } from '../terrain-world'
@@ -72,6 +72,8 @@ import { cycleLook, LookChip } from './ground-look'
 import { GroundCover, coverFromUrl } from './ground-cover'
 import { coverClear } from './cover-clear'
 import { useOpenMultiplayer, RemoteKeepers, OPEN_WILDS, openNet } from '../shared/open-mp'
+import { pickState, encodeState } from '../shared/mp-state'   // BETA M248: others see me jump
+import { lastPunchAt } from '../shared/boop'
 import { OpenSocial } from '../shared/play-together'
 import { ClusterPanel, useCluster } from './cluster-panel'
 import { clusterGround, mateWalls, mateAt, inMiddle, onPath, onMeadow } from './cluster'
@@ -980,7 +982,9 @@ function AtherSliceGame() {
   // The party instance is the only way in (strangers never match into one); no party = no socket on the plot, as before.
   const { party } = useParty()
   const plotMp = zone.kind === 'plot' && party ? plotZone(visitNow ? visitNow.host : selfPlayerId()) : null
-  const mp = useOpenMultiplayer(zone.kind === 'wilds' ? OPEN_WILDS : plotMp, () => { const p = poseRef.current, y = ground(p.x, p.z); return { x: p.x, y: Number.isFinite(y) ? y : 0, z: p.z, yaw: p.yaw } },
+  // M248: the REAL feet height + a state code (mpBody, set in onTick); before the first tick, the ground as before
+  const mpBody = useRef<{ y: number; s: number } | null>(null), mpLand = useRef({ air: false, at: -1e9 })
+  const mp = useOpenMultiplayer(zone.kind === 'wilds' ? OPEN_WILDS : plotMp, () => { const p = poseRef.current, b = mpBody.current, y = b && Number.isFinite(b.y) ? b.y : ground(p.x, p.z); return { x: p.x, y: Number.isFinite(y) ? y : 0, z: p.z, yaw: p.yaw, ...(b ? { s: b.s } : {}) } },
     () => (stanceRef.current.kind === 'weapon' ? heldRef.current : null))   // M27 slice 4: the party sees my gun
   const heightRef = useRef(ground); heightRef.current = ground
   const visitRev = useMemo(() => ({ works, owned: garden.owned }), [works, garden.owned])   // stable until the plot changes
@@ -1056,6 +1060,11 @@ function AtherSliceGame() {
     }
     gateStepRef.current(lc, yaw, dt, heightRef.current)   // a standing Gate (shared/use-casts.ts): bills, and carries the keeper through an end
     poseRef.current = { x: lc.px, z: lc.pz, yaw }
+    { const now = performance.now(), L = mpLand.current   // M248: what the others see (real feet height + a state code)
+      if (L.air && !lc.airborne) L.at = now
+      L.air = lc.airborne
+      mpBody.current = { y: lc.py, s: encodeState(pickState({ airborne: lc.airborne, vy: lc.vy, landAgoMs: now - L.at, climbing: lc.climbing, sliding: lc.sliding, crouching: lc.crouching,
+        punchAgoMs: now - Math.max(lastSwingAt(), lastPunchAt()), aiming: sightRef.current.aiming, speed: Math.hypot(lc.hvx, lc.hvz), runAt: THIRD.RUN_AT })) } }
     setKeeperAt(lc.px, lc.pz, yaw, lc.py, !lc.airborne)   // M109: a following spirit trails this (M126: feet + standing, for their trail)
     let n: Near = null
     // BETA M60 (Alex 11-21): E acts only on what the CROSSHAIR is on, within 3 m of the keeper (shared/aim-pick.ts); each kind keeps
@@ -1985,7 +1994,7 @@ function AtherSliceGame() {
         {zone.kind === 'plot' && <ClusterScene frame={cl.frame} />}
         {zone.kind === 'glade' && <><PlotScene owned={GLADE_OWNED} pages={0} linked lift={gladeMeshLift} gate={false} /><ClusterScene frame={gladeFrame(gladeLayer)} lift={gladeMeshLift} /><GladeCluster ground={ground} blocked={momoBlocked} marker={gregMark} /><GladeWater layer={gladeLayer} /><ZonePartsView parts={gladeParts} /><SceneryView items={gladeDecor} /></>}   {/* M67 s1a */}
         {zone.kind === 'glade' && <><GladeNodesView nodes={gladeOwnNodes} focus={poseRef} /><ForestryFX ww={gladeOwnNodes} aim={aimRef} fx={fxRef} ground={ground} /><ChannelFocus focus={focusRef} /><GatherTether ref={tetherRef} /><ProspectingFX ww={gladeOwnNodes} aim={cAimRef} fx={cFxRef} ground={ground} mineable={c => mineCheck(c.kind, c.id).ok} /><GroundLoot place="glade" keeper={lootKeeper} ground={ground} can={lootCan} /></>}   {/* M153 s1b */}
-        {(zone.kind === 'wilds' || plotMp) && <RemoteKeepers peers={mp.peers} me={() => poseRef.current} />}
+        {(zone.kind === 'wilds' || plotMp) && <RemoteKeepers peers={mp.peers} me={() => poseRef.current} ground={ground} />}
         {zone.kind === 'plot' && cover !== 'none' && <GroundCover cover={cover} ground={ground} skip={coverSkip} focus={poseRef} />}
         {zone.kind === 'wilds' && wildsTrees && <ForestryFX ww={wildsTrees} aim={aimRef} fx={fxRef} ground={ground} />}
         {zone.kind === 'wilds' && <><ChannelFocus focus={focusRef} /><GatherTether ref={tetherRef} /></>}

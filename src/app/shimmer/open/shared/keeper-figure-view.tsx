@@ -11,14 +11,17 @@ import { gunProp } from './held-gun-prop'   // M27 slice 4: a peer's held gun on
 import type { Look } from './keeper-look'
 import type { Proportions } from './keeper-proportions'
 import type { DollDrive } from './keeper-doll'
+import { applyPoseHint, type PoseHint } from './mp-state'   // BETA M248: a remote keeper's jump / punch / aim hint
 
-export function KeeperFigure({ look, drive, spin = 0, yaw = 0, gun = null, shape, walk }: { look: Look; drive?: React.MutableRefObject<DollDrive>; spin?: number; yaw?: number
+export function KeeperFigure({ look, drive, spin = 0, yaw = 0, gun = null, shape, walk, hint }: { look: Look; drive?: React.MutableRefObject<DollDrive>; spin?: number; yaw?: number
   /** BETA M103: proportions to build with instead of the shipped ones (the body bench's live sliders) */
   shape?: Proportions
   /** BETA M27 slice 4: a gun id held in the right hand (a remote keeper's), null = hands empty */
   gun?: string | null
   /** BETA M156: a remote keeper's walk amount, read each frame (0 stands, 0.6 walks, 1 runs) */
-  walk?: React.RefObject<number> }) {
+  walk?: React.RefObject<number>
+  /** BETA M248: a remote keeper's pose hint (feet tuck, hands up, punch, aim), read each frame on top of the walk */
+  hint?: React.RefObject<PoseHint> }) {
   // M154 follow-up: merged after sizing (keeper-merge.ts), so the dials still drive everything and a new look / shape re-merges
   const body = useMemo(() => mergeKeeper(shape ? buildKeeper(look, shape) : buildKeeper(look)), [look, shape])
   // the gun rides the BODY, following 'hand-r' each frame (the hand mesh is scaled to a mitten: a child would shrink with it)
@@ -44,6 +47,7 @@ export function KeeperFigure({ look, drive, spin = 0, yaw = 0, gun = null, shape
     } else {
       if (spin) h.rotation.y += dt * spin
       poseKeeper(body, t.current, walk?.current ?? 0)
+      if (hint?.current) applyPoseHint(body.group, hint.current)
     }
     const hand = prop.current && body.group.getObjectByName('hand-r')
     if (prop.current && hand) prop.current.position.set(hand.position.x, hand.position.y + 0.02, hand.position.z + 0.06)

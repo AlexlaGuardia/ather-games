@@ -73,6 +73,8 @@ export function throwPunch(now = performance.now()): boolean {
   if (now - S.lastPunch < PUNCH_CD * 1000) return false
   S.lastPunch = now; S.punch = { at: now }; return true
 }
+/** BETA M248: performance.now() of the last punch thrown (-1e9 = never): others see the fist go out. */
+export const lastPunchAt = () => S.lastPunch
 /** Combat's frame: the punch owed, at most 1 s old (a weak GPU's slow frame still lands it; a paused combat never lands a stale one). */
 export function takePunch(now = performance.now()): boolean { const p = S.punch; S.punch = null; return !!p && now - p.at < 1000 }
 /** A boop reached this keeper (from the net, or a check): the walker takes it on its next frame. */

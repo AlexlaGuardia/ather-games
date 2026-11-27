@@ -27,6 +27,8 @@ export interface RemotePlayer {
   lastSeen: number
   /** the sender's `sprite` (server PlayerState.sprite, sent whole on join): the open world puts a packed look here ('lk1:...', M29) */
   sprite?: string
+  /** the sender's `direction` (BETA M248: the open world's state code, open/shared/mp-state.ts; 0 / missing = an old client) */
+  dir?: number
 }
 
 const SEND_HZ = 12          // position updates/sec. 2D shipped 5Hz on a grid; a first-person
@@ -133,8 +135,10 @@ export function useMultiplayer(opts: {
   playerName?: string
   /** a per-player look key sent on connect (the open world's packed look, M29); a change reconnects (looks change rarely) */
   sprite?: string
+  /** BETA M248: a small state code sent as the move's `direction` (the server forwards it whole); null / absent = none sent */
+  stateRef?: React.RefObject<number | null>
 }) {
-  const { enabled, zoneId, posRef, yawRef, party = null, playerName = '', sprite } = opts
+  const { enabled, zoneId, posRef, yawRef, party = null, playerName = '', sprite, stateRef } = opts
   const peers = useRef<Map<string, RemotePlayer>>(new Map())
   const selfId = useRef<string>('')
   const status = useRef<'off' | 'connecting' | 'live' | 'error'>('off')
@@ -160,14 +164,16 @@ export function useMultiplayer(opts: {
     let retry: ReturnType<typeof setTimeout> | null = null
     let closed = false
     let attempt = 0
-    const last = { x: NaN, y: NaN, z: NaN, yaw: NaN }
+    const last = { x: NaN, y: NaN, z: NaN, yaw: NaN, st: null as number | null }
 
     const upsert = (p: Record<string, unknown>) => {
       const id = String(p.player_id ?? '')
       if (!id || id === selfId.current) return
       const x = Number(p.x ?? 0), y = Number(p.y ?? 0), z = Number(p.z ?? 0), yaw = Number(p.yaw ?? 0)
       const cur = peers.current.get(id)
+      const dir = typeof p.direction === 'number' ? p.direction : undefined   // M248
       if (cur) {
+        cur.dir = dir
         cur.tx = x; cur.ty = y; cur.tz = z; cur.tyaw = yaw
         cur.moving = Boolean(p.moving)
         cur.lastSeen = performance.now()
@@ -178,7 +184,7 @@ export function useMultiplayer(opts: {
           id, name: String(p.name ?? 'Traveler'),
           tx: x, ty: y, tz: z, tyaw: yaw,
           x, y, z, yaw,
-          moving: Boolean(p.moving), lastSeen: performance.now(),
+          moving: Boolean(p.moving), lastSeen: performance.now(), dir,
           ...(typeof p.sprite === 'string' ? { sprite: p.sprite } : {}),
         })
       }
@@ -198,7 +204,8 @@ export function useMultiplayer(opts: {
           const p = posRef.current
           if (!p || !ws || ws.readyState !== WebSocket.OPEN) return
           const yaw = yawRef.current ?? 0
-          const moved = Math.abs(p.x - last.x) > SEND_MIN_DELTA
+          const st = stateRef?.current ?? null
+          const moved = st !== last.st || Math.abs(p.x - last.x) > SEND_MIN_DELTA
             || Math.abs(p.y - last.y) > SEND_MIN_DELTA
             || Math.abs(p.z - last.z) > SEND_MIN_DELTA
             || Math.abs(yaw - last.yaw) > 0.03
@@ -209,8 +216,8 @@ export function useMultiplayer(opts: {
           const now = performance.now()
           if (!moved && now - lastSent < KEEPALIVE_MS) return
           lastSent = now
-          last.x = p.x; last.y = p.y; last.z = p.z; last.yaw = yaw
-          ws.send(JSON.stringify({ type: 'move', x: p.x, y: p.y, z: p.z, yaw, moving: moved }))
+          last.x = p.x; last.y = p.y; last.z = p.z; last.yaw = yaw; last.st = st
+          ws.send(JSON.stringify({ type: 'move', x: p.x, y: p.y, z: p.z, yaw, moving: moved, ...(st !== null ? { direction: st } : {}) }))
         }, 1000 / SEND_HZ)
       }
 
@@ -267,7 +274,7 @@ export function useMultiplayer(opts: {
       peers.current.clear()
       status.current = 'off'
     }
-  }, [enabled, zoneId, posRef, yawRef, party, playerName, sprite])
+  }, [enabled, zoneId, posRef, yawRef, party, playerName, sprite, stateRef])
 
   return { peers, status, selfId, relay, onRelay }
 }

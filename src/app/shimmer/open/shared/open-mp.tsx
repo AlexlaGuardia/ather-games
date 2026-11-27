@@ -27,6 +27,7 @@ import { HELD_KIND, heldDue, newHeldSend, decodeHeld } from './held-gun'   // BE
 import { gunProp } from './held-gun-prop'
 import { gaitOf, smoothSpeed, GAIT_WALK, type Gait } from './mate-gait'   // BETA M156: mates walk
 import { THIRD } from './third-person'
+import { decodeState, stepRemoteY, hintOf, type MpState, type PoseHint } from './mp-state'   // BETA M248: others jump
 
 export const OPEN_WILDS = 'open:wilds', OPEN_CONTINENT = 'open:continent'
 /** Peers drawn on the full rig; the rest are a capsule. */
@@ -55,6 +56,8 @@ export const openNet = () => netBox
 // BETA M27 slice 4: what each peer says is in their hand (gun id, or null), and which guns are actually drawn on a rig (checks)
 const peerGuns = new Map<string, string | null>()
 const GUN_SHOWN = new Map<string, string>()
+// BETA M248: the state each drawn peer is posed in (a probe for checks, reading only)
+const SHOWN = new Map<string, MpState | null>()
 
 // ── checks never land beside a real player (Alex 11-19 saw a solo-fight-check keeper in HIS Wilds) ──
 // An automated browser (navigator.webdriver: puppeteer, playwright) does NOT join PUBLIC matchmaking unless the page was
@@ -80,7 +83,9 @@ function useVisible(): boolean {
 
 /** The page's socket. `zone` null = no socket (the plot, a loading screen). `where()` is read at send time (12 Hz). */
 /** `held` (BETA M27 slice 4): the gun in this keeper's hand right now (id, or null): the party sees it on our rig. */
-export function useOpenMultiplayer(zone: string | null, where: () => { x: number; y: number; z: number; yaw: number } | null, held?: () => string | null) {
+/** BETA M248: `where().y` is the keeper's REAL feet height and `where().s` its state code (mp-state encodeState); a page that
+ *  sends no `s` stays an old client (its y is read as ground and snapped). */
+export function useOpenMultiplayer(zone: string | null, where: () => { x: number; y: number; z: number; yaw: number; s?: number } | null, held?: () => string | null) {
   const visible = useVisible()
   const { party } = useParty()
   const { session } = useAccount()
@@ -88,8 +93,9 @@ export function useOpenMultiplayer(zone: string | null, where: () => { x: number
   // stable ref objects whose `current` reads the page's live pose each time the hook sends
   const posRef = useMemo(() => ({ get current() { const w = whereRef.current(); return w ? { x: w.x, y: w.y, z: w.z } : null } }) as React.RefObject<{ x: number; y: number; z: number } | null>, [])
   const yawRef = useMemo(() => ({ get current() { return whereRef.current()?.yaw ?? 0 } }) as React.RefObject<number>, [])
+  const stateRef = useMemo(() => ({ get current() { return whereRef.current()?.s ?? null } }) as React.RefObject<number | null>, [])
   const myLook = useLook()
-  const mp = useMultiplayer({ enabled: !!zone && visible && (!!party || publicMpAllowed()), zoneId: zone ?? '', posRef, yawRef, party, playerName: session?.username ?? '', sprite: LOOK_SYNC ? LOOK_SPRITE + packLook(myLook) : undefined })
+  const mp = useMultiplayer({ enabled: !!zone && visible && (!!party || publicMpAllowed()), zoneId: zone ?? '', posRef, yawRef, stateRef, party, playerName: session?.username ?? '', sprite: LOOK_SYNC ? LOOK_SPRITE + packLook(myLook) : undefined })
   peersBox.current = mp.peers.current
   const heldRef = useRef(held); heldRef.current = held
   useEffect(() => {   // M27 slice 4: say what I hold (change / a newcomer / 10 s keepalive); hear what they hold
@@ -106,7 +112,8 @@ export function useOpenMultiplayer(zone: string | null, where: () => { x: number
     live: () => { const now = performance.now(); return [...mp.peers.current.values()].filter(p => now - p.lastSeen <= STALE_MS).map(p => p.id) } }
   if (typeof window !== 'undefined') (window as unknown as { __mp?: unknown }).__mp = {
     zone: () => zone, status: () => mp.status.current, party: () => party, me: () => whereRef.current(),
-    peers: () => [...mp.peers.current.values()].map(p => ({ id: p.id, name: p.name, x: p.x, y: p.y, z: p.z, tx: p.tx, tz: p.tz, sprite: p.sprite ?? null })),
+    peers: () => [...mp.peers.current.values()].map(p => ({ id: p.id, name: p.name, x: p.x, y: p.y, z: p.z, tx: p.tx, ty: p.ty, tz: p.tz, sprite: p.sprite ?? null, st: decodeState(p.dir) })),   // M248: y = drawn, ty = sent, st = their state
+    shown: () => Object.fromEntries(SHOWN),   // M248: the state each drawn peer is posed in right now (m248-mp-jump-check)
     figures: () => [...FIGURES],   // M29: peers drawn as their own keeper (look-sync-check)
     guns: () => Object.fromEntries(peerGuns), gunsShown: () => Object.fromEntries(GUN_SHOWN),   // M27 slice 4 (held-gun-check)
   }
@@ -123,8 +130,8 @@ function Plate({ name }: { name: string }) {
   )
 }
 
-function Peer({ peer, rig, seed }: { peer: RemotePlayer; rig: boolean; seed: number }) {
-  const g = useRef<THREE.Group>(null)
+function Peer({ peer, rig, seed, ground }: { peer: RemotePlayer; rig: boolean; seed: number; ground?: (x: number, z: number) => number }) {
+  const g = useRef<THREE.Group>(null), lean = useRef<THREE.Group>(null), hint = useRef<PoseHint>(hintOf(null))   // M248
   // M27 slice 4: the gun they say they hold (none while stale); rarely changes, so a state is fine
   const [gun, setGun] = useState<string | null>(null), gunNow = useRef<string | null>(null)
   const walk = useRef(0), speed = useRef(0), gaitNow = useRef<Gait>('idle'), [gait, setGait] = useState<Gait>('idle')   // M156 (state changes on a start / stop only: the folk rig reads it)
@@ -133,6 +140,7 @@ function Peer({ peer, rig, seed }: { peer: RemotePlayer; rig: boolean; seed: num
   // M29: a peer who sent a packed look draws as their own keeper (LOOK_SYNC; anything else keeps the folk rig)
   const theirs = useMemo(() => (LOOK_SYNC && peer.sprite?.startsWith(LOOK_SPRITE) ? unpackLook(peer.sprite.slice(LOOK_SPRITE.length)) : null), [peer.sprite])
   useEffect(() => { if (rig && theirs) { FIGURES.add(peer.id); return () => { FIGURES.delete(peer.id) } } }, [rig, theirs, peer.id])
+  useEffect(() => () => { SHOWN.delete(peer.id) }, [peer.id])
   useFrame((_, dt) => {
     const o = g.current; if (!o) return
     const stale = performance.now() - peer.lastSeen > STALE_MS
@@ -141,7 +149,12 @@ function Peer({ peer, rig, seed }: { peer: RemotePlayer; rig: boolean; seed: num
     if (want !== gunNow.current) { gunNow.current = want; setGun(want) }
     if (stale) return
     const k = 1 - Math.exp(-LERP * dt), wasX = peer.x, wasZ = peer.z
-    peer.x += (peer.tx - peer.x) * k; peer.y += (peer.ty - peer.y) * k; peer.z += (peer.tz - peer.z) * k
+    peer.x += (peer.tx - peer.x) * k; peer.z += (peer.tz - peer.z) * k
+    // M248: their real height (a jump keeps its arc); an old client (no state) stands on OUR ground
+    const st = decodeState(peer.dir), gy = ground ? ground(peer.x, peer.z) : null
+    peer.y = stepRemoteY(peer.y, peer.ty, st, gy, dt)
+    hint.current = hintOf(st); SHOWN.set(peer.id, st)
+    const L = lean.current; if (L) { L.rotation.x = hint.current.lean; L.scale.y = hint.current.squash }
     speed.current = smoothSpeed(speed.current, Math.hypot(peer.x - wasX, peer.z - wasZ), dt)
     const gt = gaitOf(gaitNow.current, speed.current, THIRD.RUN_AT)
     if (gt !== gaitNow.current) { gaitNow.current = gt; walk.current = GAIT_WALK[gt]; setGait(gt) }
@@ -150,11 +163,12 @@ function Peer({ peer, rig, seed }: { peer: RemotePlayer; rig: boolean; seed: num
     o.rotation.y = peer.yaw + Math.PI   // the sender's yaw 0 LOOKS down -Z; the body's front is +Z (play3d's flip)
   })
   return (
-    <group ref={g}>
-      {rig && theirs ? <KeeperFigure look={theirs} gun={gun} walk={walk} />
+    <group ref={g}><group ref={lean}>
+      {rig && theirs ? <KeeperFigure look={theirs} gun={gun} walk={walk} hint={hint} />
         : rig ? <FolkModel look={look} action={gait === 'idle' ? 'idle' : 'walk'} seed={seed} speed={gait === 'run' ? 1.6 : 1} />
         : <mesh position={[0, 0.85, 0]}><capsuleGeometry args={[0.3, 0.9, 4, 8]} /><meshLambertMaterial color={look.shirt} /></mesh>}
       {gun && !(rig && theirs) && <GunAt id={gun} />}
+      </group>
       <Html position={[0, FOLK_HEIGHT + 0.25, 0]} center distanceFactor={12} zIndexRange={[10, 0]}><Plate name={peer.name} /></Html>
     </group>
   )
@@ -167,7 +181,8 @@ function GunAt({ id }: { id: string }) {
 }
 
 /** Mount inside the Canvas. `me()` = where this keeper stands (who counts as near). */
-export function RemoteKeepers({ peers, me }: { peers: React.RefObject<Map<string, RemotePlayer>>; me: () => { x: number; z: number } | null }) {
+/** `ground` (BETA M248): this page's ground height; an old client's figure (no state code) is snapped onto it. */
+export function RemoteKeepers({ peers, me, ground }: { peers: React.RefObject<Map<string, RemotePlayer>>; me: () => { x: number; z: number } | null; ground?: (x: number, z: number) => number }) {
   const roster = useRoster(peers)
   const [near, setNear] = useState<Set<string>>(new Set())
   const acc = useRef(1)
@@ -178,5 +193,5 @@ export function RemoteKeepers({ peers, me }: { peers: React.RefObject<Map<string
     const ids = [...roster].sort((a, b) => Math.hypot(a.x - m.x, a.z - m.z) - Math.hypot(b.x - m.x, b.z - m.z)).slice(0, NEAR_RIGS).map(p => p.id)
     if (ids.length !== near.size || ids.some(id => !near.has(id))) setNear(new Set(ids))
   })
-  return <>{roster.map((p, i) => <Peer key={p.id} peer={p} rig={near.has(p.id)} seed={i} />)}</>
+  return <>{roster.map((p, i) => <Peer key={p.id} peer={p} rig={near.has(p.id)} seed={i} ground={ground} />)}</>
 }
