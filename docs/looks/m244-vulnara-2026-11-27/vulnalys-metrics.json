@@ -1,0 +1,80 @@
+{
+ "bones": 24,
+ "glb_bytes": 494128,
+ "weights_bad": 0,
+ "walk": {
+  "dur_s": 0.57,
+  "lowest_m": -0.001,
+  "rest_lowest_m": 0.0,
+  "edge_stretch_p99": 1.27,
+  "edge_stretch_max": 3.93,
+  "leg_reach_ratio_max": 0.97,
+  "stride_m": 0.314,
+  "plays_1to1_at_mps": 0.55,
+  "cadence_at_mps": {
+   "0.55": 1.75,
+   "1.15": 3.67,
+   "1.92": 6.12,
+   "4.2": 13.39,
+   "6.5": 20.73
+  },
+  "planted_foot_drift_max_m": 0.0,
+  "length_m": 0.956,
+  "height_m": 0.875,
+  "lowest_bone": "fr_paw"
+ },
+ "run": {
+  "dur_s": 0.432,
+  "lowest_m": -0.0007,
+  "rest_lowest_m": 0.0,
+  "edge_stretch_p99": 1.64,
+  "edge_stretch_max": 5.25,
+  "leg_reach_ratio_max": 0.97,
+  "stride_m": 1.211,
+  "plays_1to1_at_mps": 2.8,
+  "cadence_at_mps": {
+   "0.55": 0.45,
+   "1.15": 0.95,
+   "1.92": 1.59,
+   "2.8": 2.31,
+   "4.2": 3.47,
+   "6.5": 5.37
+  },
+  "planted_foot_drift_max_m": 0.0002,
+  "length_m": 1.024,
+  "height_m": 0.817,
+  "lowest_bone": "fr_paw"
+ },
+ "idle": {
+  "dur_s": 4.8,
+  "lowest_m": -0.0,
+  "rest_lowest_m": 0.0,
+  "edge_stretch_p99": 1.35,
+  "edge_stretch_max": 3.17,
+  "length_m": 0.924,
+  "height_m": 0.903,
+  "lowest_bone": "fr_paw"
+ },
+ "sit": {
+  "dur_s": 5.0,
+  "lowest_m": -0.0004,
+  "rest_lowest_m": 0.0,
+  "edge_stretch_p99": 2.05,
+  "edge_stretch_max": 5.39,
+  "leg_reach_ratio_max": 0.65,
+  "length_m": 0.572,
+  "height_m": 0.718,
+  "lowest_bone": "pelvis"
+ },
+ "lie": {
+  "dur_s": 5.6,
+  "lowest_m": -0.0,
+  "rest_lowest_m": 0.0,
+  "edge_stretch_p99": 2.48,
+  "edge_stretch_max": 11.21,
+  "leg_reach_ratio_max": 0.52,
+  "length_m": 1.07,
+  "height_m": 0.57,
+  "lowest_bone": "hr_paw"
+ }
+}
