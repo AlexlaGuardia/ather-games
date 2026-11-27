@@ -1,5 +1,4 @@
 // BETA M153 s1a: the layer's props (pure) + the store's plan with them. Run: npx tsx src/app/shimmer/world/builder-props.test.ts
-import { readFileSync } from 'fs'
 import { cleanProps, propsCanon, newPropId, addProp, removeProp, changeProp, snapXZ, turnBy, scaleBy, nextOf, propsToStore, propsOfStore, PROPS_KEY, PROPS_MAX, PROP_SNAPS, type Prop } from './builder-props'
 import { cleanLayer, sameLayer, layerSize, planPublish, planRollback, emptyIndex, draftState, EMPTY_LAYER, type Layer } from './builder'
 import { EditHistory, mergeEdits, type Edits } from '../open/ather/wilds-edits'
@@ -19,9 +18,10 @@ ok(J(cleanProps({ props: junk })) === J(junk), 'cleaning is stable')
 
 // the layer: absent when empty, byte-identical
 for (const j of [{ v: 1, tiles: {}, water: {}, falls: {} }, { tiles: { glade: { 5: 30 } }, props: [] }, { tiles: {}, props: [null] }]) ok(!('props' in cleanLayer(j)), 'no props = no key')
-const live = readFileSync(new URL('./glade-edits.json', import.meta.url), 'utf-8')
+// hermetic fixture: a known propless Glade layer, never the live published glade-edits.json
+const live = J(cleanLayer({ v: 1, tiles: { glade: { 5: 30, 9: 12 } }, water: {}, falls: {} })) + '\n'
 const liveLayer = cleanLayer(JSON.parse(live))
-if (!JSON.parse(live).props) ok(J(liveLayer) + '\n' === live, 'the live Glade layer (no props) round-trips byte-identical')
+if (!JSON.parse(live).props) ok(J(liveLayer) + '\n' === live, 'a propless Glade layer round-trips byte-identical')
 const A: Layer = { ...EMPTY_LAYER, props: [P('p1'), P('p2', { k: 'prop:chest', x: 4 })] }
 ok(J(cleanLayer(JSON.parse(J(A)))) === J(A), 'a layer with props round-trips')
 ok(sameLayer(A, { ...EMPTY_LAYER, props: [...A.props!].reverse() }) && !sameLayer(A, EMPTY_LAYER), 'sameLayer: order does not matter, presence does')
