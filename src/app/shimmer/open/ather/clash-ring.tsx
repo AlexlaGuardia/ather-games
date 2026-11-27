@@ -21,10 +21,13 @@ import { SpiritFigure } from './spirit-model'
 import { formLook, spiritModelFor, type SpiritElement } from './spirit-models'
 import type { RigClip } from './spirit-rig'
 import { newBracket, nextBout, recordBout, keeperWon, runOver, hasYou, rounds, YOU, type Bracket } from './clash-bracket'
+import type { Bonded } from './clash-fight'   // M238
 import { fightRunner, RING_R, type BoutPlay, type BoutPose, type BoutRunner, type BoutAct } from './clash-bout'
 import { CLASH_UI as L, type ClashTier } from './fair-clash-rules'
 
-export interface RingEntrant { name: string; species: Species; element: Element; /** a fresh evened battle Spirit */ spirit: () => Spirit }
+export interface RingEntrant { name: string; species: Species; element: Element; /** a fresh evened battle Spirit */ spirit: () => Spirit
+  /** M238: her favourite (bonded) move + twist, and her own known move ids (the keeper's spirit only) */
+  bonded?: Bonded | null; known?: readonly string[] }
 /** the load card's time on screen (ms) */
 export const LOAD_MS = 2400
 /** the pause after a bout (the winner stands, the tree moves) and before hers (ms) */
@@ -67,7 +70,7 @@ export function ClashRing({ tier, title, entrants, runner = fightRunner, result,
     const go = () => {
       const swap = bt.b === YOU   // the runner takes her side first
       const [sa, sb] = swap ? [bt.b!, bt.a!] : [bt.a!, bt.b!]
-      const play = runner.run({ spirit: entrants[sa].spirit(), keeper: sa === YOU }, { spirit: entrants[sb].spirit(), keeper: sb === YOU }, { tier, seed: seedDial() !== null ? seedDial()! * 1000 + i : undefined })
+      const play = runner.run({ spirit: entrants[sa].spirit(), keeper: sa === YOU, bonded: entrants[sa].bonded, known: entrants[sa].known }, { spirit: entrants[sb].spirit(), keeper: sb === YOU, bonded: entrants[sb].bonded, known: entrants[sb].known }, { tier, seed: seedDial() !== null ? seedDial()! * 1000 + i : undefined })
       const l: Live = { i, play, start: performance.now(), swap, mine, x: speedDial() * (mine ? 1 : TROUPE_X) }
       liveRef.current = l; setYourTurn(false); setCheerUsed(false); setLive(l)
     }
@@ -109,7 +112,7 @@ export function ClashRing({ tier, title, entrants, runner = fightRunner, result,
         </Canvas>
         {/* the bout's HP bars over the ring */}
         {hud.length > 0 && (
-          <div data-clash-bout={live!.i} data-clash-keeper-bout={hasYou(bt!) ? '1' : '0'} style={{ position: 'absolute', top: 10, left: 10, right: 10, display: 'flex', gap: 10, pointerEvents: 'none' }}>
+          <div data-clash-bout={live!.i} data-clash-keeper-bout={hasYou(bt!) ? '1' : '0'} data-clash-bonded={hasYou(bt!) && live!.play.bonded ? (b => `${b.id}:${b.twist}`)(live!.play.bonded[live!.swap ? 'b' : 'a']) : undefined} style={{ position: 'absolute', top: 10, left: 10, right: 10, display: 'flex', gap: 10, pointerEvents: 'none' }}>
             {hud.map(h => (
               <div key={h.side} data-clash-hp={h.side} data-hp={h.hp.toFixed(2)} style={{ flex: 1, padding: '6px 10px', borderRadius: 10, background: 'rgba(255,248,232,.88)', boxShadow: '0 2px 8px rgba(0,0,0,.25)' }}>
                 <div style={{ fontSize: 13, fontWeight: 800, textAlign: h.side === 'a' ? 'left' : 'right', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>

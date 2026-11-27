@@ -36,11 +36,12 @@ import { getInv, setInv, useInv } from '../shared/bag'
 import { itemDef, take } from '../shared/inventory'
 import { loadFed, saveFed, spiritCheer, withFed } from './spirit-feed'
 import { askAlong, inParty } from './spirit-party'
+import { canAsk, knownList, pickFavourite, BOND_MOVE_UI } from './spirit-bond-move'   // M238: her favourite (bonded) move
 import { followRefuseLine, talkLine } from './party-spirit-lines'   // M109: the SIGNED lines (canon script, word for word)
 import { PARTY_FULL_LINE } from './spirit-roster'
 
 
-export type SpiritTalkState = { id: string; screen: 'talk' | 'panel' }
+export type SpiritTalkState = { id: string; screen: 'talk' | 'panel' | 'bond' }
 
 export function useSpiritTalk(st: SpiritTalkState | null, set: (s: SpiritTalkState | null) => void, phone: boolean) {
   const following = useSyncExternalStore(subscribeFollow, () => (st ? isFollowing(st.id) : false), () => false)
@@ -53,14 +54,32 @@ export function useSpiritTalk(st: SpiritTalkState | null, set: (s: SpiritTalkSta
   // party is not covered by the script: she keeps the '…'.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const said = useMemo(() => (st && live ? (inParty(st.id) ? talkLine(live.sp) : '…') : ''), [st?.id, live])   // her model is gone (flag off, planter lifted): nothing to talk to
+  // M238: her pot (bond, form, favourite): the 'Pick a bond' ask shows once her bond is maxed, once per form
+  const pot = useBook().pots[st?.id ?? '']
   const node: TalkNode | null = useMemo(() => {
-    if (!st || st.screen !== 'talk' || !live) return null
+    if (!st || !live) return null
     const id = st.id
+    if (st.screen === 'bond') {
+      // M238: the ask itself: her known moves, one answer each; the pick makes it her favourite (saved on her pot)
+      if (!canAsk(pot)) return null
+      return {
+        line: said,   // her own talk line stays up (no new words); the keeper's answers are the moves
+        options: [
+          ...knownList(pot, live.sp).map(m => ({ label: m.name, pick: () => {
+            const cur = getPots()[id], next = cur && pickFavourite(cur, live.sp, m.id, gameDay(Date.now()))
+            if (next) { setPots({ ...getPots(), [id]: next }); hudSay(BOND_MOVE_UI.picked(m.name), 'item', 4) }
+            set(null) } })),
+          { label: BOND_MOVE_UI.back, pick: () => set({ id, screen: 'talk' }) },
+        ],
+      }
+    }
+    if (st.screen !== 'talk') return null
     return {
       line: said,
       options: [
         // M240 (Alex 11-27): Feed left the talk; she is fed BY HAND (a dish in hand, the crosshair on her, E: feedSpirit below).
-        // Its old place stays empty for now (M238's bonded-move ask goes there).
+        // M238: its old place = the bonded-move ask, only at a maxed bond, once per evolution (spirit-bond-move.ts canAsk)
+        ...(canAsk(pot) ? [{ label: BOND_MOVE_UI.ask, pick: () => set({ id, screen: 'bond' }) }] : []),
         following ? { label: 'Stay', pick: () => { setFollowing(id, false); set(null) } } : { label: 'Follow', pick: () => {
           // M109 s3: the ones who come along are from the party (up to 3 of the 8): Follow asks her along first
           if (!askAlong(id)) hudSay(PARTY_FULL_LINE, 'info', 4)
@@ -69,7 +88,7 @@ export function useSpiritTalk(st: SpiritTalkState | null, set: (s: SpiritTalkSta
         { label: 'Open', pick: () => set({ id, screen: 'panel' }) },
       ],
     }
-  }, [st, live, following, set, said])
+  }, [st, live, following, set, said, pot])
   const panel = st && st.screen === 'panel' && live ? <SpiritPanel sp={live.sp} id={live.id} phone={phone} onClose={() => set(null)} /> : null
   return {
     node, panel,

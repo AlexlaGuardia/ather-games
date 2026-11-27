@@ -15,6 +15,7 @@ import type { Species } from '../../spirits/spirit'
 import type { Pot, Pots } from './spirit-seeds'
 import { isSeed, speciesOf } from './seed-items'
 import type { FormElement } from '../../spirits/second-form-gate'
+import { parseMoves, parseFav } from './spirit-bond-move'   // M238
 
 export type Stage = 'seen' | 'bonded'
 /** form = a second-form page (M203): the species' form in that element. No form = the base page. */
@@ -75,7 +76,10 @@ export function parseBook(v: unknown): Book {
     // M234 s2: her bond from dishes + today's tally (spirit-dishes.ts); whole numbers only, a junk value drops
     const int = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.floor(v) : undefined)
     const bd = p.bloomed && int(p.bond) ? { bond: int(p.bond), ...(int(p.bondDay) !== undefined && int(p.bondToday) !== undefined ? { bondDay: int(p.bondDay), bondToday: int(p.bondToday) } : {}) } : {}
-    pots[id] = p.bloomed ? { seed: p.seed, at: p.at, ...day, bloomed: true, ...el, ...meals, ...bd } : { seed: p.seed, at: p.at, ...day }
+    // M238: her known moves + favourite (spirit-bond-move.ts); a junk value drops
+    const mv = p.bloomed ? parseMoves(p.moves) : undefined, fv = p.bloomed ? parseFav(p.fav) : undefined
+    const bm = { ...(mv ? { moves: mv } : {}), ...(fv ? { fav: fv } : {}) }
+    pots[id] = p.bloomed ? { seed: p.seed, at: p.at, ...day, bloomed: true, ...el, ...meals, ...bd, ...bm } : { seed: p.seed, at: p.at, ...day }
   }
   const met = Array.isArray(o.met) ? o.met.filter((k): k is number => Number.isInteger(k)) : []
   const since = Number.isInteger(o.since) ? o.since : undefined

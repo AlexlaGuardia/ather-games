@@ -10,7 +10,7 @@
 import type { Spirit } from '../../spirits/spirit'
 import { createPartyBattle, currentActor, chooseAction, takeAction } from '../../engine/party-battle'
 import { CLASH_AI, CLASH_TROUPE_MANA, type ClashTier } from './fair-clash-rules'
-import { createFight, step, tentEntrant, DT, RING, type FightState, type FighterSnap, type FightEvent } from './clash-fight'
+import { createFight, step, tentEntrant, resolveBonded, bondSeed, type Bonded, DT, RING, type FightState, type FighterSnap, type FightEvent } from './clash-fight'
 
 export type BoutAct = 'idle' | 'walk' | 'windup' | 'strike' | 'evade' | 'guard' | 'hit' | 'down' | 'win'
 /** a short word the ring floats over her for a moment (a landed blow, a dodge, a block, a miss, her cheer) */
@@ -30,8 +30,12 @@ export interface BoutPlay {
   /** a timeline's fixed length (placeholder); a live bout has none */
   duration?: number
   events?: BoutEvent[]
+  /** M238: the bonded move each side throws this bout (the keeper's favourite, or the seeded random one) */
+  bonded?: { a: Bonded; b: Bonded }
 }
-export interface BoutSide { spirit: Spirit; /** her spirit (the keeper's side) */ keeper?: boolean }
+export interface BoutSide { spirit: Spirit; /** her spirit (the keeper's side) */ keeper?: boolean
+  /** M238: her favourite + twist and her known move ids (spirit-bond-move.ts); unset = a seeded random known move */
+  bonded?: Bonded | null; known?: readonly string[] }
 export interface BoutRunner { name: string; run(a: BoutSide, b: BoutSide, o: { tier: ClashTier; /** a fixed fight seed (checks); none = fresh */ seed?: number }): BoutPlay }
 
 /** the placeholder's bout lengths (s): short, so a run stays a minute or two (the live engine aims at 60-90 s a bout) */
@@ -150,7 +154,8 @@ export function liveBout(s: FightState, hold = 1.2): BoutPlay {
 export const fightRunner: BoutRunner = {
   name: 'clash-fight',
   run(a, b, o) {
-    const e = (x: BoutSide) => ({ ...tentEntrant(x.spirit.species, (x.spirit.element ?? 'base'), o.tier), name: x.spirit.name })
-    return liveBout(createFight(e(a), e(b), o.seed ?? (Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0))
+    const e = (x: BoutSide) => ({ ...tentEntrant(x.spirit.species, (x.spirit.element ?? 'base'), o.tier, x.bonded), name: x.spirit.name, known: x.known })
+    const ea = e(a), eb = e(b), seed = o.seed ?? (Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0
+    return { ...liveBout(createFight(ea, eb, seed)), bonded: { a: resolveBonded(ea, bondSeed(seed, 0)), b: resolveBonded(eb, bondSeed(seed, 1)) } }
   },
 }

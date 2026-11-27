@@ -13,6 +13,8 @@ import { speciesOf } from './spirit-seeds'
 import { useBook } from './spirit-panels'
 import { partyIds, subscribeParty } from './spirit-party'
 import { ClashRing, type RingEntrant } from './clash-ring'   // M233 v2a
+import { bondedOf, knownOf } from './spirit-bond-move'   // M238
+import { gameDay } from './spirit-seeds'
 import { clashLineup, evenSpirit, foeName } from './fair-clash'
 import { CLASH_UI as L, CLASH_OPEN, CLASH_PRIZE, CLASH_SEASON, TENT_LEVEL, type ClashTier, type ClashState, type ClashClaim } from './fair-clash-rules'
 import { CLASH_LEVEL_LABEL } from './network'
@@ -49,9 +51,11 @@ export function ClashPanel({ tier, tent, ledger, setLedger, onClose }: { tier: C
 
   // the ring's entrants, evened to the tent's level: hers (species + her form) first, then the line-up (a fresh Spirit per bout)
   const ring = useMemo<RingEntrant[] | null>(() => chosen ? [
-    { name: chosen.name, species: chosen.sp, element: chosen.element, spirit: () => evenSpirit(chosen.sp, chosen.element, tier, chosen.name) },
+    { name: chosen.name, species: chosen.sp, element: chosen.element, spirit: () => evenSpirit(chosen.sp, chosen.element, tier, chosen.name),
+      // M238: she throws her favourite (with its twist) from her own known moves; none picked = a seeded random known move
+      bonded: bondedOf(book.pots[chosen.id], gameDay(Date.now())), known: knownOf(book.pots[chosen.id], chosen.sp) },
     ...lineup.map(f => ({ name: foeName(f), species: f.species, element: f.element, spirit: () => evenSpirit(f.species, f.element, tier) })),
-  ] : null, [chosen, lineup, tier])
+  ] : null, [chosen, lineup, tier, book])
 
   const enter = () => { if (!canEnter) return; setResult(null); setMsg(null); setBout(0) }
   const won = async () => {

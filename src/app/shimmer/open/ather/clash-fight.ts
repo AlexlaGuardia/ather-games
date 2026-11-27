@@ -6,7 +6,7 @@
 //  - MELEE      : a close strike (PWR vs GRD), needs her within MELEE.range of the foe
 //  - BONDED     : the move she and her keeper made THEIRS (canon shimmer-battles.md, ruled 11-24): ONE move she already
 //                 knows, set by the keeper, deepened by a TWIST (never more damage). An INPUT here: { id, twist }. Unset =
-//                 defaultBonded() (her first species move). The move table is keyed by MOVE ID (clashMoveOf), from engine/moves.ts.
+//                 M238: a SEEDED RANDOM known move (resolveBonded; Magii 4204f49), no longer defaultBonded(). The move table is keyed by MOVE ID (clashMoveOf), from engine/moves.ts.
 //  - EVADE or GUARD (one per species, KIND table): evade = a side-dash with a moment of no-hit; guard = brace, most damage turned.
 //  - REPOSITION : close in / back off toward her kind's preferred range.
 // Every action has phases (windup -> active -> recover); a WIND-UP is public state (Fighter.act), which is what the foe
@@ -140,6 +140,29 @@ export function knownMoves(species: Species, element: Element, level: number): M
   return out
 }
 export interface Bonded { id: string; twist: number }
+/** M238 (Magii ruling 4204f49): with NO favourite picked she uses a RANDOM known move, seeded (a fight replays the same).
+ *  Drawn from her damaging moves (the born Spirit Ward would make a bout a ward-off); any known move if she has none. */
+export function randomBonded(k: readonly Move[], seed: number): Bonded {
+  const pool = k.filter(m => m.power > 0).length ? k.filter(m => m.power > 0) : k.length ? k : [MOVE_MANA_PULSE]
+  let t = (seed ^ 0x85ebca6b) >>> 0
+  t = Math.imul(t ^ (t >>> 16), 0x7feb352d) >>> 0; t = Math.imul(t ^ (t >>> 15), 0x846ca68b) >>> 0; t = (t ^ (t >>> 16)) >>> 0
+  return { id: pool[t % pool.length].id, twist: 0 }
+}
+/** M238: the moves an ENTRANT knows: her own saved list when she brings one (spirit-bond-move.ts, read at that list's
+ *  level, not the tent's: evening her stats does not unlearn her moves), else knownMoves at her level */
+export function entrantKnown(e: Pick<Entrant, 'species' | 'element' | 'level' | 'known'>): Move[] {
+  if (!e.known) return knownMoves(e.species, e.element, e.level)
+  const all = knownMoves(e.species, e.element, KNOWN_ALL_LEVEL)
+  return e.known.flatMap(id => { const m = all.find(x => x.id === id); return m ? [m] : [] })
+}
+/** M238: her favourite as thrown in this fight: the keeper's pick when she knows it (with its twist), else seeded random */
+export function resolveBonded(e: Pick<Entrant, 'species' | 'element' | 'level' | 'known' | 'bonded'>, seed: number): Bonded {
+  const k = entrantKnown(e)
+  if (e.bonded && k.some(m => m.id === e.bonded!.id)) return { id: e.bonded.id, twist: Math.max(0, Math.min(TWIST_MAX, Math.floor(e.bonded.twist) || 0)) }
+  return randomBonded(k, seed)
+}
+/** the level a saved known-moves list is read at (every learnset move + the element mid tier: engine/moves.ts) */
+export const KNOWN_ALL_LEVEL = 40
 /** unset bonded move = her first SPECIES move (the born pair is every spirit's; the first learnset move is her nature),
  *  no twist. Falls back to Mana Pulse before she has learned one. */
 export function defaultBonded(species: Species, element: Element, level: number): Bonded {
@@ -157,6 +180,8 @@ export function bondedMove(species: Species, element: Element, level: number, b?
 export interface Entrant {
   species: Species; element: Element; level: number; stats: PartyStats
   bonded?: Bonded | null; name?: string
+  /** M238: her own known move ids (the pot's saved list); unset = knownMoves at her level */
+  known?: readonly string[]
 }
 /** a tent entrant evened as s3 did (fair-clash.ts evenSpirit): tent level, even seeds, neutral temperament */
 export function tentEntrant(species: Species, element: Element, tier: ClashTier, bonded?: Bonded | null): Entrant {
@@ -211,7 +236,7 @@ function rnd(s: FightState): number {
 }
 
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v))
-function mkFighter(e: Entrant, side: 0 | 1, ref: PartyStats): Fighter {
+function mkFighter(e: Entrant, side: 0 | 1, ref: PartyStats, seed: number): Fighter {
   const st = e.stats, kind = KIND[e.species]
   const rel = (v: number, r: number) => Math.max(0.2, v / Math.max(1, r))
   const x = side === 0 ? -RING.start / 2 : RING.start / 2
@@ -224,7 +249,7 @@ function mkFighter(e: Entrant, side: 0 | 1, ref: PartyStats): Fighter {
     cheered: false,
     slowT: 0, rootT: 0, weakT: 0, braceT: 0, hasteT: 0, dotT: 0, iframeT: 0,
     _: {
-      stats: st, bonded: bondedMove(e.species, e.element, e.level, e.bonded), defense: kind.defense, pref: kind.pref,
+      stats: st, bonded: bondedOfEntrant(e, seed, side), defense: kind.defense, pref: kind.pref,
       speed: SPEED * Math.max(SPEED_FLOOR, Math.pow(rel(st.agi, ref.agi), STAT_EXP.speed)),
       cdMul: Math.pow(rel(ref.agi, st.agi), STAT_EXP.cd),
       dmgRef: ref.maxHp, read: 0, strafe: side === 0 ? 1 : -1, nextDecide: side, dotPerS: 0,
@@ -232,9 +257,15 @@ function mkFighter(e: Entrant, side: 0 | 1, ref: PartyStats): Fighter {
   }
 }
 
+/** M238: the bonded move a side throws (resolveBonded on the fight seed, one draw per side), twisted */
+export const bondSeed = (seed: number, side: 0 | 1) => (seed * 2 + side + 0x238) >>> 0
+function bondedOfEntrant(e: Entrant, seed: number, side: 0 | 1): ClashMove {
+  const b = resolveBonded(e, bondSeed(seed, side))
+  return twisted(clashMoveOf(entrantKnown(e).find(m => m.id === b.id) ?? MOVE_MANA_PULSE), b.twist)
+}
 export function createFight(a: Entrant, b: Entrant, seed: number): FightState {
   const ref = refOf(Math.round((a.level + b.level) / 2))
-  const f: [Fighter, Fighter] = [mkFighter(a, 0, ref), mkFighter(b, 1, ref)]
+  const f: [Fighter, Fighter] = [mkFighter(a, 0, ref, seed), mkFighter(b, 1, ref, seed)]
   for (const x of f) x.maxHp = x.hp
   const s: FightState = { tick: 0, t: 0, seed, rng: (seed ^ 0x9e3779b9) >>> 0, f, over: false, winner: null, reason: null, ref }
   for (const x of f) {
