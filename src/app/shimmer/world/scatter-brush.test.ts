@@ -90,7 +90,7 @@ ok(/new THREE\.InstancedMesh\(p\.geometry, mat, items\.length\)/.test(view) && /
 const filler = readFileSync('src/app/shimmer/open/ather/scenery-view.tsx', 'utf8').match(/'filler' in K\.model[^\n]*\n[^\n]*baked\.set\(K\.k, \[\{ geometry: g, material: fillerMaterial\(\) \}\]\)/)
 ok(!!filler, 'a filler kind bakes to ONE part: 1 draw call per filler kind')
 const page = readFileSync('src/app/shimmer/open/ather/page.tsx', 'utf8')
-ok(/zone\.kind === 'wilds' && wildsScenery\.length > 0 && <SceneryView items=\{wildsScenery\} \/>/.test(page), 'the Wilds game draws its pieces through SceneryView')
+ok(/zone\.kind === 'wilds' && wildsDecor\.length > 0 && <SceneryView items=\{wildsDecor\} \/>/.test(page), 'the Wilds game draws its pieces through SceneryView')
 const fly = readFileSync('src/app/shimmer/dev/editors/BuilderFly.tsx', 'utf8'), pm = readFileSync('src/app/shimmer/dev/editors/place-mode.tsx', 'utf8')
 ok(/P\?\.scatter && isLocked\(\)/.test(fly) && /e\.button === 0 \|\| e\.shiftKey \|\| e\.altKey/.test(fly), 'Fly: right paints, left / Shift / Alt + right erases')
 ok(/e\.code === 'KeyK'/.test(pm) && /eraseScatter\(c\.props/.test(pm) && /paintScatter\(c\.props/.test(pm), 'Place mode: K toggles the brush, dabs paint / erase the draft list')
