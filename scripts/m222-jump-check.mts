@@ -71,6 +71,8 @@ if (spot) {
   if (i0 >= 0 && i1 > i0) {
     const air = rec.slice(i0, i1)
     const minHv = Math.min(...air.map(q => q.hv))
+    ok(air[0].hv >= run * 0.9, `★ take-off: ${air[0].hv.toFixed(2)} m/s on the jump frame (run ${run.toFixed(2)}, >= 90%)`)
+    ok(minHv >= run * 0.9, `★ mid-air: slowest of ${air.length} airborne frames ${minHv.toFixed(2)} m/s (>= 90% of the run)`)
     // forward travel per game-second (the walker caps a frame at 1/20 s, so wall time is not game time at swiftshader fps)
     const pace = (a: number, z: number) => { let d = 0, g = 0; for (let i = Math.max(1, a); i < z; i++) { d += Math.hypot(rec[i].px - rec[i - 1].px, rec[i].pz - rec[i - 1].pz); g += Math.min(0.05, (rec[i].t - rec[i - 1].t) / 1000) } return g > 0 ? d / g : 0 }
     const before = pace(Math.max(1, i0 - 8), i0), during = pace(i0, i1 + 1)
