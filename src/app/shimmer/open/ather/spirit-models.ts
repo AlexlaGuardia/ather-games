@@ -370,8 +370,9 @@ const hovForm = (el: SpiritElement, name: string, emissive: string, hull: string
   const L = secondForm('hummingbird', el, name, emissive, hull)
   return { ...L, rig, glow: { ...L.glow!, emissive: shimmer } }
 }
-/** each form's body height at rest (wing tip to tail tip, the hover not counted), glb units; the prod check sizes her by it */
-export const HOV_GLB_TALL: Readonly<Record<string, number>> = { voltari: 1.299, lumari: 1.316, obsidari: 1.243, tidari: 1.402 }
+/** each form's body height hanging in her hover (the idle clip's mean, wing tip to tail tip, the hover not counted; redo tools/idle-tall.mts),
+ *  glb units; the prod check sizes her by it once she hangs still, the unit test holds her bind height within 4% of it */
+export const HOV_GLB_TALL: Readonly<Record<string, number>> = { voltari: 1.328, lumari: 1.323, obsidari: 1.273, tidari: 1.42 }
 export const SECOND_FORMS: Partial<Record<Species, Partial<Record<SpiritElement, SpiritLook>>>> = {
   axolotl: {
     water: marlotl(),

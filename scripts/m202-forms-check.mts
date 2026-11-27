@@ -51,15 +51,18 @@ async function open(owner: boolean, q: string) {
   return { p, got }
 }
 /** wait for her rig, then her standing height in WORLD metres over 40 frames (top of the body minus her feet) */
-const measure = (p: Page) => p.evaluate(async () => {
+const measure = (p: Page) => p.evaluate(async (hover: boolean) => {
   const W = window as any, raf = () => new Promise(r => requestAnimationFrame(r))
   for (let k = 0; k < 600 && !(W.__spiritModel?.rigs?.size); k++) await new Promise(r => setTimeout(r, 100))
   const r = [...(W.__spiritModel?.rigs?.values() ?? [])][0]; if (!r) return null
+  // M202 Hovari redo: a hoverer's drift pitches her forward (her height read 0.86-0.93 of her hover's while she followed the keeper),
+  // so read her once she hangs still (two reads 0.5 s apart within 2 cm; 12 s cap): HOV_GLB_TALL is her hover (idle) height
+  if (hover) { let last = { x: 1e9, z: 1e9 }; for (let k = 0; k < 24; k++) { await new Promise(res => setTimeout(res, 500)); if (Math.hypot(r.x - last.x, r.z - last.z) < 0.02) break; last = { x: r.x, z: r.z } } }
   let hi = 0, n = 0
   for (let f = 0; f < 40; f++) { await raf(); const b = r.body, geo = b.meshes.body.geometry, ps = geo.getAttribute('position'), V = b.bones[0].position.clone(); let lo = 1e9, top = -1e9
     for (let i = 0; i < ps.count; i += 3) { b.at('body', i, V); lo = Math.min(lo, V.y); top = Math.max(top, V.y) } hi += top - lo; n++ }
   return { h: hi / n, look: r.h, sp: r.sp, x: r.x, z: r.z, rigs: W.__spiritModel.rigs.size, urls: { ...W.__spiritModel.urls }, live: W.__spiritModel.rigCount.live }
-})
+}, SP === 'hummingbird')
 const hideCard = (p: Page) => p.evaluate(() => { const h = [...document.querySelectorAll('div')].filter(d => d.textContent?.includes('Click to play')); for (const d of h.filter(d => !h.some(o => o !== d && d.contains(o)))) (d as HTMLElement).style.visibility = 'hidden' }).catch(() => {})
 
 const base = SPIRIT_RIGS[SP]!

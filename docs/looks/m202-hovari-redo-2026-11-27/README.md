@@ -14,6 +14,7 @@ Each form keeps her own sculpt file (her art's body, crown piece, colours, patte
 - **the full beak kept on the smaller head** (so it reads longer: grown);
 - **wings 1.18x longer** from root (wrist out by its root), blades 6% broader; **tail feathers 1.32x longer** (spread by sqrt; Lumari's three
   lengthen without spreading: spread, her outer one closed a handle);
+- **HOV_GLB_TALL is now her idle (hover) mean** (tools/idle-tall.mts); the prod check reads her once she hangs still (her drift pitched her forward and read 0.86-0.93 of it).
 - **size dial 1.4 -> 1.5** (`FORM_GROW_BY`), so with the longer body she is clearly bigger than the old form, and far past the base.
 The layered feather-tip rows are re-laid on the grown core (same rows per form). Obsidari's crown chips stand 0.03 taller.
 
