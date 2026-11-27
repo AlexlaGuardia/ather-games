@@ -194,7 +194,8 @@ async function clashPhase(p: Page, out: string, errs: string[]) {
     await openTent()
     const s = await p.$(`[data-signup-spirit="${sid}"]`); if (!s) return null
     await s.click(); await sleep(300); await (await p.$('[data-signup-enter] button'))!.click()
-    await p.waitForSelector('[data-clash-ring="ring"]', { timeout: 30000 })
+    try { await p.waitForSelector('[data-clash-ring="ring"]', { timeout: 60000 }) }
+    catch (e) { await p.screenshot({ path: `${out}/x-${sid}-no-ring.png` }).catch(() => {}); throw e }
     const bonded: Record<string, string> = {}
     for (let i = 0; i < 1200; i++) {
       const st = await p.evaluate(() => { const e = document.querySelector('[data-clash-bonded]') as HTMLElement | null; return { b: e?.dataset.clashBonded ?? null, i: e?.dataset.clashBout ?? null, res: (document.querySelector('[data-clash-ring-result]') as HTMLElement | null)?.dataset.clashRingResult } })
