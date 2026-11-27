@@ -108,7 +108,7 @@ try {
   ok(JSON.stringify(Object.entries(back).sort()) === JSON.stringify(Object.entries(cells).sort()), '1c. Save -> reload reads the seams back')
   await o.evaluate(() => (window as W).__terrain.publish('m223-seam-check')); await sleep(1500)
   ok(posts.includes('publish') && JSON.stringify(Object.entries(mockLive?.nodes ?? {}).sort()) === JSON.stringify(Object.entries(cells).sort()), '1d. Publish carries them to the scratch live layer')
-  await o.setRequestInterception(false)
+  // (interception stays on: the store read carries x-m223-real, which the handler lets through to the real route)
   const h1 = hashes(await store(o))
   ok(JSON.stringify(h1) === JSON.stringify(h0), `1e. the REAL store did not move (${JSON.stringify(h1)})`)
   await owner.close()
