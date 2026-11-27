@@ -53,11 +53,12 @@ await visit('rune-hold', 'kindled-mug')
 ok(!!(await p.$('[data-shop="kindled-mug"][data-closed]')), 'the Kindled Mug says closed for now')
 await p.evaluate(() => document.querySelector<HTMLElement>('[data-panel="shop-panel"] button[aria-label]')?.click()); await wait(800)
 // the Enchant Temple TALKS first since M13 part 3 (49eac508): Idony's line in a bubble over the door, the counters are answers.
-// Live since 204e8fab (11-16): Idony + the runesmith serve; the twin has nothing to open yet, so she is not an answer.
+// Live since 204e8fab (11-16): Idony + the runesmith serve. Since 34afcbb0 (M93 s3, 11-23) her twin Idris serves too
+// (he cuts letters into a gun's sigil), so "Is Idris in?" (signed, 491f462) is the third counter answer, then goodbye.
 await visitTalk('citadel', 'enchant-temple')
 const temple = await p.evaluate(() => ({ line: document.querySelector('[data-talk-bubble]')?.textContent ?? '', answers: [...document.querySelectorAll('[data-talk-option]')].map(e => (e.textContent ?? '').replace('›', '').trim()) }))
-ok(temple.line.includes(IDONY_HUSH) && temple.answers.includes(DOOR_ASK.inscribe) && temple.answers.includes(DOOR_ASK.letters) && temple.answers.length === 3,
-  `the Enchant Temple (Citadel): Idony talks, her vessels + the runesmith are answers, the twin is not (${JSON.stringify(temple)})`)
+ok(temple.line.includes(IDONY_HUSH) && temple.answers.includes(DOOR_ASK.inscribe) && temple.answers.includes(DOOR_ASK.letters) && temple.answers.includes(DOOR_ASK.idris) && temple.answers.includes(DOOR_ASK.byeTemple) && temple.answers.length === 4,
+  `the Enchant Temple (Citadel): Idony talks, her vessels + the runesmith + Idris are answers, then goodbye (${JSON.stringify(temple)})`)
 await p.evaluate((l: string) => ([...document.querySelectorAll<HTMLElement>('[data-talk-option]')].find(e => (e.textContent ?? '').includes(l)))?.click(), DOOR_ASK.byeTemple); await wait(800)
 ok(!(await p.$('[data-talk-choices]')), 'goodbye ends the talk (the next door is reachable again)')
 await visit('rune-hold', 'station')
