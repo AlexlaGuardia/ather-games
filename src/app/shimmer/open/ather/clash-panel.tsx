@@ -15,6 +15,9 @@ import { partyIds, subscribeParty } from './spirit-party'
 import { ClashRing, type RingEntrant } from './clash-ring'   // M233 v2a
 import { bondedOf, knownOf } from './spirit-bond-move'   // M238
 import { gameDay } from './spirit-seeds'
+import { getPots, setPots } from './spirit-panels'
+import { learnFrom, LESSON_UI, type BoutRecord } from './clash-lessons'   // M233 v2c
+import { hudSay } from '../shared/hud-say'
 import { clashLineup, evenSpirit, foeName } from './fair-clash'
 import { CLASH_UI as L, CLASH_OPEN, CLASH_PRIZE, CLASH_SEASON, TENT_LEVEL, type ClashTier, type ClashState, type ClashClaim } from './fair-clash-rules'
 import { CLASH_LEVEL_LABEL } from './network'
@@ -53,7 +56,8 @@ export function ClashPanel({ tier, tent, ledger, setLedger, onClose }: { tier: C
   const ring = useMemo<RingEntrant[] | null>(() => chosen ? [
     { name: chosen.name, species: chosen.sp, element: chosen.element, spirit: () => evenSpirit(chosen.sp, chosen.element, tier, chosen.name),
       // M238: she throws her favourite (with its twist) from her own known moves; none picked = a seeded random known move
-      bonded: bondedOf(book.pots[chosen.id], gameDay(Date.now())), known: knownOf(book.pots[chosen.id], chosen.sp) },
+      bonded: bondedOf(book.pots[chosen.id], gameDay(Date.now())), known: knownOf(book.pots[chosen.id], chosen.sp),
+      lessons: book.pots[chosen.id]?.lessons },
     ...lineup.map(f => ({ name: foeName(f), species: f.species, element: f.element, spirit: () => evenSpirit(f.species, f.element, tier) })),
   ] : null, [chosen, lineup, tier, book])
 
@@ -70,6 +74,15 @@ export function ClashPanel({ tier, tent, ledger, setLedger, onClose }: { tier: C
     } catch { setResult({ won: true }); setMsg('Could not reach the troupe.') }
   }
   // the ring's run is over: a win claims the purse (server: once per tent per season); the ring stays up until 'Back to the Fair'
+  // M233 v2c: her bout is over: she may learn ONE lesson from it (saved on her pot; the next bout reads it)
+  const onKeeperBout = useCallback((r: BoutRecord, seed: number) => {
+    if (!chosen) return
+    const cur = getPots()[chosen.id]; if (!cur) return
+    const l = learnFrom(cur.lessons ?? [], r, seed)
+    if (!l) return
+    setPots({ ...getPots(), [chosen.id]: { ...cur, lessons: [...(cur.lessons ?? []), l] } })
+    hudSay(LESSON_UI.learned(chosen.name, LESSON_UI.name[l]), 'item', 4)
+  }, [chosen])
   const onDone = useCallback((w: boolean) => { if (w) void won(); else setResult({ won: false }) }, [chosen, ledger, tent, tier])   // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
@@ -103,7 +116,7 @@ export function ClashPanel({ tier, tent, ledger, setLedger, onClose }: { tier: C
         </div>
       </FairSignup>
       {bout !== null && ring && (
-        <ClashRing key={`${tent}-${pick}`} tier={tier} title={L.title(CLASH_LEVEL_LABEL[tier])} entrants={ring} result={result} onDone={onDone} onExit={() => setBout(null)} />
+        <ClashRing key={`${tent}-${pick}`} tier={tier} title={L.title(CLASH_LEVEL_LABEL[tier])} entrants={ring} result={result} onDone={onDone} onExit={() => setBout(null)} onKeeperBout={onKeeperBout} />
       )}
     </>
   )

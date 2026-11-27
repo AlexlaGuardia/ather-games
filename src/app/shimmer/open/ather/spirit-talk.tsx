@@ -37,6 +37,7 @@ import { itemDef, take } from '../shared/inventory'
 import { loadFed, saveFed, spiritCheer, withFed } from './spirit-feed'
 import { askAlong, inParty } from './spirit-party'
 import { canAsk, knownList, pickFavourite, BOND_MOVE_UI } from './spirit-bond-move'   // M238: her favourite (bonded) move
+import { LESSON_UI } from './clash-lessons'   // M233 v2c: her Clash lessons
 import { followRefuseLine, talkLine } from './party-spirit-lines'   // M109: the SIGNED lines (canon script, word for word)
 import { PARTY_FULL_LINE } from './spirit-roster'
 
@@ -246,6 +247,21 @@ export function SpiritPanel({ sp, id, phone, onClose }: { sp: Parameters<typeof 
             ))}
           </div>
         ) : <div data-spirit-moves-empty className="text-[13px] italic" style={{ color: H.inkFaint }}>no moves known yet</div>}
+        {/* M233 v2c: her Clash LESSONS (clash-lessons.ts): what her fights taught her, one tactic each. Labels = placeholders (@lark). */}
+        {id && pot && (
+          <div data-spirit-lessons={(pot.lessons ?? []).join(',')} className="mt-3">
+            <div className="mb-1.5 text-[13px] font-bold" style={{ color: H.inkSoft }}>{LESSON_UI.header}</div>
+            {pot.lessons?.length ? (
+              <div style={{ display: 'grid', gap: 4 }}>
+                {pot.lessons.map(l => (
+                  <div key={l} data-spirit-lesson={l} className="rounded-[8px] px-2.5 py-1.5 text-[13px]"
+                    style={{ background: 'rgba(255,250,240,.6)', boxShadow: 'inset 0 0 0 1px rgba(58,39,22,.14)', color: H.ink, fontWeight: 700 }}>
+                    {LESSON_UI.name[l] ?? l}</div>
+                ))}
+              </div>
+            ) : <div data-spirit-lessons-empty className="text-[13px] italic" style={{ color: H.inkFaint }}>{LESSON_UI.none}</div>}
+          </div>
+        )}
       </div>
     </HearthFrame>
   )

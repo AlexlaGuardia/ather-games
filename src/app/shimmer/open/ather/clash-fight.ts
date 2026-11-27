@@ -182,7 +182,17 @@ export interface Entrant {
   bonded?: Bonded | null; name?: string
   /** M238: her own known move ids (the pot's saved list); unset = knownMoves at her level */
   known?: readonly string[]
+  /** M233 v2c: the tactics her LESSONS taught her (clash-lessons.ts tacticsOf); unset = none */
+  tactics?: readonly Tactic[]
 }
+/** M233 v2c FIGHT MEMORY: one tactic shift each, read by decide()/react(). Never a stat, damage or cooldown (power = choice).
+ *  saveDefense: no dodge/guard spent on a melee while the foe's bonded move (strong vs her) is nearly ready.
+ *  watchBonded: reads a bonded wind-up more often, a melee one less. pressKiter: closes on a far kind while her strike is near.
+ *  spaceBrawler: a step off a close kind while its strike is ready and hers is not (a close kind herself: only while hers is long off). trustReach: throws the bonded from the edge of
+ *  its reach. pressMelee: darts in whenever her strike is ready. bold: no backing off when hurt. wary: hurt, she strikes only
+ *  with her dodge/guard ready. closeIn: throws her bonded move only well inside its reach. waitGuard: no strike into a raised guard. baitDodge:
+ *  melee before the bonded move while an evader's dodge is ready. shakeOff: slowed or rooted, she backs off instead of striking. */
+export type Tactic = 'saveDefense' | 'watchBonded' | 'pressKiter' | 'spaceBrawler' | 'trustReach' | 'pressMelee' | 'bold' | 'wary' | 'closeIn' | 'waitGuard' | 'baitDodge' | 'shakeOff'
 /** a tent entrant evened as s3 did (fair-clash.ts evenSpirit): tent level, even seeds, neutral temperament */
 export function tentEntrant(species: Species, element: Element, tier: ClashTier, bonded?: Bonded | null): Entrant {
   const s = evenSpirit(species, element, tier)
@@ -214,10 +224,11 @@ export interface Fighter {
   cheered: boolean
   slowT: number; rootT: number; weakT: number; braceT: number; hasteT: number; dotT: number; iframeT: number
   /** private */
-  _: { stats: PartyStats; bonded: ClashMove; defense: Defense; pref: number; speed: number; cdMul: number; dmgRef: number; read: number; strafe: number; nextDecide: number; dotPerS: number }
+  _: { stats: PartyStats; bonded: ClashMove; defense: Defense; pref: number; speed: number; cdMul: number; dmgRef: number; read: number; strafe: number; nextDecide: number; dotPerS: number; tac: ReadonlySet<Tactic> }
 }
-export type FightEventKind = 'start' | 'hit' | 'miss' | 'evaded' | 'guarded' | 'rider' | 'cheer' | 'ko' | 'end'
-export interface FightEvent { kind: FightEventKind; side: 0 | 1; move?: 'melee' | 'bonded' | 'evade' | 'guard' | 'reposition'; moveId?: string; dmg?: number; rider?: Rider; eff?: number; clean?: boolean }
+export type FightEventKind = 'start' | 'hit' | 'miss' | 'evaded' | 'guarded' | 'rider' | 'cheer' | 'ko' | 'end' | 'tactic'
+/** 'tactic' (M233 v2c) = a lesson CHANGED her choice this tick (the pick without it would have been another) */
+export interface FightEvent { kind: FightEventKind; side: 0 | 1; move?: 'melee' | 'bonded' | 'evade' | 'guard' | 'reposition'; moveId?: string; dmg?: number; rider?: Rider; eff?: number; clean?: boolean; tactic?: Tactic }
 export interface FighterSnap { x: number; z: number; face: number; hp: number; maxHp: number; act: ActKind; phase: Phase; actT: number; cheered: boolean }
 export interface TickLog { tick: number; t: number; f: [FighterSnap, FighterSnap]; ev: FightEvent[] }
 export interface FightState {
@@ -252,7 +263,7 @@ function mkFighter(e: Entrant, side: 0 | 1, ref: PartyStats, seed: number): Figh
       stats: st, bonded: bondedOfEntrant(e, seed, side), defense: kind.defense, pref: kind.pref,
       speed: SPEED * Math.max(SPEED_FLOOR, Math.pow(rel(st.agi, ref.agi), STAT_EXP.speed)),
       cdMul: Math.pow(rel(ref.agi, st.agi), STAT_EXP.cd),
-      dmgRef: ref.maxHp, read: 0, strafe: side === 0 ? 1 : -1, nextDecide: side, dotPerS: 0,
+      dmgRef: ref.maxHp, read: 0, strafe: side === 0 ? 1 : -1, nextDecide: side, dotPerS: 0, tac: new Set(e.tactics ?? []),
     },
   }
 }
@@ -349,7 +360,17 @@ function react(s: FightState, me: Fighter, foe: Fighter, ev: FightEvent[]) {
   if (mv && mv.power === 0) return
   const reach = foe.act.kind === 'melee' ? MELEE.range : mv!.range
   if (dist(me, foe) > reach + 1) return
-  if (rnd(s) >= me._.read) return
+  const tac = me._.tac
+  // M233 v2c saveDefense: the foe's bonded move is strong against her and nearly ready -> let the melee through, keep the dodge
+  if (tac.has('saveDefense') && foe.act.kind === 'melee' && foe._.bonded.power > 0 && foe.cd.bonded <= 2
+    && getEffectiveness(foe._.bonded.element, toBattleElement(me.element)) > 1) { ev.push({ kind: 'tactic', side: me.side, tactic: 'saveDefense' }); return }
+  const roll = rnd(s)
+  if (tac.has('watchBonded')) {
+    // M233 v2c watchBonded: her attention moves to the big move (a bonded wind-up read more, a melee one less)
+    const r = clamp(me._.read + (foe.act.kind === 'bonded' ? 0.15 : -0.15), 0.05, 0.85)
+    if ((roll < r) !== (roll < me._.read)) ev.push({ kind: 'tactic', side: me.side, tactic: 'watchBonded' })
+    if (roll >= r) return
+  } else if (roll >= me._.read) return
   const left = foe.act.dur - foe.act.t
   if (me._.defense === 'evade') {
     if (left > DEFENSE.evade.time + 0.1) { foe.act.read = false; return }   // too early to dash: look again next tick
@@ -364,36 +385,56 @@ function react(s: FightState, me: Fighter, foe: Fighter, ev: FightEvent[]) {
   ev.push({ kind: 'start', side: me.side, move: me._.defense })
 }
 
-/** a utility pick each decision tick: range, her HP, her cooldowns. Readable on purpose. */
-function decide(s: FightState, me: Fighter, foe: Fighter, ev: FightEvent[]) {
+/** a utility pick each decision tick: range, her HP, her cooldowns. Readable on purpose. M233 v2c: her lessons' tactics shift
+ *  the pick (plan with them); when the pick differs from the one without them, a 'tactic' event names each shift that applied. */
+type Cand = { w: number; key: string; run: (s: FightState, ev: FightEvent[]) => void }
+function plan(me: Fighter, foe: Fighter, tac: ReadonlySet<Tactic>, used: Set<Tactic>): Cand[] {
   const d = dist(me, foe), b = me._.bonded, hpF = me.hp / me.maxHp
-  const cands: [number, () => void][] = []
+  const has = (t: Tactic, cond: boolean) => { if (cond && tac.has(t)) { used.add(t); return true } return false }
+  const cands: Cand[] = []
+  const guardUp = has('waitGuard', foe.act.kind === 'guard' && foe.act.phase === 'active')
+  const snared = has('shakeOff', me.slowT > 0 || me.rootT > 0)
+  const close = (r: number) => (tac.has('closeIn') ? d <= r * 0.9 : d <= r)
+  const hurtWait = has('wary', hpF < 0.4 && me.cd.defense > 0 && me.cd.melee <= 0 && d <= MELEE.range)
+  const meleeOk = !guardUp && !snared && !hurtWait && me.cd.melee <= 0 && d <= MELEE.range
   if (me.cd.bonded <= 0) {
+    const start = (s: FightState, ev: FightEvent[]) => { begin(me, 'bonded', 'windup', b.windup); ev.push({ kind: 'start', side: me.side, move: 'bonded', moveId: b.id }) }
     if (b.power === 0) {
       const want = b.rider === 'mend' ? (hpF < 0.6 ? 1.2 : 0) : (d < 4 ? 0.9 : 0.4)
-      if (want) cands.push([want, () => { begin(me, 'bonded', 'windup', b.windup); ev.push({ kind: 'start', side: me.side, move: 'bonded', moveId: b.id }) }])
-    } else if (d <= b.range) cands.push([1.1, () => { begin(me, 'bonded', 'windup', b.windup); ev.push({ kind: 'start', side: me.side, move: 'bonded', moveId: b.id }) }])
+      if (want) cands.push({ w: want, key: 'bonded', run: start })
+    } else if (!guardUp && close(b.range)) {
+      cands.push({ w: has('baitDodge', meleeOk && foe._.defense === 'evade' && foe.cd.defense <= 0) ? 0.8 : 1.1, key: 'bonded', run: start })
+    } else if (tac.has('closeIn') && d <= b.range && !guardUp) used.add('closeIn')
   }
-  if (me.cd.melee <= 0 && d <= MELEE.range) {
-    const keen = me._.pref <= 2.5 ? 1.0 : 0.6
-    cands.push([keen, () => { begin(me, 'melee', 'windup', MELEE.windup); ev.push({ kind: 'start', side: me.side, move: 'melee' }) }])
+  if (meleeOk) {
+    const keen = me._.pref <= 2.5 || has('pressMelee', true) ? 1.0 : 0.6
+    cands.push({ w: keen, key: 'melee', run: (_s, ev) => { begin(me, 'melee', 'windup', MELEE.windup); ev.push({ kind: 'start', side: me.side, move: 'melee' }) } })
   }
   // where she wants to stand: in reach of what is ready, else her kind's range; hurt and far-preferring = further
   let want = me._.pref
-  if (me.cd.bonded <= 0.5 && b.power > 0) want = Math.min(want, b.range * 0.8)
-  else if (me.cd.melee <= 0.3 && (me._.pref <= 2.5 || me.cd.bonded > 1.5)) want = MELEE.range * 0.8   // far kinds dart in while the bonded move rests
-  if (hpF < 0.35 && me._.pref > 2.5) want += 1
+  if (me.cd.bonded <= 0.5 && b.power > 0) want = has('trustReach', b.range > 2.5) ? b.range * 0.95 : Math.min(want, b.range * 0.8)
+  else if (me.cd.melee <= 0.3 && (me._.pref <= 2.5 || me.cd.bonded > 1.5 || has('pressMelee', true))) want = MELEE.range * 0.8   // far kinds dart in while the bonded move rests
+  if (hpF < 0.35 && me._.pref > 2.5 && !has('bold', true)) want += 1
+  if (has('pressKiter', foe._.pref > 2.5 && me.cd.melee <= 1)) want = Math.min(want, MELEE.range * 0.8)
+  if (has('spaceBrawler', foe._.pref <= 2.5 && foe.cd.melee <= 1 && me.cd.melee > (me._.pref > 2.5 ? 0.3 : 3))) want = Math.max(want, MELEE.range + 1.2)
+  if (snared) want = Math.max(want, me._.pref + 1)
   const off = d - want
-  cands.push([Math.abs(off) > 0.6 ? 0.5 : 0.15, () => {
+  const radial = clamp(off, -1, 1)
+  cands.push({ w: Math.abs(off) > 0.6 ? 0.5 : 0.15, key: `pos:${radial.toFixed(1)}`, run: (s) => {
     const ux = (foe.x - me.x) / (d || 1), uz = (foe.z - me.z) / (d || 1)
-    const radial = clamp(off, -1, 1)
     if (rnd(s) < 0.08) me._.strafe *= -1
     const tx = ux * radial + -uz * me._.strafe * 0.45, tz = uz * radial + ux * me._.strafe * 0.45
     const n = Math.hypot(tx, tz) || 1
     begin(me, 'reposition', 'active', DECIDE_EVERY * DT, { dx: tx / n, dz: tz / n })
-  }])
-  cands.sort((p, q) => q[0] - p[0])
-  cands[0][1]()
+  } })
+  return cands.sort((p, q) => q.w - p.w)
+}
+const NO_TAC: ReadonlySet<Tactic> = new Set()
+function decide(s: FightState, me: Fighter, foe: Fighter, ev: FightEvent[]) {
+  const used = new Set<Tactic>()
+  const pick = plan(me, foe, me._.tac, used)[0]
+  if (me._.tac.size && used.size && plan(me, foe, NO_TAC, new Set())[0].key !== pick.key) for (const t of used) ev.push({ kind: 'tactic', side: me.side, tactic: t })
+  pick.run(s, ev)
 }
 
 function moveBy(f: Fighter, foe: Fighter, dx: number, dz: number) {

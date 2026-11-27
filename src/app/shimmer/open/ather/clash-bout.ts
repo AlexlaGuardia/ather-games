@@ -10,6 +10,7 @@
 import type { Spirit } from '../../spirits/spirit'
 import { createPartyBattle, currentActor, chooseAction, takeAction } from '../../engine/party-battle'
 import { CLASH_AI, CLASH_TROUPE_MANA, type ClashTier } from './fair-clash-rules'
+import { tacticsOf } from './clash-lessons'   // M233 v2c
 import { createFight, step, tentEntrant, resolveBonded, bondSeed, type Bonded, DT, RING, type FightState, type FighterSnap, type FightEvent, type TickLog } from './clash-fight'
 
 export type BoutAct = 'idle' | 'walk' | 'windup' | 'strike' | 'evade' | 'guard' | 'hit' | 'down' | 'win'
@@ -32,10 +33,14 @@ export interface BoutPlay {
   events?: BoutEvent[]
   /** M238: the bonded move each side throws this bout (the keeper's favourite, or the seeded random one) */
   bonded?: { a: Bonded; b: Bonded }
+  /** M233 v2c: every engine event so far (side 0 = 'a'), the fight's seed and state (clash-lessons.ts reads a finished bout) */
+  log?: FightEvent[]; seed?: number; state?: FightState
 }
 export interface BoutSide { spirit: Spirit; /** her spirit (the keeper's side) */ keeper?: boolean
   /** M238: her favourite + twist and her known move ids (spirit-bond-move.ts); unset = a seeded random known move */
-  bonded?: Bonded | null; known?: readonly string[] }
+  bonded?: Bonded | null; known?: readonly string[]
+  /** M233 v2c: her LESSONS (clash-lessons.ts ids, on her pot): the engine reads them as tactics */
+  lessons?: readonly string[] }
 export interface BoutRunner { name: string; run(a: BoutSide, b: BoutSide, o: { tier: ClashTier; /** a fixed fight seed (checks); none = fresh */ seed?: number }): BoutPlay }
 
 /** the placeholder's bout lengths (s): short, so a run stays a minute or two (the live engine aims at 60-90 s a bout) */
@@ -130,6 +135,7 @@ export function liveBout(s: FightState, hold = 1.2, onTick?: (l: TickLog) => voi
   let prev = step(s), last = prev
   onTick?.(prev)
   const press: [boolean, boolean] = [false, false], cues: { t: number; side: 0 | 1; c: BoutCue }[] = []
+  const log: FightEvent[] = [...prev.ev]   // M233 v2c: the bout's whole event log (the lessons read it)
   const pose = (i: 0 | 1, t: number): BoutPose => {
     const a = prev.f[i], b = last.f[i], k = Math.max(0, Math.min(1, (t - last.t) / DT + 1))
     const x = (a.x + (b.x - a.x) * k) * VIEW, z = (a.z + (b.z - a.z) * k) * VIEW
@@ -141,7 +147,7 @@ export function liveBout(s: FightState, hold = 1.2, onTick?: (l: TickLog) => voi
   return {
     at(t) {
       while (!s.over && last.t + DT <= t) {
-        prev = last; last = step(s, { cheer: [press[0], press[1]] }); press[0] = press[1] = false; onTick?.(last)
+        prev = last; last = step(s, { cheer: [press[0], press[1]] }); press[0] = press[1] = false; onTick?.(last); log.push(...last.ev)
         for (const e of last.ev) { const c = cueOf(e.kind); if (c) cues.push({ t: last.t, side: cueSide(e), c }) }
         if (cues.length > 40) cues.splice(0, cues.length - 40)
       }
@@ -150,13 +156,14 @@ export function liveBout(s: FightState, hold = 1.2, onTick?: (l: TickLog) => voi
     over: t => s.over && t >= s.t + hold,
     winner: () => (s.winner === null ? null : s.winner === 0 ? 'a' : 'b'),
     cheer(side) { const i = side === 'a' ? 0 : 1; if (s.over || s.f[i].cheered || press[i]) return false; press[i] = true; return true },
+    log, seed: s.seed, state: s,
   }
 }
 /** the live runner: both spirits as the tent's evened entrants (clash-fight.ts tentEntrant), a fresh seed per bout */
 export const fightRunner: BoutRunner = {
   name: 'clash-fight',
   run(a, b, o) {
-    const e = (x: BoutSide) => ({ ...tentEntrant(x.spirit.species, (x.spirit.element ?? 'base'), o.tier, x.bonded), name: x.spirit.name, known: x.known })
+    const e = (x: BoutSide) => ({ ...tentEntrant(x.spirit.species, (x.spirit.element ?? 'base'), o.tier, x.bonded), name: x.spirit.name, known: x.known, tactics: tacticsOf(x.lessons) })
     const ea = e(a), eb = e(b), seed = o.seed ?? (Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0
     return { ...liveBout(createFight(ea, eb, seed)), bonded: { a: resolveBonded(ea, bondSeed(seed, 0)), b: resolveBonded(eb, bondSeed(seed, 1)) } }
   },

@@ -43,7 +43,9 @@ export type Pot = { seed: SeedId; at: number; bloomed?: true; v?: 2; tends?: num
   bond?: number; bondDay?: number; bondToday?: number
   /** M238: her KNOWN move ids (spirit-bond-move.ts), and her FAVOURITE (bonded) move: id, the form she picked it in, the
    *  game day of her first pick (the twist grows from it) */
-  moves?: string[]; fav?: { id: string; form: 'base' | 'mana' | 'storm' | 'earth' | 'water'; day: number } }
+  moves?: string[]; fav?: { id: string; form: 'base' | 'mana' | 'storm' | 'earth' | 'water'; day: number }
+  /** M233 v2c: her Clash LESSONS (clash-lessons.ts ids), learned once each, capped */
+  lessons?: string[] }
 export type Pots = Readonly<Record<string, Pot>>
 /** The game-day calendar (anemonyx-view.tsx counts the same days). */
 export const gameDay = (t: number) => Math.floor(t / GAME_DAY_MS)
