@@ -33,8 +33,13 @@ export type SpiritNav = {
     lost: (pos: { x: number; z: number }, k: { x: number; z: number; yaw: number }, slot: { x: number; z: number }, dt: number) => { x: number; z: number } | null } | null
   /** M110 s1: the training pieces on the plot (re-read at each pick). A PARTY spirit may choose one as a beat on her own. */
   toys?: () => Toy[]
+  /** M239: her lean over the training stats (training-use.ts leanFor: the species' manner, else her signature stat); wins over the dials' toyLean */
+  lean?: Readonly<Record<string, number>>
+  /** M239: the shared piece table (two spirits never share one piece): the garden passes its one (training-use.ts PIECE_USE); none = her own */
+  occ?: Occupancy
 }
 /** M110 s1: a training piece: where it stands, `ax/az` = the unit axis she plays ACROSS it (a hurdle: over the rail), its stat */
+import { makeOccupancy, pickToy, type Occupancy } from './training-use'
 export type Toy = { id: string; x: number; z: number; ax: number; az: number; stat: string
   /** M110 s2: HOW she plays at it (default 'leap'): leap = bounds across it (AGI hurdle); shove = lunges into it from one side,
    *  leans in, backs off facing it (PWR); guard = a low wide sidestep across the gap between its posts, facing out (GRD);
@@ -187,6 +192,9 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
   // free ground: not blocked, and clear of home itself (the planter; the nav's blocked leaves her own planter out)
   // M117 s1: the piece she is heading to / playing at (or picking, or just stepping off) keeps only its parts
   let toyIgn: string | undefined, toyLeft: string | undefined
+  // M239: her hold on the piece she is heading to / playing at (training-use.ts): refreshed each step, let go when she leaves it
+  const occ = nav.occ ?? makeOccupancy(), me = {}, lean = nav.lean ?? D.toyLean
+  let held: string | null = null
   const free = (x: number, z: number) => Math.hypot(x - home.x, z - home.z) >= nav.rMin - 0.02 && !nav.blocked(x, z, toy?.id ?? toyIgn ?? toyLeft)
   // polar position round home (the ring runs' param space), kept in step with pos after every run
   let ang = R() * TAU, rad = nav.rMin + 0.1
@@ -295,12 +303,12 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
    *  by her toyLean, its two ends free and the bound between them clear. A run to the nearer end; the play starts on arrival. */
   function planToy(): boolean {
     if (!nav.toys || !nearTo || toyRest < PLAY.rest) return false
-    const k = nearTo(), list = nav.toys().filter(t => Math.hypot(t.x - pos.x, t.z - pos.z) <= PLAY.reach && Math.hypot(t.x - k.x, t.z - k.z) <= NEAR.r)
+    const now = occ.now()   // M239: a piece another spirit is heading to / playing at is not hers to pick
+    const k = nearTo(), list = nav.toys().filter(t => Math.hypot(t.x - pos.x, t.z - pos.z) <= PLAY.reach && Math.hypot(t.x - k.x, t.z - k.z) <= NEAR.r && !occ.taken(t.id, me, now))
     if (!list.length) return false
-    const w = list.map(t => D.toyLean[t.stat] ?? 1), sum = w.reduce((a, b) => a + b, 0)
-    let c = R() * sum, i = 0; while (i < list.length - 1 && c > w[i]) { c -= w[i]; i++ }
-    const t = list[i]
-    if (R() >= Math.min(0.9, PLAY.chance * w[i])) return false
+    const i = pickToy(list, lean, R()), t = list[i], w = lean[t.stat] ?? 1   // M239: weighted by her lean (training-use.ts)
+    if (R() >= Math.min(0.9, PLAY.chance * w)) return false
+    if (!occ.claim(t.id, me, now)) return false
     toyIgn = t.id
     try {
       const ends = toyEnds(t); if (!ends) return false
@@ -415,6 +423,9 @@ export function makeTrot(nav: SpiritNav, seed = 1, dials?: Partial<TrotDials>): 
 
   function step(dt: number): TrotPose {
     // M117 s1: the piece she last played at stays 'hers' (parts only) until she has stepped clear of its padded footprint
+    if (toy && !occ.claim(toy.id, me, occ.now())) { toy = null; brace = 0; if (mode === 'play') syncPolar() }   // M239: lost the piece (a lapsed hold): she lets it be
+    if (held && held !== toy?.id) occ.release(held, me)
+    held = toy?.id ?? null
     if (toy) toyLeft = toy.id; else if (toyLeft && !nav.blocked(pos.x, pos.z)) toyLeft = undefined
     dt = Math.min(dt, 0.25); t += dt; lived += dt; sinceLand += dt; toyRest += dt   // a slow frame still covers real time (a phone at 4 fps trots at speed)
     let speed = 0, heading = yaw, wantSit = 0, sniff = 0, happyAir = 0

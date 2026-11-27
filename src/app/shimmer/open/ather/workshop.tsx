@@ -53,6 +53,7 @@ import { BuildIcon } from './build-icon'
 import { AlchemyPanel } from './alchemy-panel'
 import { useWideLayout, GAP, GUTTER } from './wide-panel'   // M199
 import { loadAssign, mayUse } from './train-assign'   // M118 s2: the keeper's assign-a-piece gate
+import { leanFor, PIECE_USE } from './training-use'   // M239: which pieces she is drawn to
 import { PlanterPanel, GrimoirePanel, getPots, setPots, settlePlanter, useBook, type BankStore } from './spirit-panels'
 import { liftPiece } from './piece-lift'
 import { getBoxes, setBoxes, settleSaplingBox, PottedSapling, SaplingBoxSection } from './planter-box-view'   // M113 s1
@@ -1351,7 +1352,7 @@ function CutBody({ item, open, boxes }: { item: string; open: boolean; boxes: re
 // starts a body clear of it.
 const navBoxes = new Map<number, { w: Works; b: Foot[]; feet: PieceFoot[] }>()
 export const spiritBodyR = (sp: Species) => bodyRadius(GROWN[sp] ?? { height: 0.5 })
-function planterNav(id: string, dev = false, r = 0.3): SpiritNav | null {
+function planterNav(id: string, dev = false, r = 0.3, lean?: Readonly<Record<string, number>>): SpiritNav | null {
   const pc = getW().pieces.find(x => x.id === homeOf(id)); if (!pc) return null   // M122: `id` = the spirit's pots key; her planter = homeOf(id)
   const home = { x: pc.x, z: pc.z }, owned = new Set(loadGarden().owned), floor0 = pieceFloor(getW(), pc)
   const nav = () => {
@@ -1367,7 +1368,7 @@ function planterNav(id: string, dev = false, r = 0.3): SpiritNav | null {
   const toys = () => getW().pieces.filter(t => FURNITURE[t.item]?.train && Math.abs(pieceFloor(getW(), t) - floor0) < 0.02)
     .map(t => { const a = -t.q * Math.PI / 2, f = FURNITURE[t.item], kind = f.play ?? 'leap'   // M110 s2: how she plays at it, and its measure
       return { id: t.id, x: t.x, z: t.z, ax: Math.sin(a), az: Math.cos(a), stat: f.train!, kind, size: kind === 'shove' ? f.d / 2 : kind === 'guard' ? f.w / 2 - 0.3 : kind === 'laps' ? f.w / 2 - 0.15 : undefined } })
-  return { home, rMin, rMax: rMin + 0.6, roam: { maxLeg: 4.5, away: 3 }, toys: dev ? () => { const a = loadAssign(); return toys().filter(t => mayUse(a, t.id, id)) } : undefined,   // M118 s2: only the pieces the keeper assigned her
+  return { home, rMin, rMax: rMin + 0.6, roam: { maxLeg: 4.5, away: 3 }, lean, occ: PIECE_USE, toys: dev ? () => { const a = loadAssign(); return toys().filter(t => mayUse(a, t.id, id)) } : undefined,   // M118 s2: only the pieces the keeper assigned her
      blocked: (x, z, toy) => {
     const sq = squareAt(x, z); if (!sq || !owned.has(sqId(sq.i, sq.j))) return true
     if (!(Math.abs(plotHeightAt(x, z) - GROUND_Y) < 0.05) || Math.abs(pieceFloor(getW(), { item: pc.item, x, z }) - floor0) > 0.02) return true
@@ -1409,7 +1410,7 @@ function PlanterSpirit({ id }: { id: string }) {
   // M204: the form models are owner-only while they are redone: a player's evolved spirit (element set) keeps her base look
   // M226: ...except the forms Alex OK'd (spirit-public.ts PUBLIC_FORMS), which every keeper's evolved spirit draws
   const owner = useOwner(), preview = useFormPreview(), sp = p?.bloomed ? speciesOf(p.seed) : null, look = keeperFormLook(sp, p?.element, owner) ?? formLook(sp, preview) ?? spiritModelFor(sp) ?? (owner ? basePreviewFor(sp) : null)   // M174: built bases, owner only until Alex OKs; M226: the OK'd forms + bases for every keeper
-  const nav = useMemo(() => (look && sp ? planterNav(id, dev, spiritBodyR(sp)) : null), [look, id, dev, sp])   // M107: she roams the garden
+  const nav = useMemo(() => (look && sp ? planterNav(id, dev, spiritBodyR(sp), leanFor(sp, look.trot?.toyLean)) : null), [look, id, dev, sp])   // M239: her lean at the training pieces   // M107: she roams the garden
   useFrame(({ clock }) => { if (orb.current) orb.current.position.y = 1.0 + Math.sin(clock.elapsedTime * 1.6) * 0.06 })
   const orbMesh = <mesh ref={orb} position-y={1.0}><sphereGeometry args={[0.16, 14, 10]} /><meshBasicMaterial color={f.glow} transparent opacity={0.85} /></mesh>
   if (!sp) return null
