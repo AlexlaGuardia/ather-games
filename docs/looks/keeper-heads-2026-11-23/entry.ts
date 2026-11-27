@@ -1,7 +1,7 @@
 // M116 sheet renderer (headless; bundled to an IIFE by render.mts). Not part of the game.
 import * as THREE from 'three'
 import { protoKeeper, FACES, type Face } from './heads'
-import { DEFAULT_LOOK, type Look } from '/root/ather-games/src/app/shimmer/open/shared/keeper-look'
+import { DEFAULT_LOOK, type Look } from '../../../src/app/shimmer/open/shared/keeper-look'
 const r = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true }); r.setPixelRatio(1)
 const BG = 0xefe4cc
 const light = (s: THREE.Scene) => { s.add(new THREE.AmbientLight(0xffffff, 0.6)); const d = new THREE.DirectionalLight(0xffffff, 0.9); d.position.set(2, 3, 4); s.add(d) }

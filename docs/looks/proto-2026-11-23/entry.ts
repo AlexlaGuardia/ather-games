@@ -1,7 +1,7 @@
 import * as THREE from 'three'
-import { buildKeeper } from '/root/ather-games/src/app/shimmer/open/shared/keeper-figure'
+import { buildKeeper } from '../../../src/app/shimmer/open/shared/keeper-figure'
 import { buildKeeper as buildAnime } from './keeper-anime'
-import { DEFAULT_LOOK } from '/root/ather-games/src/app/shimmer/open/shared/keeper-look'
+import { DEFAULT_LOOK } from '../../../src/app/shimmer/open/shared/keeper-look'
 const W = 1200, Hh = 700
 const r = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true }); r.setSize(W, Hh); r.setClearColor(0xefe4cc); document.body.appendChild(r.domElement)
 const scene = new THREE.Scene(); scene.add(new THREE.AmbientLight(0xffffff, 0.6)); const d = new THREE.DirectionalLight(0xffffff, 0.9); d.position.set(2, 3, 4); scene.add(d)

@@ -4,7 +4,7 @@
 // ★ ORIGIN AT THE FEET (the mock centred the figure for its stage); parts are NAMED (hand-l/-r, foot-l/-r, head, body) so a
 // caller can move them. Materials are shared by colour across every figure built (a crowd of keepers costs no extra programs).
 import * as THREE from 'three'
-import { OPT, type Look } from '/root/ather-games/src/app/shimmer/open/shared/keeper-look'
+import { OPT, type Look } from '../../../src/app/shimmer/open/shared/keeper-look'
 
 const grad = (() => {
   const t = new THREE.DataTexture(new Uint8Array([90, 170, 255]), 3, 1, THREE.RedFormat)

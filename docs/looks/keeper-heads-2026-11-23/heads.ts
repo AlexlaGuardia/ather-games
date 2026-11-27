@@ -3,9 +3,9 @@
 // face sets (A-D) drawn on the same head sphere. The head + hair + face are a PROTO COPY of keeper-figure.ts headAndFace()
 // (same toon ramp, ink hull, hair v3) with the face parameterised; 'today' renders the live builder untouched.
 import * as THREE from 'three'
-import { buildKeeper } from '/root/ather-games/src/app/shimmer/open/shared/keeper-figure'
-import { OPT, type Look } from '/root/ather-games/src/app/shimmer/open/shared/keeper-look'
-import { proportionsFor, type Proportions } from '/root/ather-games/src/app/shimmer/open/shared/keeper-proportions'
+import { buildKeeper } from '../../../src/app/shimmer/open/shared/keeper-figure'
+import { OPT, type Look } from '../../../src/app/shimmer/open/shared/keeper-look'
+import { proportionsFor, type Proportions } from '../../../src/app/shimmer/open/shared/keeper-proportions'
 
 /** ONE head size for every model: the mean of today's six saved sizes (headW 0.74-0.80 -> 0.785, headH 0.71-0.82 -> 0.772),
  *  rounded down a touch so the larger frames keep the smaller-head read Alex dialled in on the bench. */

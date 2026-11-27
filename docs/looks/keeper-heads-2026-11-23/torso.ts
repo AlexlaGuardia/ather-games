@@ -2,9 +2,9 @@
 // lathe (the same 'inverted egg' the game uses, EGG[1] = today's Curved) and, where the M103 dials reach, moves the dials.
 // T3 also bends the lathe front/back (a lathe alone is round in plan, so it has no side profile).
 import * as THREE from 'three'
-import { buildKeeper } from '/root/ather-games/src/app/shimmer/open/shared/keeper-figure'
-import type { Look } from '/root/ather-games/src/app/shimmer/open/shared/keeper-look'
-import { proportionsFor, type Proportions } from '/root/ather-games/src/app/shimmer/open/shared/keeper-proportions'
+import { buildKeeper } from '../../../src/app/shimmer/open/shared/keeper-figure'
+import type { Look } from '../../../src/app/shimmer/open/shared/keeper-look'
+import { proportionsFor, type Proportions } from '../../../src/app/shimmer/open/shared/keeper-proportions'
 import { UNIVERSAL, FACES, protoKeeper } from './heads'
 
 type P = [number, number][]

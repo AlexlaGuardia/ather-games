@@ -2,7 +2,7 @@
 import * as THREE from 'three'
 import { protoKeeper, FACES, MOUTHS, type Face } from './heads'
 import { TORSOS, torsoKeeper } from './torso'
-import { DEFAULT_LOOK, type Look } from '/root/ather-games/src/app/shimmer/open/shared/keeper-look'
+import { DEFAULT_LOOK, type Look } from '../../../src/app/shimmer/open/shared/keeper-look'
 const r = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true }); r.setPixelRatio(1)
 const light = (s: THREE.Scene) => { s.add(new THREE.AmbientLight(0xffffff, 0.6)); const d = new THREE.DirectionalLight(0xffffff, 0.9); d.position.set(2, 3, 4); s.add(d) }
 function shot(id: string, w: number, h: number, setup: (s: THREE.Scene) => THREE.Camera) {
