@@ -25,9 +25,9 @@ type W = any
 type N = { id: string; x: number; z: number; kind: string }
 const errs: string[] = [], posts: string[] = []
 const br = await puppeteer.launch({ protocolTimeout: 300000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] })
-const tiles = (JSON.parse(readFileSync('public/open/wilds/tiles.json', 'utf8')) as { tiles: { name: string; tx: number; ty: number }[] }).tiles
+const tiles = (JSON.parse(readFileSync('public/open/wilds/tiles.json', 'utf8')) as { tiles: { name: string; tx: number; ty: number; nodes: { i: number; j: number; zone?: string }[] }[] }).tiles
 const g = tiles.find(t => t.name === 'first-wilds')!
-const G = { x: g.tx * 1000 - 300, z: g.ty * 1000 + 300 }, R = 140
+const G = { x: g.tx * 1000 - 300, z: g.ty * 1000 + 300 }, R = 320
 const NZ = 8, cellKey = (x: number, z: number) => `${Math.floor(x / NZ)}_${Math.floor(z / NZ)}`
 let mockDraft: any = null, mockLive: any = null, real: any = null
 const store = (o: Page) => o.evaluate(async () => (await fetch('/shimmer/save-builder?map=wilds', { cache: 'no-store', headers: { 'x-m86-real': '1' } })).json()) as Promise<any>
@@ -68,7 +68,7 @@ async function keeper(layer: string, tag: string, look?: { x: number; z: number 
   for (let i = 0; i < 30; i++) { n = await kp.evaluate((x: number, z: number, r: number) => (window as W).__wildsNodes?.(x, z, r) ?? null, G.x, G.z, R); if (n?.trees?.length) break; await sleep(1000) }
   if (look) {
     const yawE = -Math.PI / 2
-    await A('tp', look.x - 14, look.z, yawE); await sleep(2500); await A('look', yawE, -0.35); await sleep(4000)
+    await A('tp', look.x - 14, look.z, yawE); await sleep(2500); await dismissStartCard(kp); await A('look', yawE, -0.35); await sleep(4000)
     await kp.screenshot({ path: `${out}/${tag}-path.png` }).catch(() => {})
   }
   await ctx.close()
@@ -79,11 +79,17 @@ try {
   // ── BEFORE: what the game holds round the waymark today ──
   const b0 = await keeper(liveTxt, 'a-before')
   ok(b0.trees.length > 20, `before: ${b0.trees.length} trees + ${b0.crystals.length} crystals within ${R} m of Greg's waymark`)
-  // the busiest 16 m-wide tree row, 120 m long, centred on the waymark's x
+  // the busiest 16 m-wide tree row, 120 m long, within R of the waymark and inside Greg's tile (the editor's top-down view is that tile)
+  const TX = g.tx * 1000, TZ = g.ty * 1000
   let row = { z: G.z, n: -1, x0: G.x - 60, x1: G.x + 60 }
-  for (let z = G.z - 100; z <= G.z + 100; z += 4) { const k = b0.trees.filter(t => Math.abs(t.z - z) < 8 && Math.abs(t.x - G.x) < 60).length; if (k > row.n) row = { ...row, z, n: k } }
-  // the crystal bed: on a tree's spot (so on dry land) well off the row
-  const bedAt = b0.trees.filter(t => Math.abs(t.z - row.z) > 40 && Math.abs(t.x - G.x) < 80).sort((a, b) => Math.hypot(a.x - G.x, a.z - G.z) - Math.hypot(b.x - G.x, b.z - G.z))[0] ?? { x: G.x, z: G.z + 60 }
+  for (let cx = Math.max(TX - 420, G.x - R + 60); cx <= Math.min(TX + 420, G.x + R - 60); cx += 20) for (let z = Math.max(TZ - 480, G.z - R + 10); z <= Math.min(TZ + 480, G.z + R - 10); z += 4) {
+    const k = b0.trees.filter(t => Math.abs(t.z - z) < 8 && Math.abs(t.x - cx) < 60).length; if (k > row.n) row = { z, n: k, x0: cx - 60, x1: cx + 60 }
+  }
+  // the crystal bed: on a tree's spot (so on dry land) well off the row, inside the tile
+  const mid = (row.x0 + row.x1) / 2
+  // ... in a zone that grows crystals at all (the Thicket is stoneless, as today: a bed there adds nothing)
+  const zoneOfPt = (x: number, z: number) => g.nodes.find(q => q.i === Math.floor((x - TX + 500) / 200) && q.j === Math.floor((z - TZ + 500) / 200))?.zone ?? 'meadows'
+  const bedAt = b0.trees.filter(t => zoneOfPt(t.x, t.z) !== 'thicket' && zoneOfPt(t.x + 20, t.z + 20) !== 'thicket' && zoneOfPt(t.x - 20, t.z - 20) !== 'thicket' && Math.abs(t.z - row.z) > 40 && Math.abs(t.x - TX) < 470 && Math.abs(t.z - TZ) < 470 && Math.abs(t.x - mid) < 400).sort((a, b) => Math.hypot(a.x - mid, a.z - row.z) - Math.hypot(b.x - mid, b.z - row.z))[0] ?? { x: G.x, z: G.z + 60 }
   console.log(`  path row z ${row.z.toFixed(0)} (${row.n} trees on it), crystal bed at (${bedAt.x.toFixed(1)}, ${bedAt.z.toFixed(1)})`)
 
   // ── the owner paints ──

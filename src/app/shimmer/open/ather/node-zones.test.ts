@@ -30,7 +30,7 @@ const load = (t: T) => {
 const parse = (t: T, nz?: NodeZones | null): Wilds => { const f = load(t); return parseWilds(f.meta, f.dm, f.bio, f.zoneAt, undefined, true, null, null, null, null, null, nz) }
 
 // ── 1. NO ZONES = TODAY'S WORLD EXACTLY ─────────────────────────────────────────────────────────────────────────
-// The digest of every tile's trees + crystals (ids, spots, kinds, sizes) as HEAD built them before M86 (73a.. 2026-11-27, 67 tiles,
+// The digest of every tile's trees + crystals (ids, spots, kinds, sizes) as HEAD built them before M86 (7736af58, 2026-11-27, 67 tiles,
 // 80413 trees, 10352 crystals). ⚠ It moves only if someone retunes forestry / prospecting / relief: then re-take it from that
 // commit WITHOUT any zone code involved, never from this file's own output.
 const GOLDEN = '576697f3de794b8dabeb2c297a490ddaec3faf9acbbbd944b4b3f2fa4f5e9df5'
