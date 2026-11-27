@@ -189,10 +189,10 @@ const setPlanEdit = (v: boolean) => { if (v !== planEdit) { planEdit = v; wdEmit
 const usePlanEdit = () => useSyncExternalStore(f => { wdSubs.add(f); return () => { wdSubs.delete(f) } }, () => planEdit, () => false)
 const BUILT_FLOOR = 'That floor is built: build or cancel the plan across it first.'
 const EDIT_ONLY = 'Editing the plan: that one is built.'
-function wallVerdict(owned: ReadonlySet<string>, a: Corner, b: Corner, erase: boolean) {
-  const w = currentWorks(), keys = runKeys(a, b), lv = getPlanLevel(), cur = levelOf(w, lv).walls
 /** M144: a built piece taken down goes into the catalog's store (placeholder words, @lark) */
 const STORED_SAY = 'Stored in the catalog: a plan uses it first.'
+function wallVerdict(owned: ReadonlySet<string>, a: Corner, b: Corner, erase: boolean) {
+  const w = currentWorks(), keys = runKeys(a, b), lv = getPlanLevel(), cur = levelOf(w, lv).walls
   if (erase) return { keys, ok: planEdit ? draftKeys(cur, keys).length > 0 : keys.some(k => !!cur[k]), why: 'No wall there to take down.' }
   const v = layOn(w, lv, keys, owned)   // a plan is drawn free: the list is paid at Build
   return { keys, ok: v.ok, why: v.ok ? '' : v.why }
@@ -754,11 +754,9 @@ function Catalog({ onPick }: { onPick: () => void }) {
       </span>
     </button>
   )
+  const kinds = Object.entries(stored ?? {}).filter(([, e]) => e.n > 0)
   return (
     <div data-catalog style={{ display: 'grid', gap: 8, padding: '10px', borderRadius: 14, background: 'rgba(255,250,235,.9)', boxShadow: '0 2px 10px rgba(0,0,0,.25)', maxHeight: '52vh', overflowY: 'auto' }}>
-  const kinds = Object.entries(stored ?? {}).filter(([, e]) => e.n > 0)
-      {(['walls', 'paint'] as const).map(t => (
-        <div key={t} style={{ display: 'grid', gap: 5 }}>
       {kinds.length > 0 && <div data-cat-group="stored" style={{ display: 'grid', gap: 5 }}>
         <div style={{ font: '700 11px system-ui', letterSpacing: '.12em', textTransform: 'uppercase', color: H.ink, opacity: 0.7 }}>Stored · taken down, a plan uses them first</div>
         {kinds.map(([k, e]) => <div key={k} data-stored={k} data-n={e.n} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 8px', borderRadius: 10, background: 'rgba(255,250,235,.96)', boxShadow: `inset 0 0 0 1px ${H.rule}` }}>
@@ -766,6 +764,8 @@ function Catalog({ onPick }: { onPick: () => void }) {
           <span data-act="break-down" data-key={k}><HearthButton small onClick={() => breakDownKind(k)}>Break down</HearthButton></span>
         </div>)}
       </div>}
+      {(['walls', 'paint'] as const).map(t => (
+        <div key={t} style={{ display: 'grid', gap: 5 }}>
           <div style={{ font: '700 11px system-ui', letterSpacing: '.12em', textTransform: 'uppercase', color: H.ink, opacity: 0.7 }}>{t === 'walls' ? 'Walls · drawn as a plan, built from the list' : 'Floors · a pattern, painted a whole room'}</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 6 }}>
             {t === 'walls' ? WALL_MAT_ORDER.map(m => {
@@ -1719,9 +1719,9 @@ function PlanBom({ slim = false }: { slim?: boolean }) {
           <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 700, minWidth: 54 }}>{Math.min(l.have, l.n)} / {l.n}</span><span>{l.name}</span>
         </div>
       ))}
+      {bom.stored > 0 && <div data-bom-stored={bom.stored} style={{ fontSize: 11.5, color: H.inkSoft }}>{bom.stored} piece{bom.stored === 1 ? '' : 's'} from the store (nothing to pay for {bom.stored === 1 ? 'it' : 'them'})</div>}
       {bom.set.length > 0 && <div data-bom-set style={{ fontSize: 11.5, color: H.inkSoft }}>{bom.set.map(c => `${c.n} x ${FURNITURE[c.id].name}`).join(' · ')}</div>}
       <div style={{ fontSize: 11.5, color: H.inkSoft }}>{edit ? 'Editing: Erase takes planned pieces out, the other tools add.' : bom.ok ? 'Everything is here.' : 'Planks: Carpentry. Bricks and panes: Stonery.'}</div>
-      {bom.stored > 0 && <div data-bom-stored={bom.stored} style={{ fontSize: 11.5, color: H.inkSoft }}>{bom.stored} piece{bom.stored === 1 ? '' : 's'} from the store (nothing to pay for {bom.stored === 1 ? 'it' : 'them'})</div>}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         {ask && planned ? askRow : <>{planActs}<span style={{ flex: 1 }} />
         <span data-act="build-plan"><HearthButton primary disabled={!bom.ok} onClick={build}>Build</HearthButton></span></>}

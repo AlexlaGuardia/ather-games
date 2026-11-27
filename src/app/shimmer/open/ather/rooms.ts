@@ -659,8 +659,8 @@ export function loadWorks(): Works {
       paid: adoptPaid(v.paid, adoptWalls(v.walls)),
       ...(v.tableMoved === true ? { tableMoved: true as const } : {}),   // M96: the planning table left its first spot
       ...(adoptStarter(v.starter) ? { starter: adoptStarter(v.starter) } : {}),   // M220: the starter Keepstone was moved; absent = its first spot
-      ...(Object.keys(adoptCarry(v.wallCarry)).length ? { wallCarry: adoptCarry(v.wallCarry) } : {}),   // 11-22: exact wall refunds carry their fraction   // M37 slice 4: a save from before it has none, so every room standing counts as built
       ...(Object.keys(adoptStore(v.stored)).length ? { stored: adoptStore(v.stored) } : {}),   // M144: the catalog's store of taken-down pieces
+      ...(Object.keys(adoptCarry(v.wallCarry)).length ? { wallCarry: adoptCarry(v.wallCarry) } : {}),   // 11-22: exact wall refunds carry their fraction   // M37 slice 4: a save from before it has none, so every room standing counts as built
     }
   } catch { /* private window */ }
   return freshWorks()
