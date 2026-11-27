@@ -302,6 +302,7 @@ Steps (one worker each, in order; each keeps `beta-m7-saves` green):
 
 ## Inbox (Alex's brain dump: hub writes here at once, dated, his words; triaged into rows / queue / CANON_GAPS / killed)
 - 11-27 05:3x Alex: 'Here's that glitch I mentioned' (screenshot) -> M193, docs/looks/m193-2026-11-27/alex-shot.jpg
+- 11-27 05:3x Alex: 'its got something to do with the cameral angle i had to position it just right to see it' -> M193 (relayed to play agent)
 - 11-27 05:2x Alex: 'ill tag the venium and eurleen spots in world builder if we have the tool for it ..if needed we can have a tool to mark all nodes spawn areas' -> M223 s1 (Nodes brush gets per-kind spawn zones)
 - 11-27 05:1x Alex: 'i was checking out the spirit gallery and im not sure but there are a few broken links there.. like the hovari line has niether model or image..?' -> M224
 - 11-27 04:5x Alex (overrides Magii 6a2f193 'Co. sells metal'): 'no i would like to venium and eurleen to be found in the ather..i think we went over the venium sadlands already no? eurleen could be found on the top right islands where veradyn is found on nyx side' -> RULED live e3c310e -> M223. (was: canon amend asked; then M134/M185: Venium + Eurleen = Ather mining nodes (Sadlands / NE islands), not Co. lots. Hub note: the Sadlands ruling (6069026) never named Venium; economy.md has Venium = Spine, Eurleen = Valkara (both Nyx).
