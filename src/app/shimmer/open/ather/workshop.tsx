@@ -28,7 +28,7 @@ import {
   WALL_H, benchBox, keepClear, tableAt, TABLE_ITEM, type Works, type Room, type RoomKind, type WorkNear,
   stationOf, setStation, stockItemFromBag, stockItemFromBank, craftAt, jobRuns, toWorld, pieceRect, pieceBoxes, pieceFloor, canPlacePiece, placePiece, planPiece, plannedAt, unplan, withPlanned, turnPiece, retireRooms, toggleOpen, type Piece,
   ROOM_STORE_SLOTS, ROOM_KEEPS, roomAccepts, roomStore, stockRoom, stockRoomFromBag, takeFromRoom, makeBaitAt, filetAt, benchCount, type StoreMove,
-  CHEST_W, CHEST_D, CHEST_H, KEEPSTONE, KEEPSTONE_RECIPE, makeKeepstone, makeKeepstoneFrom, shortOf, haveFor, payCost, pickUpChest, allChests, chestBox, chestsStanding, canPlaceChest, placeChest, type Chest,
+  CHEST_W, CHEST_D, CHEST_H, KEEPSTONE, KEEPSTONE_RECIPE, makeKeepstone, makeKeepstoneFrom, shortOf, haveFor, payCost, pickUpChest, allChests, chestBox, chestsStanding, canPlaceChest, placeChest, canMoveStarter, moveStarter, starterChest, STARTER_ID, type Chest,
 } from './rooms'
 import {
   MAX_CHESTS, CHEST_SLOTS, bankCap, bankUsed, bankView, BANK_TABS, deposit, depositBag, withdraw, loadBank, saveBank, freshBank,
@@ -878,7 +878,7 @@ const PLANTER_BANK: BankStore = { use: useBank, get: getB, set: setBank }
 // placing: which room, its turn, and where the ghost stands now (set by the scene each frame)
 // `hand` (M45): the thing came from the HOTBAR (held in hand), not from a menu. It follows the stance: stow or swap and the
 // ghost goes; E taps set it, an E hold turns it; R stays the stance's key (draw / stow), Esc is not a cancel.
-type Placing = { kind: RoomKind; q: number } | { kind: 'chest'; item: string; q: number; hand?: true } | { kind: 'piece'; item: string; q: number; hand?: true; /** M143: set as a DRAFT (the catalog); from = the planned piece being moved */ plan?: true; from?: string } | null
+type Placing = { kind: RoomKind; q: number } | { kind: 'chest'; item: string; q: number; hand?: true; /** M220: moving the starter Keepstone (nothing from the bag; a cancel leaves it where it stood) */ move?: true } | { kind: 'piece'; item: string; q: number; hand?: true; /** M143: set as a DRAFT (the catalog); from = the planned piece being moved */ plan?: true; from?: string } | null
 let placing: Placing = null
 const ghost = { x: 0, z: 0 }
 const psubs = new Set<() => void>()
@@ -952,6 +952,13 @@ function confirmPlace(owned: ReadonlySet<string>) {
     // keep placing while more of the same are in the bag (a row of stools is one job, not five trips to the table)
     if (countOf(c.inv, item) > 0) hudSay(`${FURNITURE[item].name} set · ${countOf(c.inv, item)} more in the bag · ${placing.hand ? 'hold R to put it away' : 'Esc stops'}${an}`, 'item', 4)
     else { setPlacing(null); hudSay(`${FURNITURE[item].name} set.${an}`, 'item', 3) }
+    return
+  }
+  if (placing.kind === 'chest' && placing.move) {   // M220: the starter Keepstone set down somewhere new; the bank never moves
+    const m = moveStarter(getW(), owned, ghost.x, ghost.z, placing.q)
+    if (!m) { const v = canMoveStarter(getW(), owned, ghost.x, ghost.z, placing.q); hudSay(v.ok ? 'Cannot set a Keepstone there.' : v.why, 'info'); return }
+    setWorks(m); setPlacing(null)
+    hudSay('Keepstone moved. Nothing in the bank has moved.', 'item', 4)
     return
   }
   if (placing.kind === 'chest') {
@@ -1044,7 +1051,7 @@ export function WorkshopScene({ pose, owned, stowed }: { pose: React.MutableRefO
       <PlanGrid owned={owned} works={w} />
       <WallGhost />
       <DeckGhost />
-      {p && (p.kind === 'piece' ? <PieceGhost pose={pose} owned={owned} item={p.item} q={p.q} plan={p.plan} from={p.from} /> : p.kind === 'chest' ? <ChestGhost pose={pose} owned={owned} q={p.q} item={p.item} /> : <Ghost pose={pose} owned={owned} kind={p.kind} q={p.q} />)}
+      {p && (p.kind === 'piece' ? <PieceGhost pose={pose} owned={owned} item={p.item} q={p.q} plan={p.plan} from={p.from} /> : p.kind === 'chest' ? <ChestGhost pose={pose} owned={owned} q={p.q} item={p.item} move={p.move} /> : <Ghost pose={pose} owned={owned} kind={p.kind} q={p.q} />)}
     </>
   )
 }
@@ -1269,12 +1276,14 @@ function Keepstone({ c, pose, y = GROUND_Y }: { c: Chest; pose: React.MutableRef
   )
 }
 /** The Keepstone's ghost: snapped to the half metre, close in front of the keeper. */
-function ChestGhost({ pose, owned, q, item }: { pose: React.MutableRefObject<Pose>; owned: ReadonlySet<string>; q: number; item: string }) {
+function ChestGhost({ pose, owned, q, item, move }: { pose: React.MutableRefObject<Pose>; owned: ReadonlySet<string>; q: number; item: string; move?: true }) {
   const g = useRef<THREE.Group>(null), mat = useRef<THREE.MeshBasicMaterial>(null)
+  // M220: leaving the plot mid-move (the scene goes) drops the move: the starter stays where it stood
+  useEffect(() => { if (!move) return; return () => { if (placing?.kind === 'chest' && placing.move) setPlacing(null) } }, [move])
   useFrame(() => {
     ghostFine(pose.current, 1.8, CHEST_W, CHEST_D, q)
     g.current?.position.set(ghost.x, floorAt(getW(), GROUND_Y, ghost.x, ghost.z) + CHEST_H / 2, ghost.z)
-    mat.current?.color.set(canPlaceChest(getW(), owned, ghost.x, ghost.z, q, getInv(), item).ok ? GHOST_OK : GHOST_BAD)
+    mat.current?.color.set((move ? canMoveStarter(getW(), owned, ghost.x, ghost.z, q) : canPlaceChest(getW(), owned, ghost.x, ghost.z, q, getInv(), item)).ok ? GHOST_OK : GHOST_BAD)
   })
   return (
     <group ref={g} rotation-y={-q * Math.PI / 2}>
@@ -2356,7 +2365,8 @@ function BankPanel({ id, onClose }: { id: string; onClose: () => void }) {
           <div style={{ ...lab, flex: 1 }} data-bank-used={used} data-bank-cap={cap}>
             <span style={{ color: used > cap ? '#b5452c' : undefined }}>{used}</span> / {cap} slots · {chestsStanding(w)} of {MAX_CHESTS} Keepstones
           </div>
-          {id !== 'starter' && <span data-act="pickup-keepstone"><HearthButton small onClick={() => { const r = pickUpChest(getW(), id, getInv()); if (r) { setInv(r.inv); setWorks(r.works); onClose(); hudSay('Keepstone back in your bag. Nothing in the bank has moved.', 'item', 4) } else hudSay('No room in the bag for it.', 'info') }}>Pick up</HearthButton></span>}
+          {id === STARTER_ID && <span data-act="move-keepstone"><HearthButton small onClick={() => { onClose(); setPlacing({ kind: 'chest', item: KEEPSTONE, q: starterChest(getW()).q, move: true }); hudSay('Moving the Keepstone · Place sets it · Cancel leaves it where it stood', 'info', 6) }}>Pick up</HearthButton></span>}
+          {id !== STARTER_ID && <span data-act="pickup-keepstone"><HearthButton small onClick={() => { const r = pickUpChest(getW(), id, getInv()); if (r) { setInv(r.inv); setWorks(r.works); onClose(); hudSay('Keepstone back in your bag. Nothing in the bank has moved.', 'item', 4) } else hudSay('No room in the bag for it.', 'info') }}>Pick up</HearthButton></span>}
           <span data-act="deposit-bag"><HearthButton small onClick={putAll}>Put the bag away</HearthButton></span>
         </div>
         <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center' }}>

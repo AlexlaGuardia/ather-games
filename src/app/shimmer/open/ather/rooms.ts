@@ -121,7 +121,7 @@ export interface Room {
 export interface Chest { id: string; x: number; z: number; q: number; placedAt: number; crystal?: string }
 /** A piece of furniture or decor standing on the plot (furniture.ts). Picked up, it is the bag item `item` again. */
 export interface Piece { id: string; item: string; x: number; z: number; q: number; placedAt: number; /** M48: a lift's car level (lift.ts); absent = the ground */ lv?: number; /** M169 s2: a door's leaves / a window's shutters stand open (E); absent = shut */ open?: true }
-export interface Works { v: 1; rooms: Room[]; chests: Chest[]; pieces: Piece[]; /** M143: pieces only PLANNED (slabs, panels): not solid, not near, nothing paid. Apart from `pieces`, so no reader can take one for real; Build moves them over */ planned?: Piece[]; /** M37: the keeper's own walls (plot-walls.ts); an older save has none */ walls?: Walls; /** M37 slice 2: the house's roof style */ roof?: RoofStyle; /** M37 slice 3: painted floor cells */ floors?: Floors; /** M37 slice 4: rooms whose floor and roof are built (room key to its m²); see plot-bom.ts */ paid?: Record<string, number>; /** M47: the floors above the ground one (plot-floors.ts); an older save has none = one storey */ upper?: Level[]; /** M54: ground-floor columns (plot-cols.ts) */ cols?: Cols; /** M56: ground-floor stairs (plot-stairs.ts) */ stairs?: Stairs; /** M56 (a): ground-floor open floor, patios (plot-decks.ts) */ decks?: Decks; /** M55: the house's foundation height (plot-found.ts), 0 / 0.6 / 1.2 */ found?: number; /** M96: the planning table has left its first spot (it is a placed piece now, or in the bag); see tableAt */ tableMoved?: true; /** M55 slice 2: per house, per room cell */ foundCells?: Record<string, number>; /** 11-22: a take-down's leftover fraction of a plank per item (plot-walls raze), carried to the next */ wallCarry?: Record<string, number> }
+export interface Works { v: 1; rooms: Room[]; chests: Chest[]; pieces: Piece[]; /** M143: pieces only PLANNED (slabs, panels): not solid, not near, nothing paid. Apart from `pieces`, so no reader can take one for real; Build moves them over */ planned?: Piece[]; /** M37: the keeper's own walls (plot-walls.ts); an older save has none */ walls?: Walls; /** M37 slice 2: the house's roof style */ roof?: RoofStyle; /** M37 slice 3: painted floor cells */ floors?: Floors; /** M37 slice 4: rooms whose floor and roof are built (room key to its m²); see plot-bom.ts */ paid?: Record<string, number>; /** M47: the floors above the ground one (plot-floors.ts); an older save has none = one storey */ upper?: Level[]; /** M54: ground-floor columns (plot-cols.ts) */ cols?: Cols; /** M56: ground-floor stairs (plot-stairs.ts) */ stairs?: Stairs; /** M56 (a): ground-floor open floor, patios (plot-decks.ts) */ decks?: Decks; /** M55: the house's foundation height (plot-found.ts), 0 / 0.6 / 1.2 */ found?: number; /** M96: the planning table has left its first spot (it is a placed piece now, or in the bag); see tableAt */ tableMoved?: true; /** M220: the starter Keepstone was moved here (absent = its first spot by the planning table) */ starter?: { x: number; z: number; q: number }; /** M55 slice 2: per house, per room cell */ foundCells?: Record<string, number>; /** 11-22: a take-down's leftover fraction of a plank per item (plot-walls raze), carried to the next */ wallCarry?: Record<string, number> }
 /** M37: is this rectangle in a drawn wall (plot-walls.ts)? */
 const inDrawnWall = (w: Works, r: { x0: number; x1: number; z0: number; z1: number }, pad = 0) => wallRects(w.walls ?? {}).some(b => r.x0 - pad < b.x1 && r.x1 + pad > b.x0 && r.z0 - pad < b.z1 && r.z1 + pad > b.z0)
 export const freshWorks = (): Works => ({ v: 1, rooms: [], chests: [], pieces: [] })
@@ -261,9 +261,12 @@ export function nearWork(works: Works, x: number, z: number, now = Date.now()): 
 }
 
 // ── Keepstones: doors into the garden bank ────────────────────────────────────────────────────────────────────────
-/** The plot's own Keepstone, standing by the planning table from the first minute (garden-bank.ts says why). Fixed: it
- *  cannot be picked up, so a garden always has a door into its bank. */
-export const STARTER_CHEST: Chest = { id: 'starter', x: TABLE.x + 3.2, z: TABLE.z, q: 0, placedAt: 0 }
+/** The plot's own Keepstone, standing by the planning table from the first minute (garden-bank.ts says why). It never goes
+ *  into the bag, so a garden always has a door into its bank. M220 (Alex 11-26): it can be MOVED: Pick up goes straight to
+ *  placing it (moveStarter); a cancel leaves it where it stood. This constant is its FIRST spot; starterChest(w) is where it is. */
+export const STARTER_ID = 'starter'
+export const STARTER_CHEST: Chest = { id: STARTER_ID, x: TABLE.x + 3.2, z: TABLE.z, q: 0, placedAt: 0 }
+export const starterChest = (w: Pick<Works, 'starter'>): Chest => w.starter ? { ...STARTER_CHEST, x: w.starter.x, z: w.starter.z, q: w.starter.q } : STARTER_CHEST
 export const CHEST_W = 0.9, CHEST_D = 0.9, CHEST_H = 1.1, CHEST_REACH = 1.9
 /** A Keepstone is an ITEM (canon): made at the planning table (the Stonery's job once it opens), set from the bag, picked
  *  back up. Blankstone is the build's plain stone (RULED 11-16) and the shard is the light. */
@@ -276,7 +279,7 @@ export function makeKeepstoneFrom(inv: Inv, bank: Bank | null | undefined): { in
   const r = give(paid.inv, KEEPSTONE, 1)
   return r.left > 0 ? null : { inv: r.inv, bank: paid.bank }
 }
-export const allChests = (w: Works): Chest[] => [STARTER_CHEST, ...w.chests]
+export const allChests = (w: Works): Chest[] => [starterChest(w), ...w.chests]
 /** Chests standing, the starter included: what the bank's cap is counted from. */
 export const chestsStanding = (w: Works) => 1 + w.chests.length
 export function chestBox(c: Pick<Chest, 'x' | 'z' | 'q'>, base: number = GROUND_Y): Box {   // base (M55): the floor it stands on
@@ -284,6 +287,13 @@ export function chestBox(c: Pick<Chest, 'x' | 'z' | 'q'>, base: number = GROUND_
 }
 export function canPlaceChest(works: Works, owned: ReadonlySet<string>, x: number, z: number, q: number, inv?: Inv, item = KEEPSTONE): PlaceVerdict {
   if (chestsStanding(works) >= MAX_CHESTS) return { ok: false, why: `${MAX_CHESTS} Keepstones already stand. That is all a plot holds.` }
+  const spot = chestSpot(works, owned, x, z, q); if (!spot.ok) return spot
+  if (!(item in KEEPSTONES)) return { ok: false, why: 'That is not a Keepstone.' }
+  if (inv && countOf(inv, item) < 1) return { ok: false, why: `No ${KEEPSTONES[item].name} in the bag.${item === KEEPSTONE ? ' Make one at the planning table.' : ''}` }
+  return { ok: true }
+}
+/** may a Keepstone stand at x,z (turn q)? `skip` = the one being moved (it does not crowd itself) */
+function chestSpot(works: Works, owned: ReadonlySet<string>, x: number, z: number, q: number, skip?: string): PlaceVerdict {
   const k = chestBox({ x, z, q })
   for (const [cx, cz] of [[k.x0, k.z0], [k.x1, k.z0], [k.x0, k.z1], [k.x1, k.z1]]) {
     const s = squareAt(cx, cz); if (!s || !owned.has(sqId(s.i, s.j))) return { ok: false, why: 'Build on ground you hold.' }
@@ -300,11 +310,16 @@ export function canPlaceChest(works: Works, owned: ReadonlySet<string>, x: numbe
     if (!r.shell && Math.hypot(d.x - x, d.z - z) < 1.8) return { ok: false, why: 'That blocks the doorway.' }   // M97: a shell has no door
     if (Math.hypot(b.x - x, b.z - z) < 1.8) return { ok: false, why: 'That crowds the bench.' }
   }
-  if (allChests(works).some(c => Math.hypot(c.x - x, c.z - z) < 1.4)) return { ok: false, why: 'Too close to another Keepstone.' }
+  if (allChests(works).some(c => c.id !== skip && Math.hypot(c.x - x, c.z - z) < 1.4)) return { ok: false, why: 'Too close to another Keepstone.' }
   if (inDrawnWall(works, k, pad)) return { ok: false, why: 'In one of your walls.' }
-  if (!(item in KEEPSTONES)) return { ok: false, why: 'That is not a Keepstone.' }
-  if (inv && countOf(inv, item) < 1) return { ok: false, why: `No ${KEEPSTONES[item].name} in the bag.${item === KEEPSTONE ? ' Make one at the planning table.' : ''}` }
   return { ok: true }
+}
+/** M220: may the starter Keepstone be set down at x,z? The same ground rules as any Keepstone; no count, nothing from the bag. */
+export const canMoveStarter = (works: Works, owned: ReadonlySet<string>, x: number, z: number, q: number): PlaceVerdict => chestSpot(works, owned, x, z, q, STARTER_ID)
+/** M220: set the starter Keepstone down at x,z. Only its spot changes: the bank, its cap and the bag are untouched. null = not there. */
+export function moveStarter(works: Works, owned: ReadonlySet<string>, x: number, z: number, q: number): Works | null {
+  if (!canMoveStarter(works, owned, x, z, q).ok) return null
+  return { ...works, starter: { x, z, q: normQ(q) } }
 }
 export function placeChest(works: Works, owned: ReadonlySet<string>, inv: Inv, x: number, z: number, q: number, now = Date.now(), item = KEEPSTONE): { works: Works; inv: Inv; chest: Chest } | null {
   if (!canPlaceChest(works, owned, x, z, q, inv, item).ok) return null
@@ -613,6 +628,12 @@ export function turnPiece(works: Works, owned: ReadonlySet<string>, id: string):
 
 // ── save: garden-tied (the garden is shared across a roster; Alex 11-17), registered in GARDEN_KEY_SPECS ─────────────
 export const adoptPlanned = (v: unknown): Piece[] => Array.isArray(v) ? v.filter((p: Piece) => p && typeof p.id === 'string' && isPlanned(p.item) && Number.isFinite(p.x) && Number.isFinite(p.z)).map((p: Piece) => ({ id: p.id, item: p.item, x: p.x, z: p.z, q: Number.isFinite(p.q) ? p.q : 0, placedAt: 0 })) : []
+/** M220: a moved starter Keepstone's spot from a save, or undefined (an older save, or junk: it stays by the planning table) */
+export function adoptStarter(v: unknown): { x: number; z: number; q: number } | undefined {
+  const o = v as { x?: unknown; z?: unknown; q?: unknown } | null
+  if (!o || typeof o !== 'object' || typeof o.x !== 'number' || typeof o.z !== 'number' || !Number.isFinite(o.x) || !Number.isFinite(o.z)) return undefined
+  return { x: o.x, z: o.z, q: typeof o.q === 'number' && Number.isFinite(o.q) ? o.q : 0 }
+}
 export const WORKS_KEY = 'open.works.v1'
 export function loadWorks(): Works {
   try {
@@ -636,6 +657,7 @@ export function loadWorks(): Works {
       ...(adoptUpper(v.upper).length ? { upper: adoptUpper(v.upper) } : {}),   // M47: floors above the ground one
       paid: adoptPaid(v.paid, adoptWalls(v.walls)),
       ...(v.tableMoved === true ? { tableMoved: true as const } : {}),   // M96: the planning table left its first spot
+      ...(adoptStarter(v.starter) ? { starter: adoptStarter(v.starter) } : {}),   // M220: the starter Keepstone was moved; absent = its first spot
       ...(Object.keys(adoptCarry(v.wallCarry)).length ? { wallCarry: adoptCarry(v.wallCarry) } : {}),   // 11-22: exact wall refunds carry their fraction   // M37 slice 4: a save from before it has none, so every room standing counts as built
     }
   } catch { /* private window */ }

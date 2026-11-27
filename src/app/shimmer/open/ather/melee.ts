@@ -1,10 +1,11 @@
 // MELEE (BETA M42, Alex 11-20: "a melee button like right clicking while weapons stowed so the player has a way to break placed
 // items with like 3 hits to move them"). Stowed + right-click = a short swing; THREE hits on the same placed thing (furniture, a
-// lift, a placed Keepstone, never the starter) pop it back into the bag, refunded whole. A pause resets the count; a swing has a
+// lift, a placed Keepstone) pop it back into the bag, refunded whole. M220: the STARTER Keepstone takes the hit (it wobbles like
+// the rest) but never comes up: it is the garden's one door the bag can never swallow; its card's Pick up moves it instead. A pause resets the count; a swing has a
 // short cooldown. Armed right-click stays the sights (combat-layer). Only the keeper's own plot (the works this page holds).
 // PURE: no React, no three, no DOM.
 import type { Works } from './rooms'
-import { pickUpChest, pieceRect, chestBox, CHEST_H, TABLE, TABLE_ITEM } from './rooms'
+import { pickUpChest, pieceRect, chestBox, allChests, CHEST_H, TABLE, TABLE_ITEM, STARTER_ID } from './rooms'
 import { give } from '../shared/inventory'
 import { FURNITURE } from './furniture'
 import { GROUND_Y } from './plot'
@@ -38,7 +39,7 @@ export function rayBox(o: V3, d: V3, b: { x0: number; x1: number; y0: number; y1
   return t0
 }
 
-/** what a swing from the eye would land on: the nearest placed piece or placed Keepstone within reach (the starter never) */
+/** what a swing from the eye would land on: the nearest placed piece or Keepstone within reach (M220: the starter too; it only wobbles) */
 export function meleeTarget(w: Works, o: V3, d: V3, reach = MELEE_REACH): Target | null {
   let best: Target | null = null
   for (const p of w.pieces) {
@@ -50,7 +51,7 @@ export function meleeTarget(w: Works, o: V3, d: V3, reach = MELEE_REACH): Target
     const t = rayBox(o, d, { x0: TABLE.x - 1.1, x1: TABLE.x + 1.1, y0: GROUND_Y, y1: GROUND_Y + 1.05, z0: TABLE.z - 0.65, z1: TABLE.z + 0.65 })
     if (t <= reach && (!best || t < best.t)) best = { kind: 'table', id: TABLE_HIT, x: TABLE.x, z: TABLE.z, t }
   }
-  for (const c of w.chests) {   // w.chests = placed ones only; the starter lives outside the list (rooms.ts allChests)
+  for (const c of allChests(w)) {   // M220: the starter included, wherever it stands (strike never breaks it)
     const t = rayBox(o, d, { ...chestBox(c), y1: GROUND_Y + CHEST_H })
     if (t <= reach && (!best || t < best.t)) best = { kind: 'chest', id: c.id, x: c.x, z: c.z, t }
   }
@@ -62,6 +63,7 @@ export const canSwing = (lastSwing: number, now: number) => now - lastSwing >= M
 /** one landed hit: the count on that target (a new target, or a long pause, starts at 1); `broke` on the third */
 export function strike(h: Hits | null, id: string, now: number): { hits: Hits | null; n: number; broke: boolean } {
   const n = h && h.id === id && now - h.at <= MELEE_RESET_MS ? h.n + 1 : 1
+  if (id === STARTER_ID) { const m = Math.min(n, MELEE_HITS - 1); return { hits: { id, n: m, at: now }, n: m, broke: false } }   // M220: lands, never breaks
   return n >= MELEE_HITS ? { hits: null, n, broke: true } : { hits: { id, n, at: now }, n, broke: false }
 }
 /** the third hit: the thing comes back to the bag, whole. null = the bag is full (nothing moves); 'spirit' = a spirit lives in

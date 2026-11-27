@@ -17,7 +17,7 @@ const look = (x: number, z: number, tx: number, ty: number, tz: number): [[numbe
 { const [o, d] = look(3, 0, 3, GROUND_Y + 0.6, -1.5); ok(meleeTarget(w, o, d)?.id === 'k1', 'aiming at a placed Keepstone hits it') }
 { const [o, d] = look(0, 3, 0, GROUND_Y + 0.3, -1.5); ok(meleeTarget(w, o, d) === null, `out of reach (> ${MELEE_REACH} m) hits nothing`) }
 { const [o, d] = look(0, 0, 0, eye + 2, -3); ok(meleeTarget(w, o, d) === null, 'looking over it hits nothing') }
-{ const sw = { ...freshWorks() }; const [o, d] = look(0, 0, 0, GROUND_Y + 0.3, -1.5); ok(meleeTarget(sw, o, d) === null, 'the starter Keepstone / an empty plot: nothing to hit') }
+{ const sw = { ...freshWorks() }; const [o, d] = look(0, 0, 0, GROUND_Y + 0.3, -1.5); ok(meleeTarget(sw, o, d) === null, 'an empty spot: nothing to hit') }
 ok(rayBox([0, 0, 0], [1, 0, 0], { x0: 2, x1: 3, y0: -1, y1: 1, z0: -1, z1: 1 }) === 2, 'ray-box distance')
 
 // hit counter
