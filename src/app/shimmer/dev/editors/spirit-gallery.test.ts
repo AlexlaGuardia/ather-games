@@ -14,10 +14,10 @@ const CANON = '/root/athernyx/CANON/world/spirits-species.md'
 ok(existsSync(LEDGER), `ledger present (${LEDGER})`)
 ok(existsSync(CANON), `canon base table present (${CANON})`)
 
-ok(GALLERY.length === 50, `50 rows (got ${GALLERY.length})`)
+ok(GALLERY.length === 54, `54 rows: 10 base + 40 forms + 4 awakened (got ${GALLERY.length})`)
 GALLERY.forEach((r, i) => ok(r.num === i + 1, `row ${i} numbered ${i + 1} (got ${r.num})`))
 ok(GALLERY.slice(0, 10).every(r => r.el === null) && GALLERY.slice(10).every(r => r.el !== null), 'base 10 first, then the 40 forms')
-ok(new Set(GALLERY.map(r => r.name)).size === 50, 'every name unique')
+ok(new Set(GALLERY.map(r => r.name)).size === 54, 'every name unique')
 ok(new Set(DISCOVERY.map(([s, e]) => `${s}/${e}`)).size === 40, 'every species x element once')
 
 if (existsSync(LEDGER)) {
@@ -37,7 +37,7 @@ for (const r of GALLERY) ok(existsSync(iconFile(r.icon)), `${r.name}'s art exist
 // and its URL carries the version that busts the year-long immutable cache.
 if (existsSync(LEDGER)) {
   const locks = JSON.parse(readFileSync(LEDGER, 'utf8')).locks as { name: string; file: string }[]
-  for (const r of GALLERY.slice(10)) {
+  for (const r of GALLERY.slice(10, 50)) {   // the 40 second forms (the awakened rows' icons are our renders: checked below)
     const l = locks.find(x => x.name === r.name)
     const src = l && join('/root/athernyx/assets/stage2', l.file)
     ok(!!src && existsSync(src) && existsSync(iconFile(r.icon)) && readFileSync(src).equals(readFileSync(iconFile(r.icon))), `${r.name}'s public art is the locked ${l?.file}`)
@@ -46,7 +46,7 @@ if (existsSync(LEDGER)) {
 }
 
 ok(galleryNo(7) === '#007' && galleryNo(50) === '#050', 'number label')
-ok(dialStep(0, -1) === 0 && dialStep(49, 3) === 49 && dialStep(10, 2) === 12, 'dial held to its ends')
+ok(dialStep(0, -1) === 0 && dialStep(GALLERY.length - 1, 3) === GALLERY.length - 1 && dialStep(10, 2) === 12, 'dial held to its ends')
 
 // M213 s2: the Steep mix preview feeds the game's own accentOf; none = no glow; the bar holds 10
 ok(steepMeals(STEEP_NONE).length === 0 && accentOf(steepMeals(STEEP_NONE)) === null, 'no meals = no glow')
@@ -58,5 +58,16 @@ ok(steepAdd(steepAdd(STEEP_NONE, 'mana', 8), 'storm', 5).storm === 2, 'add is he
 { const a = accentOf(steepMeals(mx)), b = accentOf(steepMeals(steepAdd(STEEP_NONE, 'storm', 10)))
   ok(!!a && a.locked && a.n === 10 && !!b && a.hex !== b.hex, `6 storm + 4 water glows its own mix (${a?.hex}) vs all storm (${b?.hex})`) }
 
+// M244: the four awakened rows = the stage-3 ledger's locks 1-4 in order AND the canon's 'Locked so far' line (both read here)
+{
+  const L3 = '/root/athernyx/assets/stage3/grimoire-ledger-stage3.json'
+  const locks = (JSON.parse(readFileSync(L3, 'utf8')).locks as { n: number; name: string; branch_name: string; second_form: string }[]).slice().sort((a, b) => a.n - b.n)
+  const aw = GALLERY.filter(r => r.aw)
+  ok(aw.length === 4 && aw.every((r, i) => r.num === 51 + i), `awakened rows #051-#054 (got ${aw.map(r => r.num)})`)
+  locks.slice(0, 4).forEach((l, i) => ok(aw[i]?.name === l.name && aw[i]?.aw?.branch === l.branch_name.toLowerCase() && l.second_form === 'Vulnara', `awakened #${51 + i} = stage-3 n${l.n} ${l.name} ${l.branch_name} (got ${aw[i]?.name} ${aw[i]?.aw?.branch})`))
+  const line = readFileSync(CANON, 'utf8').split('\n').find(x => x.includes('Locked so far') && x.includes('Vulnara')) ?? ''
+  for (const r of aw) ok(line.includes(`**${r.name}** (${r.aw!.branch[0].toUpperCase()}${r.aw!.branch.slice(1)})`), `canon line names ${r.name} (${r.aw!.branch})`)
+  ok(aw.every(r => r.icon.startsWith('/open/spirits/') && !r.icon.includes('stage3')), 'awakened icons are our renders, not the private art')
+}
 console.log(`spirit-gallery: ${pass} pass, ${fails.length} fail`)
 if (fails.length) { for (const f of fails) console.log('  FAIL', f); process.exit(1) }

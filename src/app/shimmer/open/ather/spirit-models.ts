@@ -467,6 +467,26 @@ export const SECOND_FORMS: Partial<Record<Species, Partial<Record<SpiritElement,
     water: secondForm('fox', 'water', 'vulnix', '#2fb4c4', '#9fe4ec'),
   },
 }
+// BETA M244 sheet 1 (sprites, 2026-11-27): the four AWAKENED forms of Vulnara, OWNER PREVIEW ONLY (the /dev gallery; no evolution
+// rule, nothing a player draws). Each her own sculpt + skeleton (docs/looks/m244-vulnara-2026-11-27/tools: sculpt_awaken.py,
+// rig_awaken.py) in Vulnara's number space, so each draws the Vulnyx's glb scale x her dial; every dial is past Vulnara's 1.4
+// (canon: each evolution grows her). Her 'aura' part is the look's glow part: Vulnarok's four gold self-echoes and Vulnavex's
+// two gold copies where she just ran (whole copies, not smoke), Vulnalys's violet spirals and Vulnamyr's crown-halo (head-borne).
+/** each one's nose to tail standing (rig metrics idle length_m / 0.70), glb units: the rig's glbLen */
+export const AWAKEN_LEN: Readonly<Record<string, number>> = { vulnarok: 1.663, vulnalys: 1.32, vulnavex: 1.87, vulnamyr: 1.284 }
+export const AWAKEN_GROW: Readonly<Record<string, number>> = { vulnarok: 1.8, vulnalys: 1.7, vulnavex: 1.65, vulnamyr: 1.75 }
+const awakened = (name: string, glbLen: number, aura: string, far: number): SpiritLook => {
+  const b = SECOND_FORMS.fox!.mana!, h = VRIG_H * AWAKEN_GROW[name]
+  return { ...b, name, url: `/open/spirits/${name}-rigged.glb`, h, trot: grownTrot(b.trot, b.h, h), rig: { ...b.rig!, glbLen, avatar: { z: b.rig!.avatar.z, far } },
+    glow: { part: 'aura', emissive: aura, lo: 0.35, hi: 0.7, hz: 0.35 } }
+}
+/** by look name (spirit.ts AWAKENED_NAMES, lower-cased) */
+export const AWAKENED_FORMS: Readonly<Record<string, SpiritLook>> = {
+  vulnarok: awakened('vulnarok', AWAKEN_LEN.vulnarok, '#ffcf5a', 2.4),
+  vulnalys: awakened('vulnalys', AWAKEN_LEN.vulnalys, '#b48cff', 1.7),
+  vulnavex: awakened('vulnavex', AWAKEN_LEN.vulnavex, '#ffcf5a', 2.6),
+  vulnamyr: awakened('vulnamyr', AWAKEN_LEN.vulnamyr, '#ffcf5a', 1.9),
+}
 /** M202: her second form's look when she has evolved (`element` set) and her species has its forms modelled, else null */
 export const formLook = (s: Species | null | undefined, el: SpiritElement | null | undefined): SpiritLook | null =>
   (s && el ? SECOND_FORMS[s]?.[el] ?? null : null)

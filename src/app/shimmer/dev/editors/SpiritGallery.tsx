@@ -10,7 +10,7 @@ import { useCallback, useEffect, useRef, useState, type PointerEvent as RPointer
 import { GALLERY, dialStep, galleryNo, STEEP_ELS, STEEP_NONE, steepAdd, steepMeals, steepTotal, type GalleryRow, type SteepMix } from './spirit-gallery'
 import { accentOf } from '../../open/ather/spirit-accent'
 import { SpiritStage } from '../../open/ather/spirit-model'
-import { formLook, spiritModelFor, type SpiritLook } from '../../open/ather/spirit-models'
+import { AWAKENED_FORMS, formLook, spiritModelFor, type SpiritLook } from '../../open/ather/spirit-models'
 import { basePreviewFor } from '../../open/ather/spirit-base-preview'
 import { RIG_CLIPS, type RigClip } from '../../open/ather/spirit-rig'
 import { ELEMENT_COLORS } from '../../spirits/spirit'
@@ -19,7 +19,7 @@ const ROW = 52, SHOWN = 11, half = Math.floor(SHOWN / 2)
 const GAME = 'var(--font-game), system-ui, sans-serif'
 
 // M174: a base form built but not yet OK'd by Alex shows here (this page is owner-only) via basePreviewFor
-const lookOf = (r: GalleryRow): SpiritLook | null => (r.el ? formLook(r.sp, r.el) : spiritModelFor(r.sp) ?? basePreviewFor(r.sp))
+const lookOf = (r: GalleryRow): SpiritLook | null => (r.aw ? AWAKENED_FORMS[r.aw.look] ?? null : r.el ? formLook(r.sp, r.el) : spiritModelFor(r.sp) ?? basePreviewFor(r.sp))
 
 const initialIndex = () => {
   if (typeof window === 'undefined') return 0
@@ -110,7 +110,7 @@ export default function SpiritGallery() {
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
           <span style={{ fontFamily: GAME, fontVariantNumeric: 'tabular-nums', fontSize: 13, opacity: 0.6 }}>{galleryNo(row.num)}</span>
           <span data-gallery-title style={{ fontFamily: GAME, fontWeight: 700, fontSize: 22, letterSpacing: '0.14em', textTransform: 'uppercase' }}>{row.name}</span>
-          <span style={{ fontFamily: GAME, fontSize: 11, letterSpacing: '0.16em', textTransform: 'uppercase', opacity: 0.5 }}>{row.el ?? 'base'}{look ? ` · ${look.name}` : ''}</span>
+          <span style={{ fontFamily: GAME, fontSize: 11, letterSpacing: '0.16em', textTransform: 'uppercase', opacity: 0.5 }}>{row.el ?? 'base'}{row.aw ? ` · ${row.aw.branch}` : ''}{look ? ` · ${look.name}` : ''}</span>
         </div>
         <div data-gallery-state={look ? 'model' : 'art'} style={{ position: 'relative', height: 520, borderRadius: 12, overflow: 'hidden',
           background: 'radial-gradient(circle at 50% 40%, rgba(255,236,190,.30), rgba(36,24,14,.92) 75%)', border: '1px solid rgba(245,197,66,.18)' }}>

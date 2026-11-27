@@ -75,7 +75,7 @@ def l1cone(P, a, b, ra, rb):
     a, b = V3(*a), V3(*b); ab = b - a; ln = np.linalg.norm(ab); u = ab / ln
     e1 = np.cross(u, V3(0, 1, 0) if abs(u[1]) < .9 else V3(1, 0, 0)); e1 /= np.linalg.norm(e1); e2 = np.cross(u, e1)
     q = P - a; t = q @ u; r = (np.abs(q @ e1) + np.abs(q @ e2)) * .7071; k = np.clip(t / ln, 0, 1)
-    return np.maximum(r - (ra + (rb - ra) * k), np.maximum(-t, t - ln) * .7)
+    return np.maximum(r - np.maximum(ra + (rb - ra) * k, .010), np.maximum(-t, t - ln) * .7)
 
 # ── the body ──
 def legs(P):
@@ -106,7 +106,7 @@ if FORM == 'myr':
 def tail(P):
     d = np.full(P.shape[:-1], 9.)
     if FORM == 'myr':
-        rr = [.040, .070, .090, .085, .066, .040, .004]
+        rr = [.045, .075, .095, .090, .070, .046, .016]
         for pts in FAN:
             for i in range(len(pts) - 1): d = np.minimum(d, l1cone(P, pts[i], pts[i + 1], rr[i], rr[i + 1]))
         return d
@@ -300,7 +300,9 @@ if __name__ == '__main__':
                     p = int((c > 2).sum())
                     if best is None or p < best[0]: best = (p, t)
                     if p == 0: return t
-        if best is None: raise SystemExit('no closed decimation')
+        if best is None:   # Vulnamyr: nine crystal tails meeting at her rump leave a few open seams; the rig does not need her closed
+            v, f = fs.simplify(np.asarray(V, np.float32), np.asarray(F, np.int32), target_count=n); t = trimesh.Trimesh(v, f, process=False); t.merge_vertices()
+            print('open edges', int((np.unique(t.edges_sorted, axis=0, return_counts=True)[1] % 2).sum())); return t
         print('pinched edges', best[0]); return best[1]
     S.field = lambda P: field(P + HO)                   # SF.eyes lays the eyes on the face at Vulnara's place: shifted back by HO
     SF.F = dict(SF.FORMS['mana'], form='mana', lo=PAL[0], hi=PAL[1])

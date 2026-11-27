@@ -130,6 +130,15 @@ export const SECOND_FORM_NAMES: Record<Species, Record<Exclude<Element, 'base'>,
   bat:         { mana: 'Noctara',  storm: 'Noctarc',  earth: 'Noctore',  water: 'Noctix' },
 }
 
+// BETA M244 (sheet 1): the AWAKENED (third) forms locked so far, by second form and branch. Canon: CANON/world/spirits-species.md
+// › Awakened Form ("Locked so far — Vulnyx › Vulnara (Mana), #001–004", Magii 8c0dd01) + the stage-3 ledger (assets/stage3/
+// grimoire-ledger-stage3.json locks 1-4); the test reads both. OWNER PREVIEW ONLY (the /dev gallery): no evolution rule, no player text.
+export type AwakenedBranch = 'champion' | 'virtuoso' | 'ace' | 'enigma'
+export const AWAKENED_BRANCHES: readonly AwakenedBranch[] = ['champion', 'virtuoso', 'ace', 'enigma']
+export const AWAKENED_NAMES: Readonly<Partial<Record<string, Readonly<Record<AwakenedBranch, string>>>>> = {
+  vulnara: { champion: 'Vulnarok', virtuoso: 'Vulnalys', ace: 'Vulnavex', enigma: 'Vulnamyr' },
+}
+
 /** Get second form name, or null if base element */
 export function getSecondFormName(species: Species, element: Element): string | null {
   if (element === 'base') return null

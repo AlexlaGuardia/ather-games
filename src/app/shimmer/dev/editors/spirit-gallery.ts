@@ -6,7 +6,7 @@
 // is kept as [species, element] pairs; spirit-gallery.test.ts reads the ledger file and proves each pair names the ledger's form.
 // ★ PURE: no three, no React. Run: npx tsx src/app/shimmer/dev/editors/spirit-gallery.test.ts
 import { ALL_SPECIES } from '../../engine/spirit-index'
-import { SECOND_FORM_NAMES, SPECIES_NAMES, type Species } from '../../spirits/spirit'
+import { AWAKENED_BRANCHES, AWAKENED_NAMES, SECOND_FORM_NAMES, SPECIES_NAMES, type AwakenedBranch, type Species } from '../../spirits/spirit'
 import { BAR_SLOTS } from '../../open/ather/infusions'
 
 export type GalleryElement = 'mana' | 'storm' | 'earth' | 'water'
@@ -22,12 +22,17 @@ export const DISCOVERY: readonly (readonly [Species, GalleryElement])[] = [
   ['hummingbird', 'earth'], ['hummingbird', 'water'], ['bat', 'mana'], ['bat', 'earth'], ['bat', 'water'],
 ]
 
+/** M244: the awakened forms built so far, stage-3 ledger order (n = index + 1) */
+export const AWAKENED: readonly (readonly [Species, GalleryElement, AwakenedBranch])[] = AWAKENED_BRANCHES.map(b => ['fox', 'mana', b] as const)
+
 export type GalleryRow = {
   /** grimoire # (1-50) */ num: number
   name: string
   sp: Species
   /** null = the base spirit */ el: GalleryElement | null
   /** the 2D art: the base grimoire art or the form's locked art (public/) */ icon: string
+  /** M244: an AWAKENED form (owner preview): her branch + look name (spirit-models AWAKENED_FORMS). Her icon is OUR render (the
+   *  stage-3 locked art is private and never ships). */ aw?: { branch: AwakenedBranch; look: string }
 }
 
 /** public/ files keep the tardigrade as `waterbear` */
@@ -41,6 +46,11 @@ export const FORM_ART_VER = 'locked1'
 export const GALLERY: readonly GalleryRow[] = [
   ...ALL_SPECIES.map((sp, i): GalleryRow => ({ num: i + 1, name: SPECIES_NAMES[sp], sp, el: null, icon: `/spirits/${artKey(sp)}.png` })),
   ...DISCOVERY.map(([sp, el], i): GalleryRow => ({ num: ALL_SPECIES.length + i + 1, name: SECOND_FORM_NAMES[sp][el], sp, el, icon: `/spirits/forms/${artKey(sp)}_${el}.png?v=${FORM_ART_VER}` })),
+  // M244: the awakened forms in stage-3 ledger order (#051 on), each after the 50: Vulnara's four first
+  ...AWAKENED.map(([sp, el, branch], i): GalleryRow => {
+    const name = AWAKENED_NAMES[SECOND_FORM_NAMES[sp][el].toLowerCase()]![branch], look = name.toLowerCase()
+    return { num: ALL_SPECIES.length + DISCOVERY.length + i + 1, name, sp, el, icon: `/open/spirits/${look}-icon.png?v=1`, aw: { branch, look } }
+  }),
 ]
 
 export const galleryNo = (n: number) => `#${String(n).padStart(3, '0')}`
