@@ -11,12 +11,41 @@ import { gardenKey } from '@/lib/keeper-local'
 import { GAME_DAY_MS } from './nodes'
 import { OPEN_ITEMS, countOf, take, type Inv } from '../shared/inventory'
 import { bankCount, bankTake, type Bank } from './garden-bank'
+import { MOONBERRY } from './cooking'
 
 /** The furniture id of the decor box. */
 export const PLANTER_BOX = 'planter_box'
 /** Every sapling item in the game (read from the item table, none added here). */
 export const SAPLING_IDS: readonly string[] = Object.keys(OPEN_ITEMS).filter(id => id.endsWith('_sapling'))
 export const isSapling = (id: string) => SAPLING_IDS.includes(id)
+// ── M241 (Alex 11-27, BETA M241 s3): a picked MOONBERRY can go in the box too and grows a moonberry BUSH that keeps giving
+//    berries (pick in the box's card, then it regrows). The box still lifts like any piece and the bush rides along (carryBox).
+//    Not the farm beds (crops), not the spirit planters (Mana Seeds).
+/** What the box takes: every sapling, plus a Moonberry (grows a bush). */
+export const POTTABLE_IDS: readonly string[] = [...SAPLING_IDS, MOONBERRY]
+export const isPottable = (id: string) => POTTABLE_IDS.includes(id)
+export const isBush = (b: Pick<BoxPlant, 'sapling'>) => b.sapling === MOONBERRY
+/** Berries a ripe bush gives per pick, and how long it takes to bear again after a pick (dials, Jin's; feel: Alex). */
+export const BUSH_BERRIES = 2
+export const BUSH_REGROW_MS = GAME_DAY_MS / 2
+/** When the potted plant is fully grown (the last stage). */
+export const grownAt = (b: BoxPlant) => b.at + (SAPLING_STAGES - 1) * STAGE_MS
+/** A bush bears once grown, then again BUSH_REGROW_MS after each pick. False for a sapling (decor only, never bears). */
+export function ripe(b: BoxPlant, now: number): boolean {
+  if (!isBush(b) || now < grownAt(b)) return false
+  return b.picked === undefined || now >= b.picked + BUSH_REGROW_MS
+}
+/** When a bush bears next (null = a sapling, or ripe now). */
+export function ripeAt(b: BoxPlant, now: number): number | null {
+  if (!isBush(b) || ripe(b, now)) return null
+  return Math.max(grownAt(b), b.picked === undefined ? 0 : b.picked + BUSH_REGROW_MS)
+}
+/** Pick the berries off box `pieceId`. Null = no bush there or not ripe. */
+export function pickBox(boxes: Boxes, pieceId: string, now: number): { boxes: Boxes; give: { id: string; n: number } } | null {
+  const b = boxes[pieceId]
+  if (!b || !ripe(b, now)) return null
+  return { boxes: { ...boxes, [pieceId]: { ...b, picked: now } }, give: { id: MOONBERRY, n: BUSH_BERRIES } }
+}
 
 /** Stages a potted sapling shows: 0 = just planted ... SAPLING_STAGES - 1 = fully grown. Dial. */
 export const SAPLING_STAGES = 4
@@ -24,7 +53,8 @@ export const SAPLING_STAGES = 4
 export const STAGE_DAYS = 1
 export const STAGE_MS = STAGE_DAYS * GAME_DAY_MS
 
-export type BoxPlant = { sapling: string; at: number }
+/** `sapling` = the item planted (a *_sapling, or MOONBERRY for a bush); `picked` (M241) = when a bush was last picked. */
+export type BoxPlant = { sapling: string; at: number; picked?: number }
 export type Boxes = Readonly<Record<string, BoxPlant>>
 
 /** Which stage the sapling is at now (0-based, capped at the last). */
@@ -34,13 +64,13 @@ export const nextStageAt = (b: BoxPlant, now: number) => { const s = stageOf(b, 
 
 /** Plant `sapling` in box `pieceId`. Null = the box already holds one, or it is not a sapling. */
 export function plantBox(boxes: Boxes, pieceId: string, sapling: string, now: number): Boxes | null {
-  if (boxes[pieceId] || !isSapling(sapling)) return null
+  if (boxes[pieceId] || !isPottable(sapling)) return null
   return { ...boxes, [pieceId]: { sapling, at: now } }
 }
 
 /** Every sapling on the plot, grouped: how many in the bag, how many in the bank. */
 export function saplingsOnPlot(inv: Inv, bank: Bank): { id: string; bag: number; bank: number }[] {
-  return SAPLING_IDS.map(id => ({ id, bag: countOf(inv, id), bank: bankCount(bank, id) })).filter(s => s.bag + s.bank > 0)
+  return POTTABLE_IDS.map(id => ({ id, bag: countOf(inv, id), bank: bankCount(bank, id) })).filter(s => s.bag + s.bank > 0)
 }
 /** Take one sapling: from the bag first, else from the bank. Null = none anywhere. */
 export function takeSapling(inv: Inv, bank: Bank, id: string): { inv: Inv; bank: Bank; from: 'bag' | 'bank' } | null {
@@ -74,7 +104,7 @@ export const BOX_KEY = 'ather.planterBox.v1'
 export function parseBoxes(v: unknown): Boxes {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return {}
   const out: Record<string, BoxPlant> = {}
-  for (const [k, b] of Object.entries(v as Record<string, Partial<BoxPlant>>)) if (b && typeof b.sapling === 'string' && isSapling(b.sapling) && typeof b.at === 'number') out[k] = { sapling: b.sapling, at: b.at }
+  for (const [k, b] of Object.entries(v as Record<string, Partial<BoxPlant>>)) if (b && typeof b.sapling === 'string' && isPottable(b.sapling) && typeof b.at === 'number') out[k] = { sapling: b.sapling, at: b.at, ...(typeof b.picked === 'number' ? { picked: b.picked } : {}) }
   return out
 }
 export function loadBoxes(): Boxes {

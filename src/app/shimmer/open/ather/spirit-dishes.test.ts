@@ -53,11 +53,11 @@ for (const j of GRILL) ok(HEARTH_JOBS.includes(j) && ALL_JOBS.some(x => x.id ===
 ok(!SPICED.some(j => j.out.id === 'water_meal') && ROAST.every(j => !GRILL.includes(j)), 'the grill replaced the water meal job; the roasts are their own jobs')
 for (const id of [...Object.keys(GRILLED), FIERY_SPICE, MOONBERRY]) ok(itemDef(id).name !== id.replace(/_/g, ' ') && ITEM_GROUP[id] === 'cooking' && existsSync(`public${itemDef(id).icon}`), `${id}: a bag row with an icon`)
 
-// ── 4. Firewort: a crop, found by a Goldwood, ground with Fuli Powder at the Crusher Table ───────────────────────────
+// ── 4. Firewort: a crop (M241: wild forage at the Scald's edge, forage.test.ts; no longer a Goldwood find), ground with Fuli Powder at the Crusher Table ───────────────────────────
 ok(CROPS.firewort.tier === 2 && existsSync(`public${itemDef(seedId('firewort')).icon}`) && existsSync(`public${itemDef(cropId('firewort')).icon}`), 'Firewort grows like a herb, seed + crop icons')
-ok(TREE_SPICE_HERB.goldwood === 'firewort', 'a Goldwood turns up Firewort')
+ok(TREE_SPICE_HERB.goldwood === undefined, 'M241: a Goldwood no longer turns up Firewort (stand-in retired)')
 const lo = () => 0
-ok(prunePlan('goldwood', lo).some(d => d.id === cropId('firewort')) && prunePlan('goldwood', lo).some(d => d.id === seedId('firewort')), 'a pruned goldwood can give Firewort + its seed')
+ok(!prunePlan('goldwood', lo).some(d => d.id.includes('firewort')), 'M241: even a lucky goldwood prune gives no Firewort')
 ok(!prunePlan('goldwood', () => 0.99).some(d => d.id.includes('firewort')), 'not every prune')
 const fiery = SPICE_MIXES.find(m => m.id === FIERY_SPICE)!
 ok(!!fiery && fiery.at === 'crusher' && spiceMixesAt('crusher').includes(fiery), 'the spice mix is made at the Crusher Table')

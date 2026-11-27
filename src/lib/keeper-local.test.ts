@@ -402,6 +402,7 @@ function fakeStore(initial: Record<string, string>) {
 // ⚠ Comments stripped first: several files legitimately name these keys in prose, and a guard that
 // matches prose either fires on honest documentation or gets loosened until it sees nothing.
 const OWNERS: Record<string, string> = {
+  'ather.forage.v1': 'open/ather/forage.ts',
   'ather:shimmer:birthRune': 'play3d/rune-inventory.ts', 'ather:shimmer:runes': 'play3d/rune-inventory.ts',
   'ather:shimmer:side': 'engine/front-door.ts',
   'ather:shimmer:book': 'play3d/book.ts', 'ather:shimmer:loadout': 'play3d/loadout.ts',

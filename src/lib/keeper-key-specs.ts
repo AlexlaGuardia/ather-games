@@ -23,6 +23,7 @@ export const KEEPER_KEY_SPECS: readonly { base: string; worldTied: boolean }[] =
   { base: 'ather:shimmer:hold:best', worldTied: false },  // the hold's best round — a keeper's own record, survives like the ledger (2026-09-24)
   { base: 'ather:mp:id',             worldTied: false },  // ★ the peer other players see — two accounts were ONE peer
   { base: 'ather:mp:name',           worldTied: false },  // and this MIRRORS the signed-in username, so B announced A's name
+  { base: 'ather.forage.v1',          worldTied: false },  // M241: wild forage spots this keeper picked + when (ather/forage.ts)
   // ── dynamic tails: no suffix can match these, so the epoch matches them by PREFIX ─────────────
   { base: 'ather:shimmer:seen:',     worldTied: false },  // ⚠ OPEN: the map of a world that no longer exists
   { base: 'voxel3d:tutorial:',       worldTied: true },   // ★ dynamic tail: seed. Reborn keeper must retake it —

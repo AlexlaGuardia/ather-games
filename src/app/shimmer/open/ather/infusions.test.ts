@@ -48,8 +48,8 @@ for (const k of ['goldwood', 'shimmeroak', 'starwillow', 'dawnwood'] as const) o
 ok(!minePlan('earth', lo).drops.some(d => d.id.includes('rootvine')), 'a Dinloid gives no Rootvine')
 ok(prunePlan('starwillow', lo).some(d => d.id === 'seed:tidepetal:D'), 'a pruned starwillow can give Tidepetal')
 ok(prunePlan('dawnwood', lo).some(d => d.id === 'crop:stormgrass:D'), 'a pruned dawnwood can give Stormgrass')
-// M234 s2 (meaning changed): a goldwood now turns up FIREWORT (the hot herb), never an element herb
-ok(prunePlan('goldwood', lo).every(d => !d.id.startsWith('crop:') || d.id === 'crop:firewort:D') && prunePlan('goldwood', lo).some(d => d.id === 'seed:firewort:D'), 'a goldwood gives Firewort and no element herb')
+// M241 (meaning changed again): the Goldwood stand-in is RETIRED; a pruned goldwood turns up no herb at all (Firewort is wild forage, forage.ts)
+ok(!prunePlan('goldwood', lo).some(d => d.id.startsWith('crop:') || d.id.startsWith('seed:')), 'a goldwood gives no Firewort and no element herb')
 ok(minePlan('violet', lo).drops.some(d => d.id === 'crop:violetbloom:D'), 'a broken Fuli can give Violetbloom')
 ok(!minePlan('storm', lo).drops.some(d => d.id.startsWith('crop:')), 'other crystals give no herb')
 ok(prunePlan('dawnwood', () => 0.99).every(d => !d.id.startsWith('seed:')), 'a high roll: no herb (the odds are real)')

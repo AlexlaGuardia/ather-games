@@ -108,6 +108,9 @@ import { sceneryPlaced, sceneryBoxes, wildsPublishedProps } from './scenery'   /
 import { SceneryView } from './scenery-view'
 import { isNode } from '../../world/builder-props'
 import { gladeNodes, WILDS_NODE } from './glade-nodes'   // M153 s1b: the Glade's tutorial nodes
+import { wildSpots, placedSpots, FORAGE_REGROW_MS, type ForageSpot } from './forage'   // M241: wild Moonberry + Firewort
+import { ForageView, pickForage, foragePrompt, bushProps, getPicks, setPicks } from './forage-view'
+import { isPicked as foragePicked } from './forage'
 import { isKeeperNode } from './keeper-nodes'
 import { GladeNodesView } from './glade-nodes-view'
 import { zoneDoor, zoneUse, zonePrompt, zoneSay, homeTalk, type ZoneUse } from './zone-tags'   // M114 s2: a published zone's tag = one E point
@@ -257,7 +260,7 @@ type Spawn = { x: number; z: number; yaw: number }
 const WILDS_SAFE = { x: GREG_WAYMARK.x, z: GREG_WAYMARK.z - 30.75, r: 50 }
 const gregAt = gregSpot()   // at load only (gregLive's first frame); M153 s1c-1: anything later asks gregSpot(). BETA M30 part 2: where Gregory sits (Moonwell Glade); the plot keeps only its old anchor numbers (plot.ts GREG)
 type Panel = null | { kind: 'smash' } | { kind: 'dash' } | { kind: 'clash'; tier: ClashLevel; tent: number } | { kind: 'map'; view: 'ather' | 'athernyx'; travel: boolean } | { kind: 'greg' } | { kind: 'talk'; step: number } | { kind: 'pack'; tab: PackTab } | { kind: 'cluster' } | { kind: 'work'; near: WorkNear } | { kind: 'folk'; s: Settlement } | { kind: 'fennel'; page: number } | { kind: 'brew'; station: AlcStation } | { kind: 'friend'; c: FriendCursor } | { kind: 'gfennel'; c: FennelCursor } | { kind: 'idlemog'; c: { id: string; screen: IdleScreen } } | { kind: 'spirit'; c: SpiritTalkState } | { kind: 'shop'; id: string } | { kind: 'settler'; c: SettlerCursor | AngelicaCursor } | { kind: 'adesk' } | { kind: 'chordstone' } | { kind: 'hall'; i: number } | { kind: 'exchange'; tab: 'offers' | 'search' | 'mine' }
-type Near = null | { kind: 'gate' } | { kind: 'greg' } | { kind: 'friend'; f: GardenFriend } | { kind: 'fennel' } | { kind: 'gfennel' } | { kind: 'idlemog'; id: string; name: string } | { kind: 'anemonyx' } | { kind: 'work'; near: WorkNear } | { kind: 'waymark'; w: Waymark; own: boolean } | { kind: 'folk'; s: Settlement; id?: string } | { kind: 'spirit'; id: string; name: string } | { kind: 'zone'; u: ZoneUse } | { kind: 'settler'; id: SettlerId; name: string } | { kind: 'adesk' } | { kind: 'chordstone' }
+type Near = null | { kind: 'gate' } | { kind: 'greg' } | { kind: 'friend'; f: GardenFriend } | { kind: 'fennel' } | { kind: 'gfennel' } | { kind: 'idlemog'; id: string; name: string } | { kind: 'anemonyx' } | { kind: 'work'; near: WorkNear } | { kind: 'waymark'; w: Waymark; own: boolean } | { kind: 'folk'; s: Settlement; id?: string } | { kind: 'spirit'; id: string; name: string } | { kind: 'zone'; u: ZoneUse } | { kind: 'forage'; s: ForageSpot } | { kind: 'settler'; id: SettlerId; name: string } | { kind: 'adesk' } | { kind: 'chordstone' }
 
 // ★ held until the save owner is known (shared/owner-ready.tsx: the 11-18 'rooms vanished on refresh' fix)
 /** M61: a mate's island alone on the Green (the frame nobody is linked into) */
@@ -481,6 +484,7 @@ function AtherSliceGame() {
   const gladeMeshLift = useMemo(() => gladeLift(gladeLayer.edits), [gladeLayer])
   const gladeParts = useMemo(() => zoneParts(gladeLayer.zones ?? [], gladeLand), [gladeLayer, gladeLand])   // M84 s3
   const gladeScenery = useMemo(() => sceneryPlaced(gladeLayer.props ?? [], gladeZoneGround, gladeLand, gladeWaterAt(gladeLayer)), [gladeLayer, gladeZoneGround, gladeLand])   // M153 s1a
+  const gladeForage = useMemo(() => placedSpots(gladeScenery, 'g'), [gladeScenery])   // M241: the Glade's placed moonberry bush(es)
   const gladeOwnNodes = useMemo(() => gladeNodes(gladeLayer.props ?? [], gladeZoneGround), [gladeLayer, gladeZoneGround]), gladeDecor = useMemo(() => gladeScenery.filter(p => !isNode(p)), [gladeScenery])   // M153 s1b
   // M114 s2: each tagged zone's ONE E point (zone-tags.ts: front edge; locked / shop panel / home label + talk / supplier line)
   const gladeDoors = useMemo(() => (gladeLayer.zones ?? []).flatMap(z => { const u = zoneUse(z); return u ? [{ id: z.id, ...zoneDoor(z), u }] : [] }), [gladeLayer])
@@ -947,7 +951,12 @@ function AtherSliceGame() {
   const wildsPartsSig = wildsPartsNow.map(p => `${p.key}@${p.y.toFixed(2)}`).join()
   const wildsParts = useMemo(() => wildsPartsNow, [wildsPartsSig])   // eslint-disable-line react-hooks/exhaustive-deps
   // M85 s1: the Wilds' published scenery (World Builder Scenery mode): stands on the ground, drawn, solid where it blocks
-  const wildsSceneryNow = useMemo(() => ww ? sceneryPlaced(wildsPublishedProps(propsJsonLive()), ww.heightAt) : [], [ww, wrev])   // eslint-disable-line react-hooks/exhaustive-deps
+  // M241: the wild forage spots of the loaded tiles (woodland Moonberry bushes, Firewort at the Scald's edge) + the owner's placed bushes
+  const wildsForage = useMemo(() => { if (!ww) return [] as ForageSpot[]
+    const tiles = [...ww.loaded.keys()].map(n => ww.byName.get(n)).filter((t): t is NonNullable<typeof t> => !!t)
+    return [...wildSpots(tiles, ww.index.tiles).filter(s => Number.isFinite(ww.heightAt(s.x, s.z)) && ww.biomeAt(s.x, s.z) !== BIOME.water && ww.walkable(s.x, s.z)), ...placedSpots(wildsPublishedProps(propsJsonLive()), 'w')] }, [ww, wrev])   // eslint-disable-line react-hooks/exhaustive-deps
+  const wildsSceneryNow = useMemo(() => ww ? sceneryPlaced([...wildsPublishedProps(propsJsonLive()), ...bushProps(wildsForage)], ww.heightAt) : [], [ww, wrev, wildsForage])   // eslint-disable-line react-hooks/exhaustive-deps
+  const forageRef = useRef<readonly ForageSpot[]>([]); forageRef.current = zone.kind === 'wilds' ? wildsForage : zone.kind === 'glade' ? gladeForage : []   // M241: read by the aim loop
   const wildsScenerySig = wildsSceneryNow.map(p => `${p.id}:${p.k}@${p.x},${p.z},${p.q},${p.s},${p.y.toFixed(2)},${p.solid ?? ''}`).join()
   const wildsScenery = useMemo(() => wildsSceneryNow, [wildsScenerySig])   // eslint-disable-line react-hooks/exhaustive-deps
   const wildsSceneryBoxes = useMemo(() => sceneryBoxes(wildsScenery), [wildsScenery])
@@ -1063,6 +1072,7 @@ function AtherSliceGame() {
       for (const k of gladeFriendsAt()) cands.push(cap(k.x, k.z, 0.45, 1.8, { kind: 'friend', f: k.id }))   // M68 s3a
       if (tourRef.current && !tourRef.current.talk && Math.hypot(gl.x - lc.px, gl.z - lc.pz) > 30) setTour(null)   // M32: walked off = the tour is skipped
       for (const f of gladeFolkDrawn) cands.push(cap(f.x, f.z, 0.4, MOGLIN_HEIGHT.chibi + 0.1, f.id === FENNEL_FOLK_ID ? { kind: 'gfennel' } : { kind: 'folk', s: GLADE, id: f.id }))   // M68 s3b
+      for (const s of forageRef.current) if (Math.abs(s.x - lc.px) < 6 && Math.abs(s.z - lc.pz) < 6 && !foragePicked(getPicks(), s.id, Date.now())) cands.push(cap(s.x, s.z, 0.55, 1.1, { kind: 'forage', s }))   // M241
       for (const d of gladeDoorsRef.current) { const y = g(d.x, d.z); if (Number.isFinite(y)) cands.push(cap(d.x, d.z, 0.6, 2.4, { kind: 'zone', u: d.u })) }   // M114 s2
       n = aimPick(cands, eye, dir, from)
     }
@@ -1089,6 +1099,7 @@ function AtherSliceGame() {
       if (!workAim && gleanerPost.on && Math.hypot(lc.px - GLEANER_POST.x, lc.pz - GLEANER_POST.z) < GLEANER_POST_R) { const g = stallDrawn.get(GLEANER_POST.id); if (g) cands.push(cap(g.x, g.z, 0.6, MOGLIN_HEIGHT.chibi + 0.4, { kind: 'folk', s: GLEANER_POST })) }   // M112 s2: Gleaner (owner-only post)
       if (!workAim && inSettlement(lc.px, lc.pz)) for (const st of SETTLERS) if (st.talks || (st.id === 'angelica' && m70sideNow.angelica)) cands.push(cap(st.x, st.z, 0.45, MOGLIN_HEIGHT.chibi + 0.1, { kind: 'settler', id: st.id, name: st.name }))   // M70 s1 (+ s3 Angelica)
       if (!workAim && m70sideNow.desk && Math.hypot(lc.px - ANGELICA_DESK.x, lc.pz - ANGELICA_DESK.z) < 12) cands.push(cap(ANGELICA_DESK.x, ANGELICA_DESK.z, 0.7, 1.2, { kind: 'adesk' }))   // M70 s3: Angelica's Desk
+      for (const s of forageRef.current) if (Math.abs(s.x - lc.px) < 6 && Math.abs(s.z - lc.pz) < 6 && !foragePicked(getPicks(), s.id, Date.now())) cands.push(cap(s.x, s.z, 0.55, 1.1, { kind: 'forage', s }))   // M241
       for (const d of wildsDoorsRef.current) { const y = g(d.x, d.z); if (Number.isFinite(y)) cands.push(cap(d.x, d.z, 0.6, 2.4, { kind: 'zone', u: d.u })) }   // M84 s3b: a tagged zone's E point (only where its tile is loaded)
       n = aimPick(cands, eye, dir, from)
       // streaming: crossing into another tile loads round you and re-aims everything that is per tile
@@ -1120,6 +1131,7 @@ function AtherSliceGame() {
         : n?.kind === 'waymark' ? (n.own ? 'E · fold map · L lift this waymark' : 'E · fold map')
         : n?.kind === 'folk' ? (n.id && moglinPrompt(n.id)) || `E · talk to the folk of ${n.s.name}`
         : n?.kind === 'zone' ? zonePrompt(n.u)   // M114 s2
+        : n?.kind === 'forage' ? foragePrompt(n.s)   // M241
         : atFairDoor(lc.px, lc.pz) ? `E · the Thistledown Fair · ${tentLabel(atFairDoor(lc.px, lc.pz)!)}`   // M233
         : zone.kind === 'wilds' && attendantAt(lc.px, lc.pz) >= 0 ? `E · ${HALL_TALK.name}`   // M228 s1
         : rinPrompt() ?? (cAimRef.current.crystal && cAimRef.current.dist < aimRef.current.dist ? crystalPrompt() : treePrompt())
@@ -1182,6 +1194,10 @@ function AtherSliceGame() {
       travel: (d: Dest) => travel(d),
       grant: (grey = 0, pages = 0) => updateGarden({ ...garden, grey: garden.grey + grey, pages: garden.pages + pages }),
       resetGarden: () => updateGarden(freshGarden()),
+      // M241 probes (m241-forage-check): the forage spots of this zone nearest the keeper (+ picked), and CHECK-ONLY forageAge: age every pick by ms (fast-forward the regrow)
+      forage: (n = 12) => { const p = pos.current, pk = getPicks(), t = Date.now(); return forageRef.current.map(s => ({ ...s, picked: foragePicked(pk, s.id, t), d: Math.hypot(s.x - p.x, s.z - p.z) })).sort((a, b) => a.d - b.d).slice(0, n) },
+      forageAll: () => forageRef.current.map(s => ({ id: s.id, kind: s.kind, x: s.x, z: s.z })),
+      forageAge: (ms = FORAGE_REGROW_MS) => { const pk = getPicks(); setPicks(Object.fromEntries(Object.entries(pk).map(([k, v]) => [k, v - ms]))) },
       spread: () => spreadRef.current, skipDays, ownerAt: (x: number, z: number) => nodeOwner?.(x, z),
       chan: () => (chanRef.current ? { id: chanRef.current.w.id, done: chanRef.current.w.p, of: 1 } : null), gather: () => gatherView(), tether: () => tetherRef.current?.now() ?? null, prune: () => pruneAimed(), aim: () => aimRef.current.tree?.id ?? null, mine: () => mineAimed(), crystal: () => { const c = cAimRef.current.crystal; return c ? { id: c.id, kind: c.kind, x: c.x, y: c.y, z: c.z } : null }, mana: () => manaRef.current.cur,
       stance: () => stanceRef.current, speedMult: () => (stanceRef.current.kind === 'stowed' ? STOWED_SPEED : 1) * frameStats(getLook()).speed,
@@ -1885,6 +1901,7 @@ function AtherSliceGame() {
         else if (n.kind === 'spirit' && handFeedOf(heldRef.current, n)) { const sp = spiritLive.get(n.id)?.sp; if (sp) feedSpirit(n.id, sp, heldRef.current!) }   // M240: fed by hand
         else if (n.kind === 'spirit') setPanel({ kind: 'spirit', c: { id: n.id, screen: 'talk' } })   // M109 s1
         else if (n.kind === 'anemonyx') meetToday(clock())   // M76 s2
+        else if (n.kind === 'forage') pickForage(n.s)   // M241: wild Moonberry / Firewort into the bag
         else if (n.kind === 'work' && n.near.kind === 'piece' && currentWorks().pieces.some(x => x.id === (n.near as { id: string }).id && x.item === 'lift') && callNearest()) return   // M61 s3: a guest calls a mate's lift too (a local ride, never saved)
         else if (n.kind === 'work' && n.near.kind === 'piece' && isVisiting() && (() => { const pc = currentWorks().pieces.find(x => x.id === (n.near as { id: string }).id), st = pc && FURNITURE[pc.item]?.alc; if (st) setPanel({ kind: 'brew', station: st }); return !!st })()) return   // M57 s3b: a guest takes brewing steps at a mate's alchemy set
         else if (n.kind === 'work' && guestRefuses(m => hudSay(m, 'info', 4))) return   // M61: a guest opens no station, store or piece
@@ -1952,6 +1969,8 @@ function AtherSliceGame() {
         {zone.kind === 'wilds' && <WarmProxies key={epoch} />}   {/* M44: late-mounting shader variants, compiled behind the arrival veil */}
         {zone.kind === 'wilds' && <ZonePartsView parts={wildsParts} />}   {/* M84 s3b */}
         {zone.kind === 'wilds' && wildsDecor.length > 0 && <SceneryView items={wildsDecor} />}
+        {zone.kind === 'wilds' && ww && <ForageView spots={wildsForage} ground={ww.heightAt} focus={pos} />}   {/* M241 */}
+        {zone.kind === 'glade' && gladeForage.length > 0 && <ForageView spots={gladeForage} ground={gladeZoneGround} focus={pos} />}   {/* M241 */}
         {zone.kind === 'wilds' && wildsOwnNodes.trees.length > 0 && <GladeNodesView nodes={wildsOwnNodes} focus={poseRef} />}   {/* M85 s1 */}
         <OpenHands ref={handsApi} held={rodOut ? <HeldRod /> : <HeldItem id={stance.kind === 'item' ? held : null} />} />
         <FpGun ref={gunApi} />

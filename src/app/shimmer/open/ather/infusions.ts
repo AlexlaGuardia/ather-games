@@ -47,7 +47,8 @@ export const herbFind = (el: FormElement): { id: string; n: number }[] => { cons
 /** M234 s2: FIREWORT (canon's new hot herb, alchemy.md › THE RECIPES SIT-DOWN) is found like the element herbs, by pruning a
  *  GOLDWOOD (the commonest tree, which had no find since M207). Jin's placement, a mechanical stand-in: where Firewort grows
  *  wild is not ruled (Magii may move it). A find = the herb + its seed, so it can be grown in the Farm. */
-export const TREE_SPICE_HERB: Readonly<Record<string, CropId>> = { goldwood: 'firewort' }
+// M241 (Magii 4204f49 / 933293c): RETIRED. Firewort grows wild at the Sadlands' edges now (forage.ts); no tree turns it up.
+export const TREE_SPICE_HERB: Readonly<Record<string, CropId>> = {}
 /** roll a find for a node of this kind (one rand() call, always made, so the roll count never depends on the kind).
  *  `herb` (M234 s2): a non-element herb this node turns up instead (TREE_SPICE_HERB). */
 export function rollHerb(el: FormElement | undefined, rand: () => number, herb?: CropId): { id: string; n: number }[] {
