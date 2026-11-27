@@ -7,12 +7,12 @@ lines / chevrons), never a rune or sigil.
   rok  Vulnarok   an UPRIGHT war-form, a TRUE BIPED since M244 s1b (Alex 11-27): she stands on two digitigrade legs, trunk
                   vertical, arms free (heavy forearms, claws), a deep muscled chest, a gold blaze up the chest, gold flow marks on
                   shoulder and forearm, crystal plates; FOUR GOLD SELF-ECHOES (rig_biped.py rebuilds them as rigged delayed copies)
-  lys  Vulnalys   the tallest and finest: long slim legs, the head carried high, a big GOLD THROAT-RUFF of points, a great plume
+  lys  Vulnalys   (s1c: Vulnara's fox built heavy like a DIRE WOLF: deep chest, thick legs, a broader head) long legs, the head carried high, a big GOLD THROAT-RUFF of points, a great plume
                   curled up over her back; VIOLET SPIRALS hanging in the air either side of her head ('aura', head-borne)
   vex  Vulnavex   a long low racer: a long trunk, long legs, ears laid back, a straight streaming brush, a gold throat-ruff; two
                   WHOLE GOLD COPIES of her where she just ran, behind and to one side ('aura', copies not smoke)
-  myr  Vulnamyr   regal and still: a deep chest with a big violet CRYSTAL CHEST-GEM, gold chevrons down legs and shoulders, NINE
-                  CRYSTALLINE TAILS fanned behind her, a GOLD CROWN-HALO over her head ('aura', head-borne)
+  myr  Vulnamyr   regal and still: a deep chest with a big violet CRYSTAL CHEST-GEM, gold chevrons down legs and shoulders, EIGHT
+                  separate CRYSTAL TAILS (s1c: each its own closed piece + bones), a GOLD CROWN-HALO over her head ('aura', head-borne)
 Number space = Vulnara's (sculpt_v2's head at its place + HO), so the eyes / face classes / rig plan carry over."""
 import sys, os
 import numpy as np
@@ -36,14 +36,16 @@ FORMS = dict(
              neck=((0, 1.0, .02), (0, 1.10, .10), .10), tuck=((0, -2, 0), (.1, .1, .1)),
              tail=[(0, .55, -.17), (0, .44, -.29), (0, .35, -.43), (0, .31, -.58), (0, .34, -.73), (0, .42, -.85), (0, .50, -.93), (0, .55, -.99), (0, .56, -1.03)],
              tailr=[.06, .09, .145, .19, .205, .19, .14, .07, .004]),
-    lys=dict(HO=(0, .08, .02), ear=((.128, .655, .222), (.232, 1.06, .142)),
-             chest=(0, .49, .14), pelvis=(0, .49, -.17),
-             f=[(.078, .47, .150), (.080, .250, .130), (.082, .048, .150)], fr=(.060, .037, .032), paw=1.0,
-             h=[(.078, .455, -.175), (.094, .30, -.10), (.088, .140, -.235), (.088, .042, -.200)], hr=(.074, .047, .034),
-             trunk=((0, .495, .12), (0, .495, -.17), .100, .082), chestE=((0, .47, .14), (.100, .14, .105)),
-             neck=((0, .53, .17), (0, .63, .245), .088), tuck=((0, .31, -.065), (.3, .09, .14)),
-             tail=[(0, .52, -.25), (0, .55, -.34), (0, .62, -.44), (0, .74, -.52), (0, .88, -.56), (0, 1.00, -.55), (0, 1.08, -.50), (0, 1.12, -.43), (0, 1.12, -.38)],
-             tailr=[.05, .085, .14, .19, .21, .20, .16, .09, .004]),
+    # M244 s1c (Alex 11-27): Vulnara's fox, BIGGER and heavier like a DIRE WOLF: a longer, deeper-chested trunk, thick legs, big paws,
+    # a broader head (hk = the head grown about its centre; eyes, nose, brow gem and face classes follow it), same fox head + brush
+    lys=dict(HO=(0, .10, .08), hk=1.14, ear=((.128, .655, .222), (.232, 1.04, .142)),
+             chest=(0, .50, .20), pelvis=(0, .50, -.23),
+             f=[(.092, .48, .205), (.094, .255, .185), (.096, .048, .205)], fr=(.080, .052, .045), paw=1.28,
+             h=[(.092, .47, -.235), (.110, .31, -.155), (.102, .145, -.29), (.102, .042, -.255)], hr=(.098, .064, .047),
+             trunk=((0, .51, .18), (0, .50, -.23), .130, .108), chestE=((0, .465, .20), (.130, .18, .14)),
+             neck=((0, .55, .23), (0, .66, .30), .115), tuck=((0, .29, -.085), (.32, .085, .15)),
+             tail=[(0, .52, -.31), (0, .55, -.40), (0, .62, -.50), (0, .74, -.58), (0, .88, -.62), (0, 1.00, -.61), (0, 1.08, -.56), (0, 1.12, -.49), (0, 1.12, -.44)],
+             tailr=[.06, .095, .15, .20, .22, .21, .17, .095, .004]),
     vex=dict(HO=(0, -.01, .06), ear=((.128, .655, .222), (.250, .930, .040)),
              chest=(0, .41, .17), pelvis=(0, .39, -.25),
              f=[(.080, .39, .175), (.082, .205, .150), (.084, .046, .185)], fr=(.064, .040, .034), paw=1.0,
@@ -66,7 +68,10 @@ S.EAR_A, S.EAR_T = V3(*G['ear'][0]), V3(*G['ear'][1])
 L = dict(head=tuple(V3(0, .565, .255) + HO), chest=G['chest'], pelvis=G['pelvis'], f=G['f'], h=G['h'], tail=G['tail'], tailr=G['tailr'], HO=G['HO'])
 TC = S.catmull([(*a, r) for a, r in zip(L['tail'], L['tailr'])], 5); S.TC = TC
 
-def head(P): return S.head(P - HO)
+HK = G.get('hk', 1.0); HC = V3(0, .57, .22) + HO
+def hm(P): return HC + (P - HC) / HK                  # world -> Vulnara's head space (before the head grew)
+def fwd(P): return HC + (np.asarray(P, float) - HC) * HK   # Vulnara's head space -> world
+def head(P): return S.head(hm(P) - HO) * HK
 
 def _surf(field, p, dirn, n=60):
     p = V3(*p).astype(float); dirn = V3(*dirn) / np.linalg.norm(dirn)
@@ -113,21 +118,42 @@ def legs(P):
     for x in (-.022, 0, .022): t = su(t, ell(M, (hx + x, .022, hz + .068), (.0145, .022, .020)), .010)
     return d, t
 
-# the fan of nine for Vulnamyr: each a chain of crystal segments rising out of her rump and arcing out (+ the centre one = TC)
-FAN = []
+# M244 s1c (Alex 11-27): Vulnamyr's EIGHT crystal tails, each its OWN tail (own root on the rump, own bones, own sway), spread in
+# depth as well as side to side (two tiers, alternate tails higher and further back): not one fan, not a sheet. Each is meshed as its
+# own closed piece and joined to the body (a merged fan would not decimate closed at a fine grid).
+TAILS, TRR = [], [.030, .052, .062, .058, .046, .029, .010]
 if FORM == 'myr':
-    for k, th in enumerate(np.linspace(-1.25, 1.25, 9)):
-        base = V3(0, .48, -.22); pts = [base]
-        for s in np.linspace(.12, 1, 6):
-            ang = th * (.55 + .45 * s); ln = .80 * s
-            pts.append(base + V3(np.sin(ang) * ln * .95, np.cos(ang) * ln * .85 + .05 * s, -.30 * s - .10 * s * s))
-        FAN.append(pts)
+    for k in range(8):
+        u = (k - 3.5) / 3.5; hi_ = k % 2
+        yaw = u * 1.15; el = .62 - .34 * abs(u) + (.16 if hi_ else -.04); ln0 = .70 + .06 * hi_
+        base = V3(.034 * u, .475 + .015 * hi_, -.215 - .025 * hi_); pts = [base]
+        for s in np.linspace(.16, 1, 6):
+            yw = yaw * (.55 + .45 * s); e = el + .22 * s * s
+            pts.append(base + V3(np.sin(yw) * np.cos(e), np.sin(e), -np.cos(yw) * np.cos(e)) * ln0 * s)
+        TAILS.append([tuple(map(float, q)) for q in pts])
+TCK = [S.catmull([(*p, r) for p, r in zip(pts, TRR)], 4) for pts in TAILS]      # each tail's dense centre line (x, y, z, half-width)
+def tail_k(P, k):
+    c = TCK[k]; d = np.full(P.shape[:-1], 9.)
+    for a, b in zip(c[:-1], c[1:]): d = np.minimum(d, l1cone(P, a[:3], b[:3], a[3], b[3]))
+    return d
+def tail_mesh(k):
+    """one crystal tail as its own CLOSED mesh, lofted on the same frames as tail_k (a four-sided diamond per ring, corners at
+    half-width x sqrt 2 on e1 / e2), a base cap sunk in the rump and a point at the tip: closed by construction at any fineness"""
+    c = TCK[k]; V, F = [], []; n = len(c)
+    for i in range(n):
+        a, b = (c[i, :3], c[i + 1, :3]) if i < n - 1 else (c[i - 1, :3], c[i, :3]); u = (b - a) / np.linalg.norm(b - a)
+        e1 = np.cross(u, V3(0, 1, 0) if abs(u[1]) < .9 else V3(1, 0, 0)); e1 /= np.linalg.norm(e1); e2 = np.cross(u, e1); w = max(c[i, 3], .010) * 1.4142
+        V += [c[i, :3] + e * w for e in (e1, e2, -e1, -e2)]
+        if i == n - 1: tip = c[i, :3] + u * .012
+    for i in range(n - 1):
+        for j in range(4): a0, a1, b0, b1 = 4 * i + j, 4 * i + (j + 1) % 4, 4 * i + 4 + j, 4 * i + 4 + (j + 1) % 4; F += [(a0, b0, a1), (a1, b0, b1)]
+    u0 = c[1, :3] - c[0, :3]; V.append(c[0, :3] - u0 / np.linalg.norm(u0) * .004); V.append(tip); B, T = len(V) - 2, len(V) - 1
+    for j in range(4): F += [(B, j, (j + 1) % 4), (T, 4 * (n - 1) + (j + 1) % 4, 4 * (n - 1) + j)]
+    return np.array(V), np.array(F)
 def tail(P):
     d = np.full(P.shape[:-1], 9.)
     if FORM == 'myr':
-        rr = [.045, .075, .095, .090, .070, .046, .016]
-        for pts in FAN:
-            for i in range(len(pts) - 1): d = np.minimum(d, l1cone(P, pts[i], pts[i + 1], rr[i], rr[i + 1]))
+        for k in range(len(TAILS)): d = np.minimum(d, tail_k(P, k))
         return d
     for a, b in zip(TC[:-1], TC[1:]): d = np.minimum(d, cone(P, a[:3], b[:3], a[3], b[3]))
     for u, s, ln in ((.42, -1, .15), (.55, -1, .17), (.68, -1, .14), (.62, 1, .14), (.78, -1, .10), (.50, 1, .12)):   # soft fur points
@@ -140,7 +166,7 @@ def tail(P):
 def ruff(P):
     """the gold throat-ruff (Lys big, Vex smaller): points of fur fanning off the throat and upper chest"""
     if FORM not in ('lys', 'vex'): return np.full(P.shape[:-1], 9.)
-    M = np.stack([np.abs(P[..., 0]), P[..., 1], P[..., 2]], -1); n0 = V3(*G['neck'][0]); big = 1.0 if FORM == 'lys' else .7; d = np.full(P.shape[:-1], 9.)
+    M = np.stack([np.abs(P[..., 0]), P[..., 1], P[..., 2]], -1); n0 = V3(*G['neck'][0]); big = 1.15 if FORM == 'lys' else .7; d = np.full(P.shape[:-1], 9.)
     for i, (ang, lift) in enumerate([(0, -.9), (.35, -.8), (.7, -.6), (1.05, -.35), (1.35, -.1), (0, -.55), (.5, -.4), (.95, -.15), (1.3, .15)]):
         o = n0 + V3(0, -.03 + .02 * (i // 5), .05)
         tip = o + V3(np.sin(ang) * .16, lift * .16, np.cos(ang) * .12) * big
@@ -160,12 +186,13 @@ def body(P):
         for x, y, z, tx, ty, tz, r in ((0, .52, .23, 0, .44, .30, .055), (.06, .53, .21, .085, .44, .27, .05), (.10, .52, .17, .135, .43, .22, .045)):
             bd = su(bd, cone(M, (x, y, z), (tx, ty, tz), r, .004), .03)
     f, h = legs(P); bd = su(bd, f, .02 if G.get('biped') else .045); bd = su(bd, h, .05)
-    return su(su(su(bd, tail(P), .035), head(P), .03), ruff(P), .02)
+    if FORM != 'myr': bd = su(bd, tail(P), .035)    # Vulnamyr's tails are their own pieces (TAILS), joined after meshing
+    return su(su(bd, head(P), .03), ruff(P), .02)
 
 # ── crystal facet plates (the ledger's 'violet crystal facets'): low four-sided pyramids proud of the coat ──
 PLATES_AT = dict(
     rok=[((.20, .99, .02), .040), ((.25, .86, -.01), .032), ((.27, .69, .02), .030), ((.15, .80, -.06), .040), ((.17, .50, -.01), .036), ((.14, .28, -.01), .030), ((.13, .95, -.10), .034)],
-    lys=[((.11, .47, .10), .030), ((.11, .50, -.02), .034), ((.11, .45, -.14), .036), ((.10, .30, -.12), .026), ((.10, .27, .12), .022)],
+    lys=[((.13, .48, .15), .036), ((.13, .51, -.01), .040), ((.13, .46, -.17), .042), ((.12, .31, -.17), .030), ((.12, .28, .17), .026)],
     vex=[((.11, .40, .10), .030), ((.11, .41, -.03), .034), ((.11, .39, -.17), .036), ((.10, .27, -.18), .026), ((.10, .25, .15), .022)],
     myr=[((.12, .48, .07), .032), ((.12, .48, -.05), .034), ((.12, .44, -.16), .036), ((.11, .29, -.11), .026)])[FORM]
 def _frame(n):
@@ -193,9 +220,9 @@ GEMZ = _surf(body, (0, .395, .60), (0, 0, -1))[2] - .010 if FORM == 'myr' else 0
 
 def brow_gem(P):
     """the brow gem, kept on all four: a faceted crystal proud of the brow (SF.eyes lays the pink + gold setting over it)"""
-    q = np.stack([P[..., 0] / .026, (P[..., 1] - .675 - HO[1]) / .038, (P[..., 2] - BROWZ) / .018], -1)
-    return (np.abs(q).sum(-1) - 1) * .012
-BROWZ = _surf(lambda Q: su(body(Q), np.full(Q.shape[:-1], 9.), .01), (0, .675 + HO[1], 1.0), (0, 0, 1))[2] - .004
+    Q = hm(P); q = np.stack([Q[..., 0] / .026, (Q[..., 1] - .675 - HO[1]) / .038, (Q[..., 2] - BROWZ) / .018], -1)
+    return (np.abs(q).sum(-1) - 1) * .012 * HK
+BROWZ = hm(_surf(lambda Q: su(body(Q), np.full(Q.shape[:-1], 9.), .01), (0, fwd(V3(0, .675 + HO[1], 0))[1], 1.2), (0, 0, 1)))[2] - .004 / HK
 
 def field(P):
     b = body(P); b = su(b, plates(P), .004); b = su(b, chest_gem(P), .006)
@@ -216,7 +243,7 @@ def marks(V):
             out = np.maximum(out, seg_band(M, pts, .011))
         out = np.maximum(out, np.where((M[:, 2] > .08) & (M[:, 1] < 1.0) & (M[:, 1] > .74) & (M[:, 0] < .12), .022 - M[:, 0] - .02 * zig(M[:, 1] * 9, 1), -1.))
     elif FORM == 'lys':
-        for pts in ([(.11, .46, -.02), (.12, .44, -.08), (.11, .46, -.14)],): out = np.maximum(out, seg_band(M, pts, .008))
+        for pts in ([(.13, .47, -.02), (.14, .45, -.09), (.13, .47, -.16)],): out = np.maximum(out, seg_band(M, pts, .009))
     elif FORM == 'vex':   # swept speed lines along the flank
         for pts in ([(.11, .44, .05), (.115, .42, -.06), (.11, .38, -.16)], [(.11, .36, .07), (.115, .34, -.04)]): out = np.maximum(out, seg_band(M, pts, .008))
     else:                 # chevrons down the legs and shoulders + brow marks
@@ -228,7 +255,8 @@ def marks(V):
     return out
 PAL = dict(rok=('#3f3388', '#7f6cc8'), lys=('#3d3d92', '#7e7cd2'), vex=('#3c3a8c', '#7672c8'), myr=('#4c4496', '#9a8cda'))[FORM]
 def classes(V):
-    out = S.classes(V - HO); x, y, z = V.T
+    w = np.clip((.62 - np.linalg.norm(V - HC, axis=1)) / .2, 0, 1)[:, None]          # the face classes follow the grown head
+    out = S.classes(V + w * (hm(V) - V) - HO); x, y, z = V.T
     d = ((V[:, None] - TC[None, :, :3]) ** 2).sum(-1); i = d.argmin(1); s = i / (len(TC) - 1.)
     out[2] = np.where(np.abs(V[:, 0]) < .1, out[2], -1.) if FORM != 'myr' else np.full(len(V), -1.)    # bib only between the forelegs
     out[3] = (np.where(z < -.40, (s - .70) - .06 * zig(np.arctan2(x, y - TC[i, 1]) / (2 * np.pi) + .5, 7), -1.) * .5) if FORM != 'myr' else np.full(len(V), -1.)  # pale brush tip
@@ -236,7 +264,7 @@ def classes(V):
     out.append(.004 - ruff(V))                      # 8 gold ruff
     out.append(marks(V))                            # 9 gold marks
     out.append(.006 - chest_gem(V))                 # 10 chest gem
-    out.append(.004 - tail(V) if FORM == 'myr' else np.full(len(V), -1.))   # 11 crystal tails
+    out.append(.013 - tail(V) if FORM == 'myr' else np.full(len(V), -1.))   # 11 crystal tails
     return out
 def palette():
     gold = C('#e3b23c'); return [C('#cfc6ea'), C('#efeafb'), C('#efeafb'), C('#d9d2f4'), C('#e9a3b4'), C('#efeafb'), C('#2a1a2e'),
@@ -265,7 +293,7 @@ def aura(Vb, Fb):
         col = '#f2c54a'
     elif FORM == 'lys':
         for sx in (1, -1):
-            c = V3(sx * .40, .80 + HO[1], .26 + HO[2]); th = np.linspace(0, 5.2 * np.pi, 90); r = .012 + .095 * th / th[-1]
+            c = V3(sx * .40 * HK, .80 + HO[1], .26 + HO[2]); th = np.linspace(0, 5.2 * np.pi, 90); r = .012 + .095 * th / th[-1]
             path = np.c_[np.zeros_like(th) + c[0] + sx * .01 * np.sin(th * .5), c[1] + r * np.sin(th), c[2] + r * np.cos(th)]
             parts.append(tube(path, lambda u: .006 + .006 * u))
         col = '#a77cff'
@@ -286,7 +314,8 @@ def finish(V, Fa, path, eye):
     for k in range(len(pal)):
         V, Fa, lab, side = S.cut(V, Fa, lab, classes(V)[k]); lab = np.where(side, k, lab)
     ep = .0035
-    N = np.stack([field(V + np.eye(3)[i] * ep) - field(V - np.eye(3)[i] * ep) for i in range(3)], -1); N /= np.maximum(np.linalg.norm(N, axis=1, keepdims=True), 1e-9)
+    NF = (lambda Q: np.minimum(field(Q), tail(Q))) if FORM == 'myr' else field     # myr: each surface's own normal (hard join)
+    N = np.stack([NF(V + np.eye(3)[i] * ep) - NF(V - np.eye(3)[i] * ep) for i in range(3)], -1); N /= np.maximum(np.linalg.norm(N, axis=1, keepdims=True), 1e-9)
     base = np.array([1, 2, 3]); cols = np.array([pal[k] if k >= 0 else base for k in lab]); key, inv = np.unique(np.c_[Fa.ravel(), np.repeat(cols, 3, 0)], axis=0, return_inverse=True)
     VV, NN, CC = V[key[:, 0]], N[key[:, 0]], np.c_[key[:, 1:], np.full(len(key), 255)]; FF = inv.reshape(-1, 3)
     g = (key[:, 1:] == base).all(1); sh = np.clip(.5 + .5 * NN[:, 1], 0, 1)[:, None]; CC[g, :3] = C(PAL[0]) * (1 - sh[g]) + C(PAL[1]) * sh[g]
@@ -299,7 +328,7 @@ def finish(V, Fa, path, eye):
             t, u = np.pi * a / nr, 2 * np.pi * b / ns; nv.append((HO[0] + np.sin(t) * np.cos(u) * .0300 * (1 + .16 * np.sin(t) * np.sin(u)), HO[1] + .5335 + np.sin(t) * np.sin(u) * .0228, HO[2] + .503 + np.cos(t) * .0235))
     for a in range(nr):
         for b in range(ns): p, q = a * ns + b, a * ns + (b + 1) % ns; nf += ([] if a == 0 else [(p, p + ns, q)]) + ([] if a == nr - 1 else [(p + ns, q + ns, q)])
-    eF = np.vstack([eF, np.array(nf) + len(eV)]); eV = np.vstack([eV, nv]); eC = np.vstack([eC, np.tile((2, 1, 1, 255), (len(nv), 1))])
+    eF = np.vstack([eF, np.array(nf) + len(eV)]); eV = np.vstack([eV, fwd(np.array(nv))]); eC = np.vstack([eC, np.tile((2, 1, 1, 255), (len(nv), 1))])
     P = dict(body=(VV, FF, CC.astype(np.uint8), NN), eyes=(eV, eF, eC, S.normals(eV, eF)))
     if A:
         aV, aF, col = A; aC = np.tile((*np.round(255 * (C(col) / 255.) ** 1.0), 255), (len(aV), 1)).astype(np.uint8); P['aura'] = (aV, aF, aC, S.normals(aV, aF))
@@ -324,12 +353,21 @@ if __name__ == '__main__':
             v, f = fs.simplify(np.asarray(V, np.float32), np.asarray(F, np.int32), target_count=n); t = trimesh.Trimesh(v, f, process=False); t.merge_vertices()
             print('open edges', int((np.unique(t.edges_sorted, axis=0, return_counts=True)[1] % 2).sum())); return t
         print('pinched edges', best[0]); return best[1]
-    S.field = lambda P: field(P + HO)                   # SF.eyes lays the eyes on the face at Vulnara's place: shifted back by HO
+    S.field = lambda P: field(fwd(P + HO)) / HK         # SF.eyes lays the eyes on the face at Vulnara's place: shifted back by HO (+ the head's growth)
     SF.F = dict(SF.FORMS['mana'], form='mana', lo=PAL[0], hi=PAL[1])
-    xr = .95 if FORM == 'myr' else .52
-    lo = V3(-xr, -.033, min(-1.36, TC[:, 2].min() - .25)); hi = V3(xr, 1.80 if FORM == 'rok' else 1.30 if FORM in ('lys', 'myr') else 1.20, .66)
-    Vr, Fr = surface(field, lo, hi, float(os.environ.get('AW_H', .0070))); m = trimesh.Trimesh(Vr, Fr, process=False); print('raw', len(Fr), 'closed', m.is_watertight, 'parts', m.body_count)
-    k = max(m.split(only_watertight=False), key=lambda c: len(c.faces)); t = decimate(k.vertices, k.faces, TRIS)
-    print('dec', len(t.faces), 'closed', t.is_watertight, 'parts', t.body_count, t.bounds.round(3).tolist())
-    eV, eF, eC = SF.eyes(); eV = eV + HO
+    xr = .52
+    lo = V3(-xr, -.033, min(-1.36, TC[:, 2].min() - .25)); hi = V3(xr, 1.80 if FORM == 'rok' else 1.30 if FORM in ('lys', 'myr') else 1.20, .80 if FORM == 'lys' else .66)
+    def piece(fld, lo, hi, h, n):
+        Vr, Fr = surface(fld, lo, hi, h); m = trimesh.Trimesh(Vr, Fr, process=False); print('raw', len(Fr), 'closed', m.is_watertight, 'parts', m.body_count)
+        k = max(m.split(only_watertight=False), key=lambda c: len(c.faces)); t = decimate(k.vertices, k.faces, n)
+        print('dec', len(t.faces), 'closed', t.is_watertight, 'parts', t.body_count, t.bounds.round(3).tolist()); return t
+    if FORM == 'myr':   # M244 s1c: the body (no tails) + each of the eight tails as its own closed piece, then joined
+        lo[2] = -.62; t = piece(field, lo, hi, float(os.environ.get('AW_H', .0065)), TRIS); Vs, Fs, o = [np.array(t.vertices)], [np.array(t.faces)], len(t.vertices)
+        for k in range(len(TAILS)):
+            tl = trimesh.Trimesh(*tail_mesh(k), process=False); tl.fix_normals()
+            assert tl.is_watertight and tl.body_count == 1 and tl.volume > 0, 'tail %d not closed' % k
+            Vs.append(np.array(tl.vertices)); Fs.append(np.array(tl.faces) + o); o += len(tl.vertices)
+        t = trimesh.Trimesh(np.vstack(Vs), np.vstack(Fs), process=False)
+    else: t = piece(field, lo, hi, float(os.environ.get('AW_H', .0070)), TRIS)
+    eV, eF, eC = SF.eyes(); eV = fwd(eV + HO)
     finish(np.array(t.vertices), np.array(t.faces), OUT, (eV, eF, eC))

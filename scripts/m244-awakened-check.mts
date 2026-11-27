@@ -6,6 +6,7 @@
 import puppeteer, { type Page } from 'puppeteer-core'
 import { mkdirSync } from 'fs'
 import { GALLERY } from '../src/app/shimmer/dev/editors/spirit-gallery'
+import { AWAKEN_GROW, formGrow } from '../src/app/shimmer/open/ather/spirit-models'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), shots = flag('--shots', ''), KEY = process.env.OWNER_KEY
 const W = Number(flag('--w', '390')), H = Number(flag('--h', '844'))
@@ -61,6 +62,17 @@ try {
       }
       void T; return { names, out }
     }, n, gap))
+    // her body without her tail(s), at rest in the idle, in her own glb units (root space)
+    const measure = () => p.click('[data-gallery-clip="idle"]').catch(() => {}).then(() => sleep(800)).then(() => p.evaluate(() => {
+      const r = (window as any).__spiritModel?.rigs?.get('gallery')?.body; if (!r?.meshes?.body) return null
+      const m = r.meshes.body, si = m.geometry.getAttribute('skinIndex'), sw = m.geometry.getAttribute('skinWeight'), names: string[] = r.bones.map((b: any) => b.name)
+      r.root.updateMatrixWorld(true); const inv = r.root.matrixWorld.clone().invert(), v = new (r.root.position.constructor)(); let z0 = 9, z1 = -9, y1 = -9, n = 0
+      for (let i = 0; i < si.count; i++) {
+        let tw = 0; for (let c = 0; c < 4; c++) if (names[si.getComponent(i, c)]?.startsWith('b_tail')) tw += sw.getComponent(i, c)
+        if (tw >= 0.5) continue; r.at('body', i, v); v.applyMatrix4(inv); z0 = Math.min(z0, v.z); z1 = Math.max(z1, v.z); y1 = Math.max(y1, v.y); n++
+      }
+      return { len: z1 - z0, tall: y1, n }
+    }))
     if (look === 'vulnarok') {
       const s1 = await sample('walk', 14, 70)
       const legs = (s1?.names ?? []).filter(x => /^b_leg_[lr]_(up|lo|mt|paw)$/.test(x)), d = (s1?.out ?? []).map(o => (o.bones.b_leg_l_paw?.[2] ?? 0) - (o.bones.b_leg_r_paw?.[2] ?? 0))
@@ -73,9 +85,38 @@ try {
       const s1 = await sample('run', 12, 60), e = (s1?.out ?? []).map(o => o.bones.b_e0_head ?? [0, 0, 0]), ex = e.length ? Math.max(...e.map(q => Math.hypot(q[0] - e[0][0], q[1] - e[0][1], q[2] - e[0][2]))) : 0
       ok(ex > 0.2, `#${row.num} her copies move during the run (copy 0 head travels ${ex.toFixed(3)} glb)`)
     }
-    if (look === 'vulnamyr') {
-      const s1 = await sample('sit', 6, 300), lo = Math.min(...(s1?.out ?? [{ low: -9 }]).map(o => o.low))
-      ok(lo >= -0.001, `#${row.num} sit clearance >= 0 (lowest body / fan / halo vertex ${(lo * 1000).toFixed(1)} mm glb)`)
+    if (look === 'vulnamyr') {   // M244 s1c: EIGHT tails, each its own chain; every clip clears the ground; in the sit the tips stay below her head
+      for (const c of ['idle', 'walk', 'run', 'sit', 'lie']) {
+        const s1 = await sample(c, 6, 250), lo = Math.min(...(s1?.out ?? [{ low: -9 }]).map(o => o.low))
+        if (c === 'idle') { const ch = new Set((s1?.names ?? []).filter(x => /^b_tail_\d_[123]$/.test(x)).map(x => x.split('_')[2])); ok(ch.size === 8 && (s1?.names ?? []).filter(x => /^b_tail_\d_[123]$/.test(x)).length === 24, `#${row.num} EIGHT tail chains on the live rig (${ch.size} chains)`) }
+        ok(lo >= -0.0015, `#${row.num} ${c}: lowest body / tails / halo vertex ${(lo * 1000).toFixed(1)} mm glb (>= 0)`)
+      }
+      const tips = await p.click('[data-gallery-clip="sit"]').then(() => sleep(1500)).then(() => p.evaluate(async () => {
+        const r = (window as any).__spiritModel?.rigs?.get('gallery')?.body; if (!r) return null
+        const m = r.meshes.body, si = m.geometry.getAttribute('skinIndex'), sw = m.geometry.getAttribute('skinWeight'), names: string[] = r.bones.map((b: any) => b.name), out = []
+        for (let k = 0; k < 6; k++) {
+          await new Promise(res => setTimeout(res, 300)); r.root.updateMatrixWorld(true); const inv = r.root.matrixWorld.clone().invert(), v = new (r.root.position.constructor)()
+          let head = -9, tip = -9
+          for (let i = 0; i < si.count; i++) {
+            let best = 0, bw = 0; for (let c = 0; c < 4; c++) { const w = sw.getComponent(i, c); if (w > bw) { bw = w; best = si.getComponent(i, c) } }
+            const n = names[best]; if (n !== 'b_head' && !/^b_tail_\d_3$/.test(n)) continue
+            r.at('body', i, v); v.applyMatrix4(inv); if (n === 'b_head') head = Math.max(head, v.y); else tip = Math.max(tip, v.y)
+          }
+          out.push({ head, tip })
+        }
+        return out
+      }))
+      const worst = Math.max(...(tips ?? [{ head: 0, tip: 9 }]).map(t => t.tip - t.head))
+      ok(!!tips && worst < 0, `#${row.num} sit: the tails' tips stay below the top of her head (highest tip minus head top ${(worst * 1000).toFixed(0)} mm glb)`)
+    }
+    if (look === 'vulnalys') {   // M244 s1c: Vulnara's fox build, bigger like a dire wolf: four legs; body length + height vs Vulnara as drawn
+      const names = await p.evaluate(() => ((window as any).__spiritModel?.rigs?.get('gallery')?.body?.bones ?? []).map((b: any) => b.name) as string[])
+      ok(['fl', 'fr', 'hl', 'hr'].every(l => names.includes(`b_${l}_paw`)) && !names.some(x => /^b_leg_/.test(x)), `#${row.num} four-legged (fox rig: ${names.filter(x => /_paw$/.test(x)).join(' ')})`)
+      const L = await measure(), vr = GALLERY.find(r => r.name === 'Vulnara')
+      await p.goto(`${url}/shimmer/dev?mode=spirits&spirit=${vr!.num}`, { waitUntil: 'load', timeout: 240000 }); await p.waitForSelector('[data-spirit-gallery]', { timeout: 120000 })
+      let V = await measure(); const t1 = Date.now(); while (Date.now() - t1 < 60000 && !(V && V.n > 2000)) { await sleep(500); V = await measure() }
+      const k = AWAKEN_GROW.vulnalys / formGrow('vulnara'), rl = L && V ? L.len * k / V.len : 0, rh = L && V ? L.tall * k / V.tall : 0
+      ok(rl >= 1.25 && rh >= 1.25, `#${row.num} dire-wolf size vs Vulnara (#${vr!.num}) as drawn: body length x${rl.toFixed(2)}, height x${rh.toFixed(2)} (>= 1.25)`)
     }
   }
   ok(errs.length === 0, `owner errors: ${errs.length} ${errs.slice(0, 4).join(' | ')}`)

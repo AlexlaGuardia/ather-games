@@ -8,29 +8,38 @@ HERE = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, os.path.jo
 import numpy as np, rigcore as K
 sys.path.insert(0, HERE); import sculpt_awaken as SV
 FORM = SV.FORM; ARGS = sys.argv[2:]; IN, OUT, MET = [os.path.abspath(x) for x in ARGS[:3]]
-G = SV.G; HO = np.array(G['HO']); f_, h_ = G['f'], G['h']; T0 = np.array(SV.L['tail'][0]); v = lambda *a: tuple(float(x) for x in np.array(a[0]) + (np.array(a[1]) if len(a) > 1 else 0))
-FZ = .10 if FORM == 'rok' else .02; TZ = dict(rok=-.27, lys=-.245, vex=-.33, myr=-.25)[FORM]
+G = SV.G; HO = np.array(G['HO']); vh = lambda p: tuple(float(c) for c in SV.fwd(np.array(p) + HO))   # Vulnara's head space -> world (the grown head, M244 s1c)
+f_, h_ = G['f'], G['h']; T0 = np.array(SV.L['tail'][0]); v = lambda *a: tuple(float(x) for x in np.array(a[0]) + (np.array(a[1]) if len(a) > 1 else 0))
+FZ = .10 if FORM == 'rok' else .02; TZ = dict(rok=-.27, lys=-.31, vex=-.33, myr=-.25)[FORM]
 shellfree = lambda V, m=.012: np.ones(len(V), bool)        # no carapace: every vertex is free
 from plans import quadruped as Q
 from rigcore import Pose
 PV, CH = np.array(G['pelvis']) + (0, 0, .02), np.array(G['chest']) + (0, .01, -.04)
-H = .70; SK = {'root': (None, (0, 0, 0)), 'pelvis': ('root', v(PV)), 'spine': ('pelvis', v((PV + CH) / 2)), 'chest': ('spine', v(CH)), 'neck': ('chest', v(G['neck'][0], (0, .02, 0))), 'head': ('neck', v((0, .53, .22), HO))}
+H = .70; SK = {'root': (None, (0, 0, 0)), 'pelvis': ('root', v(PV)), 'spine': ('pelvis', v((PV + CH) / 2)), 'chest': ('spine', v(CH)), 'neck': ('chest', v(G['neck'][0], (0, .02, 0))), 'head': ('neck', vh((0, .53, .22)))}
 for s, x in (('l', 1), ('r', -1)):
     X = lambda p, y=None: (x * p[0], p[1] if y is None else y, p[2])
-    SK |= {'ear_' + s: ('head', v((x * .135, .68, .22), HO)), 'f%s_up' % s: ('chest', X(f_[0])), 'f%s_lo' % s: ('f%s_up' % s, X(f_[1])), 'f%s_paw' % s: ('f%s_lo' % s, X(f_[2], .050)),
+    SK |= {'ear_' + s: ('head', vh((x * .135, .68, .22))), 'f%s_up' % s: ('chest', X(f_[0])), 'f%s_lo' % s: ('f%s_up' % s, X(f_[1])), 'f%s_paw' % s: ('f%s_lo' % s, X(f_[2], .050)),
            'h%s_up' % s: ('pelvis', X(h_[0])), 'h%s_lo' % s: ('h%s_up' % s, X(h_[1])), 'h%s_paw' % s: ('h%s_lo' % s, X(h_[3], .050))}
-TP = [tuple(float(c) for c in SV.FAN[4][i]) for i in (0, 2, 3, 5, 6)] if FORM == 'myr' else [tuple(SV.L['tail'][i]) for i in (0, 2, 4, 6, 8)]
+TP = [tuple(SV.L['tail'][i]) for i in (0, 2, 4, 6, 8)]
 for i in range(4): SK['tail%d' % (i + 1)] = ('tail%d' % i if i else 'pelvis', TP[i])
-J = lambda b: SK[b][1]; tail = lambda V: (V[:, 2] < TZ - .6 * np.clip(T0[1] - .15 - V[:, 1], 0, .5)) & shellfree(V) & ((np.abs(V[:, 0]) < .075) | (V[:, 1] > T0[1] - .09) | (V[:, 2] < TZ - .085)); body = lambda V: ~tail(V) & ((V[:, 1] < CH[1] + .14) | ~shellfree(V)); hd = lambda V: (V[:, 1] > G['neck'][0][1] - .03) & (V[:, 2] > .10 + HO[2] * .5) & shellfree(V)
+# M244 s1c (Alex 11-27): Vulnamyr's EIGHT tails, each its own chain of three bones (tail_<k>_1..3, off the pelvis) on its own lofted
+# piece; tail1-4 stay as an unweighted centre line (spirit-fx reads b_tail2 / b_tail4). Each tail sways on its own beat.
+TJ = (0, 8, 16)                                                    # joints at these points of the tail's dense centre line (25 points)
+if FORM == 'myr':
+    for k, c in enumerate(SV.TCK):
+        for i, j in enumerate(TJ): SK['tail_%d_%d' % (k, i + 1)] = ('tail_%d_%d' % (k, i) if i else 'pelvis', tuple(float(x) for x in c[j, :3]))
+def TAILV(V): return (SV.tail(V) < .010) & (np.abs(SV.field(V)) > .002)   # myr: a vertex of one of the lofted tail pieces (not the body's)
+J = lambda b: SK[b][1]; tailgeo = lambda V: (V[:, 2] < TZ - .6 * np.clip(T0[1] - .15 - V[:, 1], 0, .5)) & shellfree(V) & ((np.abs(V[:, 0]) < .075) | (V[:, 1] > T0[1] - .09) | (V[:, 2] < TZ - .085)); body = lambda V: ~tail(V) & ((V[:, 1] < CH[1] + .14) | ~shellfree(V)); hd = lambda V: (V[:, 1] > G['neck'][0][1] - .03) & (V[:, 2] > .10 + HO[2] * .5) & shellfree(V)
 jp = lambda b: np.array(J(b))
-B = [('pelvis', v(jp('pelvis'), (0, 0, -.05)), v(jp('pelvis') + (jp('spine') - jp('pelvis')) * .5), .12, body), ('spine', J('spine'), v(jp('spine') + (jp('chest') - jp('spine')) * .5), .11, body), ('chest', v(jp('chest'), (0, -.01, .01)), v(jp('chest') + (jp('neck') - jp('chest')) * .8), .12, body), ('neck', v(jp('neck'), (0, -.01, .01)), v(jp('neck') + (jp('head') - jp('neck')) * .7), .11, lambda V: (V[:, 2] > 0) & shellfree(V)), ('head', v((0, .57, .2), HO), v((0, .6, .3), HO), .2, hd)]
+B = [('pelvis', v(jp('pelvis'), (0, 0, -.05)), v(jp('pelvis') + (jp('spine') - jp('pelvis')) * .5), .12, body), ('spine', J('spine'), v(jp('spine') + (jp('chest') - jp('spine')) * .5), .11, body), ('chest', v(jp('chest'), (0, -.01, .01)), v(jp('chest') + (jp('neck') - jp('chest')) * .8), .12, body), ('neck', v(jp('neck'), (0, -.01, .01)), v(jp('neck') + (jp('head') - jp('neck')) * .7), .11, lambda V: (V[:, 2] > 0) & shellfree(V)), ('head', vh((0, .57, .2)), vh((0, .6, .3)), .2 * SV.HK, hd)]
 for s, x in (('l', 1), ('r', -1)):
     side = lambda V, x=x: V[:, 0] * x > .006; fore = lambda V, x=x: (V[:, 0] * x > .006) & (V[:, 2] > FZ) & (V[:, 1] < f_[0][1] + .02) & shellfree(V); hind = lambda V, x=x: (V[:, 0] * x > .006) & (V[:, 2] < FZ - .02) & ~tail(V) & (V[:, 1] < h_[0][1] + .055) & shellfree(V)
     Xs = lambda p, d=(0, 0, 0), x=x: (x * (p[0] + d[0]), p[1] + d[1], p[2] + d[2]); fu = np.array(f_[0]) + (np.array(f_[1]) - np.array(f_[0])) * .4; hu = np.array(h_[0]) + (np.array(h_[1]) - np.array(h_[0])) * .2
-    B += [('ear_' + s, v((x * .142, .72, .212), HO), v((x * SV.S.EAR_T[0], SV.S.EAR_T[1], SV.S.EAR_T[2]), HO), .11, lambda V, x=x: (V[:, 1] > .66 + HO[1]) & (V[:, 0] * x > .03) & (V[:, 2] > .10 + HO[2]) & shellfree(V)),
+    B += [('ear_' + s, vh((x * .142, .72, .212)), vh((x * SV.S.EAR_T[0], SV.S.EAR_T[1], SV.S.EAR_T[2])), .11 * SV.HK, lambda V, x=x: (V[:, 1] > vh((0, .66, 0))[1]) & (V[:, 0] * x > .03) & (V[:, 2] > .10 + HO[2]) & shellfree(V)),
           ('f%s_up' % s, Xs(fu), J('f%s_lo' % s), .070 * G['fr'][0] / .066, fore), ('f%s_lo' % s, J('f%s_lo' % s), J('f%s_paw' % s), .056 * G['fr'][1] / .040, fore), ('f%s_paw' % s, Xs(f_[2], (0, -.018, 0)), Xs(f_[2], (0, -.028, .07)), .058 * G['paw'], fore),
           ('h%s_up' % s, Xs(hu), J('h%s_lo' % s), .085 * G['hr'][0] / .080, hind), ('h%s_lo' % s, J('h%s_lo' % s), Xs(h_[2], (0, -.015, .01)), .058, hind), ('h%s_paw' % s, Xs(h_[3], (0, -.012, 0)), Xs(h_[3], (0, -.022, .08)), .058, hind)]
-B += [('tail%d' % (i + 1), TP[i], TP[i + 1], .13, tail) for i in range(4)]
+tail = TAILV if FORM == 'myr' else tailgeo
+B += [('tail%d' % (i + 1), TP[i], TP[i + 1], .13, tail) for i in range(4)] if FORM != 'myr' else []
 nb = list(SK); nm = [b[0] for b in B]
 RIG = [(nm.index(a + s + '_paw'), (lambda V, x=x, a=a: (V[:, 1] < .06) & (V[:, 0] * x > 0) & ((V[:, 2] > FZ) == (a == 'f')))) for a in 'fh' for s, x in (('l', 1), ('r', -1))]
 TAU = 2 * np.pi; sm = K.smooth
@@ -41,6 +50,21 @@ RUN = dict(plant=.002, v=2.8, duty=.2, reach=.173, lift=.085, toe=.8, phase=dict
 live = K.Glb(IN).meshes(); parts = {}; m = live['body']; V0 = m['POSITION'].astype(float)
 w = K.skin_weights(V0, m['F'], B, 7, RIG); W = np.zeros((len(V0), len(nb)))
 for i, n in enumerate(nm): W[:, nb.index(n)] += w[:, i]
+if FORM == 'myr':   # each tail vertex rides its own tail's chain by how far along it lies (blend at the joints, the root into the pelvis)
+    from scipy.sparse import coo_matrix; from scipy.sparse.csgraph import connected_components   # a tail = one lofted PIECE (its mesh component)
+    _, wv = np.unique(np.round(V0, 5), axis=0, return_inverse=True); wv = wv.ravel(); Ew = K.edges(wv[m['F']])
+    _, comp = connected_components(coo_matrix((np.ones(len(Ew)), (Ew[:, 0], Ew[:, 1])), shape=(wv.max() + 1,) * 2)); comp = comp[wv]
+    TV = TAILV(V0); near = np.argmin(np.stack([SV.tail_k(V0, k) for k in range(8)], 1), 1); big = np.bincount(comp).argmax()
+    CK = {c: int(np.bincount(near[(comp == c) & TV], minlength=8).argmax()) for c in np.unique(comp[TV]) if c != big}
+    TV = np.isin(comp, list(CK)); X = V0[TV]; kk = np.array([CK[c] for c in comp[TV]]); assert sorted(set(CK.values())) == list(range(8)), CK; TIDX = np.zeros(len(V0)); TK = np.full(len(V0), -1)
+    W[TV] = 0
+    for r, (x, k) in zip(np.flatnonzero(TV), zip(X, kk)):
+        c = SV.TCK[k]; j = float(np.argmin(np.linalg.norm(c[:, :3] - x, axis=1))); TIDX[r], TK[r] = j, k
+        b = ['pelvis'] + ['tail_%d_%d' % (k, i) for i in (1, 2, 3)]; at = [-2, 1.5, 8, 16]   # each bone's weight peaks past its joint
+        for i in range(4):
+            lo_, hi_ = (at[i - 1] if i else -9), (at[i + 1] if i < 3 else 99); wv = np.interp(j, [lo_, at[i], hi_], [0, 1, 1 if i == 3 else 0])
+            W[r, nb.index(b[i])] += max(wv, 0)
+        W[r] /= W[r].sum()
 W = K.four(W); parts['body'] = dict(m, W=W); e = np.zeros((len(live['eyes']['POSITION']), len(nb))); e[:, nb.index('head')] = 1; parts['eyes'] = dict(live['eyes'], W=e)
 if 'aura' in live and FORM != 'vex': a = np.zeros((len(live['aura']['POSITION']), len(nb))); a[:, nb.index('head' if FORM in ('lys', 'myr') else 'root')] = 1; parts['aura'] = dict(live['aura'], W=a)
 LEGS = ('fl', 'fr', 'hl', 'hr'); SOLE = {f: V0[(W[:, nb.index(f + '_paw')] > .5) & (V0[:, 1] < .10)] - np.array(SK[f + '_paw'][1]) for f in LEGS}
@@ -99,7 +123,7 @@ def sitpose(br):
     p = Pose(SK); a = SITA; ch, pv = np.array(SK['chest'][1]), np.array(SK['pelvis'][1]); R = rx(-a); d = ch + np.array([0, SITY, -.035]) - R @ (ch - pv)
     p.R['pelvis'] = R; p.T['pelvis'] = d - pv; p.rot('spine', rx(.16)); p.rot('chest', rx(.16)); p.rot('neck', rx(.30)); p.rot('head', rx(.24)); return p
 def sitpost(p, u):
-    st = [setleg(p, f, -.035, 0) for f in ('fl', 'fr')] + [setleg(p, f, .165, 0, x=.150 * (1 if f == 'hl' else -1), bend=(.35 if f == 'hl' else -.35, .9, .7)) for f in ('hl', 'hr')]
+    st = [setleg(p, f, -.035, 0) for f in ('fl', 'fr')] + [setleg(p, f, .165, 0, x=SITX * (1 if f == 'hl' else -1), bend=(.35 if f == 'hl' else -.35, .9, .7)) for f in ('hl', 'hr')]
     sw = .05 * np.sin(TAU * u); side = (.30 + sw * .2, .26 + sw * .6, .22 + sw, .10 + sw) if FORM != 'myr' else (sw * .2, sw * .3, sw * .3, sw * .3)   # M244 s1b: Myr's fan stays behind her, not swung round
     tail(p, [SITT[0], SITT[1], SITT[2], SITT[3] + .04 * np.sin(TAU * u * 2)], 0, 0, side); return max(st)
 def liepose(br):
@@ -113,26 +137,50 @@ def solve(f, a, b):
     for _ in range(22):
         c = (a + b) / 2; a, b = (a, c) if f(c) > 0 else (c, b)
     return b
-SITA = .88; SITY = -.03; SITT = [0, -.12, -.05, 0]; LIEY = -.2; LIET = 0
+SITX = .185 if FORM == 'lys' else .150; SITA = .88; SITY = -.03; SITT = [0, -.12, -.05, 0]; LIEY = -.2; LIET = 0
 RUMP = W[:, [nb.index('pelvis'), nb.index('spine')]].sum(1) > .5
 def _sy(v): global SITY; SITY = v; p = sitpose(0); sitpost(p, 0); return low(p, RUMP) - .006
 SITY = solve(_sy, -.45, .25)
-if FORM == 'myr':   # M244 s1b: her haunch (hr_up) sat 28 mm under the ground once the fan cleared: nothing but the paws may be lower
-    NOPAW = W[:, [nb.index(b) for b in nb if b.endswith('_paw')]].sum(1) < .3
+if FORM in ('myr', 'lys'):   # M244 s1b (+ s1c the dire-wolf Lys): her haunch (hr_up) sat 28 mm under the ground once the fan cleared: nothing but the paws may be lower
+    NOPAW = (W[:, [nb.index(b) for b in nb if b.endswith('_paw')]].sum(1) < .3) & (W[:, [nb.index(b) for b in nb if b.startswith('tail')]].sum(1) < .5)   # s1c: tails clear on their own
     def _sy2(v): global SITY; SITY = v; p = sitpose(0); sitpost(p, 0); return low(p, NOPAW) - .002
     s0 = SITY; SITY = max(s0, solve(_sy2, -.45, .25))
 FANM = W[:, [nb.index(b) for b in D['tail']]].sum(1) > (.02 if FORM == 'myr' else .5)   # M244 s1b: every vertex the fan moves, not only the tail-heavy ones (Myr sat 317 mm into the ground)
 def _st(v): global SITT; SITT = [v, -.12, -.05, 0]; return min(low((lambda p: (sitpost(p, u), p)[1])(sitpose(0)), FANM) for u in (0, .25, .5, .75)) - .010
-_st(solve(_st, -.3, 2.6) if FORM != 'myr' else max(np.linspace(-1.6, 2.6, 43), key=_st))   # myr: the fan's clearance is not monotone in the lift: take the best
+if FORM != 'myr': _st(solve(_st, -.3, 2.6))   # myr: the fan's clearance is not monotone in the lift: take the best
 BODY = W[:, [nb.index(b) for b in ('pelvis', 'spine', 'chest')]].sum(1) > .6
 def _ly(v): global LIEY; LIEY = v; p = liepose(-1); liepost(p, 0); return low(p, BODY) - .008
-LIEY = solve(_ly, -.36, 0)
+LIEY = solve(_ly, -.50, 0)
 def _lt(v): global LIET; LIET = v; return min(low((lambda p: (liepost(p, u), p)[1])(liepose(-1)), TB) for u in (.25, .75)) - .010
-_lt(solve(_lt, -.6, 1.6)); p = sitpose(0); sitpost(p, 0); print('rump', low(p, W[:, [nb.index('pelvis'), nb.index('spine')]].sum(1) > .5)); print('solved', SITY, SITT, LIEY, LIET)
+_lt(solve(_lt, -.6, 1.6)) if FORM != 'myr' else None; p = sitpose(0); sitpost(p, 0); print('rump', low(p, W[:, [nb.index('pelvis'), nb.index('spine')]].sum(1) > .5)); print('solved', SITY, SITT, LIEY, LIET)
 clips, T, st = {}, {}, {}
 for n, g, fn in (('walk', WALK, walk), ('run', RUN, run)): T[n] = 2 * g['reach'] * H / g['duty'] / g['v']; clips[n], st[n] = fn(g)
 clips['idle'] = Q.idle(SK, D, 48); T['idle'] = 4.8; clips['sit'], st['sit'] = rest('sit', 48, sitpose); T['sit'] = 5.; clips['lie'], st['lie'] = rest('lie', 48, liepose); T['lie'] = 5.6
 SK0 = SK
+if FORM == 'myr':   # M244 s1c: the eight tails' own motion over every clip, then each clip's lift SOLVED off the mesh
+    TVM = TK >= 0; HEADV = W[:, nb.index('head')] > .5; TIPV = TVM & (TIDX >= 23)
+    CYC = dict(idle=(2, 3, 4), walk=(1, 1, 1), run=(1, 1, 1), sit=(2, 3, 4), lie=(2, 3, 2))
+    TARGET = dict(idle=0., walk=0., run=-.15, sit=None, lie=None)   # None: the lowest lift that clears (tails laid low behind her)
+    def tails(p, c, f, lift):
+        for k in range(8):
+            cy = CYC[c][k % 3]; ph = k * 2.39; amp = .10 + .035 * (k % 3); sway = lambda i: amp * (.5 + .35 * i) * np.sin(TAU * (cy * f) + ph - i * .8)
+            for i in range(3): p.rot('tail_%d_%d' % (k, i + 1), rx((lift if i == 0 else 0) + .035 * np.sin(TAU * (cy * f) + ph * 1.7 - i * .6)), K.ry(sway(i)))
+    def fits(c, lift, frames):
+        n = len(frames) - 1; lows, ok = [], True
+        for i in range(0, n, max(1, n // 12)):
+            p = Pose(SK); p.R = {b: frames[i].R[b].copy() for b in SK}; p.T = {b: frames[i].T[b].copy() for b in SK}; tails(p, c, i / n, lift)
+            X = K.skin(V0[TVM], W[TVM], SK, p); lows.append(X[:, 1].min())
+            if c == 'sit':
+                tip = K.skin(V0[TIPV], W[TIPV], SK, p); top = K.skin(V0[HEADV], W[HEADV], SK, p)[:, 1].max()
+                ok &= bool(tip[:, 1].max() <= top - .02) and bool(tip[:, 2].max() <= p.glob('pelvis')[1][2])   # below her head, behind her rump
+        return min(lows), ok
+    LIFT = {}
+    for c in clips:
+        grid = np.linspace(-.8, 1.8, 53); res = [(g, *fits(c, g, clips[c])) for g in grid]; good = [g for g, lo_, ok in res if lo_ >= .012 and ok]
+        LIFT[c] = (min(good, key=lambda g: abs(g - TARGET[c])) if TARGET[c] is not None else min(good)) if good else max(res, key=lambda r: r[1])[0]
+        n = len(clips[c]) - 1
+        for i, p in enumerate(clips[c]): tails(p, c, (i % n) / n, LIFT[c])
+    print('tail lifts', {c: round(float(v), 3) for c, v in LIFT.items()})
 if FORM == 'vex':   # M244 s1b (Alex 11-27): her two gold copies RUN: each plays her run a beat behind, left where she just ran (drifting back
     import echoes as E   # at her own run speed, 4 glb/s), and shrinks away (the fade; the glow material is opaque); hidden when she is not running
     def trail(k):

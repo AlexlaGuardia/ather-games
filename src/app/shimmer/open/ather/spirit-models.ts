@@ -475,7 +475,10 @@ export const SECOND_FORMS: Partial<Record<Species, Partial<Record<SpiritElement,
 /** each one's nose to tail standing (rig metrics idle length_m / 0.70), glb units: the rig's glbLen */
 // M244 s1b: Vulnarok stands on the FIRST BIPED RIG (rig-2026-11-24/tools/plans/biped.py; same clip names), her four echoes and
 // Vulnavex's two copies are rigged copies that play her clip a beat behind (echoes.py; Vex's run only, drifting back + shrinking away).
-export const AWAKEN_LEN: Readonly<Record<string, number>> = { vulnarok: 1.463, vulnalys: 1.32, vulnavex: 1.87, vulnamyr: 1.284 }
+// M244 s1c (Alex 11-27): Vulnamyr's EIGHT crystal tails, each its own lofted piece on its own three-bone chain (b_tail_<k>_1..3), swaying
+// on its own beat, every clip's lift solved off the mesh (clear of the ground; in the sit below her head, behind her rump). Vulnalys keeps
+// Vulnara's fox build, heavier like a dire wolf (deeper chest, thick legs, big paws, a broader head): 1.5x her body length, 1.4x her height.
+export const AWAKEN_LEN: Readonly<Record<string, number>> = { vulnarok: 1.463, vulnalys: 1.487, vulnavex: 1.87, vulnamyr: 1.283 }
 export const AWAKEN_GROW: Readonly<Record<string, number>> = { vulnarok: 1.8, vulnalys: 1.7, vulnavex: 1.65, vulnamyr: 1.75 }
 const awakened = (name: string, glbLen: number, aura: string, far: number): SpiritLook => {
   const b = SECOND_FORMS.fox!.mana!, h = VRIG_H * AWAKEN_GROW[name]

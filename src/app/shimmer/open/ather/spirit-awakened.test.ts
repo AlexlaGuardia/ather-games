@@ -40,5 +40,36 @@ const glbJson = (n: string) => { const b = readFileSync(`public/open/spirits/${n
   ok(!!sc && run.channels.some((c: { target: { node: number; path: string } }) => c.target.node === nodes.indexOf('b_e0_root') && c.target.path === 'translation'), 'vulnavex: copy 0 drifts + fades in the run (translation + scale tracks)')
   ok(run.channels.some((c: { target: { node: number } }) => c.target.node === nodes.indexOf('b_e1_fl_up')), 'vulnavex: copy 1 runs (its foreleg has a track)')
 }
+// M244 s1c: Vulnamyr's eight tails (each its own chain, each moving), Vulnalys the dire-wolf build (still four-legged, bigger than Vulnara)
+const body = (n: string) => {   // the 'body' mesh's rest positions + skin, read off the glb (accessor min/max are not enough: the brush counts)
+  const b = readFileSync(`public/open/spirits/${n}-rigged.glb`), jl = b.readUInt32LE(12), j = JSON.parse(b.subarray(20, 20 + jl).toString('utf8')), bin = 20 + jl + 8
+  const acc = (i: number) => {
+    const a = j.accessors[i], v = j.bufferViews[a.bufferView], k = ({ SCALAR: 1, VEC3: 3, VEC4: 4 } as Record<string, number>)[a.type], sz = ({ 5121: 1, 5123: 2, 5126: 4 } as Record<number, number>)[a.componentType]
+    const st = v.byteStride ?? k * sz, o = bin + (v.byteOffset ?? 0) + (a.byteOffset ?? 0), out: number[][] = []
+    for (let e = 0; e < a.count; e++) { const r: number[] = []; for (let c = 0; c < k; c++) { const p = o + e * st + c * sz; r.push(sz === 4 ? b.readFloatLE(p) : sz === 2 ? b.readUInt16LE(p) / (a.normalized ? 65535 : 1) : b.readUInt8(p) / (a.normalized ? 255 : 1)) } out.push(r) }
+    return out
+  }
+  const mesh = j.meshes[j.nodes.find((x: { name?: string; mesh?: number }) => x.name === 'body').mesh].primitives[0].attributes, skin = j.skins[0]
+  const bone = (ji: number) => j.nodes[skin.joints[ji]].name as string, P = acc(mesh.POSITION), J = acc(mesh.JOINTS_0), Wt = acc(mesh.WEIGHTS_0)
+  const keep = P.filter((_, i) => J[i].reduce((s, ji, c) => s + (bone(ji).startsWith('b_tail') ? Wt[i][c] : 0), 0) < 0.5)   // her body without the tail(s)
+  return { len: Math.max(...keep.map(p => p[2])) - Math.min(...keep.map(p => p[2])), tall: Math.max(...keep.map(p => p[1])) }
+}
+{
+  const j = glbJson('vulnamyr'), nodes: string[] = j.nodes.map((x: { name?: string }) => x.name)
+  const chains = [0, 1, 2, 3, 4, 5, 6, 7, 8].filter(k => [1, 2, 3].every(i => nodes.includes(`b_tail_${k}_${i}`)))
+  ok(chains.length === 8, `vulnamyr: EIGHT tail chains of three bones (${chains.length})`)
+  for (const c of ['idle', 'walk', 'sit']) {
+    const a = j.animations.find((x: { name: string }) => x.name === c)
+    ok(chains.every(k => a.channels.some((ch: { target: { node: number } }) => ch.target.node === nodes.indexOf(`b_tail_${k}_3`))), `vulnamyr: every tail moves on its own in ${c} (each tip bone has a track)`)
+  }
+  const m = JSON.parse(readFileSync('docs/looks/m244-vulnara-2026-11-27/vulnamyr-metrics.json', 'utf8'))
+  for (const c of ['idle', 'walk', 'run', 'sit', 'lie']) ok(m[c].lowest_m >= -0.0015, `vulnamyr: ${c} lowest point ${m[c].lowest_m} m (tails clear the ground)`)
+}
+{
+  const j = glbJson('vulnalys'), nodes: string[] = j.nodes.map((x: { name?: string }) => x.name)
+  ok(['fl', 'fr', 'hl', 'hr'].every(l => ['up', 'lo', 'paw'].every(b => nodes.includes(`b_${l}_${b}`))) && !nodes.some(x => /^b_leg_/.test(x)), 'vulnalys: four-legged (fox rig, four leg chains)')
+  const L = body('vulnalys'), V = body('vulnara'), k = AWAKEN_GROW.vulnalys / formGrow('vulnara')
+  ok(L.len * k >= 1.25 * V.len && L.tall * k >= 1.25 * V.tall, `vulnalys: dire-wolf size vs Vulnara as drawn: body length x${(L.len * k / V.len).toFixed(2)}, height x${(L.tall * k / V.tall).toFixed(2)} (>= 1.25)`)
+}
 console.log(`spirit-awakened: ${pass} pass, ${fails.length} fail`)
 if (fails.length) { for (const f of fails) console.log('  FAIL', f); process.exit(1) }

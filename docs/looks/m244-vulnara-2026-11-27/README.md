@@ -44,3 +44,15 @@ npx tsx docs/looks/m202-vulnara-v2-2026-11-26/tools/three-check.mts <rigged glb>
 - **Vulnamyr sit**: the fan stays behind her (no side swing), lift chosen by clearance (it is not monotone), haunch kept above ground:
   sit lowest 0.0 mm (was -317). Finer mesh NOT done (still 0.012).
 - three-check (game makeRigBody): rok 11/11, myr 11/11, vex sit -3.0 mm (as before). Quick renders: `tools/render_awake.py` (Blender importer).
+
+## s1c (2026-11-27, Alex on v2: "we are getting close") — `line-sheet-v3.jpg`
+- **Vulnamyr: EIGHT tails** (was nine), each a SEPARATE crystal tail: its own root on the rump, its own lofted closed piece
+  (`sculpt_awaken.py tail_mesh`: a four-sided diamond per ring along a dense centre line, closed by construction, so the fine mesh
+  no longer depends on decimating a merged fan), its own chain of three bones (`b_tail_<k>_1..3`), its own sway beat. Two tiers
+  (alternate tails higher + further back), spread in depth and side to side, not a sheet. Each clip's tail lift is SOLVED off the
+  mesh (`rig_awaken.py`): clear of the ground in every clip, and in the sit the tips stay below her head and behind her rump.
+  tail1-4 remain as an unweighted centre line (spirit-fx reads b_tail2 / b_tail4). Body marched at 0.0065 (was 0.012).
+- **Vulnalys: the dire-wolf build of Vulnara's fox**: longer + deeper-chested trunk, thick legs, big paws, a broader head (`hk` 1.14:
+  the head grows about its centre; eyes, nose, brow gem and face colours follow it), same fox head / brush / gold ruff / spirals.
+  As drawn vs Vulnara: body (no brush) length x1.52, height x1.42 (was x1.24 / x1.34).
+- Rebuild: as above; myr no longer needs AW_H. Tests: spirit-awakened (8 chains each moving, every clip clear, Lys 4 legs + x1.25).
