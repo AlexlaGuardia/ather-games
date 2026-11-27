@@ -2,8 +2,9 @@
 // GAMEPLAY dials (damage, head damage, round speed, clip, reload; pellets / burst / charge where the gun has them; its fire-rate dial)
 // and DIMENSION dials (overall length, barrel, stock where it has one, body height, width + the s4 build dials); each moves the gun
 // or its numbers (window.__gunBench, the gun in hand) and saves (open:gun-stats.v1 / open:gun-build.v1); a reload keeps them.
-// B) LIVE (fresh non-owner profile, phone 390x844, every POST stubbed): the Lance's HEADSHOT kills a full Shambler in one, its body
-// shot does not (22); the Charred Rifle hits for the Lance's 22. 0 page errors. Shots of OUR renders to --out.
+// B) LIVE (fresh non-owner profile, phone 390x844, every POST stubbed), M245's numbers: a Shambler spawns at 150 hp; the Lance hits
+// 108 body / 216 head (head = body x 2.0, NO headKill rule): its HEADSHOT drops the full 150 Shambler in one only because 216 > 150,
+// its body shot does not (150 -> 42); the Charred Rifle hits 77 body / 154 head (150 -> 73). 0 page errors. Shots to --out.
 //   OWNER_KEY=... npx tsx scripts/m150-bench-sliders-check.mts [--url https://ather.games] [--out docs/looks/guns-2026-11-27b] [--only bench|live]
 import puppeteer, { type Page } from 'puppeteer-core'
 import { mkdirSync } from 'node:fs'
@@ -55,7 +56,7 @@ async function bench() {
     // gameplay: damage, round speed, the fire rate
     const b0 = r.b
     await set('data-stat-knob', 'damage', 30); await sleep(300); r = await read()
-    say(r.b.damage === 30 && r.b.dps > b0.dps && JSON.parse(r.savedS ?? '{}')[g]?.damage === 30 && r.values.includes('"STATS"'), `${g}: damage 30 moves the numbers (dps ${b0.dps.toFixed(1)} -> ${r.b.dps.toFixed(1)}), saved, in Copy values`)
+    say(r.b.damage === 30 && b0.damage !== 30 && Math.abs(r.b.dps - b0.dps * 30 / b0.damage) < 1e-6 && JSON.parse(r.savedS ?? '{}')[g]?.damage === 30 && r.values.includes('"STATS"'), `${g}: damage ${b0.damage} -> 30 moves the numbers with it (dps ${b0.dps.toFixed(1)} -> ${r.b.dps.toFixed(1)} = x${(30 / b0.damage).toFixed(3)}), saved, in Copy values`)   // M245: Lance 108 / Charred 77 sit above 30, so dps falls for them
     await set('data-stat-knob', 'projSpeed', 150); await sleep(300); r = await read(); say(r.b.projSpeed === 150, `${g}: round speed 150`)
     const rk = r.rate[r.rate.length - 1]; const cd0 = r.b.fireCd
     await set('data-knob', rk, rk === 'BURST_GAP' ? 0.12 : rk === 'BURST_DELAY' ? 0.75 : 0.4); await sleep(400); r = await read()
@@ -77,7 +78,7 @@ async function bench() {
   await load('gun=grinder&set=new&preview=hip'); let r = await read()
   say(r.b.damage === 30 && r.b.projSpeed === 150 && Math.abs(r.b.front) > 0 && JSON.parse(r.savedB ?? '{}').grinder?.barrel === 1.5, 'reload: the Grinder comes back with its stats and dimensions')
   await p.click('[data-stats-reset]'); await sleep(400); await p.click('[data-build-reset]'); await sleep(600); r = await read()
-  say(Math.abs(r.b.damage - 13.5 * r.b.fireCd / 0.22) < 1e-9 && !JSON.parse(r.savedS ?? '{}').grinder && !JSON.parse(r.savedB ?? '{}').grinder, `reset: the Grinder's stats + build back to its row (damage ${r.b.damage.toFixed(2)} = 13.5 on its still-dialled ${r.b.fireCd} s rhythm, which keeps DPS)`)
+  say(Math.abs(r.b.damage - 29 * r.b.fireCd / 0.22) < 1e-9 && !JSON.parse(r.savedS ?? '{}').grinder && !JSON.parse(r.savedB ?? '{}').grinder, `reset: the Grinder's stats + build back to its row (damage ${r.b.damage.toFixed(2)} = M245's 29 on its still-dialled ${r.b.fireCd} s rhythm, which keeps DPS)`)
   await load('gun=twins&set=new&preview=hip'); r = await read()
   say(r.b.damage === 30 && JSON.parse(r.savedB ?? '{}').twins?.width === 0.8, 'reload: the Twins keep theirs too')
   await p.evaluate(() => { localStorage.removeItem('open:gun-stats.v1'); localStorage.removeItem('open:gun-build.v1'); localStorage.removeItem('open:gun-tune.v2') })
@@ -126,15 +127,16 @@ async function live(gunId: string) {
   }
   const tries = async (zone: 'head' | 'body') => { for (let i = 0; i < 4; i++) { const r = await shoot(zone); if (r && (zone === 'head' ? r.head : r.body)) return r } return null }
   if (gunId === 'lance') {
+    say(held.dmg === 108 && held.crit === 216 && !held.headKill, `live lance: M245 numbers in hand (body ${held.dmg} == 108, head ${held.crit} == 216 = 2.0x, headKill ${held.headKill} == false)`)
     const h = await tries('head')
-    say(!!h && h.head && h.killed && h.hp0 === 45, `live lance: HEADSHOT kills a full shambler in one (${JSON.stringify(h)})`)
+    say(!!h && h.head && h.killed && h.hp0 === 150, `live lance: a HEADSHOT (216) drops a full 150 hp shambler in one (${JSON.stringify(h)})`)
     await p.screenshot({ path: `${out}/live-lance-390.png` })
     const b = await tries('body')
-    say(!!b && b.body && !b.killed && Math.abs(b.hp0 - b.hp - 22) < 0.01, `live lance: BODY shot does not (45 -> ${b?.hp})`)
+    say(!!b && b.body && !b.killed && b.hp0 === 150 && Math.abs(b.hp0 - b.hp - 108) < 0.01, `live lance: a BODY shot (108) does not (${b?.hp0} -> ${b?.hp}, want 150 -> 42)`)
   } else {
-    say(held.dmg === 22, `live charred-rifle: damage ${held.dmg} == the Lance's 22`)
+    say(held.dmg === 77 && held.crit === 154 && !held.headKill, `live charred-rifle: M245 numbers in hand (body ${held.dmg} == 77, head ${held.crit} == 154 = 2.0x)`)
     const b = await tries('body')
-    say(!!b && b.body && Math.abs(b.hp0 - b.hp - 22) < 0.01, `live charred-rifle: a body shot takes 22 (45 -> ${b?.hp})`)
+    say(!!b && b.body && !b.killed && b.hp0 === 150 && Math.abs(b.hp0 - b.hp - 77) < 0.01, `live charred-rifle: a body shot takes 77 (${b?.hp0} -> ${b?.hp}, want 150 -> 73)`)
   }
   await p.close()
 }
