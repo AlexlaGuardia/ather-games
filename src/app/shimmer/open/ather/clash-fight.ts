@@ -70,12 +70,12 @@ export const KIND: Readonly<Record<Species, { pref: number; defense: Defense; st
   axolotl:       { pref: 3.5, defense: 'guard', stamina: 0.97},
   owl:           { pref: 4.0, defense: 'evade', stamina: 0.98 },
   frog:          { pref: 1.8, defense: 'evade', stamina: 1.04 },
-  firefly:       { pref: 5.5, defense: 'evade', stamina: 0.99 },
+  firefly:       { pref: 5.5, defense: 'evade', stamina: 1.03 },
   rabbit:        { pref: 1.5, defense: 'guard', stamina: 1.0 },
   'water-bear':  { pref: 1.4, defense: 'guard', stamina: 1.06 },
   hummingbird:   { pref: 3.0, defense: 'evade', stamina: 1.06 },
-  turtle:        { pref: 3.0, defense: 'guard', stamina: 1.1 },
-  bat:           { pref: 4.5, defense: 'evade', stamina: 0.99 },
+  turtle:        { pref: 3.0, defense: 'guard', stamina: 1.0 },
+  bat:           { pref: 4.5, defense: 'evade', stamina: 1.02 },
 }
 
 // ───────────────────────────── the MOVE table, keyed by move id ─────────────────────────────
@@ -278,6 +278,11 @@ function mkFighter(e: Entrant, side: 0 | 1, ref: PartyStats, seed: number): Figh
  *  lands (clash-sim 11-27: far kinds lost, guard pairs stalled to the cap). A near kind with a far move keeps her pref
  *  (standing her off too made near kinds lose: sim). */
 export const STANCE = { near: 2.2 }
+/** M233 v2d (Alex 11-27 watching: "each spirit should stay 4-5 meters from the opponent"): BETWEEN actions she holds HOLD.min..
+ *  HOLD.max m off (her kind's range clamped into it); she closes only to throw what is ready (melee / her bonded move) and
+ *  backs out after. Never stands further than HOLD.max. */
+export const HOLD = { min: 4, max: 5 } as const
+export const holdOf = (pref: number) => clamp(pref, HOLD.min + 0.5, HOLD.max)   // aim mid-band: the walk settles a little short
 export function stanceOf(pref: number, b: Pick<ClashMove, 'range' | 'power'>): number {
   if (b.power <= 0 || !Number.isFinite(b.range)) return pref
   return b.range > 2.5 ? pref : Math.min(pref, STANCE.near)
@@ -425,13 +430,15 @@ function plan(me: Fighter, foe: Fighter, tac: ReadonlySet<Tactic>, used: Set<Tac
     cands.push({ w: keen, key: 'melee', run: (_s, ev) => { begin(me, 'melee', 'windup', MELEE.windup); ev.push({ kind: 'start', side: me.side, move: 'melee' }) } })
   }
   // where she wants to stand: in reach of what is ready, else her kind's range; hurt and far-preferring = further
-  let want = me._.pref
+  let want = holdOf(me._.pref)   // M233 v2d: between actions she holds 4-5 m
   if (me.cd.bonded <= 0.5 && b.power > 0) want = has('trustReach', b.range > 2.5) ? b.range * 0.95 : Math.min(want, b.range * 0.8)
   else if (me.cd.melee <= 0.3 && (me._.pref <= 2.5 || me.cd.bonded > 1.5 || has('pressMelee', true))) want = MELEE.range * 0.8   // far kinds dart in while the bonded move rests
-  if (hpF < 0.35 && me._.pref > 2.5 && !has('bold', true)) want += 1
+  const kite = hpF < 0.35 && me._.pref > 2.5 && !has('bold', true)
+  if (kite) want += 1
   if (has('pressKiter', foe._.pref > 2.5 && me.cd.melee <= 1)) want = Math.min(want, MELEE.range * 0.8)
   if (has('spaceBrawler', foe._.pref <= 2.5 && foe.cd.melee <= 1 && me.cd.melee > (me._.pref > 2.5 ? 0.3 : 3))) want = Math.max(want, MELEE.range + 1.2)
   if (snared) want = Math.max(want, me._.pref + 1)
+  want = Math.min(want, HOLD.max + (kite ? 1 : 0))   // a hurt far kind kites a step past the hold
   const off = d - want
   const radial = clamp(off, -1, 1)
   cands.push({ w: Math.abs(off) > 0.6 ? 0.5 : 0.15, key: `pos:${radial.toFixed(1)}`, run: (s) => {
@@ -513,6 +520,23 @@ export function step(s: FightState, input?: { cheer?: [boolean, boolean] }): Tic
   return { tick: s.tick, t: s.t, f: [snap(s.f[0]), snap(s.f[1])], ev }
 }
 const snap = (f: Fighter): FighterSnap => ({ x: f.x, z: f.z, face: f.face, hp: Math.round(f.hp), maxHp: f.maxHp, act: f.act.kind, phase: f.act.phase, actT: f.act.t, cheered: f.cheered })
+
+/** M233 v2d: the SPACING meter (the check's and the tests' instrument). A fighter is HOLDING when she is idle or repositioning
+ *  with nothing ready to throw (melee resting, her bonded move resting or a no-damage move); a gap is sampled on a tick where
+ *  BOTH have held for HOLD_SETTLE_S (so the walk out after a strike is not counted). `gaps` = those distances (m). */
+export const HOLD_SETTLE_S = 1.5
+export const isHolding = (f: Fighter) => (f.act.kind === 'idle' || f.act.kind === 'reposition') && f.cd.melee > 0.3 && (f._.bonded.power <= 0 || f.cd.bonded > 0.5)
+export function holdMeter() {
+  const since: [number, number] = [-1, -1], gaps: number[] = []
+  return {
+    gaps,
+    tick(s: FightState) {
+      for (const f of s.f) since[f.side] = isHolding(f) ? (since[f.side] < 0 ? s.t : since[f.side]) : -1
+      if (!s.over && since[0] >= 0 && since[1] >= 0 && s.t - Math.max(since[0], since[1]) >= HOLD_SETTLE_S) gaps.push(dist(s.f[0], s.f[1]))
+    },
+    median: () => { if (!gaps.length) return null; const g = [...gaps].sort((x, y) => x - y); return g[g.length >> 1] },
+  }
+}
 
 /** the sim's / tests' keeper: cheer once when her HP falls under `at` (null = never cheers) */
 export type CheerPolicy = { at: number | null }
