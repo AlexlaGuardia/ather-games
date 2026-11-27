@@ -15,7 +15,7 @@ import { useParty, newPartyCode, sanitizePartyCode, inviteUrl } from '@/lib/part
 import { usePresence, type UsePresence } from '@/lib/presence'
 import { useAccount, type UseAccount } from '@/lib/accounts/use-account'
 import { setOptionsOpen } from '../options'
-import { setChordBox, useChordBox, chordColour } from './chord'
+import { setChordBox, useChordBox, chordColour, setChordFull } from './chord'
 import { hudSay } from './hud-say'
 import { openPeers } from './open-mp'
 import { setPartyOrder } from './party-host'
@@ -238,6 +238,7 @@ export function OpenSocial() {
   lobbyBox = { members: mates, me: me ?? '' }
   setPartyOrder(mates.map(m => m.look).filter(Boolean))   // M156 s2: who hosts the party's Wilds
   useEffect(() => { setChordBox(mates, me ?? '', party) })   // M188: the Chord tab + the chordmates' bars read this
+  setChordFull(!!party && lobby.full)   // M217: a fifth keeper (the chord holds four) hears why its visit will not go
   useEffect(() => { socialBox = { presence, account }; socialGen++; ssubs.forEach(f => f()) })
   useBrewingDoor(!!userId, party, start, me)   // M188 s4: a brewing this keeper hosts opens its door 20 min before
   if (typeof window !== 'undefined') (window as unknown as { __lobby?: unknown }).__lobby = { members: () => lobbyBox.members, zone: () => lobbyZone }

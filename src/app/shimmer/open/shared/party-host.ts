@@ -2,7 +2,7 @@
 // One keeper hosts the Wilds a party stands in: their Hollows are fought (fight-share.ts) and their grey ground is drawn
 // (ather/guest-wilds.ts). HOST = the party STARTER (the lobby's longest-standing member, shimmer-server lobby.py) while they are
 // here; with them elsewhere, the next longest-standing member who IS here; so the ground and the Hollows are never two keepers'.
-// A keeper the lobby has no seat for (it holds three) follows whoever sends the host's ledger; nobody known = the lowest id, as M28.
+// A keeper the lobby has no seat for (it holds four, M217) follows whoever sends the host's ledger; nobody known = the lowest id, as M28.
 // ★ PURE but for the two boxes the page fills (the lobby's order, the last keeper heard sending as host).
 import { hostOf } from './fight-share'
 /** how long a heard host stands for a keeper with no seat */

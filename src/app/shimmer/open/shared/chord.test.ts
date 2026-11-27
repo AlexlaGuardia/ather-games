@@ -1,5 +1,5 @@
 // BETA M188 s1: the chord's pure half (chord.ts). Run: npx tsx src/app/shimmer/open/shared/chord.test.ts
-import { chordMates, mateBars, chordColour, hpFrac, decodeHp, CHORD_COLOURS, HP_STALE_S, MAX_BARS } from './chord'
+import { chordMates, mateBars, chordColour, hpFrac, decodeHp, CHORD_COLOURS, HP_STALE_S, MAX_BARS, CHORD_SEATS, CHORD_FULL_LINE, visitRefusal } from './chord'
 import type { LobbyMember } from '@/lib/party-lobby'
 let fails = 0
 const ok = (c: boolean, m: string) => { console.log(`${c ? '✓' : '✗'} ${m}`); if (!c) fails++ }
@@ -21,4 +21,11 @@ ok(hpFrac(73, 100) === 0.75 && hpFrac(100, 100) === 1 && hpFrac(-5, 100) === 0 &
 ok(hpFrac(50, 0) === 0 && hpFrac(NaN, 100) === 0, 'no max / junk = 0, never NaN on the wire')
 ok(decodeHp({ h: 0.5 }) === 0.5 && decodeHp({ h: 0 }) === 0 && decodeHp({ h: 1 }) === 1, 'reads a fraction')
 ok(decodeHp({ h: 2 }) === undefined && decodeHp({ h: -0.1 }) === undefined && decodeHp({ h: '0.5' }) === undefined && decodeHp(null) === undefined, 'junk is refused (undefined, never 0)')
+// M217: a chord holds four (canon glossary › Chord, amended 11-26; shimmer-server lobby.py SEATS = 4)
+ok(CHORD_SEATS === 4, 'a chord holds four')
+ok(MAX_BARS >= CHORD_SEATS - 1, `a full chord's three mates all get a bar (MAX_BARS ${MAX_BARS})`)
+ok(chordMates(['me', 'b', 'c', 'd'].map(x => mem(x)), 'me').length === 3, 'a chord of four = three mates on screen')
+{ const r = visitRefusal('ash', true); ok(r.log === 'refused:chord-full' && r.line === CHORD_FULL_LINE && r.line === 'The chord is full.', 'a fifth keeper hears the chord is full') }
+{ const r = visitRefusal('ash', false); ok(r.log === 'refused:not-home' && /Could not reach ash's plot/.test(r.line), 'a seated keeper whose host left hears the old line') }
+ok(visitRefusal('', false).line.includes("a friend's"), 'no name = a friend')
 console.log(fails ? `FAIL (${fails})` : 'PASS'); process.exit(fails ? 1 : 0)

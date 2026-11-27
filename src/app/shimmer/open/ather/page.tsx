@@ -36,6 +36,7 @@ import { selfPlayerId } from '../../play3d/multiplayer'
 import { clusterFrame } from './cluster'
 import { guestLanding, freeLanding, type Seat, type Spot } from './green-landing'   // M208 s2: four landing spots on the Green
 import { setLobbyZone, setVisitHandler, hostHome } from '../shared/play-together'
+import { chordFull, visitRefusal } from '../shared/chord'   // M217: a chord holds four; the fifth hears why
 import { Canvas } from '@react-three/fiber'
 import { ProgramKeeper } from './program-keeper-view'
 import { WarmProxies } from './warm-proxies'
@@ -537,11 +538,11 @@ function AtherSliceGame() {
       let asks = 0
       const ask = () => {
         const v = visitVerdict(hostHome(host), VISIT_ASK_MS * asks++)
-        if (v === 'wait') return
+        if (v === 'wait' && !chordFull()) return   // M217: no seat in the chord = no roster will ever answer: refuse now
         clearInterval(asking)
         try { sessionStorage.removeItem(VISIT_LINK_KEY) } catch { /* private mode */ }   // M208 s2: the link's visit is answered
         if (v === 'go') { startVisit(host, name); return }
-        noteVisit('refused:not-home'); hudSay(`Could not reach ${name || 'a friend'}'s plot. They may have left it.`, 'info', 5)
+        const r = visitRefusal(name, chordFull()); noteVisit(r.log); hudSay(r.line, 'info', 5)
       }
       asking = setInterval(ask, VISIT_ASK_MS); ask()
     }

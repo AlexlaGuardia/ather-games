@@ -1,13 +1,15 @@
 // BETA M208 s2b: A FULL CHORD ON ONE PLOT. Four FRESH anonymous keepers (never anyone's save), all folded, one chord code. A hosts;
 // B and C visit A one after another (?visit=<A>): each gets A's plot (the snapshot) on the first try and stands on its free spot,
-// while the guest before it stays. D is a FOURTH keeper on the chord code: a chord is three (canon glossary › Chord, 'three to
-// a door'; shimmer-server lobby.py SEATS = 3), so the lobby is full and D's visit is refused. Built to isolate 11-26's
-// "the 4th keeper's visit fails" (m208-four-check) from signed-in keepers, the db and the box's load: that was this cap.
-// PASS = 1. A hosts its plot · B, C: on A's ground, snapshot in, no end:*, on freeLanding(its id) < 1.2 m
-//   D: refused:not-home, never on A's ground · 5. A lists both guests · 6. 0 page errors. Prints each visit log + the net probes.
+// while the guest before it stays. ★ M217 (11-27): A CHORD HOLDS FOUR (canon glossary › Chord amended 11-26; shimmer-server
+// lobby.py SEATS = 4), so D (the 4th) visits like B and C, and E is a FIFTH keeper on the chord code: the lobby is full, E's visit
+// is refused as refused:chord-full and E hears 'The chord is full.' (s2b had D refused: the chord was three.)
+// PASS = 1. A hosts its plot · B, C, D: on A's ground, snapshot in, no end:*, on freeLanding(its id) < 1.2 m
+//   E: refused:chord-full + the line, never on A's ground · 5. A lists three guests · 6. 0 page errors. Prints each visit log + the net probes.
+// Five fresh anon contexts at once (A..E): run it on the EliteDesk (tools/edesk-check.sh).
 //   npx tsx scripts/m208-guests-check.mts [--url https://ather.games] [--phone]
 import puppeteer, { type Page } from 'puppeteer-core'
 import { freeLanding } from '../src/app/shimmer/open/ather/green-landing'
+import { CHORD_FULL_LINE } from '../src/app/shimmer/open/shared/chord'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), PHONE = process.argv.includes('--phone')
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
@@ -40,7 +42,7 @@ try {
   ok(await poll(async () => /^open:plot:p_/.test((await mpZone(A)) ?? ''), 90000), `1. A hosts its plot (${await mpZone(A)})`)
   const idA = ((await mpZone(A)) ?? '').replace('open:plot:', '')
   const guests: Page[] = []
-  for (const name of ['B', 'C']) {
+  for (const name of ['B', 'C', 'D']) {
     const P = await ctx(name); guests.push(P)
     const t0 = Date.now(); await load(P, `&visit=${idA}&vn=A`)
     const there = await poll(async () => (await mpZone(P)) === `open:plot:${idA}` && (await vis(P)).snap === true, 90000)
@@ -51,10 +53,16 @@ try {
     ok(await poll(async () => { const s = await at(P); return s.zone === 'plot' && Math.hypot(s.x - want.x, s.z - want.z) < 1.2 }, 30000), `${name}. on its free spot`)
     for (const [i, G] of guests.entries()) { const g = await vis(G); if ((g.log ?? []).some((e: string) => e.startsWith('end:'))) ok(false, `guest ${i} left: ${JSON.stringify(g.log)}`) }
   }
-  const D = await ctx('D'); await load(D, `&visit=${idA}&vn=A`)
-  ok(await poll(async () => ((await vis(D)).log ?? []).includes('refused:not-home'), 90000), `D. a 4th on the chord code is refused: the chord is three (${JSON.stringify((await vis(D)).log)})`)
-  ok((await mpZone(D)) !== `open:plot:${idA}` && (await vis(D)).snap !== true, `D. ...never on A's ground (${await mpZone(D)})`)
-  ok(await poll(async () => (await A.evaluate(() => (window as any).__visit.guests().length)) >= 2, 20000), `5. A lists both guests (${await A.evaluate(() => (window as any).__visit.guests().length)})`)
+  const E = await ctx('E')
+  await E.evaluateOnNewDocument((line: string) => {
+    (window as any).__sawFull = false
+    document.addEventListener('DOMContentLoaded', () => new MutationObserver(ms => { if (!(window as any).__sawFull && ms.some(m => (m.target.textContent ?? '').includes(line))) (window as any).__sawFull = true }).observe(document.body, { subtree: true, childList: true, characterData: true }))
+  }, CHORD_FULL_LINE)
+  await load(E, `&visit=${idA}&vn=A`)
+  ok(await poll(async () => ((await vis(E)).log ?? []).includes('refused:chord-full'), 120000), `E. a 5th on the chord code is refused: the chord holds four (${JSON.stringify((await vis(E)).log)})`)
+  ok(await poll(async () => await E.evaluate(() => (window as any).__sawFull === true), 10000), `E. ...and hears '${CHORD_FULL_LINE}'`)
+  ok((await mpZone(E)) !== `open:plot:${idA}` && (await vis(E)).snap !== true, `E. ...never on A's ground (${await mpZone(E)})`)
+  ok(await poll(async () => (await A.evaluate(() => (window as any).__visit.guests().length)) >= 3, 20000), `5. A lists three guests (${await A.evaluate(() => (window as any).__visit.guests().length)})`)
 } catch (e) { ok(false, `threw: ${String(e).slice(0, 300)}`) }
 ok(errs.length === 0, `6. 0 page errors (${errs.slice(0, 3).join(' | ')})`)
 await br.close()

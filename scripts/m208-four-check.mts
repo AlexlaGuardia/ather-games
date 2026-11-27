@@ -7,12 +7,12 @@
 //   1. fir (solo) loads in at plot.ts HOME_LANDING (< 1.5 m), as slice 1 put it; ash (in the cluster) loads in there too
 //   2. birch + cedar visit ash (?visit=): each lands on the side of the gate facing ITS OWN plot in ash's frame
 //      (green-landing.ts quarterLanding(relQuarter(sw, q)), < 1.2 m; the plot's direction from the gate within ~25 deg)
-//   3. ★ MOVED (M208 s2b, 11-27): a CHORD IS THREE (canon glossary › Chord, 'three to a door'; shimmer-server lobby.py SEATS = 3),
-//      so a fourth keeper in the chord is told the lobby is full and its visit link is refused (refused:not-home): it never
-//      reaches ash's ground and stays home. The old assert (a 4th chordmate lands on a free spot) could never pass; a non-cluster
-//      chordmate on a free spot is m208-green-check step 4 (+ m208-guests-check)
-//   4. everyone on ash's Green (ash + 2 guests = the whole chord): every pair >= 2 m apart, read from each keeper's own walker
-//      AND from ash's view of its guests (__mp.peers)
+//   3. ★ REWRITTEN (M217, 11-27): A CHORD HOLDS FOUR (canon glossary › Chord amended 11-26, athernyx 9a3694b; shimmer-server
+//      lobby.py SEATS = 4). fir (signed in, no cluster) is the chord's FOURTH and visits ash like the others (a free spot).
+//      A FIFTH keeper on the chord code (fresh anon) is told the lobby is full: its visit is refused as refused:chord-full and
+//      it hears 'The chord is full.' (chord.ts CHORD_FULL_LINE), never reaches ash's ground. (s2b had: a 4th refused, chord three.)
+//   4. everyone on ash's Green (ash + 3 guests = the whole chord of four): every pair >= 2 m apart, read from each keeper's own
+//      walker AND from ash's view of its guests (__mp.peers); ★ every keeper sees the other three (__mp.peers >= 3 on each)
 //   5. 0 page errors. Cleanup: every test keeper takes back its corner. Shots: <out>/<390|desk>-*.png
 //   npx tsx scripts/m208-four-check.mts [--url https://ather.games] [--phone] [--out dir]
 // ⚠ Writes the LIVE accounts db (data/accounts.db) for the test keepers only: run from the repo root, on the box.
@@ -28,6 +28,7 @@ const C = await import('../src/lib/accounts/clusters')
 import { HOME_LANDING, GATE } from '../src/app/shimmer/open/ather/plot'
 import { relQuarter, clusterFrame, type Quarter } from '../src/app/shimmer/open/ather/cluster'
 import { quarterLanding } from '../src/app/shimmer/open/ather/green-landing'
+import { CHORD_FULL_LINE } from '../src/app/shimmer/open/shared/chord'
 
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), out = flag('--out', '/tmp/m208s2'), PHONE = process.argv.includes('--phone')
@@ -123,13 +124,24 @@ try {
     ok(off < 25, `2. ${k.name} stands on the side of the gate facing its plot (${off.toFixed(0)} deg off)`)
     here.push({ who: k.name, page: P, want })
   }
-  // 3 · a fourth chordmate (no cluster): the chord is three, so the lobby is full and the visit is refused
-  const S = await open(null, 'stranger'); await load(S, `&visit=${idA}&vn=ash`)
+  // 3 · the chord's FOURTH (fir: signed in, no cluster) visits ash and stands on a free spot clear of the others
+  { const P = await open(KF, 'fir4'); await load(P, `&visit=${idA}&vn=ash`)
+    ok(await reach(P, idA, 'fir'), `3. ★ fir, the chord's 4th, is on ash's ground (${await mpZone(P)})`)
+    await poll(async () => (await at(P)).zone === 'plot', 45000)
+    here.push({ who: 'fir', page: P, want: HOME_LANDING }) }
+  // 3b · a FIFTH keeper on the chord code (fresh anon): the lobby is full, the visit is refused and says so
+  const S = await open(null, 'fifth')
+  await S.evaluateOnNewDocument((line: string) => {
+    (window as any).__sawFull = false
+    document.addEventListener('DOMContentLoaded', () => new MutationObserver(ms => { if (!(window as any).__sawFull && ms.some(m => (m.target.textContent ?? '').includes(line))) (window as any).__sawFull = true }).observe(document.body, { subtree: true, childList: true, characterData: true }))
+  }, CHORD_FULL_LINE)
+  await load(S, `&visit=${idA}&vn=ash`)
   const vlog = () => S.evaluate(() => ((window as any).__visit?.log?.() ?? []) as string[])
-  // a 4th swiftshader page on the box asks slowly (11-27: an empty log at 90 s, refused at once on the EliteDesk): 240 s cap
-  const t3 = Date.now(), refused = await poll(async () => (await vlog()).includes('refused:not-home'), 240000)
-  ok(refused, `3. ★ a 4th chordmate's visit is refused: the chord is three (log ${JSON.stringify(await vlog())}, ${((Date.now() - t3) / 1000).toFixed(0)} s)`)
-  { const z = await mpZone(S); ok(z !== `open:plot:${idA}` && !(await vlog()).some(e => e.startsWith('start:')), `3. ...it never reaches ash's ground (${z})`) }
+  // a 5th swiftshader page on the box asks slowly: 240 s cap
+  const t3 = Date.now(), refused = await poll(async () => (await vlog()).includes('refused:chord-full'), 240000)
+  ok(refused, `3b. ★ a 5th keeper's visit is refused: the chord holds four (log ${JSON.stringify(await vlog())}, ${((Date.now() - t3) / 1000).toFixed(0)} s)`)
+  ok(await poll(async () => await S.evaluate(() => (window as any).__sawFull === true), 10000), `3b. ★ ...and it hears '${CHORD_FULL_LINE}'`)
+  { const z = await mpZone(S); ok(z !== `open:plot:${idA}` && !(await vlog()).some(e => e.startsWith('start:')), `3b. ...it never reaches ash's ground (${z})`) }
   await S.close()
   await sleep(3000)
   // 4 · nobody on anybody
@@ -137,9 +149,10 @@ try {
   for (let i = 0; i < pos.length; i++) for (let j = i + 1; j < pos.length; j++) ok(dist(pos[i], pos[j]) >= 2, `4. ${pos[i].who} / ${pos[j].who}: ${dist(pos[i], pos[j]).toFixed(2)} m apart (own walkers)`)
   const peers = await A.evaluate(() => (window as any).__mp.peers() as { id: string; x: number; z: number }[])
   const seen = [{ x: (await at(A)).x, z: (await at(A)).z }, ...peers]
-  ok(peers.length >= 2, `4. ash sees its two guests (${peers.length})`)
+  ok(peers.length >= 3, `4. ash sees its three guests (${peers.length})`)
+  for (const h of here.slice(1)) { const n = await poll(async () => (await h.page.evaluate(() => (window as any).__mp.peers().length as number)) >= 3, 30000); ok(n, `4. ★ ${h.who} sees the other three (${await h.page.evaluate(() => (window as any).__mp.peers().length)})`) }
   let minD = Infinity; for (let i = 0; i < seen.length; i++) for (let j = i + 1; j < seen.length; j++) minD = Math.min(minD, dist(seen[i], seen[j]))
-  ok(peers.length >= 2 && minD >= 2, `4. ★ in ash's view all three stand >= 2 m apart (closest pair ${minD.toFixed(2)} m)`)
+  ok(peers.length >= 3 && minD >= 2, `4. ★ in ash's view all four stand >= 2 m apart (closest pair ${minD.toFixed(2)} m)`)
   // a wide look from behind ash's spot
   for (const h of here) await shot(h.page, `a-${h.who}`)
   await A.evaluate((g: { x: number; z: number }, hl: { x: number; z: number }) => { const x = g.x + (hl.x - g.x) * 3, z = g.z + (hl.z - g.z) * 3; (window as any).__ather.tp(x, z, Math.atan2(-(g.x - x), -(g.z - z))) }, GATE, HOME_LANDING)

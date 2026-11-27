@@ -47,9 +47,10 @@ export { lobbySeats, launchBlock, whereLabel, STATION_ZONE } from './lobby-seats
 // ★ A CHORD OF THREE FITS ANY SCREEN (Alex 09-29: "a bit close up… scale it down so a team of three fits comfortably…
 // it converts better on the phone"). The slots sit closer, and the camera (below) pulls back until the whole pad fits
 // the WIDTH, so a portrait phone sees all three instead of the middle one.
-const SLOT_X = [0, -1.15, 1.15]
+// M217 (11-27): a chord holds FOUR (canon amended 11-26), so four places on the pad, you inside-left and a step forward.
+const SLOT_X = [-0.575, -1.725, 0.575, 1.725]
 /** what must be in frame: the three keepers and their names, with a margin (world units, half-extents) */
-const FIT_HALF_W = 2.0, FIT_HALF_H = 2.5   // H was 1.45: on a wide screen HEIGHT sets the fit, and 1.45 stood them head-to-foot
+const FIT_HALF_W = 2.6, FIT_HALF_H = 2.5   // H was 1.45: on a wide screen HEIGHT sets the fit, and 1.45 stood them head-to-foot
 function CameraFit() {
   const { camera, size } = useThree()
   const last = useRef('')
@@ -111,7 +112,7 @@ function Keeper({ seat, slot, partied }: { seat: Seat; slot: number; partied: bo
     </group>
   )
 }
-/** an empty place in the chord: a faint ring and the words, so three reads as three even alone */
+/** an empty place in the chord: a faint ring and the words, so four reads as four even alone */
 function OpenSeat({ slot }: { slot: number }) {
   return (
     <group position={[SLOT_X[slot] ?? 0, 0, 0]}>
@@ -141,7 +142,7 @@ function Stage({ seats, partied }: { seats: Seat[]; partied: boolean }) {
           <ringGeometry args={[2.02, 2.1, 64]} />
           <meshBasicMaterial color={H.ember} />
         </mesh>
-        {[0, 1, 2].map((i) => seats[i] ? <Keeper key={seats[i].id} seat={seats[i]} slot={i} partied={partied} /> : <OpenSeat key={`open-${i}`} slot={i} />)}
+        {[0, 1, 2, 3].map((i) => seats[i] ? <Keeper key={seats[i].id} seat={seats[i]} slot={i} partied={partied} /> : <OpenSeat key={`open-${i}`} slot={i} />)}
       </group>
     </Canvas>
   )

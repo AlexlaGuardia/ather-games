@@ -28,6 +28,21 @@ export const chordBox = () => box
 export const useChordBox = () => useSyncExternalStore(f => { subs.add(f); return () => { subs.delete(f) } }, () => box, () => box)
 
 /** A keeper's own colour in the chord: stable for the keeper (from their id), never two neighbours alike in a small chord. */
+// ── BETA M217: A CHORD HOLDS FOUR (canon amended 11-26, athernyx 9a3694b: four to a door) ──────────────────────────
+// shimmer-server lobby.py SEATS = 4: a fifth keeper with the chord's code is told the lobby is full (lib/party-lobby `full`).
+// That keeper has no roster, so a visit it asks for can never be answered; it hears WHY instead of "They may have left it."
+export const CHORD_SEATS = 4
+/** placeholder for @lark (M217): what a keeper the chord has no seat for hears */
+export const CHORD_FULL_LINE = 'The chord is full.'
+let full = false
+export function setChordFull(f: boolean) { full = f }
+export const chordFull = () => full
+/** a visit that will not go: the log entry + the one line the keeper hears */
+export function visitRefusal(name: string, isFull: boolean): { log: string; line: string } {
+  return isFull ? { log: 'refused:chord-full', line: CHORD_FULL_LINE }
+    : { log: 'refused:not-home', line: `Could not reach ${name || 'a friend'}'s plot. They may have left it.` }
+}
+
 export const CHORD_COLOURS = ['#e0a33a', '#5fa8c9', '#c9627a', '#7bb35a', '#9a7bd1', '#d9774a'] as const
 export function chordColour(id: string): string {
   let h = 2166136261
