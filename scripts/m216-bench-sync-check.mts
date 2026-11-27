@@ -103,7 +103,9 @@ try {
   const torsos = await opts('torso'), scarves = await opts('scarf'), belts = await opts('belt')
   ok(torsos.length === 6 && scarves.length === 6 && belts.length === 5, `pickers: Torso ${torsos.length} / Scarf ${scarves.length} / Belt ${belts.length} (${torsos.join(' / ')} | ${belts.join(' / ')})`)
   for (const k of ['belt', 'beltY']) ok(await dialVal(k) !== null, `slider ${k} on the bench`)
-  const shot = async (name: string) => { const c = (await (await p.$('canvas'))!.boundingBox())!; await p.screenshot({ path: `${DIR}/${name}.png`, clip: { x: c.x + c.width * 0.32, y: c.y + c.height * 0.12, width: c.width * 0.36, height: c.height * 0.8 } }) }
+  // the canvas runs taller than an 820 viewport: shots need the whole canvas on screen (a clip past the viewport comes out black)
+  await p.setViewport({ width: 1280, height: 1400 }); await sleep(800)
+  const shot = async (name: string) => { const c = (await (await p.$('canvas'))!.boundingBox())!; await p.screenshot({ path: `${DIR}/${name}.png`, clip: { x: c.x + c.width * 0.3, y: c.y + c.height * 0.14, width: c.width * 0.4, height: Math.min(c.height * 0.72, 1400 - c.y - c.height * 0.14) } }) }
   const bodySigs = new Set<string>()
   for (const [k, list] of [['torso', torsos], ['scarf', scarves], ['belt', belts]] as const) {
     const seen = new Set<string>()
