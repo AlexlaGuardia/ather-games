@@ -7,7 +7,7 @@
 // Desktop opens the open-world bag with I; --phone (390x844 touch) taps MENU then pack.
 //   npx tsx scripts/m234-cut-bottles-check.mts [--url https://ather.games] [--out dir] [--phone]
 import puppeteer, { type Page } from 'puppeteer-core'
-import { mkdirSync, readFileSync, readdirSync } from 'node:fs'
+import { mkdirSync, readFileSync, readdirSync, existsSync } from 'node:fs'
 import { dismissStartCard } from './lib/start-card.mts'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), out = flag('--out', '/tmp/m234b'), PHONE = process.argv.includes('--phone')
@@ -72,7 +72,8 @@ try {
   }
   // ── C. every chunk the live build serves (BOX-ONLY: the chunk list is read from the build dir `.next-active` names; every
   //    file is then fetched from the public url, so what is judged is what prod serves). Catches lazy chunks B never pulled.
-  {
+  if (!existsSync(`${new URL('..', import.meta.url).pathname}.next-active`)) console.log('- C skipped: no live build dir here (run on the box for C)')
+  else {
     const root = new URL('..', import.meta.url).pathname
     const dir = `${root}${readFileSync(`${root}.next-active`, 'utf8').trim()}/static/chunks`
     const files = readdirSync(dir).filter(f => f.endsWith('.js'))
