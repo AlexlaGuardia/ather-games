@@ -153,6 +153,25 @@ try {
   for (const h of here.slice(1)) { const n = await poll(async () => (await h.page.evaluate(() => (window as any).__mp.peers().length as number)) >= 3, 30000); ok(n, `4. ★ ${h.who} sees the other three (${await h.page.evaluate(() => (window as any).__mp.peers().length)})`) }
   let minD = Infinity; for (let i = 0; i < seen.length; i++) for (let j = i + 1; j < seen.length; j++) minD = Math.min(minD, dist(seen[i], seen[j]))
   ok(peers.length >= 3 && minD >= 2, `4. ★ in ash's view all four stand >= 2 m apart (closest pair ${minD.toFixed(2)} m)`)
+  // 4b · CHORD LOAD FOR FOUR (M217, re-measuring M125, which was parked and never measured): no assert, numbers only.
+  //   frame = median rAF gap on each page over ~3 s (box swiftshader: a CPU rasteriser, NOT a phone; compare pages, not devices)
+  //   lag   = a guest steps 1 m (tp) -> ash's __mp.peers shows it there (tx/tz within 0.3 m): end to end through the server
+  const load4: string[] = []
+  for (const h of here) {
+    const f = await h.page.evaluate(() => new Promise<number>(res => { const d: number[] = []; let l = performance.now(); const t0 = l
+      const step = (t: number) => { d.push(t - l); l = t; if (t - t0 < 3000 && d.length < 120) requestAnimationFrame(step); else { d.sort((a, b) => a - b); res(d[Math.floor(d.length / 2)]) } }
+      requestAnimationFrame(step) }))
+    load4.push(`${h.who} frame ${f.toFixed(0)} ms`)
+  }
+  for (const h of here.slice(1)) {
+    const id = await h.page.evaluate(() => localStorage.getItem('ather:mp:id')), s0 = await at(h.page), X = s0.x + 1, Z = s0.z
+    const t0 = Date.now(); await h.page.evaluate((x: number, z: number, y: number) => (window as any).__ather.tp(x, z, y), X, Z, s0.yaw)
+    const seen = await A.evaluate((pid: string | null, x: number, z: number) => new Promise<boolean>(res => { const t = performance.now()
+      const k = setInterval(() => { const p = ((window as any).__mp.peers() as { id: string; tx: number; tz: number }[]).find(q => q.id === pid)
+        if (p && Math.hypot(p.tx - x, p.tz - z) < 0.3) { clearInterval(k); res(true) } else if (performance.now() - t > 8000) { clearInterval(k); res(false) } }, 25) }), id, X, Z)
+    load4.push(`${h.who} lag ${seen ? `${Date.now() - t0} ms` : '> 8 s (not seen)'}`)
+  }
+  console.log(`  CHORD LOAD (4 keepers, ${tag}): ${load4.join(' · ')}`)
   // a wide look from behind ash's spot
   for (const h of here) await shot(h.page, `a-${h.who}`)
   await A.evaluate((g: { x: number; z: number }, hl: { x: number; z: number }) => { const x = g.x + (hl.x - g.x) * 3, z = g.z + (hl.z - g.z) * 3; (window as any).__ather.tp(x, z, Math.atan2(-(g.x - x), -(g.z - z))) }, GATE, HOME_LANDING)
