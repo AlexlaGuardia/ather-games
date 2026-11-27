@@ -1,3 +1,4 @@
+// ⚠ SUPERSEDED IN PART by M234 s2 (scripts/m234-dishes-check.mts): a roast NO LONGER HEALS the keeper (food feeds spirits); the eat/heal asserts here are history.
 // ── THE COOKING ROOM + THE SMOKEHOUSE, PLAYED (2026-11-17, play / Jin 30bbef32) ───────────────────────────────────
 // The hearth ROASTS (canon 09-15) and the Smokehouse sells farmed meat by the bundle (RULED 11-17). A keeper roasts two
 // Shimmerscale and a Drifthorn Cut from the room's store at the cooking room's hearth, is refused a meal on the plot,

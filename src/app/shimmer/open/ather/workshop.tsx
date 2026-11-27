@@ -1881,7 +1881,7 @@ function BenchPanel({ room, onClose }: { room: Room; onClose: () => void }) {
         ? cl(crafts(STONE_REFINE), 'Parts for a house plan, cut from every stone in the store. A Moglin also keeps stacks going by itself.', 'No blankstone or mana shards to cut. Prospect them in the Wilds.')
         : cl(crafts(REFINE), 'Each log works two ways. Focus one: the station works every log in its store, one at a time. A Moglin also keeps stacks going by itself.', 'No logs to work. Prune trees in the Wilds. Better woods come as your Forestry grows.')
       case 'furniture': return cl(BENCH_JOBS.filter(j => spirits3d || !FURNITURE[j.id]?.train), 'Finished pieces wait in the output. Hold one from the hotbar on your plot and E sets it.')
-      case 'hearth': return cl(HEARTH_JOBS, 'Hold a roast in the Wilds and click to eat it mid-fight. Meat comes from the Smokehouse in the continent\'s towns. A spiced meal is fed to a garden spirit, in her panel.')
+      case 'hearth': return cl(HEARTH_JOBS, 'Food is for spirits: feed a dish to a garden spirit, in her panel. Grilled Rinn with Aqual Sauce fills her Water. Meat comes from the Smokehouse in the continent\'s towns.')   // M234 s2 (placeholder words, @lark)
       case 'cauldron': return cl(BREW, 'Hold a potion and click to drink.')
       case 'blades': case 'spikes': return focusSkill ? <FocusList r={r} inv={inv} skill={focusSkill} /> : null
       case 'rinsticks': return <RinstickList r={r} inv={inv} />

@@ -50,7 +50,8 @@ ok(!full.ok && /room/.test(full.why), 'buy: took Marks for a lot the bag could n
 // bag rows, the cooking room keeps them, Rootbulb roasts
 ok(['rootbulb', 'capgrain', 'roast_rootbulb'].every(id => OPEN_ITEMS[id] && ITEM_GROUP[id] === 'cooking' && existsSync(`public${OPEN_ITEMS[id].icon}`)), 'items: a staple / roast is not a cooking bag row with an icon on disk')
 ok(roomAccepts('cooking', 'rootbulb') && roomAccepts('cooking', 'capgrain'), 'room: the cooking store refuses a staple')
-ok(ROAST.some(j => j.in.length === 1 && j.in[0].id === 'rootbulb' && j.in[0].n === 1 && j.out.id === 'roast_rootbulb') && isDish('roast_rootbulb') && DISHES.roast_rootbulb.heal > 0, 'hearth: 1 Rootbulb -> 1 Roast Rootbulb missing')
+// M234 s2: a roast is a spirit dish (bond), no longer a keeper heal
+ok(ROAST.some(j => j.in.length === 1 && j.in[0].id === 'rootbulb' && j.in[0].n === 1 && j.out.id === 'roast_rootbulb') && isDish('roast_rootbulb') && DISHES.roast_rootbulb.bond > 0, 'hearth: 1 Rootbulb -> 1 Roast Rootbulb missing')
 ok(!isDish('rootbulb') && !isDish('capgrain'), 'eat: a raw staple counts as a dish')
 // the zone tag
 ok(supplierChoices()[0]?.ref === 'trade-co' && supplierChoices()[0]?.name === FRONT_SHOPS['trade-co'].name && FRONT_SHOPS['trade-co'].name === 'Ather Trading Co.', 'builder: the existing Ather Trading Co. (its own name) is not the first supplier pick')

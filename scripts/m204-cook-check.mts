@@ -1,3 +1,4 @@
+// ⚠ SUPERSEDED IN PART by M234 s2 (scripts/m234-dishes-check.mts): the Water meal's hearth job is gone (Aqual Sauce grills into Grilled Rinn), and a full Steep still shows feed buttons (a dish gives bond). B's water cook + C's 'locked: no feed button' are history.
 // ── BETA M204 s1 + M207 THE ELEMENT COMES FROM COOKING: OWNER + ?spirits=3d (2026-11-26, play-M204cook; M207 world-M207) ───
 // Alex 11-26: the four INFUSIONS are made at the alchemy set (M207: Aqual Sauce = Shimmerscale + Aqual at the Crusher, Fuli
 // Powder = Fuli at the Crusher, Golden Glaze = Goldleaf + Dinloid at the Still, Storm Broth = Stormgrass + Rhyloid at the

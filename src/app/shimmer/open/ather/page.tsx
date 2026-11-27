@@ -207,7 +207,8 @@ import { PackMenu, PACK_KEYS, type PackTab } from '../pack'
 import { QuestGuide } from '../quest-guide'
 import { useJournal, postEntries, questMarks } from '../shared/journal'
 import { give, take, itemDef, countOf, NO_BAIT_LINE } from '../shared/inventory'
-import { isDish, healOf } from './cooking'
+import { isDish } from './cooking'
+import { DISH_UI } from './spirit-dishes'   // M234 s2: food feeds spirits, potions heal keepers
 import { loadTools, saveTools, easeOf, xpOf, TOOLS_EVENT } from './rinsticks'
 import { edgeDial, wearEdge, EDGE_TEXT } from './edges'   // BETA M134 s1
 import { useRinQuest, fennelTalk, FENNEL_NAME } from './use-rinquest'
@@ -1392,17 +1393,11 @@ function AtherSliceGame() {
     const o = ww.offsetOf(tt.name)
     return zonesOf(ww, tt.name)(Math.min(4, Math.floor((x - o.x + 500) / 200)), Math.min(4, Math.floor((z - o.z + 500) / 200)))
   }, [ww])
-  // EAT (the cooking room, 11-17): a held roast, clicked, heals mid-fight. Refuses where it would be wasted: off the Wilds
-  // (nothing hurts you there), at full health, or while down. One meal per click.
+  // EAT (the cooking room, 11-17) -> ★ M234 s2 (THE RECIPES SIT-DOWN 11-27): FOOD FEEDS SPIRITS, POTIONS HEAL KEEPERS. A held
+  // roast no longer heals the keeper: nothing is taken, the HUD says where it goes (a garden spirit's panel, spirit-dishes.ts).
   const eatHeld = useCallback(() => {
-    const id = heldRef.current
-    if (!isDish(id)) return
-    if (zoneRef0.current !== 'wilds') { hudSay('Save it for the Wilds. A meal heals you mid-fight.', 'info'); return }
-    const v = vitalsRef.current
-    if (v.hp <= 0) return
-    if (v.hp >= v.hpMax) { hudSay('You are whole. Keep it for a fight.', 'info'); return }
-    const out = take(getInv(), id, 1); if (!out) return
-    setInv(out); eatQueue.current.push(healOf(id)); hudSay(`${itemDef(id).name} · +${healOf(id)}`, 'item')
+    if (!isDish(heldRef.current)) return
+    hudSay(DISH_UI.notForKeeper, 'info', 4)
   }, [])
   // DRINK (the alchemy room, 11-17): a held potion, clicked, anywhere: a tonic refills mana (refused at a full bar), a buff
   // potion starts or refreshes its clock (ather/alchemy.ts).

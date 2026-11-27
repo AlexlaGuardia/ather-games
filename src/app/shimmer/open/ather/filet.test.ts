@@ -22,10 +22,10 @@ ok(outs.every(id => !!itemDef(id) && itemDef(id).name.length > 0 && !!itemDef(id
 ok(outs.every(id => !isCatch(id) && ITEM_GROUP[id] === 'cooking'), 'a fillet / scales is not a catch (first-catch quest, bait stay clean); the cooking room keeps it')
 ok(outs.every(id => roomAccepts('cooking', id)), 'the cooking room store takes every fillet + the scales')
 
-// 2. each fillet roasts at the hearth into a dish that heals
+// 2. each fillet roasts at the hearth into a dish (M234 s2: a spirit dish that gives bond, no longer a keeper heal)
 for (const f of Object.keys(FILLETS)) {
   const j = ROAST.find(x => x.in.length === 1 && x.in[0].id === f)
-  ok(!!j && isDish(j.out.id) && DISHES[j.out.id].heal > 0 && HEARTH_JOBS.includes(j), `${f}: roasts at the hearth into a dish (${j?.out.id})`)
+  ok(!!j && isDish(j.out.id) && DISHES[j.out.id].bond > 0 && HEARTH_JOBS.includes(j), `${f}: roasts at the hearth into a dish (${j?.out.id})`)
   ok(!!j && !!itemDef(j.out.id).icon, `${f}: its roast has an icon`)
 }
 

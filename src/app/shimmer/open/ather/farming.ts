@@ -23,7 +23,7 @@ export const GRADES: readonly Grade[] = Object.freeze(['D', 'C', 'B', 'A', 'S'] 
 export const DEFAULT_GRADE: Grade = 'D'
 
 const MIN = 60_000
-export type CropId = 'goldleaf' | 'ather_wheat' | 'dewdrop_vine' | 'violetbloom' | 'stormgrass' | 'tidepetal' | 'starbloom' | 'heartleaf' | 'ather_lily'
+export type CropId = 'goldleaf' | 'ather_wheat' | 'dewdrop_vine' | 'violetbloom' | 'stormgrass' | 'tidepetal' | 'starbloom' | 'heartleaf' | 'ather_lily' | 'firewort'
 export interface Crop { id: CropId; name: string; tier: 1 | 2 | 3 | 4; growMs: number }
 const C = (id: CropId, name: string, tier: 1 | 2 | 3 | 4, min: number): Crop => Object.freeze({ id, name, tier, growMs: min * MIN })
 /** Canon's resource tables, exactly (growth time per tier row), less RETIRED_CROPS (below). */
@@ -32,6 +32,9 @@ export const CROPS: Readonly<Record<CropId, Crop>> = Object.freeze({
   violetbloom: C('violetbloom', 'Violetbloom', 2, 20), stormgrass: C('stormgrass', 'Stormgrass', 2, 20), tidepetal: C('tidepetal', 'Tidepetal', 2, 20),
   starbloom: C('starbloom', 'Starbloom', 3, 45), heartleaf: C('heartleaf', 'Heartleaf', 3, 60),
   ather_lily: C('ather_lily', 'Ather Lily', 4, 120),
+  // M234 s2 (THE RECIPES SIT-DOWN 11-27, alchemy.md): FIREWORT, a new Ather crop, a hot herb (Alex's name). Grows like the
+  // tier-2 herbs (tier + time = Jin's). Ground with Fuli Powder at the Crusher Table for the spicy Grilled Rinn (infusions.ts).
+  firewort: C('firewort', 'Firewort', 2, 20),
 })
 
 /** M204 s3 (canon 35c83eb, game/alchemy.md › THE COOKING ROAD › Herbs): ROOTVINE IS RETIRED (too close to Rootbulb) and

@@ -2,7 +2,7 @@
 // The cooking room's hearth + the Smokehouse (ather/cooking.ts, business/smokehouse.ts). Canon pins: the hearth ROASTS,
 // Shimmerscale is the one rinn that roasts (Glowfin / Moonkoi are spirit food, never a roast row), the Smokehouse sells
 // only the three farmed kinds, by the bundle, and nothing roasts a follower species.
-import { DISHES, MEATS, ROAST, SMOKEHOUSE_STOCK, isDish, healOf } from './cooking'
+import { DISHES, MEATS, ROAST, SMOKEHOUSE_STOCK, isDish } from './cooking'
 import { ROOMS, roomAccepts, freshWorks, craftAt, type Works, type Room } from './rooms'
 import { buyBundle } from '../business/smokehouse'
 import { FRONT_SHOPS } from '../business/doors'
@@ -19,11 +19,13 @@ ok(Object.keys(MEATS).sort().join() === 'drifthorn_cut,hearthwing_eggs,tuskroot_
 ok(!Object.keys({ ...MEATS, ...DISHES }).some(id => /dustwhisker|sporeling/.test(id)), 'canon: a follower species is food')
 ok(SMOKEHOUSE_STOCK.every(b => b.id in MEATS && b.n > 1), 'stock: a Smokehouse line is not a bundle of farmed meat')
 ok(FRONT_SHOPS.smokehouse?.name === 'The Smokehouse', 'doors: no Smokehouse storefront')
-// every roast job is 1 in → 1 dish out, every dish is made by a job, every dish heals
+// every roast job is 1 in → 1 dish out, every dish is made by a job. M234 s2 (meaning changed): a roast no longer HEALS the
+// keeper, it gives a spirit BOND (spirit-dishes.test.ts holds the feeding); the ladder is kept on bond.
 ok(ROAST.every(j => j.in.length === 1 && j.in[0].n === 1 && j.out.n === 1 && isDish(j.out.id)), 'roast: a job is not 1 → 1 dish')
 ok(Object.keys(DISHES).every(id => ROAST.some(j => j.out.id === id)), 'roast: a dish nothing makes')
-ok(Object.keys(DISHES).every(id => healOf(id) > 0 && healOf(id) < 100), 'heal: a dish heals nothing, or a whole bar')
-ok(healOf('roast_tuskroot') > healOf('roast_drifthorn') && healOf('roast_drifthorn') > healOf('roast_rinn') && healOf('roast_rinn') > healOf('roast_eggs'), 'heal: the ladder is out of order')
+ok(Object.keys(DISHES).every(id => DISHES[id].bond > 0 && DISHES[id].bond < 10 && !('heal' in DISHES[id])), 'bond: a roast gives no bond, too much, or still heals')
+const bondOfRoast = (id: string) => DISHES[id].bond
+ok(bondOfRoast("roast_tuskroot") > bondOfRoast("roast_drifthorn") && bondOfRoast("roast_drifthorn") > bondOfRoast("roast_rinn") && bondOfRoast("roast_rinn") > bondOfRoast("roast_eggs"), 'bond: the ladder is out of order')
 ok(!isDish('shimmerscale') && !isDish('drifthorn_cut') && !isDish(null), 'eat: raw food counts as a dish')
 // bag rows + room
 ok(Object.keys({ ...MEATS, ...DISHES }).every(id => OPEN_ITEMS[id] && ITEM_GROUP[id] === 'cooking'), 'items: a food is not a bag row in the cooking group')

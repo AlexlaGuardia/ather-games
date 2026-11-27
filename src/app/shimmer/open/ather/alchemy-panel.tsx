@@ -12,7 +12,7 @@ import { useWideLayout, wideSingle } from './wide-panel'   // M199
 import { ALC_STATIONS, ALC_POTIONS, ALC_POTION_ORDER, INTERMEDIATES, stepsAt, chainOf, pickFor, gradeFrom, gradeOrNull, fills, type AlcStation, type Have } from './alchemy-set'
 import { loadRuns, saveRuns, startRun, collectRun, runFrac, runLeft, type Runs } from './alchemy-runs'
 import { extraBottles } from './alchemist-boon'
-import { INFUSION, MEAL_UI, infusionsAt, infusionTake, slotHave } from './infusions'   // M207: the stations make the four infusions
+import { INFUSION, MEAL_UI, infusionsAt, recipeTake, slotHave, spiceMixesAt, type InfusionRecipe } from './infusions'   // M207: the stations make the four infusions; M234 s2: + the spice mixes
 
 export const haveOf = (inv: Inv): Have => {
   const h: Record<string, number> = {}
@@ -120,7 +120,7 @@ export function AlchemyPanel({ pid, station, onClose, footer, boon }: { pid: str
             )
           })}
         </div>
-        {infusionsAt(station).length > 0 && <InfusionList station={station} have={have} />}
+        {(infusionsAt(station).length > 0 || spiceMixesAt(station).length > 0) && <InfusionList station={station} have={have} />}
     </>
   const tail = <>
         <div style={{ fontSize: 11.5, color: H.inkSoft }}>Higher-grade crops make a stronger potion. The best you carry goes in first.</div>
@@ -142,29 +142,31 @@ export function AlchemyPanel({ pid, station, onClose, footer, boon }: { pid: str
  *  Fuli Powder at the Crusher Table, Golden Glaze at the Still, Storm Broth at the Cauldron Nook. A crop goes in worst grade
  *  first (an infusion carries no grade). The infusion cooks into its element's meal at the hearth. */
 function InfusionList({ station, have }: { station: AlcStation; have: Have }) {
-  const make = (el: ReturnType<typeof infusionsAt>[number]) => {
+  // M234 s2: the station's recipes = its infusions + its spice mixes (Fiery Fuli Powder at the Crusher Table)
+  const recipes: { key: string; rec: InfusionRecipe }[] = [...infusionsAt(station).map(el => ({ key: el as string, rec: INFUSION[el] })), ...spiceMixesAt(station).map(m => ({ key: m.id, rec: m }))]
+  const make = (rec: InfusionRecipe) => {
     let bag: Inv | null = getInv()
-    const spend = bag && infusionTake(el, haveOf(bag))
+    const spend = bag && recipeTake(rec, haveOf(bag))
     if (!bag || !spend) return
     for (const s of spend) { bag = take(bag, s.id, s.n); if (!bag) return }
-    const g = give(bag, INFUSION[el].id, 1)
+    const g = give(bag, rec.id, 1)
     if (g.left) { hudSay('Your bag is full. Make room and come back for it.', 'info', 4); return }
-    setInv(g.inv); hudSay(`${itemDef(INFUSION[el].id).name}. Next: the hearth.`, 'item', 4)
+    setInv(g.inv); hudSay(`${itemDef(rec.id).name}. Next: the hearth.`, 'item', 4)
   }
   const slotLabel = (id: string) => (id.startsWith('crop:') ? itemDef(`${id}:D`).name.replace(/ · D$/, '') : itemDef(id).name)
   return (
     <div data-infusions style={{ display: 'grid', gap: 6, padding: '8px 10px', borderRadius: 12, background: 'rgba(58,39,22,.06)' }}>
       <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase', color: H.inkSoft }}>{MEAL_UI.infusions}</div>
-      {infusionsAt(station).map(el => {
-        const can = !!infusionTake(el, have)
+      {recipes.map(({ key, rec }) => {
+        const can = !!recipeTake(rec, have)
         return (
-          <div key={el} data-infusion={el} data-can={can ? 1 : 0} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div key={key} data-infusion={key} data-can={can ? 1 : 0} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div style={{ display: 'grid', gap: 1 }}>
-              <div style={{ fontSize: 13.5, fontWeight: 700, color: H.ink }}>{itemDef(INFUSION[el].id).name}</div>
-              <div style={{ fontSize: 12, color: H.inkSoft }}>{INFUSION[el].in.map(s => `${s.n} ${slotLabel(s.id)} (${slotHave(s.id, have)})`).join(' + ')}</div>
+              <div style={{ fontSize: 13.5, fontWeight: 700, color: H.ink }}>{itemDef(rec.id).name}</div>
+              <div style={{ fontSize: 12, color: H.inkSoft }}>{rec.in.map(s => `${s.n} ${slotLabel(s.id)} (${slotHave(s.id, have)})`).join(' + ')}</div>
             </div>
             <span data-act="infusion-make" style={{ marginLeft: 'auto' }}>
-              <HearthButton small primary disabled={!can} onClick={() => make(el)}>{MEAL_UI.make}</HearthButton>
+              <HearthButton small primary disabled={!can} onClick={() => make(rec)}>{MEAL_UI.make}</HearthButton>
             </span>
           </div>
         )

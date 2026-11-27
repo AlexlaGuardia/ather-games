@@ -38,7 +38,9 @@ export type Pot = { seed: SeedId; at: number; bloomed?: true; v?: 2; tends?: num
   /** M202: the element she evolved by (her second form); unset = her base form. Written by the evolution (M201). */
   element?: 'mana' | 'storm' | 'earth' | 'water'
   /** M204: her bar: the element of every spiced meal she was fed, in order (infusions.ts feedMeal). Append-only, max 10. */
-  meals?: ('mana' | 'storm' | 'earth' | 'water')[] }
+  meals?: ('mana' | 'storm' | 'earth' | 'water')[]
+  /** M234 s2: her BOND from dishes (spirit-dishes.ts), and the game day + amount gained that day (the daily cap) */
+  bond?: number; bondDay?: number; bondToday?: number }
 export type Pots = Readonly<Record<string, Pot>>
 /** The game-day calendar (anemonyx-view.tsx counts the same days). */
 export const gameDay = (t: number) => Math.floor(t / GAME_DAY_MS)

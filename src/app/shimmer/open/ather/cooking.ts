@@ -10,9 +10,8 @@
 //    species. Meat crosses the gate as honest trade and roasts at an Ather hearth. The Ather grows no meat of its own.
 //  · Jin's: stock, prices, bundle sizes, which towns, heal values, run times. Lark's: the lines (blurbs here await lark).
 //
-// ★ WHAT FOOD IS FOR: hold a dish and click in the Wilds, it heals the keeper (ather/page.tsx). A keeper regenerates out
-//   of a fight anyway (combat.ts REGEN_DELAY/RATE), so a meal is the MID-FIGHT heal: it is what lets a keeper stay in a
-//   fight that is going badly instead of running. That is a choice, not more damage (feedback: power is choice).
+// ★ WHAT FOOD IS FOR (M234 s2, THE RECIPES SIT-DOWN 11-27, supersedes the 11-17 mid-fight heal): FOOD FEEDS SPIRITS,
+//   POTIONS HEAL KEEPERS. Every hearth dish is fed to a garden spirit (spirit-dishes.ts); the keeper heals with potions only.
 import type { Cost, Job } from './furniture'
 
 export interface FoodDef { name: string; blurb: string }
@@ -29,18 +28,39 @@ export const STAPLES: Readonly<Record<string, FoodDef>> = {
   rootbulb: { name: 'Rootbulb', blurb: 'A knobby, starchy node with pale flesh. It roasts at the hearth.' },
   capgrain: { name: 'Capgrain', blurb: 'Dried, ground shelf-fungi caps, pale tan. Flour for bread and porridge.' },
 }
-/** What the hearth makes, and what each heals when eaten in the Wilds. */
-export const DISHES: Readonly<Record<string, FoodDef & { heal: number }>> = {
-  roast_rinn: { name: 'Roast Rinn', blurb: 'A Shimmerscale roasted over the coals. Hold it and click to eat. Heals 40.', heal: 40 },
-  roast_eggs: { name: 'Roast Eggs', blurb: 'Hearthwing eggs done in the coals. Hold them and click to eat. Heals 25.', heal: 25 },
-  roast_drifthorn: { name: 'Roast Drifthorn', blurb: 'Drifthorn roasted on the hearth. Hold it and click to eat. Heals 55.', heal: 55 },
-  roast_tuskroot: { name: 'Roast Tuskroot', blurb: 'Tuskroot roasted in its own fat. Hold it and click to eat. Heals 75.', heal: 75 },
-  // M206: a fillet off the Rinnshop's Filet tab roasts too (Jin's heals; names + blurbs await @lark)
-  roast_shimmerscale_fillet: { name: 'Roast Shimmerscale Fillet', blurb: 'A Shimmerscale fillet off the coals. Hold it and click to eat. Heals 40.', heal: 40 },
-  roast_ribboneel_fillet: { name: 'Roast Ribboneel Fillet', blurb: 'Ribboneel roasted on the hearth. Hold it and click to eat. Heals 60.', heal: 60 },
-  roast_clickclaw_meat: { name: 'Roast Clickclaw', blurb: 'Clickclaw meat done in the coals. Hold it and click to eat. Heals 45.', heal: 45 },
-  // M205: a Rootbulb off the Trading Co. supplier roasts (Jin's heal; name + blurb await @lark)
-  roast_rootbulb: { name: 'Roast Rootbulb', blurb: 'A rootbulb roasted in the coals. Hold it and click to eat. Heals 30.', heal: 30 },
+/** What the hearth roasts. ★ M234 s2 (THE RECIPES SIT-DOWN, alchemy.md, Alex + Magii 11-27): FOOD FEEDS SPIRITS, POTIONS HEAL
+ *  KEEPERS. A roast no longer heals the keeper: it is a SPIRIT DISH, fed to a garden spirit in her panel, and `bond` is what
+ *  it gives her (spirit-dishes.ts, under the daily cap). A plain roast carries no infusion, so no element: bond only. Old saves:
+ *  a roast in a bag keeps its id, it is simply a dish now. Bond numbers = Jin's (feel: Alex); blurbs = placeholders for @lark. */
+const FEED = 'Feed it to a garden spirit, in her panel.'
+export const DISHES: Readonly<Record<string, FoodDef & { bond: number }>> = {
+  roast_rinn: { name: 'Roast Rinn', blurb: `A Shimmerscale roasted over the coals. ${FEED}`, bond: 3 },
+  roast_eggs: { name: 'Roast Eggs', blurb: `Hearthwing eggs done in the coals. ${FEED}`, bond: 2 },
+  roast_drifthorn: { name: 'Roast Drifthorn', blurb: `Drifthorn roasted on the hearth. ${FEED}`, bond: 4 },
+  roast_tuskroot: { name: 'Roast Tuskroot', blurb: `Tuskroot roasted in its own fat. ${FEED}`, bond: 5 },
+  // M206: a fillet off the Rinnshop's Filet tab roasts too (names + blurbs await @lark)
+  roast_shimmerscale_fillet: { name: 'Roast Shimmerscale Fillet', blurb: `A Shimmerscale fillet off the coals. ${FEED}`, bond: 3 },
+  roast_ribboneel_fillet: { name: 'Roast Ribboneel Fillet', blurb: `Ribboneel roasted on the hearth. ${FEED}`, bond: 4 },
+  roast_clickclaw_meat: { name: 'Roast Clickclaw', blurb: `Clickclaw meat done in the coals. ${FEED}`, bond: 3 },
+  // M205: a Rootbulb off the Trading Co. supplier roasts
+  roast_rootbulb: { name: 'Roast Rootbulb', blurb: `A rootbulb roasted in the coals. ${FEED}`, bond: 2 },
+}
+
+/** ★ M234 s2: THE FIRST DISH (canon, alchemy.md › THE RECIPES SIT-DOWN): **Grilled Rinn with Aqual Sauce** (Water), and its
+ *  spicy variant with Fuli Powder crushed with **Firewort** at the Crusher Table (infusions.ts SPICE_MIXES), which adds a touch
+ *  of Mana. `steep` = the element slots the dish fills on her bar, in order: a dish's element value VARIES, and three Water is
+ *  her whole Water need (infusions.ts MEALS_FOR_FORM) in one meal ("one dish can fill a spirit's element"). A dish with
+ *  MOONBERRY gives a little more bond (Magii 30d19fd), still under the daily cap. Element values + bond = Jin's (feel: Alex).
+ *  Canon names: Grilled Rinn, Aqual Sauce, Fuli Powder, Firewort, Moonberry. The variant names are PLACEHOLDERS for @lark. */
+export interface GrillDef extends FoodDef { in: readonly { id: string; n: number }[]; steep: readonly ('mana' | 'storm' | 'earth' | 'water')[]; bond: number }
+export const FIERY_SPICE = 'fiery_fuli_powder'
+export const MOONBERRY = 'moonberry'
+export const MOONBERRY_BOND = 3
+const GRILL_BASE = [{ id: 'shimmerscale', n: 1 }, { id: 'aqual_sauce', n: 1 }]
+export const GRILLED: Readonly<Record<string, GrillDef>> = {
+  grilled_rinn: { name: 'Grilled Rinn with Aqual Sauce', blurb: `A Shimmerscale grilled with Aqual Sauce. Water for a spirit. ${FEED}`, in: GRILL_BASE, steep: ['water', 'water', 'water'], bond: 4 },
+  grilled_rinn_spicy: { name: 'Spicy Grilled Rinn', blurb: `Grilled Rinn with Aqual Sauce and a Firewort kick: Water, and a touch of Mana. ${FEED}`, in: [...GRILL_BASE, { id: FIERY_SPICE, n: 1 }], steep: ['water', 'water', 'water', 'mana'], bond: 4 },
+  grilled_rinn_moonberry: { name: 'Grilled Rinn with Moonberry', blurb: `Grilled Rinn with Aqual Sauce and Moonberry. Water, and a little more bond. ${FEED}`, in: [...GRILL_BASE, { id: MOONBERRY, n: 1 }], steep: ['water', 'water', 'water'], bond: 4 + MOONBERRY_BOND },
 }
 
 /** BETA M206 (world, Alex 11-26): THE RINNSHOP'S FILET TAB prepares a caught rinn. Jin's pick of the Ather's own roster
@@ -63,8 +83,8 @@ export const FILET: Readonly<Record<string, readonly { id: string; n: number }[]
   ribboneel: [{ id: 'ribboneel_fillet', n: 1 }],
   clickclaw: [{ id: 'clickclaw_meat', n: 1 }],
 }
+/** a hearth roast (a plain spirit dish, bond only). M234 s2: it no longer heals the keeper. */
 export const isDish = (id: string | null | undefined): id is string => !!id && id in DISHES
-export const healOf = (id: string) => DISHES[id]?.heal ?? 0
 
 /** The hearth's jobs: one in, one out, roasted. Shimmerscale is the only WHOLE rinn that roasts (canon: the tier-1 food rinn);
  *  M206: the Filet tab's fillets roast too. */
@@ -86,9 +106,13 @@ export const ROAST: readonly Job[] = [
  *  import-free (infusions.ts INFUSION / mealId make the same strings; infusions.test checks they agree). */
 const INFUSED: Readonly<Record<string, string>> = { mana: 'fuli_powder', storm: 'storm_broth', earth: 'golden_tonic', water: 'aqual_sauce' }
 const spiced = (el: string): Job => ({ id: `cook-${el}_meal`, label: 'Cook', in: [{ id: INFUSED[el], n: 1 }, { id: 'shimmerscale', n: 1 }], out: { id: `${el}_meal`, n: 1 } })
-export const SPICED: readonly Job[] = ['mana', 'storm', 'earth', 'water'].map(spiced)
+// M234 s2: the Water meal's hearth job is gone: its inputs (Aqual Sauce + a Shimmerscale) now grill into Grilled Rinn, the first
+// dish (three Water, not one). A water_meal already in a bag still feeds (infusions.ts elementOfMeal).
+export const SPICED: readonly Job[] = ['mana', 'storm', 'earth'].map(spiced)
+/** M234 s2: the grill: the first dish and its variants (GRILLED) */
+export const GRILL: readonly Job[] = Object.entries(GRILLED).map(([id, d]) => ({ id: `grill-${id}`, label: 'Grill', in: d.in, out: { id, n: 1 } }))
 /** everything the hearth does */
-export const HEARTH_JOBS: readonly Job[] = [...ROAST, ...SPICED]
+export const HEARTH_JOBS: readonly Job[] = [...ROAST, ...GRILL, ...SPICED]
 
 /** The Smokehouse's counter: bundles, priced on the ladder's scale (economy/prices.ts: a contract run pays ~2-8k), so a
  *  run buys a few bundles. A Shimmerscale from the water stays the free meal; meat is the bought, bigger one. */

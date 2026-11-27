@@ -44,10 +44,16 @@ export const CRYSTAL_HERB: Readonly<Record<string, FormElement>> = { violet: 'ma
 export const HERB_FIND_CHANCE = 0.12
 /** what a find puts in the bag: one herb and its seed, grade D */
 export const herbFind = (el: FormElement): { id: string; n: number }[] => { const h = HERB_OF[el]; return h ? [{ id: cropId(h), n: 1 }, { id: seedId(h), n: 1 }] : [] }
-/** roll a find for a node of this kind (one rand() call, always made, so the roll count never depends on the kind) */
-export function rollHerb(el: FormElement | undefined, rand: () => number): { id: string; n: number }[] {
+/** M234 s2: FIREWORT (canon's new hot herb, alchemy.md › THE RECIPES SIT-DOWN) is found like the element herbs, by pruning a
+ *  GOLDWOOD (the commonest tree, which had no find since M207). Jin's placement, a mechanical stand-in: where Firewort grows
+ *  wild is not ruled (Magii may move it). A find = the herb + its seed, so it can be grown in the Farm. */
+export const TREE_SPICE_HERB: Readonly<Record<string, CropId>> = { goldwood: 'firewort' }
+/** roll a find for a node of this kind (one rand() call, always made, so the roll count never depends on the kind).
+ *  `herb` (M234 s2): a non-element herb this node turns up instead (TREE_SPICE_HERB). */
+export function rollHerb(el: FormElement | undefined, rand: () => number, herb?: CropId): { id: string; n: number }[] {
   const r = rand()
-  return el && r < HERB_FIND_CHANCE ? herbFind(el) : []
+  if (r >= HERB_FIND_CHANCE) return []
+  return el ? herbFind(el) : herb ? [{ id: cropId(herb), n: 1 }, { id: seedId(herb), n: 1 }] : []
 }
 
 // ── the infusion (an alchemy station) and the meal (the hearth) ─────────────────────────────────────────────────────
@@ -65,10 +71,18 @@ export const infusionId = (el: FormElement) => INFUSION[el].id
 export const elementOfInfusion = (id: string): FormElement | null => ELEMENTS.find(el => INFUSION[el].id === id) ?? null
 /** the infusions a station makes, in ELEMENTS order */
 export const infusionsAt = (at: string): FormElement[] => ELEMENTS.filter(el => INFUSION[el].at === at)
+/** M234 s2: the SPICE MIXES, made at a station like an infusion but carrying no element of their own: canon's spicy variant,
+ *  "Fuli Powder crushed with Firewort at the Crusher Table for the fiery kick". The product's name is a PLACEHOLDER (@lark). */
+export const SPICE_MIXES: readonly InfusionRecipe[] = [
+  { id: 'fiery_fuli_powder', name: 'Fiery Fuli Powder', at: 'crusher', in: [{ id: 'fuli_powder', n: 1 }, { id: 'crop:firewort', n: 1 }] },
+]
+export const spiceMixesAt = (at: string): InfusionRecipe[] => SPICE_MIXES.filter(m => m.at === at)
 /** The exact bag ids an infusion would spend from `have` (crops worst grade first), or null if something is short. */
-export function infusionTake(el: FormElement, have: Readonly<Record<string, number>>): { id: string; n: number }[] | null {
+export const infusionTake = (el: FormElement, have: Readonly<Record<string, number>>) => recipeTake(INFUSION[el], have)
+/** the same for any station recipe (an infusion or a spice mix) */
+export function recipeTake(rec: InfusionRecipe, have: Readonly<Record<string, number>>): { id: string; n: number }[] | null {
   const out: { id: string; n: number }[] = []
-  for (const slot of INFUSION[el].in) {
+  for (const slot of rec.in) {
     let need = slot.n
     const ids = slot.id.startsWith('crop:') ? GRADES.map(g => `${slot.id}:${g}`) : [slot.id]
     for (const id of ids) {
@@ -126,11 +140,14 @@ export type Fed =
   | { ok: false; why: 'unbloomed' | 'locked' }
 /** Feed her one `el` meal: it takes the next slot of her bar (the slots before it never change). A full bar refuses (the
  *  meal stays in the bag). Then the gate: an evolved spirit keeps her element for good; a base one may take her form now. */
-export function feedMeal(pot: Pot, sp: Species, el: FormElement, statOf: StatOf): Fed {
+export const feedMeal = (pot: Pot, sp: Species, el: FormElement, statOf: StatOf): Fed => feedMeals(pot, sp, [el], statOf)
+/** M234 s2: a DISH may fill several slots at once (cooking.ts GRILLED steep: three Water = her whole Water need in one meal).
+ *  The slots past a full bar are dropped (Steep still sets at 10). `slot` = the first slot it took. */
+export function feedMeals(pot: Pot, sp: Species, els: readonly FormElement[], statOf: StatOf): Fed {
   if (!pot.bloomed) return { ok: false, why: 'unbloomed' }
   const meals = mealsOf(pot)
-  if (meals.length >= BAR_SLOTS) return { ok: false, why: 'locked' }
-  const next = [...meals, el], fed: Pot = { ...pot, meals: next }, locked = next.length >= BAR_SLOTS
+  if (meals.length >= BAR_SLOTS || !els.length) return { ok: false, why: 'locked' }
+  const next = [...meals, ...els].slice(0, BAR_SLOTS), fed: Pot = { ...pot, meals: next }, locked = next.length >= BAR_SLOTS
   if (pot.element) return { ok: true, pot: fed, slot: meals.length, evolved: null, formName: null, locked }
   const due = formDue(next, sp, statOf)
   return due ? { ok: true, pot: { ...fed, element: due.element }, slot: meals.length, evolved: due.element, formName: due.formName, locked }

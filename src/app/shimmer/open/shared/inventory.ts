@@ -14,8 +14,8 @@ import { NYX_RINN } from '../continent/rinning-nyx'
 import { keeperKey } from '@/lib/keeper-local'
 import { FURNITURE, KEEPSTONES } from '../ather/furniture'
 import { SEED_IDS, SEED_NAME, SEED_BLURB, seedIcon } from '../ather/seed-items'
-import { MEATS, DISHES, FILLETS, SCALES, SCALES_DEF, STAPLES } from '../ather/cooking'
-import { ELEMENTS, INFUSION, LEGACY_SPICE, mealId, MEAL_UI } from '../ather/infusions'   // M204 + M207
+import { MEATS, DISHES, FILLETS, SCALES, SCALES_DEF, STAPLES, GRILLED, MOONBERRY } from '../ather/cooking'
+import { ELEMENTS, INFUSION, LEGACY_SPICE, mealId, MEAL_UI, SPICE_MIXES } from '../ather/infusions'   // M204 + M207; M234 s2 spice mixes
 import { renameRetired } from '../ather/farming'   // M204 s3: retired crops
 import { POTIONS } from '../ather/alchemy'
 import { DEWL, DEWL_FIRST } from '../ather/dewl'
@@ -155,7 +155,7 @@ for (const [id, f] of Object.entries(FURNITURE)) { OPEN_ITEMS[id] = { name: f.na
 //    An event, not a resource: no recipe, no shop, no drop table. The Anemonyx brings them.
 for (const id of SEED_IDS) { OPEN_ITEMS[id] = { name: SEED_NAME, blurb: SEED_BLURB, icon: seedIcon(id), stack: 10, kind: 'material' }; ITEM_GROUP[id] = 'farming' }
 // COOKING (2026-11-17, ather/cooking.ts): Smokehouse meat (RULED 11-17) and the hearth's roasts (ruled 09-15). Raw meat is a
-//    material; a dish is held and clicked to eat (ather/page.tsx). Icons: tools/art/food_icons.py.
+//    material; a dish is fed to a garden spirit (M234 s2: food feeds spirits; ather/spirit-dishes.ts). Icons: tools/art/food_icons.py.
 for (const [id, f] of Object.entries(MEATS)) { OPEN_ITEMS[id] = { name: f.name, blurb: f.blurb, icon: `/open/icons/${id.replace(/_/g, '-')}.svg`, stack: 99, kind: 'material' }; ITEM_GROUP[id] = 'cooking' }
 // M205: the Trading Co. supplier's staples (Rootbulb, Capgrain; ather/cooking.ts STAPLES). Code-drawn icons.
 for (const [id, f] of Object.entries(STAPLES)) { OPEN_ITEMS[id] = { name: f.name, blurb: f.blurb, icon: `/open/icons/${id}.svg`, stack: 99, kind: 'material' }; ITEM_GROUP[id] = 'cooking' }
@@ -174,6 +174,13 @@ for (const el of ELEMENTS) {
   OPEN_ITEMS[inf.id] = { name: inf.name, blurb: MEAL_UI.infusionBlurb(EL_WORD[el], at), icon: `/open/icons/${gem.replace(/_/g, '-')}.svg`, stack: 99, kind: 'material' }; ITEM_GROUP[inf.id] = 'cooking'
   OPEN_ITEMS[mealId(el)] = { name: MEAL_UI.mealName(EL_WORD[el]), blurb: MEAL_UI.mealBlurb(EL_WORD[el]), icon: `/open/icons/meal-${el}.svg`, stack: 20, kind: 'material' }; ITEM_GROUP[mealId(el)] = 'cooking'
 }
+// M234 s2 (THE RECIPES SIT-DOWN): THE FIRST DISH + its variants (ather/cooking.ts GRILLED; mochi icon = the Water meal's until
+//    drawn), the spice mix (Fiery Fuli Powder, placeholder name; Fuli's gem icon), Moonberry (canon fruit; code-drawn placeholder
+//    icon). Aqual Sauce now grills into Grilled Rinn (the Water meal's hearth job is gone). Blurbs = placeholders for @lark.
+OPEN_ITEMS[INFUSION.water.id].blurb = `Made at the ${ALC_STATIONS[INFUSION.water.at].name}. Grill it with a Shimmerscale at the hearth: Grilled Rinn with Aqual Sauce.`
+for (const [id, d] of Object.entries(GRILLED)) { OPEN_ITEMS[id] = { name: d.name, blurb: d.blurb, icon: '/open/icons/meal-water.svg', stack: 20, kind: 'material' }; ITEM_GROUP[id] = 'cooking' }
+for (const m of SPICE_MIXES) { OPEN_ITEMS[m.id] = { name: m.name, blurb: `Made at the ${ALC_STATIONS[m.at].name}. Grill it into a Grilled Rinn with Aqual Sauce at the hearth for the spicy kick.`, icon: '/open/icons/violet-crystal.svg', stack: 99, kind: 'material' }; ITEM_GROUP[m.id] = 'cooking' }
+OPEN_ITEMS[MOONBERRY] = { name: 'Moonberry', blurb: 'A cool blue berry. Grilled into a dish, it gives a spirit a little more bond.', icon: '/open/icons/moonberry.svg', stack: 99, kind: 'material' }; ITEM_GROUP[MOONBERRY] = 'cooking'
 // POTIONS (2026-11-17, ather/alchemy.ts): canon's brews the open world can reach, boiled in the alchemy room's cauldron; held and
 //    clicked to drink (ather/page.tsx). Icons: tools/art/potion_icons.py.
 for (const [id, p] of Object.entries(POTIONS)) { OPEN_ITEMS[id] = { name: p.name, blurb: p.blurb, icon: `/open/icons/${id.replace(/_/g, '-')}.svg`, stack: 20, kind: 'material' }; ITEM_GROUP[id] = 'alchemy' }

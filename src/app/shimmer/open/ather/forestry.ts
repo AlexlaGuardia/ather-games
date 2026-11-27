@@ -26,7 +26,7 @@ import { keeperKey, gardenKey } from '@/lib/keeper-local'
 import { ownerSlot } from '../shared/owner-store'
 import { emitXp } from '../shared/xp-feed'
 import { isKeeperNode, onKeeperNodes, setSpent, spentUntil, waitClock } from './keeper-nodes'   // M153 s1b: a Glade node's record is the keeper's
-import { rollHerb, TREE_HERB } from './infusions'   // M204
+import { rollHerb, TREE_HERB, TREE_SPICE_HERB } from './infusions'   // M204; M234 s2: + Firewort by a Goldwood
 
 export type Zone = 'meadows' | 'thicket' | 'springs' | 'trails' | 'arid' | 'caverns'
 /** This season's zone names (RULED 2026-11-15, game/shimmer-geography.md › THE WILDS' ZONES, THIS SEASON): they may
@@ -170,7 +170,7 @@ export function prunePlan(kind: TreeKind, rand: () => number = Math.random): { i
   if (SAPLING_CHANCE[kind] > 0 && rand() < SAPLING_CHANCE[kind]) drops.push({ id: saplingItem(kind), n: 1 })
   if (kind === 'tensacia' && rand() < GREENSCALE_CHANCE) drops.push({ id: GREENSCALE, n: 1 })   // M135 s1: the fruit
   if (rand() < MAST_CHANCE) drops.push({ id: 'mast', n: 1 })   // bait's floor (inventory.ts › BAIT_FROM)
-  drops.push(...rollHerb(TREE_HERB[kind], rand))   // M204: now and then an element herb at its foot (infusions.ts)
+  drops.push(...rollHerb(TREE_HERB[kind], rand, TREE_SPICE_HERB[kind]))   // M204: now and then an element herb at its foot (infusions.ts)
   return drops
 }
 /** The tree is done: XP lands on Forestry and it stays spent till `until` (M136: this cycle's reset, counted from the first touch). */

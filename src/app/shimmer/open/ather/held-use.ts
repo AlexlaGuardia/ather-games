@@ -2,14 +2,13 @@
 // WHAT E DOES WITH WHAT IS IN HAND. One pure table so the page, the phone's Use button and the test agree.
 //   furniture -> a placement ghost in front of you on the plot; E sets it, the stack drops by one
 //   Keepstone -> the same, as a Keepstone (the garden bank grows a door)
-//   dish / potion -> eat / drink one
+//   potion -> drink one (M234 s2: a dish is a SPIRIT's food, fed in her panel: nothing in hand)
 //   waymark -> plant (the Wilds only)
 //   bait -> cast / answer / reel (the Wilds' water)
 //   anything else (a material, a tool) -> nothing: E falls through to whatever you are looking at
 // ★ PURE. No React, no stores.
 import { isPiece } from './furniture'
 import { KEEPSTONES } from './furniture'
-import { isDish } from './cooking'
 import { isPotion } from './alchemy'
 import { BAIT } from './rinning'
 
@@ -20,7 +19,6 @@ export function heldUse(id: string | null | undefined, zone: Zone): HeldUse {
   if (!id) return null
   if (isPiece(id)) return zone === 'plot' ? 'place-piece' : null
   if (id in KEEPSTONES) return zone === 'plot' ? 'place-chest' : null
-  if (isDish(id)) return 'eat'
   if (isPotion(id)) return 'drink'
   if (id === 'waymark') return zone === 'wilds' ? 'plant' : null
   if (id === BAIT) return zone === 'wilds' ? 'cast' : null

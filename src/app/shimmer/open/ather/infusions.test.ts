@@ -48,7 +48,8 @@ for (const k of ['goldwood', 'shimmeroak', 'starwillow', 'dawnwood'] as const) o
 ok(!minePlan('earth', lo).drops.some(d => d.id.includes('rootvine')), 'a Dinloid gives no Rootvine')
 ok(prunePlan('starwillow', lo).some(d => d.id === 'seed:tidepetal:D'), 'a pruned starwillow can give Tidepetal')
 ok(prunePlan('dawnwood', lo).some(d => d.id === 'crop:stormgrass:D'), 'a pruned dawnwood can give Stormgrass')
-ok(!prunePlan('goldwood', lo).some(d => d.id.startsWith('crop:')), 'a goldwood never gives a herb')
+// M234 s2 (meaning changed): a goldwood now turns up FIREWORT (the hot herb), never an element herb
+ok(prunePlan('goldwood', lo).every(d => !d.id.startsWith('crop:') || d.id === 'crop:firewort:D') && prunePlan('goldwood', lo).some(d => d.id === 'seed:firewort:D'), 'a goldwood gives Firewort and no element herb')
 ok(minePlan('violet', lo).drops.some(d => d.id === 'crop:violetbloom:D'), 'a broken Fuli can give Violetbloom')
 ok(!minePlan('storm', lo).drops.some(d => d.id.startsWith('crop:')), 'other crystals give no herb')
 ok(prunePlan('dawnwood', () => 0.99).every(d => !d.id.startsWith('seed:')), 'a high roll: no herb (the odds are real)')
@@ -81,8 +82,12 @@ ok(infusionTake('storm', { 'crop:stormgrass:A': 1, storm_crystal: 1 })?.map(s =>
 ok(infusionTake('storm', { 'crop:stormgrass:A': 1 }) === null, 'Storm Broth with no Rhyloid: nothing')
 
 // ── 3b. the hearth cooks infusion + Shimmerscale -> that element's meal; a meal is not the keeper's dish ─────────────
+// M234 s2 (meaning changed): Water's Aqual Sauce + Shimmerscale now GRILL into Grilled Rinn (spirit-dishes.test.ts); an old
+// water_meal still feeds. The other three keep their meal job.
 for (const el of ELEMENTS) {
   ok(itemDef(mealId(el)).name.includes('Meal'), `${el}: the meal is a bag item`)
+  ok(elementOfMeal(mealId(el)) === el, `${el}: a meal knows its element`)
+  if (el === 'water') { ok(!SPICED.some(x => x.out.id === mealId(el)), 'water: no meal job (the grill took it)'); continue }
   const j = SPICED.find(x => x.out.id === mealId(el))
   ok(!!j && j.in.some(c => c.id === INFUSION[el].id) && j.in.some(c => c.id === 'shimmerscale') && j.in.length === 2, `${el}: the hearth cooks ${INFUSION[el].name} + Shimmerscale -> meal`)
   ok(HEARTH_JOBS.includes(j!) && ALL_JOBS.some(x => x.id === j!.id), `${el}: the meal job is on the hearth and in the station queue`)

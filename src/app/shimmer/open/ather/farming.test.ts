@@ -11,8 +11,9 @@ const CANON: Record<string, [string, number, number]> = {
   goldleaf: ['Goldleaf', 1, 5], ather_wheat: ['Ather Wheat', 1, 8], dewdrop_vine: ['Dewdrop Vine', 1, 10],
   violetbloom: ['Violetbloom', 2, 20], stormgrass: ['Stormgrass', 2, 20], tidepetal: ['Tidepetal', 2, 20],
   starbloom: ['Starbloom', 3, 45], heartleaf: ['Heartleaf', 3, 60], ather_lily: ['Ather Lily', 4, 120],
+  firewort: ['Firewort', 2, 20],   // M234 s2: canon's new hot herb (alchemy.md › THE RECIPES SIT-DOWN); tier + time Jin's
 }
-ok(Object.keys(CROPS).length === 9 && Object.keys(CANON).length === 9, 'canon: crop count is not 9 (canon\'s 10 less the retired earth herb, 35c83eb)')
+ok(Object.keys(CROPS).length === 10 && Object.keys(CANON).length === 10, 'canon: crop count is not 10 (canon\'s 10 less the retired earth herb, 35c83eb, + Firewort, M234 s2)')
 for (const [id, [name, tier, min]] of Object.entries(CANON)) {
   const c = CROPS[id as CropId]
   ok(!!c && c.name === name && c.tier === tier && c.growMs === min * MIN, `canon: ${id} drifted from canon (${name}, tier ${tier}, ${min} min)`)
