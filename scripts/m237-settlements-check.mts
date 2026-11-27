@@ -1,4 +1,4 @@
-// ── BETA M237 s1: SETTLEMENTS IN THE WORLD BUILDER (owner desktop + fresh keepers 390x844 and 1280x900) ── (built on m86-node-zones-check)
+// ── BETA M237 s1 + s2: SETTLEMENTS IN THE WORLD BUILDER (owner desktop + fresh keepers 390x844 and 1280x900) ── (built on m86-node-zones-check)
 // READ ONLY against prod (ather.games is Alex's live save): every POST to save-builder is answered IN THE PAGE from a mock store (draft
 // = what the editor saved, live = the draft at Publish), a reload reads that mock draft back, and the keeper tabs get the SCRATCH layer.
 //   keeper BEFORE (390): the live network as the game holds it (__atherNet): Bryonydell (s1-10) at its baked spot.
@@ -8,16 +8,19 @@
 //   keeper AFTER (fresh, 390 and 1280): the moved one at its new spot with Shore + 3 homes + the tent stored, the added one at its
 //     spot with Rock + 2 homes; standing at each, the lots built = the home count's lots (settlementLots on the same merge);
 //     RELOAD keeps it; 0 page errors.
+// s2: homes 5 + tent Dash on the moved one: the editor's COUNTER (panel, marker, every list line) = homesCount on the same merge;
+//   a fresh keeper builds exactly the counter's placed homes there, and a Dash tent stands BESIDE it (60-90 m, the baked Dash taken
+//   over: the season's tent counts unchanged) whose door says 'E · the Thistledown Fair · Dash' and E opens the Dash panel.
 //   OWNER_KEY=... npx tsx scripts/m237-settlements-check.mts [--url https://ather.games] [--out dir]
 import puppeteer, { type Page, type HTTPRequest } from 'puppeteer-core'
 import { createHash } from 'crypto'
 import { readFileSync, existsSync, mkdirSync } from 'node:fs'
 import { dismissStartCard } from './lib/start-card.mts'
 import { applySettlementEdits, cleanSettlementEdits } from '../src/app/shimmer/open/ather/settlement-edits.ts'
-import { settlementLots } from '../src/app/shimmer/open/ather/settlement-lots.ts'
-import type { Network } from '../src/app/shimmer/open/ather/network.ts'
+import { settlementLots, homesCount } from '../src/app/shimmer/open/ather/settlement-lots.ts'
+import { tentsOf, fairDoor, tentLabel, type Network, type Tent } from '../src/app/shimmer/open/ather/network.ts'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
-const url = flag('--url', 'https://ather.games'), out = flag('--out', 'docs/looks/m237-s1-2026-11-27')
+const url = flag('--url', 'https://ather.games'), out = flag('--out', 'docs/looks/m237-s2-2026-11-27')
 mkdirSync(out, { recursive: true })
 const KEY = process.env.OWNER_KEY || (existsSync('.env') ? /OWNER_KEY=(.+)/.exec(readFileSync('.env', 'utf8'))?.[1]?.trim() : undefined)
 if (!KEY) { console.log('no OWNER_KEY'); process.exit(2) }
@@ -49,9 +52,9 @@ function intercept(o: Page) {
 const liveTxt = await (await fetch(`${url}/shimmer/open/wilds-edits`, { cache: 'no-store' } as any)).text()
 const bake = await (await fetch(`${url}/open/wilds/network-s1.json`, { cache: 'no-store' } as any)).json() as Network
 
-type Seen = { net: { id: string; name: string; x: number; z: number; biome?: string; homes?: number; tent?: { contest: string; level?: string } }[]; lots: Record<string, number> }
+type Seen = { net: { id: string; name: string; x: number; z: number; biome?: string; homes?: number; tent?: { contest: string; level?: string } }[]; lots: Record<string, number>; tents: Tent[]; prompt: string; panel: boolean }
 /** a fresh keeper on `layer`: the network the game holds, and (with `visit`) the lots built standing at each visited settlement */
-async function keeper(layer: string, tag: string, vp: { width: number; height: number }, visit: string[] = [], reload = false): Promise<Seen> {
+async function keeper(layer: string, tag: string, vp: { width: number; height: number }, visit: string[] = [], reload = false, tentOf: string | null = null): Promise<Seen> {
   const ctx = await br.createBrowserContext(), kp = await ctx.newPage(); await kp.setViewport(vp)
   kp.on('pageerror', e => errs.push(`keeper ${tag}: ` + String(e).slice(0, 200)))
   await kp.setRequestInterception(true)
@@ -80,8 +83,23 @@ async function keeper(layer: string, tag: string, vp: { width: number; height: n
     await A('look', Math.PI, -0.25); await sleep(2500)
     await kp.screenshot({ path: `${out}/${tag}-${id}.png` }).catch(() => {})
   }
+  const tents = await kp.evaluate(() => (window as W).__atherNet?.()?.tents ?? []) as Tent[]
+  let prompt = '', panel = false
+  const t = tentOf ? tents.find(q => q.settlement === tentOf) : null
+  if (t) {   // M237 s2: the Fair's tent beside it, the same door + sign-up panel as a baked one
+    const s = net.find(q => q.id === tentOf)!
+    const far = { x: t.x + (t.x - s.x) * 0.6, z: t.z + (t.z - s.z) * 0.6 }   // past the tent, looking back over it at the settlement
+    await A('tp', far.x, far.z, Math.atan2(-(s.x - far.x), -(s.z - far.z))); await A('look', Math.atan2(-(s.x - far.x), -(s.z - far.z)), -0.3); await sleep(5000)
+    await kp.screenshot({ path: `${out}/${tag}-tent-beside.png` }).catch(() => {})
+    const d = fairDoor(t), yaw = Math.atan2(-(t.x - d.x), -(t.z - d.z))
+    await A('tp', d.x, d.z, yaw); await A('look', yaw, -0.05)
+    for (let i = 0; i < 40 && !prompt.includes(`E · the Thistledown Fair · ${tentLabel(t)}`); i++) { await sleep(500); prompt = await kp.evaluate(() => document.body.innerText) }
+    await kp.keyboard.press('KeyE'); await sleep(1500)
+    for (let i = 0; i < 12 && !panel; i++) { panel = !!(await kp.$(`[data-panel="${t.contest}"]`)); if (!panel) await sleep(500) }
+    await kp.screenshot({ path: `${out}/${tag}-tent-panel.png` }).catch(() => {})
+  }
   await ctx.close()
-  return { net, lots }
+  return { net, lots, tents, prompt, panel }
 }
 
 try {
@@ -128,10 +146,21 @@ try {
   let mv = (await o.evaluate(() => (window as W).__terrain.settlements()) as any[]).find(s => s.id === MOVE)
   ok(!!mv && Math.hypot(mv.x - to.x, mv.z - to.z) < 6 && (await o.evaluate(() => (window as W).__terrain.selSettle())) === MOVE, `2. the drag moved it to (${mv?.x}, ${mv?.z}) (aimed ${to.x}, ${to.z}) and selected it`)
   await o.select('[data-testid="settle-focus"]', 'shore'); await sleep(200)
-  await o.select('[data-testid="settle-homes"]', '3'); await sleep(200)
+  await o.select('[data-testid="settle-homes"]', '5'); await sleep(200)
   await o.select('[data-testid="settle-tent"]', 'dash'); await sleep(300)
   mv = (await o.evaluate(() => (window as W).__terrain.settlements()) as any[]).find(s => s.id === MOVE)
-  ok(mv.biome === 'shore' && mv.homes === 3 && mv.tent?.contest === 'dash', `3. dropdowns: focus ${mv.biome}, homes ${mv.homes}, tent ${mv.tent?.contest}`)
+  ok(mv.biome === 'shore' && mv.homes === 5 && mv.tent?.contest === 'dash', `3. dropdowns: focus ${mv.biome}, homes ${mv.homes}, tent ${mv.tent?.contest}`)
+  // s2: THE COUNTER (panel line + marker + every list line) = homesCount on the same merge
+  const merged0 = applySettlementEdits({ ...bake, settlements: bake.settlements.filter(s => s.id !== 'moonwell-glade') }, cleanSettlementEdits({ settlements: await o.evaluate(() => (window as W).__terrain.settleEdits()) }))
+  const hc = homesCount(merged0.settlements.find(s => s.id === MOVE)!, 1)
+  const ctr = await o.$eval('[data-testid="settle-counter"]', e => ({ placed: +e.getAttribute('data-placed')!, set: +e.getAttribute('data-set')!, tent: e.getAttribute('data-tent'), txt: (e as HTMLElement).innerText }))
+  ok(ctr.placed === hc.placed && ctr.set === 5 && ctr.tent === 'dash' && ctr.txt.includes(`Homes ${hc.placed}/5`), `s2 counter: the panel reads "${ctr.txt.replace(/\s+/g, ' ')}" (want Homes ${hc.placed}/5, tent dash)`)
+  const mk = await o.$eval(`[data-testid="settle-count-${MOVE}"]`, e => e.textContent).catch(() => null)
+  ok(mk === `Homes ${hc.placed}/5`, `s2 counter: its marker reads "${mk}"`)
+  const lines = await o.$$eval('[data-testid^="settle-list-count-"]', d => d.map(e => e.textContent))
+  ok(lines.length === listN && lines.every(l => /^Homes \d\/\d( auto)?$/.test(l ?? '')), `s2 counter: every list line shows it (${lines.length}/${listN}: ${lines.slice(0, 3).join(', ')} ...)`)
+  ok(!!(await o.$(`[data-tent-of="${MOVE}"]`)), 's2: the editor draws the pitched Dash tent beside it')
+  await o.screenshot({ path: `${out}/a-editor-counter.png` }).catch(() => {})
   // a REAL click on empty ground = ADD
   const addAt = { x: org.x + (org.x > to.x ? 260 : -260), z: org.z + (org.z > to.z ? 200 : -200) }
   const c = px(addAt.x, addAt.z); await o.mouse.click(c.x, c.y); await sleep(700)
@@ -162,12 +191,18 @@ try {
   const merged = applySettlementEdits({ ...bake, settlements: bake.settlements.filter(s => s.id !== 'moonwell-glade') }, cleanSettlementEdits({ settlements: mockLive.settlements }))
   const want = (id: string) => settlementLots(merged.settlements.find(s => s.id === id)!, 1).length
   for (const [tag, vp, reload] of [['c-after-390', { width: 390, height: 844 }, false], ['d-after-desk', { width: 1280, height: 900 }, true]] as const) {
-    const k = await keeper(scratch, tag, vp, [MOVE, selId], reload)
+    const k = await keeper(scratch, tag, vp, [MOVE, selId], reload, MOVE)
     const M = k.net.find(s => s.id === MOVE), D = k.net.find(s => s.id === selId)
-    ok(!!M && M.x === mv.x && M.z === mv.z && M.biome === 'shore' && M.homes === 3 && M.tent?.contest === 'dash', `7. ${tag}: ${M?.name} stands at the new spot (${M?.x}, ${M?.z}), trade Shore, homes 3, tent Dash stored`)
+    ok(!!M && M.x === mv.x && M.z === mv.z && M.biome === 'shore' && M.homes === 5 && M.tent?.contest === 'dash', `7. ${tag}: ${M?.name} stands at the new spot (${M?.x}, ${M?.z}), trade Shore, homes 5, tent Dash`)
     ok(!!D && D.x === ad.x && D.z === ad.z && D.biome === 'rock' && D.homes === 2 && D.tent?.level === 'difficult', `7. ${tag}: the added ${D?.name} at (${D?.x}, ${D?.z}), trade Rock, homes 2`)
     ok(k.net.length === b0.net.length + 1, `7. ${tag}: ${k.net.length} settlements (one added)`)
-    ok(k.lots[MOVE] === want(MOVE) && want(MOVE) <= 3 && k.lots[MOVE] > 0, `8. ${tag}: standing at ${M?.name}: ${k.lots[MOVE]} homes built (want ${want(MOVE)}, cap 3)`)
+    ok(k.lots[MOVE] === want(MOVE) && k.lots[MOVE] === ctr.placed && k.lots[MOVE] > 0, `8. ${tag}: standing at ${M?.name}: ${k.lots[MOVE]} homes built = the counter's ${ctr.placed}/5`)
+    const T = k.tents.find(t => t.settlement === MOVE), dT = T && M ? Math.hypot(T.x - M.x, T.z - M.z) : -1
+    ok(!!T && T.contest === 'dash' && dT >= 59 && dT <= 91, `s2 ${tag}: a Dash tent stands beside ${M?.name} (${dT.toFixed(0)} m out at ${T?.x}, ${T?.z})`)
+    const cnt = (ts: Tent[]) => JSON.stringify(ts.map(t => t.contest + (t.level ?? '')).sort())
+    ok(cnt(k.tents) === cnt(tentsOf(bake)) && !k.tents.some(t => t.contest === 'dash' && !t.settlement), `s2 ${tag}: the baked Dash was taken over, the season's tents still ${k.tents.length} (${cnt(k.tents)})`)
+    ok(k.prompt.includes('E · the Thistledown Fair · Dash'), `s2 ${tag}: its door says "E · the Thistledown Fair · Dash"`)
+    ok(k.panel, `s2 ${tag}: E at its door opens the Dash panel`)
     ok(k.lots[selId] === want(selId) && want(selId) <= 2 && k.lots[selId] > 0, `8. ${tag}: standing at ${D?.name}: ${k.lots[selId]} homes built (want ${want(selId)}, cap 2)`)
   }
 } catch (e) { ok(false, 'threw: ' + String(e).slice(0, 300)) }
