@@ -17,7 +17,7 @@ import { loadIndex, makeWorld, zonesOf, tileOf, TILE_M, type WildsWorld } from '
 import { loadNetwork, clearing, roadField } from '../../open/ather/network'
 import { makeVoids, type IndexLike } from '../../open/ather/wilds-voids'
 import { paintVoids, cellKey, cellOf, VCELL, type VoidEdits } from '../../open/ather/void-edits'
-import { paintNodeZones, zoneCode, zoneOf, nzCell, nzKey, NZ_CELL, NZ_STEPS, FOREST_PER_CELL, CRYSTAL_PER_CELL, type NodeZoneType } from '../../open/ather/node-zones'   // M86
+import { paintNodeZones, zoneCode, zoneOf, nzCell, nzKey, NZ_CELL, NZ_STEPS, FOREST_PER_CELL, CRYSTAL_PER_CELL, KIND_PER_CELL, NODE_KIND_ZONES, isKindZone, type NodeZoneType, type NodeKindZone } from '../../open/ather/node-zones'   // M86
 import type { Network } from '../../open/ather/network'
 import { applyBrush, mergeEdits, EditHistory, BRUSHES, paintWater, foldWater, WATER_PREFIX, FALLS_PREFIX, addFall, removeFallsNear, fallLines, fallSheets, ponds, type Brush, type Edits, type BrushTile, type WaterMap } from '../../open/ather/wilds-edits'
 
@@ -88,6 +88,15 @@ const ZONES_KEY = 'zones/'
 // M104: the void brush's cells live in the same store under one key (not a tile name: '/' never passes TILE_NAME), so one undo
 // history, dirty set, autosave and Publish cover them; the layer file carries them as `voids` (void-edits.ts)
 const VOIDS_KEY = 'voids/'
+// M223: the kind spawn zones on the brush map (colours distinct from grey / green / violet) and their button labels (@lark)
+const KIND_ZONE: Record<NodeKindZone, { label: string; node: string; rgb: string; col: string }> = {
+  venium:  { label: 'Venium seam',  node: 'Venium',  rgb: '235,60,200',  col: 'Magenta' },
+  eurleen: { label: 'Eurleen seam', node: 'Eurleen', rgb: '255,196,40',  col: 'Gold' },
+  water:   { label: 'Aqual',        node: 'Aqual',   rgb: '70,165,255',  col: 'Blue' },
+  earth:   { label: 'Dinloid',      node: 'Dinloid', rgb: '0,190,185',   col: 'Teal' },
+  violet:  { label: 'Fuli',         node: 'Fuli',    rgb: '225,40,55',   col: 'Red' },
+  storm:   { label: 'Rhyloid',      node: 'Rhyloid', rgb: '245,245,255', col: 'White' },
+}
 // M86: the node zones' cells (node-zones.ts) live in the same store under one key, like the void brush; the layer carries them as `nodes`
 const NODES_KEY = 'nodes/'
 // the editor keeps heights and water in ONE store (so one undo history covers both): '<tile>' = heights, 'water/<tile>' = water
@@ -384,7 +393,7 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
       const x0 = B.ox - B.meta.sizeX / 2, z0 = B.oz - B.meta.sizeZ / 2, s = NZ_CELL / cell
       for (let j = nzCell(z0); j <= nzCell(z0 + B.meta.sizeZ); j++) for (let i = nzCell(x0); i <= nzCell(x0 + B.meta.sizeX); i++) {
         const zn = zoneOf(NZ[nzKey(i, j)]); if (!zn) continue
-        ctx.fillStyle = zn.type === 'none' ? 'rgba(20,20,24,0.55)' : zn.type === 'forest' ? `rgba(40,200,90,${0.2 + zn.d * 0.1})` : `rgba(190,110,255,${0.2 + zn.d * 0.1})`
+        ctx.fillStyle = zn.type === 'none' ? 'rgba(20,20,24,0.55)' : `rgba(${zn.type === 'forest' ? '40,200,90' : zn.type === 'crystal' ? '190,110,255' : KIND_ZONE[zn.type].rgb},${0.2 + zn.d * 0.1})`
         ctx.fillRect((i * NZ_CELL - x0) / cell, (j * NZ_CELL - z0) / cell, s, s)
       }
     }
@@ -833,11 +842,15 @@ function MapEditor({ map, onMap }: { map: BuilderMap; onMap: (m: BuilderMap) => 
             <div className="flex flex-wrap gap-1">
               {(['none', 'forest', 'crystal', 'erase'] as const).map(t => <button key={t} className={`${btn} ${nzType === t ? on : off}`} onClick={() => setNzType(t)} data-testid={`nodes-${t}`}>{t === 'none' ? 'No nodes' : t === 'forest' ? 'Dense forest' : t === 'crystal' ? 'Crystal bed' : 'Default'}</button>)}
             </div>
-            {(nzType === 'forest' || nzType === 'crystal') && <div className="flex gap-1 items-center">
+            {/* M223: a spawn zone per node kind (the type is the node's kind id): the metal seams, then the M185 gems */}
+            <div className="flex flex-wrap gap-1" data-testid="nodes-kinds">
+              {NODE_KIND_ZONES.map(t => <button key={t} className={`${btn} ${nzType === t ? on : off}`} onClick={() => setNzType(t)} data-testid={`nodes-${t}`}><span className="inline-block w-2 h-2 rounded-sm mr-1 align-middle" style={{ background: `rgb(${KIND_ZONE[t].rgb})` }} />{KIND_ZONE[t].label}</button>)}
+            </div>
+            {nzType !== 'none' && nzType !== 'erase' && <div className="flex gap-1 items-center">
               <span className="text-[10px] uppercase tracking-[0.18em] text-white/40">Thickness</span>
               {NZ_STEPS.map(d => <button key={d} className={`${btn} ${nzStep === d ? on : off}`} onClick={() => setNzStep(d)} data-testid={`nodes-d${d}`}>{d}</button>)}
             </div>}
-            <div className="text-[11px] text-white/45">{nzType === 'none' ? 'no trees, crystals or stones stand here (paths, clearings). Grey.' : nzType === 'forest' ? `adds ${FOREST_PER_CELL[nzStep - 1]} trees per ${NZ_CELL} m square, of the zone's own kinds. Green.` : nzType === 'crystal' ? `adds ${CRYSTAL_PER_CELL[nzStep - 1]} crystal nodes per ${NZ_CELL} m square, of the zone's own kinds. Violet.` : "back to the map's own rule."} Players see it after Publish.</div>
+            <div className="text-[11px] text-white/45">{nzType === 'none' ? 'no trees, crystals or stones stand here (paths, clearings). Grey.' : nzType === 'forest' ? `adds ${FOREST_PER_CELL[nzStep - 1]} trees per ${NZ_CELL} m square, of the zone's own kinds. Green.` : nzType === 'crystal' ? `adds ${CRYSTAL_PER_CELL[nzStep - 1]} crystal nodes per ${NZ_CELL} m square, of the zone's own kinds. Violet.` : isKindZone(nzType) ? `adds ${KIND_PER_CELL[nzStep - 1]} ${KIND_ZONE[nzType].node} nodes per ${NZ_CELL} m square, only that kind. ${KIND_ZONE[nzType].col}.` : "back to the map's own rule."} Players see it after Publish.</div>
           </div>}
           {brush === 'flatten' && <div className="text-[11px] text-white/45 mt-1">levels to the height under your first click</div>}
           {brush === 'zone' && <div className="text-[11px] text-white/45 mt-1" data-testid="zone-hint">drag a building zone: the ground inside levels to the height under your first click, the edge blends over {ZONE_BLEND_M} m. Click a zone to tag or delete it. Delete puts the ground back (undo does not reach past a zone). {zones.length} zone{zones.length === 1 ? '' : 's'} on this map.</div>}

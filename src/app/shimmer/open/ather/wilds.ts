@@ -14,7 +14,7 @@ import { VOIDED_W, type VoidField } from './wilds-voids'
 import { relieve, outcropsIn, outcropRoll } from './relief'
 import { addEdits, ponds as pondsOf, fallSheets, fallLines, type TileEdits, type WaterMap, type PondCell, type FallMap, type Sheet } from './wilds-edits'
 import type { RoadField } from './network'
-import { NZ_CELL, NZ_NONE, nzCell, nzKey, zoneOf, slotLive, SLOTS_MAX, type NodeZones } from './node-zones'   // BETA M86
+import { NZ_CELL, NZ_NONE, nzCell, nzKey, zoneOf, slotLive, SLOTS_MAX, isKindZone, type NodeZones } from './node-zones'   // BETA M86 (+ M223 kind zones)
 
 /** Biome ids, matched to export_wilds.py. What a biome is FOR: what you gather there, what a waymark there sends
  *  home. The numbers are the file format; the names are build vocabulary, not canon place names. */
@@ -268,9 +268,9 @@ function* parseSteps(meta: WildsMeta, dm: Int16Array, biomes: Uint8Array, zoneAt
       yield
       for (let ci = i0; ci <= i1; ci++) {
         const zn = zoneOf(Z[nzKey(ci, cj)]); if (!zn || zn.type === 'none') continue
-        const forest = zn.type === 'forest'
+        const forest = zn.type === 'forest', only = isKindZone(zn.type) ? zn.type : null   // M223: a spawn zone of one node kind
         for (let k = 0; k < SLOTS_MAX; k++) {
-          const s = 500 + k * 16 + (forest ? 0 : 8)
+          const s = only ? 700 + k * 16 : 500 + k * 16 + (forest ? 0 : 8)
           if (!slotLive(k, zn.perCell, hash(ci, cj, s))) continue
           const x = (ci + 0.1 + hash(ci, cj, s + 1) * 0.8) * NZ_CELL - ox, z = (cj + 0.1 + hash(ci, cj, s + 2) * 0.8) * NZ_CELL - oz
           if (Math.abs(x) > hx - 2 || Math.abs(z) > hz - 2) continue
@@ -282,6 +282,9 @@ function* parseSteps(meta: WildsMeta, dm: Int16Array, biomes: Uint8Array, zoneAt
             const t = treeFor(zone, BIOME.woods, 1, roll); if (!t) continue
             const big = bigOf(t.kind)
             trees.push({ x, z, y: heightAt(x, z), tall: (5 + hash(ci, cj, s + 4) * 5) * big, r: (1.6 + hash(ci, cj, s + 5) * 1.2) * big, kind: t.kind, id: `${meta.name}:zt${ci}_${cj}_${k}` })
+          } else if (only) {
+            // M223: exactly the painted kind (a Venium / Eurleen seam, a gem), the zone's own mix ignored; own ids `zk<kind>_i_j_k`
+            crystals.push({ x, z, y: heightAt(x, z), kind: only, s: 0.85 + hash(ci, cj, s + 4) * 0.4, rot: hash(ci, cj, s + 5) * Math.PI * 2, id: `${meta.name}:zk${only}_${ci}_${cj}_${k}` })
           } else {
             const c = crystalFor(zone, BIOME.rock, roll); if (!c) continue
             crystals.push({ x, z, y: heightAt(x, z), kind: c.kind, s: 0.8 + hash(ci, cj, s + 4) * 0.5, rot: hash(ci, cj, s + 5) * Math.PI * 2, id: `${meta.name}:zc${ci}_${cj}_${k}` })

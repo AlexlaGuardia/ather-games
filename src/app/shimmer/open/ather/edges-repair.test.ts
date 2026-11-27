@@ -7,6 +7,7 @@ import { newInv, give, countOf, type Inv } from '../shared/inventory'
 import { buyLot, supplierKind } from '../business/suppliers'
 import { NEW_LEDGER } from '../trade'
 import { loadTools, saveTools } from './rinsticks'
+import { isMetal, CRYSTAL_ITEM, METAL_YIELD } from './prospecting'   // M223
 let pass = 0, fail = 0
 const ok = (c: unknown, m: string) => { if (c) pass++; else { fail++; console.log('FAIL', m) } }
 const eq = (id: string): EquippedTool => ({ toolId: id, usesRemaining: TOOL_DEFS[id].durability, xpBonus: TOOL_DEFS[id].xpBonus, speedBonus: TOOL_DEFS[id].speedBonus })
@@ -14,16 +15,11 @@ const bag = (v = 6, e = 6): Inv => give(give(newInv(0), 'venium', v).inv, 'eurle
 const withEdge = (id: string, left: Partial<Record<EdgeMetal, number>>, on: EdgeMetal | null): EdgedTool => ({ ...eq(id), edge: { on, left } })
 const wearN = (t: EquippedTool, n: number) => { for (let i = 0; i < n; i++) t = wearEdge(t).tool; return t }
 
-// ── 1. buy metal at the Nyx supplier: metal in the bag, Marks out ──
+// ── 1. M223 moved this block (RULED athernyx e3c310e): the metals are FOUND in the Ather, mined from a seam, never sold. Was
+// 'bought in bulk at the Trading Co. supplier'; now: the Co. sells none, and one seam node's top yield is metal toward an edge ──
 for (const m of EDGE_METALS) {
-  const lot = supplierKind('trade-co')?.lots.find(l => l.id === m)
-  ok(!!lot && lot.n >= FIT_METAL, `${m}: sold in bulk at the Trading Co. supplier (a lot covers at least one edge)`)
-  if (!lot) continue
-  const r = buyLot(NEW_LEDGER, newInv(0), 'trade-co', m)
-  ok(r.ok && countOf(r.inv, m) === lot.n && r.ledger.marks === NEW_LEDGER.marks - lot.price, `${m}: buying adds ${lot.n} and spends ${lot.price} Marks`)
-  ok(lot.price <= NEW_LEDGER.marks, `${m}: a new keeper's purse covers one lot (early-mid)`)
-  const poor = buyLot({ ...NEW_LEDGER, marks: lot.price - 1 }, newInv(0), 'trade-co', m)
-  ok(!poor.ok, `${m}: no sale a Mark short`)
+  ok(!supplierKind('trade-co')?.lots.some(l => l.id === m) && !buyLot({ ...NEW_LEDGER, marks: 1e6 }, newInv(0), 'trade-co', m).ok, `${m}: still sold at the Trading Co. supplier`)
+  ok(isMetal(m) && CRYSTAL_ITEM[m] === m && METAL_YIELD[1] >= 1 && METAL_YIELD[1] <= FIT_METAL, `${m}: a seam node does not pay it (or pays a whole edge at once)`)
 }
 
 // ── 2. the repair cost formula ──

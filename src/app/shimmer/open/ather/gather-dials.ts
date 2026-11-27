@@ -45,6 +45,9 @@ export const SEEP_DIAL = {
 } as const satisfies Record<string, GatherDial>
 /** M185 s3: STONE (prospecting.ts › stoneChain), canon's lowest grade: any spike, cheap, quick back. Placeholder numbers (Jin's). */
 export const STONE_DIAL: GatherDial = { need: 1, drain: 2, mana: 5, low: [300, 900], respawnMs: min(2) }
+/** M223: VENIUM + EURLEEN seams (prospecting.ts METAL_KINDS): the Starwillow spike's rung (4), the Ather Crystal's numbers and its
+ *  45 min reset (canon's top grade); one rung low = SLOW + dear, inside a cycle. Placeholder numbers (Jin's, 11-27). */
+export const METAL_DIAL: GatherDial = { need: 4, drain: 10, mana: 36, low: [300, 1400], respawnMs: min(45) }
 export const BETTER = 0.85
 /** stay this close (m) to the node or it lets go: a little past the reach that started it */
 export const HOLD_RANGE = 13

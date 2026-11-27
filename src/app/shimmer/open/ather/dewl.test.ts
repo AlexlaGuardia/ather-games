@@ -9,7 +9,7 @@ import { roomAccepts, type RoomKind } from './rooms'
 import { pilesOf } from './ground-loot'
 let fails = 0, n = 0
 const ok = (c: boolean, m: string) => { n++; if (!c) { fails++; console.log(`✗ ${m}`) } }
-const WANT: Record<CrystalKind, number> = { raw: 1, violet: 2, storm: 2, earth: 2, water: 2, egg: 2, pure: 3, ather: 5, seep_s: 1, seep_m: 1, seep_l: 1, stone: 1 }   // Alex 11-25; M185 s2 seeps = the lowest grade; M185 s3 stone too
+const WANT: Record<CrystalKind, number> = { raw: 1, violet: 2, storm: 2, earth: 2, water: 2, egg: 2, pure: 3, ather: 5, seep_s: 1, seep_m: 1, seep_l: 1, stone: 1, venium: 5, eurleen: 5 }   // M223 metals = the Ather grade; Alex 11-25; M185 s2 seeps = the lowest grade; M185 s3 stone too
 const of = (ds: readonly { id: string; n: number }[]) => ds.filter(d => d.id === DEWL).reduce((a, d) => a + d.n, 0)
 for (const k of CRYSTAL_KINDS) for (const r of [0, 0.3, 0.6, 0.999]) {
   const p = minePlan(k, () => r)

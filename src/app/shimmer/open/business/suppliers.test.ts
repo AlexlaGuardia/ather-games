@@ -28,6 +28,10 @@ const fm = SUPPLIER_KINDS['trade-co']
 // 'its food lots are exactly Rootbulb + Capgrain, and its other lots are exactly the two edge metals'
 ok(!!fm && fm.lots.filter(l => MARKET_GOODS.includes(l.id)).map(l => l.id).sort().join() === 'capgrain,rootbulb', 'market: its food lots are not exactly Rootbulb + Capgrain')
 ok(!!fm && fm.lots.filter(l => !MARKET_GOODS.includes(l.id)).map(l => l.id).sort().join() === [...METAL_LOTS].sort().join(), 'market: its non-food lots are not exactly the edge metals')
+// M223 (RULED athernyx e3c310e): Venium + Eurleen are FOUND in the Ather, so the Co. sells neither (the panel lists fm.lots)
+ok(!fm.lots.some(l => l.id === 'venium' || l.id === 'eurleen') && METAL_LOTS.length === 0, 'M223: the Co. still lists a Venium / Eurleen lot')
+const noMetal = buyLot({ ...NEW_LEDGER, marks: 10_000 }, newInv(12), 'trade-co', 'venium')
+ok(!noMetal.ok && noMetal.why === 'Not sold here.', 'M223: Venium can still be bought from the Co.')
 ok(fm.lots.every(l => l.n >= 5 && l.price >= 100 && l.price <= 2_000), 'market: a lot is not bulk, or its price is off the Smokehouse scale')
 ok(supplierKind('trade-co') === fm && supplierKind('toString') === null && supplierKind(undefined) === null && supplierKind('grain') === null, 'kind lookup: wrong (or reads the prototype)')
 // buying

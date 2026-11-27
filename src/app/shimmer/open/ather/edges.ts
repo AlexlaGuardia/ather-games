@@ -1,8 +1,8 @@
 // THE SMITHY'S EDGES AND TIPS (BETA M134 s1, Alex 11-24 + 11-26; RULED athernyx 4d65536). Pure.
 // On the TOP pruner (Starwillow Pruner) the keeper fits an EDGE, on the top spike (Starwillow Spike) a TIP, of a metal:
 //   Venium (purple ring) = faster + the best XP · Eurleen (gold ring) = lasts longer, a little less mana, the same best XP.
-// ★ Canon: an edge is a swappable FITTING the mana runs along, never a sharpened blade. Venium + Eurleen are mortal-side metals
-//   (the Ather grows no ore), bought in bulk on the Nyx side (game/economy.md).
+// ★ Canon: an edge is a swappable FITTING the mana runs along, never a sharpened blade. Venium + Eurleen are the Ather's MANA-GROWN
+//   metals (M223, RULED athernyx e3c310e: grown out of crystal, not ore), mined from seams (prospecting.ts METAL_KINDS), never bought.
 // ★ What an edge of ANY metal does: one rung up (focuses.ts › rungOf), so the Starwillow Pruner reaches Tensacia's rung (4) and the
 //   spike its equal (5). Tensacia itself is not in the game yet (M135 / M137).
 // ★ ONLY THE EDGE WEARS (M133: tools are permanent). One finished node = one use. Below WARN_FRAC of its uses it warns; at 0 it

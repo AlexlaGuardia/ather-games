@@ -23,7 +23,7 @@
 //
 // ★ PURE but for the guarded localStorage load/save and a tiny subscribe store (as forestry.ts).
 
-import { CRYSTAL_DIAL, HIGH_GEM_DIAL, SEEP_DIAL, STONE_DIAL, type GatherDial } from './gather-dials'
+import { CRYSTAL_DIAL, HIGH_GEM_DIAL, SEEP_DIAL, STONE_DIAL, METAL_DIAL, type GatherDial } from './gather-dials'
 import { addOpenXp, type Zone } from './forestry'
 import { perkFires, activeCompanion, perkLabel, GEM_DROP_CHANCE, GEM_ITEM } from '../shared/companion'
 import { gardenKey } from '@/lib/keeper-local'
@@ -34,8 +34,18 @@ import { KEEPSTONE_FIND, keepstoneFor } from './furniture'
 import { rollHerb, CRYSTAL_HERB } from './infusions'   // M204
 
 /** what stands on the rock. `egg` = a Wooded Trails element node: which element is only known when it shatters. */
-export type CrystalKind = 'raw' | 'violet' | 'storm' | 'earth' | 'water' | 'egg' | 'pure' | 'ather' | SeepKind | 'stone'
-export const CRYSTAL_KINDS: CrystalKind[] = ['raw', 'violet', 'storm', 'earth', 'water', 'egg', 'pure', 'ather', 'seep_s', 'seep_m', 'seep_l', 'stone']
+export type CrystalKind = 'raw' | 'violet' | 'storm' | 'earth' | 'water' | 'egg' | 'pure' | 'ather' | SeepKind | 'stone' | MetalKind
+export const CRYSTAL_KINDS: CrystalKind[] = ['raw', 'violet', 'storm', 'earth', 'water', 'egg', 'pure', 'ather', 'seep_s', 'seep_m', 'seep_l', 'stone', 'venium', 'eurleen']
+// ★ BETA M223 (RULED athernyx e3c310e, Alex 11-27): VENIUM + EURLEEN are MANA-GROWN metals of the Ather, seams it grows out of
+// crystal (not ore). Venium = the Sadlands (purple), Eurleen = the north-east islands (gold). They stand ONLY where the owner
+// paints a seam zone (World Builder > Nodes, node-zones.ts NZ_KIND): no generated slot ever rolls one, so the map is unchanged
+// until he paints. Mined with the STARWILLOW spike (rung 4, the top shaft; a metal tip takes it to 5, and the tip is made of
+// these, so the need cannot be 5) on METAL_DIAL; pays its metal (the bag item the Smithy's edge takes, edges.ts) + blankstone.
+export type MetalKind = 'venium' | 'eurleen'
+export const METAL_KINDS: readonly MetalKind[] = ['venium', 'eurleen']
+export const isMetal = (k: string): k is MetalKind => (METAL_KINDS as readonly string[]).includes(k)
+/** metal a seam node gives: [min, max] (an edge takes 3, edges.ts FIT_METAL; placeholder, Jin's) */
+export const METAL_YIELD = [1, 2] as const
 // ★ M185 s2 (RULED athernyx c73ab4e, CANON_GAPS 'The four gems as the Wilds' mining nodes'): MANA SEEPS. Mana seeps out of a gap
 // in the ground, pools in one spot and crystallises into raw mana shards; small / medium / large by the leak, the bigger the
 // more shards and the rarer. On screen it is a 'mana seep', NEVER a spring or a well (mana-well = the Anemonyx fountain), and
@@ -111,14 +121,15 @@ export const CRYSTAL_NAME: Record<CrystalKind, string> = {
   egg: 'Hidden Crystal', pure: 'Pure Mana Core', ather: 'Ather Crystal',
   seep_s: 'Small Mana Seep', seep_m: 'Medium Mana Seep', seep_l: 'Large Mana Seep',
   stone: 'Stone',
+  venium: 'Venium', eurleen: 'Eurleen',
 }
 /** canon's grade (XP, reset, dewls): the four gems share one (game/shimmer-skilling.md's element row) */
-export const TIER: Record<CrystalKind, 1 | 2 | 3 | 4> = { raw: 1, violet: 2, storm: 2, earth: 2, water: 2, egg: 2, pure: 3, ather: 4, seep_s: 1, seep_m: 1, seep_l: 1, stone: 1 }
+export const TIER: Record<CrystalKind, 1 | 2 | 3 | 4> = { raw: 1, violet: 2, storm: 2, earth: 2, water: 2, egg: 2, pure: 3, ather: 4, seep_s: 1, seep_m: 1, seep_l: 1, stone: 1, venium: 4, eurleen: 4 }
 /** M185 s1: low gems first (Alex's pick, 11-26): Aqual + Dinloid take the Goldwood spike, Fuli + Rhyloid the Shimmeroak. The
  *  hidden one may be any of the four, so it asks the higher one (never a Goldwood back door to Fuli). */
 export const HIGH_GEMS: readonly CrystalKind[] = ['violet', 'storm', 'egg']
 /** the gather dial a node is worked by (the page, the tool panel) */
-export const crystalDial = (kind: CrystalKind): GatherDial => (isStone(kind) ? STONE_DIAL : isSeep(kind) ? SEEP_DIAL[kind] : HIGH_GEMS.includes(kind) ? HIGH_GEM_DIAL : CRYSTAL_DIAL[TIER[kind]])
+export const crystalDial = (kind: CrystalKind): GatherDial => (isMetal(kind) ? METAL_DIAL : isStone(kind) ? STONE_DIAL : isSeep(kind) ? SEEP_DIAL[kind] : HIGH_GEMS.includes(kind) ? HIGH_GEM_DIAL : CRYSTAL_DIAL[TIER[kind]])
 /** canon's ladder: XP, respawn (game/shimmer-skilling.md › Prospecting) */
 export const XP = [0, 20, 60, 150, 400] as const
 export const RESPAWN_MS = CRYSTAL_DIAL.map(d => d.respawnMs)
@@ -131,6 +142,7 @@ export const CRYSTAL_ITEM: Record<Exclude<CrystalKind, 'egg'>, string> = {
   pure: 'pure_mana_core', ather: 'ather_crystal',
   seep_s: 'raw_mana_shard', seep_m: 'raw_mana_shard', seep_l: 'raw_mana_shard',
   stone: 'blankstone',
+  venium: 'venium', eurleen: 'eurleen',   // M223: the bag ids the Smithy's edge already takes (shared/inventory.ts)
 }
 
 // biome ids, matched to wilds.ts › BIOME (literal, as forestry.ts)
@@ -216,7 +228,7 @@ export function minePlan(kind: CrystalKind, rand: () => number = Math.random): {
   const sh = isSeep(found) ? SEEP_SHARDS[found] : isStone(found) ? STONE_BLANKS : null
   // a seep is a pool, not rock: shards only, no blankstone (M185 s2); a stone is blankstone only (M185 s3)
   const drops = sh ? [{ id: CRYSTAL_ITEM[found], n: sh[0] + Math.floor(rand() * (sh[1] - sh[0] + 1)) }]
-    : [{ id: BLANKSTONE, n: 1 + (rand() < 0.5 ? 1 : 0) }, { id: CRYSTAL_ITEM[found], n: found === 'raw' ? 1 + Math.floor(rand() * 3) : 1 }]
+    : [{ id: BLANKSTONE, n: 1 + (rand() < 0.5 ? 1 : 0) }, { id: CRYSTAL_ITEM[found], n: found === 'raw' ? 1 + Math.floor(rand() * 3) : isMetal(found) ? METAL_YIELD[0] + Math.floor(rand() * (METAL_YIELD[1] - METAL_YIELD[0] + 1)) : 1 }]
   // Gemsense (Glowmite @15, Gemdigger @100): a bonus shard of what broke; Gemdigger's pouch now and then a gem too
   let perk: string | undefined
   if (perkFires('prospecting', rand)) {

@@ -42,6 +42,10 @@ export const CRYSTAL_LOOK: Record<CrystalKind, { color: string; glow: string; k:
   seep_l: { color: '#e8eaf2', glow: '#a8b8ff', k: 0.55 },
   // M185 s3: stone = blankstone's own pale even grey (no light inside: it is not crystal); its body = StoneMesh
   stone:  { color: '#bdb7ab', glow: '#e4ded2', k: 0 },
+  // M223: the mana-grown metals (canon colours: Venium purple, Eurleen gold), the crystal cluster for now, OPAQUE (a metal's
+  // edge, never the clear Ather Crystal gold). Placeholder look, Alex judges.
+  venium:  { color: '#6a2fb0', glow: '#a45cff', k: 0.45 },
+  eurleen: { color: '#c9962a', glow: '#ffc94a', k: 0.4 },
 }
 const EGG_HUES = ['#e0304a', '#bfe4ff', '#22c070', '#fff6ea'].map(c => new THREE.Color(c))
 

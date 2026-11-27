@@ -75,7 +75,7 @@ ok(bankCount(room.bank, 'rootbulb') === 12 * lot.n && room.book.list.length === 
 // 20% off bulk while it runs
 ok(bulkPrice(lot, freshBook(), 'trade-co', T0) === lot.price, 'perk: no contract, full price')
 ok(bulkPrice(lot, s.book, 'trade-co', T0 + DAY_MS) === Math.round(lot.price * 0.8), 'perk: a contract running, 20% off')
-const met = SUPPLIER_KINDS['trade-co'].lots.find(l => l.id === 'venium')!
+const met = SUPPLIER_KINDS['trade-co'].lots.find(l => l.id === 'capgrain')!   // M223: the metal lots came out; the OTHER bulk lot holds the 'every lot' meaning
 ok(bulkPrice(met, s.book, 'trade-co', T0 + DAY_MS) === Math.round(met.price * 0.8), 'perk: 20% off EVERY bulk lot at that supplier, not just the material')
 ok(bulkPrice(lot, s.book, 'trade-co', T0 + SEASON_MS) === lot.price, 'perk: gone when the season ends')
 const b = buyLot(rich, newInv(), 'trade-co', 'rootbulb', bulkPrice(lot, s.book, 'trade-co', T0 + DAY_MS))

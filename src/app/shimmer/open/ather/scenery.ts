@@ -7,7 +7,7 @@
 // owner's per-piece toggle (prop.solid) wins over that.
 import { FLORA_LOOKS } from '../../world/flora-placements'
 import { PROP_MODELS } from '../../world/prop-models'
-import { CRYSTAL_KINDS, CRYSTAL_NAME, isSeep, isStone } from './prospecting'
+import { CRYSTAL_KINDS, CRYSTAL_NAME, isSeep, isStone, isMetal } from './prospecting'
 import { FURNITURE, FURNITURE_ORDER, type BuildSub } from './furniture'
 import { buildSolids, CREATIVE_OPEN } from './build-catalog'
 import { panelChain, ROOMS } from './rooms'
@@ -84,7 +84,7 @@ export const SCENERY: readonly SceneryKind[] = [
   ...Object.entries(BUSHES).map(([id, b]): SceneryKind => ({ k: `bush:${id}`, group: 'Bushes', label: words(id), ...b, solid: false, model: { glb: `/models/flora/${id}.glb`, fit: b.h } })),
   ...Object.entries(FILLER).map(([id, f]): SceneryKind => ({ k: `filler:${id}`, ...f, model: { filler: id } })),
   // the egg hunt's hidden crystal is not a body of its own (it wears the others' light so it never gives itself away): not scenery
-  ...CRYSTAL_KINDS.filter(c => c !== 'egg' && !isSeep(c) && !isStone(c)).map((c): SceneryKind => ({ k: `crystal:${c}`, group: 'Crystals', label: CRYSTAL_NAME[c], w: 1.2, d: 1.2, h: 1.35, solid: true, box: { w: 0.8, d: 0.8, h: 1.1 }, model: { crystal: c } })),
+  ...CRYSTAL_KINDS.filter(c => c !== 'egg' && !isSeep(c) && !isStone(c) && !isMetal(c)).map((c): SceneryKind => ({ k: `crystal:${c}`, group: 'Crystals', label: CRYSTAL_NAME[c], w: 1.2, d: 1.2, h: 1.35, solid: true, box: { w: 0.8, d: 0.8, h: 1.1 }, model: { crystal: c } })),
   ...Object.entries(PROP_MODELS).map(([id, m]): SceneryKind => { const z = PROP_SIZE[id] ?? PROP_DEFAULT
     return { k: `prop:${id}`, group: 'Props', label: words(id), w: z.h * z.w, d: z.h * z.d, h: z.h, solid: z.h >= BIG_PROP_H, model: { glb: m.url, fit: z.h, yaw: m.yaw, glow: m.glow } } }),
   ...FURNITURE_ORDER.map((id): SceneryKind => { const f = FURNITURE[id]
