@@ -317,7 +317,9 @@ function SpiritModel({ sp, look, nav, id, avatar, dev, meals, gallery, clip }: {
     // the panel's copy turns round her middle (the tail is half of her), the garden's round her feet
     const pz = avatar || gallery ? rig.avatar.z : rig.pivot.z
     return <group ref={g} name={`spirit-model-${look.name}`} userData={{ spiritModel: look.name, rigged: true }}>
-      {body && <group scale={H} position={[-rig.pivot.x * H, avatar ? -(rig.avatar.y ?? 0) * H : 0, -pz * H]}><primitive object={body.root} /></group>}
+      {/* M224: the gallery drops her by avatar.y too, as the panel does: a hover rig's glb hangs her body ~4 units up (Hovari line,
+          Luminara), so the gallery drew her above its camera's view and showed neither model nor art */}
+      {body && <group scale={H} position={[-rig.pivot.x * H, avatar || gallery ? -(rig.avatar.y ?? 0) * H : 0, -pz * H]}><primitive object={body.root} /></group>}
     </group>
   }
   if (!parts) return null
