@@ -130,6 +130,20 @@ try {
     for (let i = 0; i < 40 && !sawLoad; i++) { sawLoad = !!(await p.$('[data-clash-load]')); if (!sawLoad) await sleep(100) }
     if (tries === 1 && sawLoad) await p.screenshot({ path: `${out}/2a-load.png` })
     await p.waitForSelector('[data-clash-ring="ring"]', { timeout: 20000 })
+    // M233 v2d: an observer in the page records every ceremony beat as it renders (a 250 ms poll misses a 500 ms beat)
+    await p.evaluate(() => {
+      const w = window as any; w.__v2d?.mo?.disconnect()
+      const rec = w.__v2d = { begin: false, intro: 0, trees: [] as string[], mo: null as MutationObserver | null }
+      const look = () => {
+        rec.intro = Math.max(rec.intro, document.querySelectorAll('[data-clash-intro]').length)
+        if (document.querySelector('[data-clash-begin]')) rec.begin = true
+        if (document.querySelector('[data-clash-tree]')) {
+          const t = [...document.querySelectorAll('[data-tree-bout]')].map(e => { const d = (e as HTMLElement).dataset; return `${d.treeBout}:x${d.treeCrossed}:m${d.treeMoved}:n${d.treeNext}` }).join(' ') + (document.querySelector('[data-tree-champion]') ? ' champ' : '')
+          if (rec.trees[rec.trees.length - 1] !== t) rec.trees.push(t)
+        }
+      }
+      rec.mo = new MutationObserver(look); rec.mo.observe(document.body, { subtree: true, childList: true, attributes: true }); look()
+    })
     for (let i = 0; i < 600; i++) {
       const st = await p.evaluate(() => {
         const q = (s: string) => document.querySelector(s) as HTMLElement | null
@@ -139,13 +153,13 @@ try {
           old: !!document.querySelector('[data-stance]'),
           cer: q('[data-clash-ring]')?.dataset.clashCer ?? '', log: q('[data-clash-ring]')?.dataset.clashCeremony ?? '',
           intro: document.querySelectorAll('[data-clash-intro]').length, begin: !!q('[data-clash-begin]'), winner: q('[data-clash-winner]')?.dataset.clashWinner,
-          tree: q('[data-clash-tree]') ? [...document.querySelectorAll('[data-tree-bout]')].map(e => { const d = (e as HTMLElement).dataset; return `${d.treeBout}:x${d.treeCrossed}:m${d.treeMoved}:n${d.treeNext}` }).join(' ') + ((q('[data-tree-champion]') ? ' champ' : '')) : '',
+          ctree: q('[data-clash-tree]') ? [...document.querySelectorAll('[data-tree-bout]')].map(e => { const d = (e as HTMLElement).dataset; return `${d.treeBout}:x${d.treeCrossed}:m${d.treeMoved}:n${d.treeNext}` }).join(' ') + ((q('[data-tree-champion]') ? ' champ' : '')) : '',
           champ: q('[data-clash-champion-name]')?.innerText ?? '' }
       })
       cerLog = st.log || cerLog
       if (st.champ) champName = st.champ
-      if (st.tree && treeSeen[treeSeen.length - 1] !== st.tree) treeSeen.push(st.tree)
-      for (const [k, seen] of [['intro', st.intro === 2], ['begin', st.begin], ['winner', st.winner != null], ['tree', !!st.tree]] as const)
+      if (st.ctree && treeSeen[treeSeen.length - 1] !== st.ctree) treeSeen.push(st.ctree)
+      for (const [k, seen] of [['intro', st.intro === 2], ['begin', st.begin], ['winner', st.winner != null], ['tree', !!st.ctree]] as const)
         if (seen && !shot.has(k)) { shot.add(k); await p.screenshot({ path: `${out}/v2d-${k}.png` }) }
       if (st.old) oldScene = true
       if (!ringInfo && st.canvas && st.models.split(',').filter(Boolean).length >= 2) { ringInfo = st; await sleep(800); await p.screenshot({ path: `${out}/2b-ring-troupe-bout.png` }) }
@@ -159,6 +173,8 @@ try {
       if (st.res) { result = st.res; break }
       await sleep(250)
     }
+    { const r = await p.evaluate(() => { const v = (window as any).__v2d; return v ? { begin: v.begin, intro: v.intro, trees: v.trees } : null })
+      if (r) { if (r.begin) shot.add('begin'); if (r.intro >= 2) shot.add('intro'); for (const t of r.trees) if (treeSeen[treeSeen.length - 1] !== t) treeSeen.push(t) } }
     if (tries === 1 || result === 'won') await p.screenshot({ path: `${out}/2d-ring-result-${result}.png` })
     const ex = await p.$('[data-clash-exit]'); if (ex) { await ex.click(); await sleep(800) }
     exited = !(await p.$('[data-clash-ring]')) && !!(await p.$('[data-panel="clash"] [data-clash-result]'))
