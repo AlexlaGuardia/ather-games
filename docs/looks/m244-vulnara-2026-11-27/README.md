@@ -28,3 +28,19 @@ cd tools; uv run --no-project --with numpy,scipy,trimesh,networkx,fast_simplific
 uv run --no-project --with numpy,scipy,trimesh,networkx,fast_simplification python rig_awaken.py <form> ../vulna<form>.glb ../vulna<form>-rigged.glb ../vulna<form>-metrics.json
 npx tsx docs/looks/m202-vulnara-v2-2026-11-26/tools/three-check.mts <rigged glb> <dial>     (lys 11/11; rok run, vex sit -3 mm, myr sit: see above)
 ```
+
+## s1b (2026-11-27, Alex: "set up the first two legged rig" + the fixes) — `line-sheet-v2.jpg`
+- **THE BIPED RIG** = `rig-2026-11-24/tools/plans/biped.py` (26 bones: root, pelvis, spine, chest, neck, head, ears, arm up/lo + hand x2,
+  leg up (hip) / lo (knee) / mt (hock) / paw x2, tail1-4; clips idle / walk / run / sit / lie, same names + the same v / H speed rule as the
+  quadruped plan, so spirit-model.tsx plays it unchanged). A leg is placed by the BALL of the foot; the hock rides above it (heel lift =
+  a turn of the hock bone), then hip-knee-hock two-bone IK, knee forward. Sit / lie heights + the tail lift are SOLVED off the mesh.
+  **Reuse for a later upright form:** landmarks -> `biped.skeleton()`, skin capsules + gates for your mesh, `Plan(SK, dials, low, masks).clips()`
+  (masks: tail / rump / belly / free). `tools/rig_biped.py` is the worked example (Vulnarok).
+- **Vulnarok re-sculpted upright** (`sculpt_awaken.py` rok entry: arm / leg landmarks, `biped_limbs`): two digitigrade legs, arms free.
+- **Echoes / copies are rigged** (`tools/echoes.py`, works on any rigcore skeleton): each copy = the body on its own skeleton copy
+  (bones e<k>_*) playing her clip a beat behind; its e<k>_root carries place + a SCALE track (rigcore now writes scale). Vulnarok's four
+  walk / run / sit with her, delayed. Vulnavex's two RUN, left where she just ran (drift back at her run speed) and shrink away; hidden
+  when she is not running.
+- **Vulnamyr sit**: the fan stays behind her (no side swing), lift chosen by clearance (it is not monotone), haunch kept above ground:
+  sit lowest 0.0 mm (was -317). Finer mesh NOT done (still 0.012).
+- three-check (game makeRigBody): rok 11/11, myr 11/11, vex sit -3.0 mm (as before). Quick renders: `tools/render_awake.py` (Blender importer).

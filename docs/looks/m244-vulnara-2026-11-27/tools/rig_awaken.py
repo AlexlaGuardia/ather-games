@@ -42,7 +42,7 @@ live = K.Glb(IN).meshes(); parts = {}; m = live['body']; V0 = m['POSITION'].asty
 w = K.skin_weights(V0, m['F'], B, 7, RIG); W = np.zeros((len(V0), len(nb)))
 for i, n in enumerate(nm): W[:, nb.index(n)] += w[:, i]
 W = K.four(W); parts['body'] = dict(m, W=W); e = np.zeros((len(live['eyes']['POSITION']), len(nb))); e[:, nb.index('head')] = 1; parts['eyes'] = dict(live['eyes'], W=e)
-if 'aura' in live: a = np.zeros((len(live['aura']['POSITION']), len(nb))); a[:, nb.index('head' if FORM in ('lys', 'myr') else 'root')] = 1; parts['aura'] = dict(live['aura'], W=a)
+if 'aura' in live and FORM != 'vex': a = np.zeros((len(live['aura']['POSITION']), len(nb))); a[:, nb.index('head' if FORM in ('lys', 'myr') else 'root')] = 1; parts['aura'] = dict(live['aura'], W=a)
 LEGS = ('fl', 'fr', 'hl', 'hr'); SOLE = {f: V0[(W[:, nb.index(f + '_paw')] > .5) & (V0[:, 1] < .10)] - np.array(SK[f + '_paw'][1]) for f in LEGS}
 LEN = {f: sum(np.linalg.norm(np.array(SK[f + a][1]) - np.array(SK[f + b][1])) for a, b in (('_up', '_lo'), ('_lo', '_paw'))) for f in LEGS}
 def clear(f, R):
@@ -100,7 +100,8 @@ def sitpose(br):
     p.R['pelvis'] = R; p.T['pelvis'] = d - pv; p.rot('spine', rx(.16)); p.rot('chest', rx(.16)); p.rot('neck', rx(.30)); p.rot('head', rx(.24)); return p
 def sitpost(p, u):
     st = [setleg(p, f, -.035, 0) for f in ('fl', 'fr')] + [setleg(p, f, .165, 0, x=.150 * (1 if f == 'hl' else -1), bend=(.35 if f == 'hl' else -.35, .9, .7)) for f in ('hl', 'hr')]
-    sw = .05 * np.sin(TAU * u); tail(p, [SITT[0], SITT[1], SITT[2], SITT[3] + .04 * np.sin(TAU * u * 2)], 0, 0, (.30 + sw * .2, .26 + sw * .6, .22 + sw, .10 + sw)); return max(st)
+    sw = .05 * np.sin(TAU * u); side = (.30 + sw * .2, .26 + sw * .6, .22 + sw, .10 + sw) if FORM != 'myr' else (sw * .2, sw * .3, sw * .3, sw * .3)   # M244 s1b: Myr's fan stays behind her, not swung round
+    tail(p, [SITT[0], SITT[1], SITT[2], SITT[3] + .04 * np.sin(TAU * u * 2)], 0, 0, side); return max(st)
 def liepose(br):
     p = Pose(SK); p.T['root'] = np.array([0, LIEY + .002 * br, 0]); p.R['pelvis'] = rx(.0); p.rot('spine', rx(-.06)); p.rot('chest', rx(-.05)); p.rot('neck', rx(.06)); p.rot('head', rx(.04)); return p
 def liepost(p, u):
@@ -116,8 +117,13 @@ SITA = .88; SITY = -.03; SITT = [0, -.12, -.05, 0]; LIEY = -.2; LIET = 0
 RUMP = W[:, [nb.index('pelvis'), nb.index('spine')]].sum(1) > .5
 def _sy(v): global SITY; SITY = v; p = sitpose(0); sitpost(p, 0); return low(p, RUMP) - .006
 SITY = solve(_sy, -.45, .25)
-def _st(v): global SITT; SITT = [v, -.12, -.05, 0]; return min(low((lambda p: (sitpost(p, u), p)[1])(sitpose(0)), TB) for u in (.25, .75)) - .010
-_st(solve(_st, -.3, 2.6))
+if FORM == 'myr':   # M244 s1b: her haunch (hr_up) sat 28 mm under the ground once the fan cleared: nothing but the paws may be lower
+    NOPAW = W[:, [nb.index(b) for b in nb if b.endswith('_paw')]].sum(1) < .3
+    def _sy2(v): global SITY; SITY = v; p = sitpose(0); sitpost(p, 0); return low(p, NOPAW) - .002
+    s0 = SITY; SITY = max(s0, solve(_sy2, -.45, .25))
+FANM = W[:, [nb.index(b) for b in D['tail']]].sum(1) > (.02 if FORM == 'myr' else .5)   # M244 s1b: every vertex the fan moves, not only the tail-heavy ones (Myr sat 317 mm into the ground)
+def _st(v): global SITT; SITT = [v, -.12, -.05, 0]; return min(low((lambda p: (sitpost(p, u), p)[1])(sitpose(0)), FANM) for u in (0, .25, .5, .75)) - .010
+_st(solve(_st, -.3, 2.6) if FORM != 'myr' else max(np.linspace(-1.6, 2.6, 43), key=_st))   # myr: the fan's clearance is not monotone in the lift: take the best
 BODY = W[:, [nb.index(b) for b in ('pelvis', 'spine', 'chest')]].sum(1) > .6
 def _ly(v): global LIEY; LIEY = v; p = liepose(-1); liepost(p, 0); return low(p, BODY) - .008
 LIEY = solve(_ly, -.36, 0)
@@ -126,6 +132,18 @@ _lt(solve(_lt, -.6, 1.6)); p = sitpose(0); sitpost(p, 0); print('rump', low(p, W
 clips, T, st = {}, {}, {}
 for n, g, fn in (('walk', WALK, walk), ('run', RUN, run)): T[n] = 2 * g['reach'] * H / g['duty'] / g['v']; clips[n], st[n] = fn(g)
 clips['idle'] = Q.idle(SK, D, 48); T['idle'] = 4.8; clips['sit'], st['sit'] = rest('sit', 48, sitpose); T['sit'] = 5.; clips['lie'], st['lie'] = rest('lie', 48, liepose); T['lie'] = 5.6
+SK0 = SK
+if FORM == 'vex':   # M244 s1b (Alex 11-27): her two gold copies RUN: each plays her run a beat behind, left where she just ran (drifting back
+    import echoes as E   # at her own run speed, 4 glb/s), and shrinks away (the fade; the glow material is opaque); hidden when she is not running
+    def trail(k):
+        def mv(c, u):
+            if c != 'run': return 0., 0.
+            q = (u + k * .5) % 1; return -.20 - (RUN['v'] / H) * T['run'] * q, sm(0, .08, q) * (1 - q) ** .8
+        return mv
+    SPECS = [dict(off=(-.16, 0, 0), s=.92, delay=.12, move=trail(0)), dict(off=(-.30, 0, 0), s=.84, delay=.30, move=trail(1))]
+    SK2, aura = E.build(SK, V0, m['F'], W, nb, SPECS)
+    for k in ('body', 'eyes'): parts[k] = dict(parts[k], W=E.pad(parts[k]['W'], nb, SK2))
+    parts['aura'] = aura; clips = E.clips(SK, SK2, clips, SPECS); SK = SK2
 path = OUT; K.write(path, parts, SK, clips, {c: (len(v) - 1) / T[c] for c, v in clips.items()})
 P = K.Player(path); pos = P.m['body']['POSITION']; F = P.m['body']['F']; ww, JJ = P.m['body']['WEIGHTS_0'] / 255., P.m['body']['JOINTS_0']; bw = lambda b: (ww * (JJ == P.names.index(b))).sum(1); M = dict(bones=len(nb), glb_bytes=os.path.getsize(path), weights_bad=int((~np.isfinite(ww)).sum()))
 E = K.edges(F); l0 = np.linalg.norm(pos[E[:, 0]] - pos[E[:, 1]], axis=1); ok = l0 > .006

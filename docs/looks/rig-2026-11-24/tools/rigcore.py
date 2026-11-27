@@ -45,13 +45,14 @@ def smooth(a, b, t): t = np.clip((t - a) / (b - a), 0, 1); return t * t * (3 - 2
 # ── pose ───────────────────────────────────────────────────────────────────────────────────────────────────────────
 class Pose:
     """local rotation + local translation offset per bone; globals are resolved on demand, parents first"""
-    def __init__(s, sk): s.sk = sk; s.R = {b: np.eye(3) for b in sk}; s.T = {b: np.zeros(3) for b in sk}
+    def __init__(s, sk): s.sk = sk; s.R = {b: np.eye(3) for b in sk}; s.T = {b: np.zeros(3) for b in sk}; s.S = {}   # S: optional uniform scale per bone (M244 s1b echoes), 1 if absent
     def rot(s, b, *Rs):
         for R in Rs: s.R[b] = s.R[b] @ R
     def glob(s, b):
         par, j = s.sk[b]; j = np.array(j)
-        if par is None: return s.R[b], j + s.T[b]
-        Rp, pp = s.glob(par); return Rp @ s.R[b], pp + Rp @ (j - np.array(s.sk[par][1]) + s.T[b])
+        k = s.S.get(b, 1.0)
+        if par is None: return s.R[b] * k, j + s.T[b]
+        Rp, pp = s.glob(par); return Rp @ s.R[b] * k, pp + Rp @ (j - np.array(s.sk[par][1]) + s.T[b])
     def leg(s, up, lo, ft, target, footR=np.eye(3), bend=(0, 0, 1), maxstretch=1.6):
         """two-bone IK up -> lo -> ft: the ft joint lands on `target` (model space) with foot rotation `footR`. A target past
         the leg's reach lengthens both bones (joint offsets, no scale); returns the stretch (1 = none)."""
@@ -177,6 +178,8 @@ def write(path, parts, sk, clips, fps):
             tr = np.array([np.array(nodes[i]['translation']) + p.T[b] for p in poses])
             if np.abs(q - [0, 0, 0, 1]).max() > 1e-5: S.append(dict(input=t, output=add(q.astype(np.float32), 5126, 'VEC4'))); C.append(dict(sampler=len(S) - 1, target=dict(node=i, path='rotation')))
             if np.abs(tr - nodes[i]['translation']).max() > 1e-5: S.append(dict(input=t, output=add(tr.astype(np.float32), 5126, 'VEC3'))); C.append(dict(sampler=len(S) - 1, target=dict(node=i, path='translation')))
+            sc = np.array([[p.S.get(b, 1.0)] * 3 for p in poses])
+            if np.abs(sc - 1).max() > 1e-5: S.append(dict(input=t, output=add(sc.astype(np.float32), 5126, 'VEC3'))); C.append(dict(sampler=len(S) - 1, target=dict(node=i, path='scale')))
         anims.append(dict(name=cn, samplers=S, channels=C))
     blob = b''.join(bufs)
     j = dict(asset=dict(version='2.0', generator='ather M132 rigcore'), scene=0, scenes=[dict(nodes=roots)], nodes=nodes, meshes=meshes, accessors=accs, bufferViews=views,
@@ -196,7 +199,7 @@ class Player:
     def dur(s, c): return float(s.g.acc(s.clips[c]['samplers'][0]['input'])[-1, 0])
     def globals(s, clip=None, t=0):
         L = {}
-        for i in s.g.j['skins'][0]['joints']: L[i] = [np.array(s.g.j['nodes'][i]['translation'], float), np.array([0, 0, 0, 1.0])]
+        for i in s.g.j['skins'][0]['joints']: L[i] = [np.array(s.g.j['nodes'][i]['translation'], float), np.array([0, 0, 0, 1.0]), np.ones(3)]
         if clip:
             a = s.clips[clip]
             for ch in a['channels']:
@@ -204,10 +207,11 @@ class Player:
                 k = int(np.clip(np.searchsorted(T, t, 'right') - 1, 0, len(T) - 2)); u = np.clip((t - T[k]) / (T[k + 1] - T[k]), 0, 1)
                 v = O[k] * (1 - u) + O[k + 1] * u
                 if ch['target']['path'] == 'rotation': L[ch['target']['node']][1] = v / np.linalg.norm(v)
+                elif ch['target']['path'] == 'scale': L[ch['target']['node']][2] = v
                 else: L[ch['target']['node']][0] = v
         G = []
         for i in s.g.j['skins'][0]['joints']:
-            M = np.eye(4); M[:3, :3] = mat(L[i][1]); M[:3, 3] = L[i][0]
+            M = np.eye(4); M[:3, :3] = mat(L[i][1]) * L[i][2]; M[:3, 3] = L[i][0]
             G.append(G[s.par[i]] @ M if i in s.par else M)
         return [g @ b for g, b in zip(G, s.ibm)]
     def verts(s, part, M):

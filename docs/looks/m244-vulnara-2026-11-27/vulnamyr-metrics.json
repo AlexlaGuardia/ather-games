@@ -57,14 +57,14 @@
  },
  "sit": {
   "dur_s": 5.0,
-  "lowest_m": -0.1812,
+  "lowest_m": -0.0,
   "rest_lowest_m": 0.0,
-  "edge_stretch_p99": 2.25,
-  "edge_stretch_max": 5.85,
-  "leg_reach_ratio_max": 0.52,
-  "length_m": 0.563,
-  "height_m": 0.648,
-  "lowest_bone": "tail3"
+  "edge_stretch_p99": 1.53,
+  "edge_stretch_max": 5.12,
+  "leg_reach_ratio_max": 0.95,
+  "length_m": 0.507,
+  "height_m": 0.769,
+  "lowest_bone": "hl_paw"
  },
  "lie": {
   "dur_s": 5.6,

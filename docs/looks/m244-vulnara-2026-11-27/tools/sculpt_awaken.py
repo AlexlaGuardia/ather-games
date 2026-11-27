@@ -4,9 +4,9 @@ Vulnamyr Enigma) built off the LOCKED art (athernyx assets/stage3/001-004, priva
 motifs. Kept on all four: violet crystal facets, the brow gem, violet eyes, gold accents. Marks = infusion pattern (flowing gold
 lines / chevrons), never a rune or sigil.
     python sculpt_awaken.py <form> <out.glb> [tris]     form = rok | lys | vex | myr
-  rok  Vulnarok   an UPRIGHT war-form: the trunk pitched up off crouched haunches, a deep muscled chest on long heavy forearms
-                  (a knuckle stance, so the quadruped rig still walks her), a gold blaze up the chest, gold flow marks on shoulder
-                  and forearm, crystal plates; FOUR GOLD SELF-ECHOES standing behind her (the 'aura' part)
+  rok  Vulnarok   an UPRIGHT war-form, a TRUE BIPED since M244 s1b (Alex 11-27): she stands on two digitigrade legs, trunk
+                  vertical, arms free (heavy forearms, claws), a deep muscled chest, a gold blaze up the chest, gold flow marks on
+                  shoulder and forearm, crystal plates; FOUR GOLD SELF-ECHOES (rig_biped.py rebuilds them as rigged delayed copies)
   lys  Vulnalys   the tallest and finest: long slim legs, the head carried high, a big GOLD THROAT-RUFF of points, a great plume
                   curled up over her back; VIOLET SPIRALS hanging in the air either side of her head ('aura', head-borne)
   vex  Vulnavex   a long low racer: a long trunk, long legs, ears laid back, a straight streaming brush, a gold throat-ruff; two
@@ -25,13 +25,16 @@ FORM = sys.argv[1] if len(sys.argv) > 1 and sys.argv[1] in ('rok', 'lys', 'vex',
 
 # ── per form: head offset, landmarks, limb radii, trunk ──
 FORMS = dict(
-    rok=dict(HO=(0, .19, .06), ear=((.128, .655, .222), (.240, 1.02, .165)),
-             chest=(0, .56, .18), pelvis=(0, .29, -.10),
-             f=[(.145, .59, .170), (.180, .33, .240), (.155, .050, .272)], fr=(.092, .066, .058), paw=1.35,
-             h=[(.105, .31, -.11), (.130, .20, .03), (.118, .105, -.15), (.115, .040, -.10)], hr=(.105, .072, .052),
-             trunk=((0, .58, .17), (0, .29, -.10), .138, .108), chestE=((0, .53, .20), (.140, .160, .120)),
-             neck=((0, .63, .22), (0, .72, .30), .105), tuck=((0, .20, -.02), (.3, .07, .12)),
-             tail=[(0, .30, -.17), (0, .26, -.29), (0, .25, -.43), (0, .29, -.57), (0, .38, -.70), (0, .50, -.79), (0, .60, -.86), (0, .65, -.92), (0, .66, -.98)],
+    # M244 s1b: the biped. arm = shoulder, elbow, wrist, hand; leg = hip, knee, hock, ball of the foot (digitigrade, a fox's leg stood up)
+    rok=dict(HO=(0, .585, -.13), ear=((.128, .655, .222), (.240, 1.02, .165)), biped=True,
+             chest=(0, .95, -.01), pelvis=(0, .62, -.06),
+             arm=[(.19, .985, .00), (.245, .775, -.035), (.262, .585, .045), (.265, .525, .075)], ar=(.074, .060, .052),
+             leg=[(.110, .60, -.05), (.135, .40, .075), (.125, .165, -.07), (.125, .042, .00)], lr=(.092, .066, .046),
+             f=[(.19, .985, .00), (.245, .775, -.035), (.262, .585, .045)], fr=(.074, .060, .052), paw=1.3,
+             h=[(.110, .60, -.05), (.135, .40, .075), (.125, .165, -.07), (.125, .042, .00)], hr=(.092, .066, .046),
+             trunk=((0, .97, -.01), (0, .62, -.06), .150, .125), chestE=((0, .93, .01), (.175, .17, .135)),
+             neck=((0, 1.0, .02), (0, 1.10, .10), .10), tuck=((0, -2, 0), (.1, .1, .1)),
+             tail=[(0, .55, -.17), (0, .44, -.29), (0, .35, -.43), (0, .31, -.58), (0, .34, -.73), (0, .42, -.85), (0, .50, -.93), (0, .55, -.99), (0, .56, -1.03)],
              tailr=[.06, .09, .145, .19, .205, .19, .14, .07, .004]),
     lys=dict(HO=(0, .08, .02), ear=((.128, .655, .222), (.232, 1.06, .142)),
              chest=(0, .49, .14), pelvis=(0, .49, -.17),
@@ -78,7 +81,23 @@ def l1cone(P, a, b, ra, rb):
     return np.maximum(r - np.maximum(ra + (rb - ra) * k, .010), np.maximum(-t, t - ln) * .7)
 
 # ── the body ──
+def biped_limbs(P):
+    """Vulnarok upright: two free arms off big shoulders (claws), two digitigrade legs (thigh, shin, the long hock bone, a foot)"""
+    M = np.stack([np.abs(P[..., 0]), P[..., 1], P[..., 2]], -1); A, (a, b, c) = G['arm'], G['ar']
+    d = ell(M, (.18, .99, .0), (.088, .078, .088))                                             # the war-form's shoulders
+    d = su(d, cone(M, A[0], A[1], a, b), .03); d = su(d, cone(M, A[1], A[2], b + .004, c), .025)
+    d = su(d, ell(M, (A[1][0] + .005, A[1][1] - .07, A[1][2] + .01), (.064, .085, .062)), .03)     # the heavy forearm
+    d = su(d, ell(M, A[3], (.046, .052, .042)), .02)
+    for x in (-.026, 0, .026): d = su(d, cone(M, (A[3][0] + x, A[3][1] - .03, A[3][2] + .02), (A[3][0] + x * 1.15, A[3][1] - .085, A[3][2] + .055), .013, .002), .006)
+    Lg, (a, b, c) = G['leg'], G['lr']; k = G['paw']
+    t = ell(M, (Lg[0][0] + .01, Lg[0][1] - .07, Lg[0][2] + .005), (.080, .125, .098))              # thigh
+    t = su(t, cone(M, Lg[0], Lg[1], a, b), .04); t = su(t, cone(M, Lg[1], Lg[2], b, c), .03); t = su(t, cone(M, Lg[2], Lg[3], c, c * .9), .025)
+    px, pz = Lg[3][0], Lg[3][2]
+    t = su(t, ell(M, (px, .030 * k, pz + .02), (.046 * k, .030 * k, .058 * k)), .03)
+    for x in (-.024, 0, .024): t = su(t, ell(M, (px + x * k, .022 * k, pz + .062 * k), (.015 * k, .022 * k, .021 * k)), .010)
+    return d, t
 def legs(P):
+    if G.get('biped'): return biped_limbs(P)
     M = np.stack([np.abs(P[..., 0]), P[..., 1], P[..., 2]], -1); f, h = G['f'], G['h']; a, b, c = G['fr']; k = G['paw']
     d = cone(M, f[0], f[1], a, b); d = su(d, cone(M, f[1], f[2], b, c), .03)
     px, pz = f[2][0], f[2][2]
@@ -134,17 +153,18 @@ def body(P):
     bd = su(bd, ell(P, *G['chestE']), .05)
     bd = ss(bd, ell(P, *G['tuck']), .07)
     n0, n1, nr = G['neck']; bd = su(bd, cone(P, n0, n1, nr, nr), .06)
-    if FORM == 'rok':   # pecs + a heavy back
-        bd = su(bd, ell(M, (.062, .53, .255), (.072, .082, .055)), .04); bd = su(bd, ell(P, (0, .52, .05), (.13, .10, .17), rx(.9)), .06)
+    if FORM == 'rok':   # pecs, a heavy back, hips
+        bd = su(bd, ell(M, (.068, .95, .115), (.075, .082, .055)), .04); bd = su(bd, ell(P, (0, .92, -.08), (.16, .17, .11)), .06)
+        bd = su(bd, ell(P, (0, .62, -.07), (.150, .12, .12)), .05)
     if FORM == 'myr':   # a ruff of pale fur over the chest, above the gem
         for x, y, z, tx, ty, tz, r in ((0, .52, .23, 0, .44, .30, .055), (.06, .53, .21, .085, .44, .27, .05), (.10, .52, .17, .135, .43, .22, .045)):
             bd = su(bd, cone(M, (x, y, z), (tx, ty, tz), r, .004), .03)
-    f, h = legs(P); bd = su(bd, f, .045); bd = su(bd, h, .05)
+    f, h = legs(P); bd = su(bd, f, .02 if G.get('biped') else .045); bd = su(bd, h, .05)
     return su(su(su(bd, tail(P), .035), head(P), .03), ruff(P), .02)
 
 # ── crystal facet plates (the ledger's 'violet crystal facets'): low four-sided pyramids proud of the coat ──
 PLATES_AT = dict(
-    rok=[((.20, .55, .15), .040), ((.20, .45, .22), .032), ((.20, .34, .25), .030), ((.16, .42, .00), .040), ((.16, .27, -.08), .036), ((.18, .17, .04), .030), ((.14, .58, .06), .034)],
+    rok=[((.20, .99, .02), .040), ((.25, .86, -.01), .032), ((.27, .69, .02), .030), ((.15, .80, -.06), .040), ((.17, .50, -.01), .036), ((.14, .28, -.01), .030), ((.13, .95, -.10), .034)],
     lys=[((.11, .47, .10), .030), ((.11, .50, -.02), .034), ((.11, .45, -.14), .036), ((.10, .30, -.12), .026), ((.10, .27, .12), .022)],
     vex=[((.11, .40, .10), .030), ((.11, .41, -.03), .034), ((.11, .39, -.17), .036), ((.10, .27, -.18), .026), ((.10, .25, .15), .022)],
     myr=[((.12, .48, .07), .032), ((.12, .48, -.05), .034), ((.12, .44, -.16), .036), ((.11, .29, -.11), .026)])[FORM]
@@ -191,10 +211,10 @@ def marks(V):
     """gold infusion marks: flowing lines / chevrons laid on the coat (a band either side of a polyline), mirrored. No rune, no sigil."""
     M = np.c_[np.abs(V[:, 0]), V[:, 1], V[:, 2]]; out = np.full(len(V), -1.)
     if FORM == 'rok':   # a flame blaze up the chest centre + flow lines over the shoulder and down the forearm
-        for pts in ([(0, .36, .29), (.02, .44, .30), (0, .52, .30), (.025, .59, .28)], [(.03, .42, .295), (.07, .50, .28), (.06, .56, .27)],
-                    [(.21, .62, .17), (.22, .56, .20), (.23, .50, .18)], [(.22, .40, .26), (.21, .33, .28), (.20, .25, .28), (.20, .19, .27)]):
+        for pts in ([(0, .76, .13), (.02, .85, .145), (0, .93, .148), (.025, 1.0, .13)], [(.03, .82, .14), (.07, .90, .15), (.06, .96, .14)],
+                    [(.20, 1.05, .03), (.24, .95, .04), (.255, .86, .03)], [(.27, .73, .04), (.272, .66, .06), (.268, .60, .08)]):
             out = np.maximum(out, seg_band(M, pts, .011))
-        out = np.maximum(out, np.where((M[:, 2] > .19) & (M[:, 1] < .60) & (M[:, 1] > .34), .022 - M[:, 0] - .02 * zig(M[:, 1] * 9, 1), -1.))
+        out = np.maximum(out, np.where((M[:, 2] > .08) & (M[:, 1] < 1.0) & (M[:, 1] > .74) & (M[:, 0] < .12), .022 - M[:, 0] - .02 * zig(M[:, 1] * 9, 1), -1.))
     elif FORM == 'lys':
         for pts in ([(.11, .46, -.02), (.12, .44, -.08), (.11, .46, -.14)],): out = np.maximum(out, seg_band(M, pts, .008))
     elif FORM == 'vex':   # swept speed lines along the flank
@@ -307,7 +327,7 @@ if __name__ == '__main__':
     S.field = lambda P: field(P + HO)                   # SF.eyes lays the eyes on the face at Vulnara's place: shifted back by HO
     SF.F = dict(SF.FORMS['mana'], form='mana', lo=PAL[0], hi=PAL[1])
     xr = .95 if FORM == 'myr' else .52
-    lo = V3(-xr, -.033, min(-1.36, TC[:, 2].min() - .25)); hi = V3(xr, 1.30 if FORM in ('lys', 'myr') else 1.20, .66)
+    lo = V3(-xr, -.033, min(-1.36, TC[:, 2].min() - .25)); hi = V3(xr, 1.80 if FORM == 'rok' else 1.30 if FORM in ('lys', 'myr') else 1.20, .66)
     Vr, Fr = surface(field, lo, hi, float(os.environ.get('AW_H', .0070))); m = trimesh.Trimesh(Vr, Fr, process=False); print('raw', len(Fr), 'closed', m.is_watertight, 'parts', m.body_count)
     k = max(m.split(only_watertight=False), key=lambda c: len(c.faces)); t = decimate(k.vertices, k.faces, TRIS)
     print('dec', len(t.faces), 'closed', t.is_watertight, 'parts', t.body_count, t.bounds.round(3).tolist())

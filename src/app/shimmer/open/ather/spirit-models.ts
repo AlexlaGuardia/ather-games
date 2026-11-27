@@ -473,7 +473,9 @@ export const SECOND_FORMS: Partial<Record<Species, Partial<Record<SpiritElement,
 // (canon: each evolution grows her). Her 'aura' part is the look's glow part: Vulnarok's four gold self-echoes and Vulnavex's
 // two gold copies where she just ran (whole copies, not smoke), Vulnalys's violet spirals and Vulnamyr's crown-halo (head-borne).
 /** each one's nose to tail standing (rig metrics idle length_m / 0.70), glb units: the rig's glbLen */
-export const AWAKEN_LEN: Readonly<Record<string, number>> = { vulnarok: 1.663, vulnalys: 1.32, vulnavex: 1.87, vulnamyr: 1.284 }
+// M244 s1b: Vulnarok stands on the FIRST BIPED RIG (rig-2026-11-24/tools/plans/biped.py; same clip names), her four echoes and
+// Vulnavex's two copies are rigged copies that play her clip a beat behind (echoes.py; Vex's run only, drifting back + shrinking away).
+export const AWAKEN_LEN: Readonly<Record<string, number>> = { vulnarok: 1.463, vulnalys: 1.32, vulnavex: 1.87, vulnamyr: 1.284 }
 export const AWAKEN_GROW: Readonly<Record<string, number>> = { vulnarok: 1.8, vulnalys: 1.7, vulnavex: 1.65, vulnamyr: 1.75 }
 const awakened = (name: string, glbLen: number, aura: string, far: number): SpiritLook => {
   const b = SECOND_FORMS.fox!.mana!, h = VRIG_H * AWAKEN_GROW[name]
