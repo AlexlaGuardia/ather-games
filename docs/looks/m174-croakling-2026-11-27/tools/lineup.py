@@ -1,15 +1,15 @@
 """blender -b -P lineup.py -- <out.png>: the ten base forms at TRUE RELATIVE SIZE, grimoire order (#001-#010), orthographic, each at the
-height the game draws her (spirit-models.ts SPIRIT_RIGS h = GROWN / glb tall; Lepara + Shellmere from spirit-base-preview.ts). Not built yet = a grey
+height the game draws her (spirit-models.ts SPIRIT_RIGS h = GROWN / glb tall; Lepara + Shellmere + Croakling from spirit-base-preview.ts). Not built yet = a grey
 block of her ruled GROWN height. Rest pose (the Hovari's bind pose hangs in the air, as she hovers in game)."""
 import bpy, sys, os, math
 HERE = os.path.dirname(os.path.abspath(__file__)); OUT = sys.argv[sys.argv.index('--') + 1]; os.environ['LOOK_H'] = '1'
-src = open(os.path.join(HERE, 'look.py')).read(); sys.argv = ['x', '--', os.path.join(HERE, '../shellmere.glb'), '/tmp/x', '10']; exec(src[:src.index('ms = [o for o')])
+src = open(os.path.join(HERE, 'look.py')).read(); sys.argv = ['x', '--', os.path.join(HERE, '../croakling.glb'), '/tmp/x', '10']; exec(src[:src.index('ms = [o for o')])
 SP = os.path.join(HERE, '../../../../public/open/spirits/')
 # name, glb (None = not built), metres per glb unit, grown height (blocks)
 ROW = [('vulnyx', 'vulnyx-rigged.glb', .70 / 1.003, 0), ('manalotl', 'manalotl-rigged.glb', .90 / 2.145, 0), ('dewbear', 'dewbear-rigged.glb', .50, 0), ('shellmere', 'shellmere-rigged.glb', .45 / .97, 0), ('athowl', 'athowl-rigged.glb', .50 / 1.005, 0),
-       ('croakling', None, 0, .40), ('luminara', None, 0, .10), ('lepara', 'lepara-rigged.glb', .48 / .982, 0), ('hovari', 'hovari-rigged.glb', .219, 0), ('noctyx', 'noctyx-rigged.glb', .45 / .999, 0)]
+       ('croakling', 'croakling-rigged.glb', .40 / .999, 0), ('luminara', None, 0, .10), ('lepara', 'lepara-rigged.glb', .48 / .982, 0), ('hovari', 'hovari-rigged.glb', .219, 0), ('noctyx', 'noctyx-rigged.glb', .45 / .999, 0)]
 GAP = .75
-[bpy.data.objects.remove(o) for o in list(bpy.data.objects)]                         # look.py's own import of shellmere.glb
+[bpy.data.objects.remove(o) for o in list(bpy.data.objects)]                         # look.py's own import of croakling.glb
 blk = bpy.data.materials.new('blk'); blk.diffuse_color = (.5, .5, .5, 1); blk.use_nodes = True; nt = blk.node_tree; nt.nodes.clear(); e = nt.nodes.new('ShaderNodeEmission'); e.inputs[0].default_value = (.42, .44, .46, 1); o_ = nt.nodes.new('ShaderNodeOutputMaterial'); nt.links.new(e.outputs[0], o_.inputs[0])
 for i, (n, g, s, gh) in enumerate(ROW):
     x = (i - 4.5) * GAP

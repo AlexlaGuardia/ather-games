@@ -1,4 +1,4 @@
-"""blender -b -P look.py -- <glb> <out prefix> [size]  (LOOK_H = metres per glb unit; M174 copy of the Hovari look, jade + amber tints): the Vulnyx look.py recipe (3-step toon, emissive floor, pale hull, unlit eyes) with the Hovari tints (emissive teal, hull pale aqua);
+"""blender -b -P look.py -- <glb> <out prefix> [size]  (LOOK_H = metres per glb unit; M174 copy of the Hovari look): the Vulnyx look.py recipe (3-step toon, emissive floor, pale hull, unlit eyes) with the Hovari tints (emissive teal, hull pale aqua);
 1 unit = H = 0.219 m, so beak tip to tail tip is 0.30 m; `shimmer` (the blur petals) is drawn toon like the game's glow part. A glb without vertex colours renders grey clay."""
 import bpy, sys, math, numpy as np
 from mathutils import Vector
