@@ -4,6 +4,7 @@
 // (every evolution grows the spirit: spirits-species.md, Spirit Scale), and carries the coat of its locked picture.
 import * as fs from 'fs'
 import { BASE_PREVIEW } from './spirit-base-preview'
+import { SHELL_GLB_TALL } from './spirit-models'   // M202 the Shellmere line
 import { type SpiritElement, CROAK_GLB_TALL, AURLOTL_RIG, ARCLOTL_RIG, CRAGLOTL_RIG, LOTL_GLB_TALL, BEAR_GLB_TALL, LUMEBEAR_RIG, VOLTBEAR_RIG, TIDEBEAR_RIG, NOCT_GLB_TALL, NOCTARC_RIG, NOCTARA_RIG, NOCTORE_RIG, NOCTIX_RIG, NOCTYX_RIG, OWL_GLB_TALL, MYSTOWL_RIG, VOLTOWL_RIG, CRAGOWL_RIG, TIDEOWL_RIG, ATHOWL_RIG, HOV_GLB_TALL, VOLTARI_RIG, LUMARI_RIG, OBSIDARI_RIG, TIDARI_RIG, HOVARI_RIG, CRAGBEAR_GLB_TALL, CRAGBEAR_RIG, MARLOTL_RIG, SECOND_FORMS, formGrow, SPIRIT_ELEMENTS, SPIRIT_MODELS, SPIRIT_RIGS, formLook, rigLook, spiritModelFor } from './spirit-models'
 
 let pass = 0
@@ -276,6 +277,33 @@ ok(new Set(SPIRIT_ELEMENTS.map(e => formLook('hummingbird', e)!.url)).size === 4
   ok(formGrow('croakore') > Math.max(...['croakrill', 'croakara', 'croakarc'].map(formGrow)) && ore.max[0] > base.max[0] + 0.05, 'Croakore: the heaviest (the biggest dial, wider than the base)')
   ok(new Set(SPIRIT_ELEMENTS.map(e => formLook('frog', e)!.url)).size === 4, 'the Croakling line: four distinct forms') }
 
+// M202 the Shellmere line: each form the base Shellmere's sculpt + rig re-shaped (18 bones, five clips), her own silhouette
+{ const b = BASE_PREVIEW.turtle!, TURTLES: [SpiritElement, string][] = [['earth', 'mesamere'], ['mana', 'aurmere'], ['storm', 'voltmere'], ['water', 'tidemere']]
+  const prof = (u: string) => { const { j } = glb(u), a = j.accessors[j.meshes.find((m: { name: string }) => m.name === 'body').primitives[0].attributes.POSITION]
+    const e = j.accessors[j.meshes.find((m: { name: string }) => m.name === 'eyes').primitives[0].attributes.POSITION]; return { max: a.max as number[], min: a.min as number[], emax: e.max as number[] } }
+  for (const [el, name] of TURTLES) {
+    const L = formLook('turtle', el)!
+    ok(!!L && L.name === name && L.url === `/open/spirits/${name}-rigged.glb` && L.form === el, `turtle ${el}: ${name} ${L?.url}`)
+    ok(!!L.rig && L.rig !== b.rig && L.rig.neck === b.rig!.neck && L.rig.lie === b.rig!.lie && L.rig.glbLen > 1.2, `turtle ${el}: her own RigLook on the base's plan (glbLen ${L.rig?.glbLen})`)
+    ok(Math.abs(L.h / b.h - formGrow(name)) < 1e-9 && formGrow(name) >= 1.4, `turtle ${el}: grows past the base (dial ${formGrow(name)})`)
+    ok(L.skin.emissive !== b.skin.emissive && L.hull.color !== b.hull.color, `turtle ${el}: her element's tints`)
+    ok(fs.existsSync('public' + L.url), `turtle ${el}: ${L.url} shipped`)
+    const { j, col, n } = glb(L.url), names = (j.nodes as { name: string }[]).map(x => x.name), clips = (j.animations as { name: string }[]).map(a => a.name)
+    ok(['body', 'eyes', 'b_root', 'b_shell', 'b_neck', 'b_head', 'b_lids', 'b_tail', 'b_ant_l', 'b_ant2_r', 'b_leg0_l', 'b_foot1_r'].every(x => names.includes(x)) && j.skins?.[0]?.joints?.length === 18, `turtle ${el}: nodes + 18 bones`)
+    ok(['idle', 'walk', 'run', 'sit', 'lie'].every(c => clips.includes(c)), `turtle ${el}: clips ${clips}`)
+    const p = prof(L.url), top = p.max[1] - p.min[1]; ok(Math.abs(top / SHELL_GLB_TALL[name] - 1) < 0.06, `turtle ${el}: body ${top.toFixed(3)} ~ SHELL_GLB_TALL ${SHELL_GLB_TALL[name]}`)
+    ok(SHELL_GLB_TALL[name] * L.h > 0.30, `turtle ${el}: stands ${(SHELL_GLB_TALL[name] * L.h).toFixed(2)} m`)
+    const [r, g, bb] = mean(col, n)
+    ok(el === 'mana' ? bb > g + 25 && r > g + 10 : el === 'storm' ? bb > r + 20 && bb > g + 5 : el === 'earth' ? r > bb + 40 && g > bb + 25 : g > r + 50 && bb > r + 40, `turtle ${el}: her ${el} coat ${[r, g, bb].map(Math.round)}`)
+  }
+  const [base, mesa, aur, volt, tide] = [b.url, ...TURTLES.map(x => formLook('turtle', x[0])!.url)].map(prof)
+  const tall = (x: typeof base) => x.max[1] - x.min[1], wide = (x: typeof base) => x.max[0] - x.min[0], long = (x: typeof base) => x.max[2] - x.min[2]
+  ok([base, aur, volt, tide].every(x => tall(mesa) > tall(x) + 0.05) && formGrow('mesamere') > formGrow('aurmere'), `Mesamere: the tallest shell, the heaviest dial (${tall(mesa).toFixed(3)})`)
+  ok([base, mesa, volt, tide].every(x => aur.emax[1] > x.emax[1] + 0.04) && [volt, tide].every(x => x.emax[1] < x.max[1] + 0.05), `Aurmere: antennae longer than the base's, the line's highest point; Voltmere + Tidemere carry none (${aur.emax[1].toFixed(3)})`)
+  ok(wide(volt) > wide(base) + 0.15 && tall(volt) < tall(mesa) - 0.1, `Voltmere: wide and low (${wide(volt).toFixed(3)} x ${tall(volt).toFixed(3)})`)
+  ok([base, mesa, aur, volt].every(x => long(tide) > long(x) + 0.1 && tall(tide) < tall(x) - 0.05), `Tidemere: a sea turtle, the longest and lowest (${long(tide).toFixed(3)} x ${tall(tide).toFixed(3)})`)
+  ok(new Set(SPIRIT_ELEMENTS.map(e => formLook('turtle', e)!.url)).size === 4, 'the Shellmere line: four distinct forms') }
+
 // ── picking ──
 ok(formLook('fox', null) === null && formLook('fox', undefined) === null, 'no element = no form (her base)')
 ok(formLook(null, 'mana') === null, 'no species = no form')
@@ -283,7 +311,7 @@ ok(formLook(null, 'mana') === null, 'no species = no form')
 ok(formLook('rabbit', 'earth') === null, 'a species whose forms are not modelled yet keeps her base')   // M202: was the Hovari, now modelled
 // M202 Cragbear (the Dewbear line begins): her Earth form is modelled, the other three Dewbear forms are not yet
 ok(new Set(SPIRIT_ELEMENTS.map(e => formLook('water-bear', e)!.url)).size === 4, 'the Dewbear line: four distinct forms')
-ok(Object.keys(SECOND_FORMS).sort().join() === 'axolotl,bat,fox,frog,hummingbird,owl,water-bear', 'the Vulnyx line + the Manalotl line + the Dewbear line + the Noctyx line + the Athowl line + the Hovari line + the Croakling line')
+ok(Object.keys(SECOND_FORMS).sort().join() === 'axolotl,bat,fox,frog,hummingbird,owl,turtle,water-bear', 'the Vulnyx line + the Manalotl line + the Dewbear line + the Noctyx line + the Athowl line + the Hovari line + the Croakling line + the Shellmere line')
 ok(new Set(SPIRIT_ELEMENTS.map(e => formLook('fox', e)!.url)).size === 4, 'four distinct forms')
 // rigLook: a form stays itself when rigs are on; ?rig=0 (the frame measure) gives her species' old model, never a rigged glb unrigged
 const v = formLook('fox', 'storm')!
