@@ -1679,6 +1679,13 @@ function ContinentRideGame() {
           { label: 'Marks', value: ledger.marks, accent: true },
           { label: ledger.deeds === 1 ? 'Deed' : 'Deeds', value: ledger.deeds },
           ...gunHud.status,
+        ]}
+        // M218: the world prompt (F) and the yard's E verb sat at 62% of the height, in the middle of the view; the template places
+        // them now. The yard verb is desktop-only (11-22: phones have it as a touch pill) and stacks above the world prompt
+        prompts={[
+          ...(hud.prompt && !bagOpen && !vesselShop && !deed && !optionsOpen ? [{ text: padPrompt(hud.prompt, padGlyph), tone: 'verb' as const }] : []),   // never over a menu
+          ...(!isTouch && hud.foot && yardState.action && !deed && !showMap && !garage && !bagOpen && !vesselShop && !optionsOpen
+            ? [{ text: padPrompt(yardState.action === 'board' && shipAct === 'fit' ? REPAIR_LABEL.fitPrompt : yardState.action === 'board' && shipAct === 'charge' ? REPAIR_LABEL.chargePrompt : YARD_PROMPT[yardState.action], padGlyph), tone: 'verb' as const, data: { 'yard-prompt': yardState.action } }] : []),
         ]} />}
       {optionsOpen && <OpenOptions onClose={() => setOptionsOpen(false)} keys={CONTINENT_KEYS} />}
       <OpenSocial />   {/* M27: presence + invites + the Play together panel */}
@@ -1716,18 +1723,6 @@ function ContinentRideGame() {
       )}
       {hud.foot && !ptrLocked && !isTouch && !showMap && !garage && !board && !bagOpen && !vesselShop && !deed && !optionsOpen && (
         <div style={{ position: 'absolute', left: '50%', top: '42%', transform: 'translateX(-50%)', padding: '7px 16px', borderRadius: 999, background: 'rgba(12,16,20,0.66)', color: '#f4efe2', font: '600 12px system-ui', letterSpacing: '0.16em', textTransform: 'uppercase', pointerEvents: 'none' }}>Click to resume</div>
-      )}
-      {/* the yard's E verb on desktop (11-22: phones had it as a touch pill, desktops had nothing to say what to press);
-          stacked just above the F prompt so both read when the keeper stands by a car in a bay */}
-      {!isTouch && hud.foot && yardState.action && !deed && !showMap && !garage && !bagOpen && !vesselShop && !optionsOpen && (
-        <div data-yard-prompt={yardState.action} style={{ position: 'absolute', left: '50%', top: hud.prompt ? 'calc(62% - 34px)' : '62%', transform: 'translateX(-50%)', padding: '6px 14px', borderRadius: 8, background: 'rgba(10,12,18,0.7)', color: '#f4efe2', font: '600 12px var(--font-game), system-ui', letterSpacing: '0.18em', textTransform: 'uppercase', pointerEvents: 'none' }}>
-          {padPrompt(yardState.action === 'board' && shipAct === 'fit' ? REPAIR_LABEL.fitPrompt : yardState.action === 'board' && shipAct === 'charge' ? REPAIR_LABEL.chargePrompt : YARD_PROMPT[yardState.action], padGlyph)}
-        </div>
-      )}
-      {hud.prompt && !bagOpen && !vesselShop && !deed && !optionsOpen && (   // world prompts stay out from over a menu
-        <div style={{ position: 'absolute', left: '50%', top: '62%', transform: 'translateX(-50%)', padding: '6px 14px', borderRadius: 8, background: 'rgba(10,12,18,0.7)', color: '#f4efe2', font: '600 12px var(--font-game), system-ui', letterSpacing: '0.18em', textTransform: 'uppercase', pointerEvents: 'none' }}>
-          {padPrompt(hud.prompt, padGlyph)}
-        </div>
       )}
       <div hidden={!!hud.foot} style={{ position: 'absolute', ...(isTouch ? { left: 14, top: 64, textAlign: 'left' as const } : { left: '50%', transform: 'translateX(-50%)', bottom: 16, /* bottom-centre is free in the template */ textAlign: 'center' as const }), color: '#f4efe2', pointerEvents: 'none', textShadow: '0 2px 8px rgba(0,0,0,0.55)' }}>
         <div style={{ font: '700 54px var(--font-game), system-ui', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{Math.round(hud.mph)}</div>

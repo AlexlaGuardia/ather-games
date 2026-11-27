@@ -1928,6 +1928,11 @@ function AtherSliceGame() {
           { label: 'Grey matter', value: garden.grey, accent: true },
           { label: 'Grimoire', value: pagesNow },
           ...(tune && spread ? [{ label: `Tune · day ${Math.floor((clock() - spread.epoch) / GAME_DAY_MS)}`, value: `${allNodes.length - spread.clean.length}/${allNodes.length} grey · [ clear all · ] +1d · ⇧] +5d`, accent: true }] : []),
+        ]}
+        // M218: the E prompt + the waymark refusal used to sit at 58% / 64%, in the middle of the view; the template places them now
+        prompts={[
+          ...(prompt && !panel && !building ? [{ text: padPrompt(!isTouch && stance.kind === 'weapon' && chud?.reloadable ? 'E · reload' : prompt, padGlyph) }] : []),
+          ...(wmWhy && !panel && !fade ? [{ text: wmWhy, tone: 'warn' as const, data: { 'waymark-why': '' } }] : []),
         ]} />
       <ScopeRing />
       {zone.kind === 'wilds' && chud && <MorelBubble feed={chudRef} />}
@@ -1955,12 +1960,6 @@ function AtherSliceGame() {
           </>
         )
       })()}
-      {prompt && !panel && !building && (
-        <div style={{ position: 'absolute', left: '50%', top: '58%', transform: 'translateX(-50%)', padding: '6px 12px', borderRadius: 6, background: 'rgba(12,16,20,0.65)', color: '#f4efe2', font: '13px system-ui', pointerEvents: 'none' }}>{padPrompt(!isTouch && stance.kind === 'weapon' && chud?.reloadable ? 'E · reload' : prompt, padGlyph)}</div>
-      )}
-      {wmWhy && !panel && !fade && (
-        <div data-waymark-why style={{ position: 'absolute', left: '50%', top: '64%', transform: 'translateX(-50%)', maxWidth: 'min(86vw, 420px)', textAlign: 'center', padding: '6px 12px', borderRadius: 6, background: 'rgba(12,16,20,0.65)', color: '#ffb4a8', font: '13px system-ui', pointerEvents: 'none' }}>{wmWhy}</div>
-      )}
       {panel?.kind === 'map' && (
         <FoldMap view={panel.view} travel={panel.travel} W={W} fog={fog} waymarks={waymarks} infected={infectedSet} here={{ x: pos.current.x - hereOff.x, z: pos.current.z - hereOff.z }}
           inWilds={zone.kind === 'wilds'} onTravel={gladeTravel} hasPlot={gardenOpen(loadTut())} tile={hereTile} pitstops={mapDoors(pitstops, runeHoldOpen({ errand: errandStage, chain, cityDoors: pitstops.length - 1 }))}

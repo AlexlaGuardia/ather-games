@@ -13,7 +13,7 @@
 //   bottom-left   health (the hearth vitals plate)
 //   bottom-right  the mana orb with the tool sockets fanned round it (Alex 11-15: "the tools how we had them fanning
 //                 around the mana")
-//   bottom-centre FREE: the page's world prompts and the touch controls live there
+//   bottom-centre the page's world PROMPTS (`prompts`, BETA M218: off the centre box, shared/hud-prompt.ts); touch controls
 // ── PHONE (any touch device, whatever its width) ───────────────────────────────────────────────────────────────
 //   the hearth phone layout (09-23): the bar on the bottom edge for the thumbs, health + mana + tool pips on its lip;
 //   the message line stands just above the bar. Compass, minimap, clock and status as on desktop.
@@ -21,7 +21,7 @@
 // ── WHAT A PAGE GIVES ──────────────────────────────────────────────────────────────────────────────────────────
 //   pose (where you stand + face) · marks (compass pips) · vitals · mana · tools/skills (omit = basic kit, lv 1)
 //   entries + sel + onSelect (the bar; 1-8 and the mouse wheel are handled here while `input` is true)
-//   minimap (a node; draw it in `openMapBox(size)`) · status (short chips under the clock)
+//   minimap (a node; draw it in `openMapBox(size)`) · status (short chips under the clock) · prompts (E verbs, refusals)
 //   …and calls `hudSay(text, kind)` for anything worth saying.
 //
 // ⚠ Built from the Carved Hearth kit (ui/hearth-hud*.tsx, Alex's Full-hearth pick 09-23). Change a LOOK there; change
@@ -38,6 +38,8 @@ import { hearthDisplay, hearthBody } from '../../ui/hearth'
 import type { HudSize } from '../../ui/hud-flag'
 import type { HotbarEntry } from '../../hud/hotbar'
 import { HOTBAR_SLOTS } from '../../hud/hotbar'
+import { promptPlace, PROMPT_HOLD_MS, PROMPT_DIM, type HudPromptLine } from './hud-prompt'
+export type { HudPromptLine } from './hud-prompt'
 import { ToolGlyph } from '../../hud/hud-corner'
 import { type EquippedTools } from '../../engine/tools'
 import { OPEN_TOOL_FAMILIES } from '../../ui/tool-stage'
@@ -125,6 +127,28 @@ function Messages({ style, align }: { style: React.CSSProperties; align: 'left' 
         }} data-say={l.kind}>{l.kind === 'morel' ? <MorelText text={l.text} align={align} /> : l.text}</div>
       ))}
       <style>{'@keyframes gamehud-in{from{opacity:0;transform:translateY(-3px)}to{opacity:1;transform:none}}' + MOREL_PULSE_CSS}</style>
+    </div>
+  )
+}
+
+/** BETA M218: the page's world prompts (E verbs, the waymark refusal), out of the centre box (shared/hud-prompt.ts says
+ *  where and why). A plate, never raw text on the scene; dims after a moment of the same text, full again when it changes. */
+function HudPrompts({ lines, size, vw, vh }: { lines: readonly HudPromptLine[]; size: HudSize; vw: number; vh: number }) {
+  const sig = lines.map(l => l.text).join('\n')
+  const [dim, setDim] = React.useState(false)
+  useEffect(() => { setDim(false); if (!sig) return; const t = setTimeout(() => setDim(true), PROMPT_HOLD_MS); return () => clearTimeout(t) }, [sig])
+  if (!lines.length) return null
+  const p = promptPlace(size, vw, vh)
+  return (
+    <div data-hud="prompt" data-dim={dim ? '1' : '0'} className={`pointer-events-none flex ${p.anchor === 'bottom' ? 'flex-col-reverse' : 'flex-col'} ${p.align === 'left' ? 'items-start' : 'items-center'}`}
+      style={{ position: 'fixed', zIndex: 34, gap: 6, left: p.left, top: p.top, bottom: p.bottom, transform: p.transform, maxWidth: p.maxWidth, opacity: dim ? PROMPT_DIM : 1, transition: 'opacity .6s' }}>
+      {lines.map((l, i) => (
+        <div key={i} {...Object.fromEntries(Object.entries(l.data ?? {}).map(([k, v]) => [`data-${k}`, v]))} data-prompt-line style={{
+          padding: '6px 12px', borderRadius: 6, background: 'rgba(12,16,20,0.68)', boxShadow: '0 1px 4px rgba(0,0,0,.35)', lineHeight: 1.35, textAlign: p.align,
+          color: l.tone === 'warn' ? '#ffb4a8' : '#f4efe2',
+          // 'verb': the continent's game-font caps plate (its yard / world verbs read that way before M218)
+          ...(l.tone === 'verb' ? { font: '600 12px var(--font-game), system-ui', letterSpacing: '0.18em', textTransform: 'uppercase' as const } : { font: '13px system-ui' }) }}>{l.text}</div>
+      ))}
     </div>
   )
 }
@@ -217,7 +241,7 @@ function FirstArrow({ entries, sel, show, phone }: { entries: readonly (HotbarEn
   )
 }
 
-export function GameHud({ size, pose, marks, vitals, mana, tools, skills, entries, sel, onSelect, onEquip, casts, dimmed, input, fight, minimap, status = [] }: {
+export function GameHud({ size, pose, marks, vitals, mana, tools, skills, entries, sel, onSelect, onEquip, casts, dimmed, input, fight, minimap, status = [], prompts = [] }: {
   size: HudSize
   pose: React.RefObject<CompassPose | null>
   marks?: React.RefObject<readonly CompassMark[]>
@@ -242,6 +266,8 @@ export function GameHud({ size, pose, marks, vitals, mana, tools, skills, entrie
   fight?: boolean
   minimap?: React.ReactNode
   status?: readonly Status[]
+  /** BETA M218: the world prompts for right now (E verbs, refusals); the template places them off the centre. [] = none */
+  prompts?: readonly HudPromptLine[]
 }) {
   // M184: the server (no save) draws the three dials EMPTY, and so does the first client render; a page that does not hold
   // the tools itself (the continent) gets the keeper's own after mount, so a newborn sees the same empty dials there
@@ -338,6 +364,7 @@ export function GameHud({ size, pose, marks, vitals, mana, tools, skills, entrie
         {vh < 520 && vw > vh
           ? <Messages align="left" style={{ left: 'max(16px, env(safe-area-inset-left))', top: 12, maxWidth: phoneCompassX - compassWidth('phone') / 2 - 16 - 12 }} />
           : <Messages align="center" style={{ left: '50%', transform: 'translateX(-50%)', top: PHONE_ROW_TOP + 48 }} />}
+        <HudPrompts lines={prompts} size={size} vw={vw} vh={vh} />
       </div>
     )
   }
@@ -360,6 +387,7 @@ export function GameHud({ size, pose, marks, vitals, mana, tools, skills, entrie
       <div className="contents" style={{ zIndex: 32 }}><CornerFixed size={size} mana={mana} readouts={readouts} onPick={pick} picked={picked} /></div>
       {picked && T.current && <ToolPanelView panel={toolPanel(T.current, picked)} phone={false} onClose={closePanel} />}
       {casts && <CastPlates casts={casts} />}
+      <HudPrompts lines={prompts} size={size} vw={vw} vh={vh} />
     </div>
   )
 }
