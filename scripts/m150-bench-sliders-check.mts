@@ -77,10 +77,10 @@ async function bench() {
   await load('gun=grinder&set=new&preview=hip'); let r = await read()
   say(r.b.damage === 30 && r.b.projSpeed === 150 && Math.abs(r.b.front) > 0 && JSON.parse(r.savedB ?? '{}').grinder?.barrel === 1.5, 'reload: the Grinder comes back with its stats and dimensions')
   await p.click('[data-stats-reset]'); await sleep(400); await p.click('[data-build-reset]'); await sleep(600); r = await read()
-  say(r.b.damage === 13.5 && !JSON.parse(r.savedS ?? '{}').grinder && !JSON.parse(r.savedB ?? '{}').grinder, `reset: the Grinder back to its row (damage ${r.b.damage})`)
+  say(Math.abs(r.b.damage - 13.5 * r.b.fireCd / 0.22) < 1e-9 && !JSON.parse(r.savedS ?? '{}').grinder && !JSON.parse(r.savedB ?? '{}').grinder, `reset: the Grinder's stats + build back to its row (damage ${r.b.damage.toFixed(2)} = 13.5 on its still-dialled ${r.b.fireCd} s rhythm, which keeps DPS)`)
   await load('gun=twins&set=new&preview=hip'); r = await read()
   say(r.b.damage === 30 && JSON.parse(r.savedB ?? '{}').twins?.width === 0.8, 'reload: the Twins keep theirs too')
-  await p.evaluate(() => { localStorage.removeItem('open:gun-stats.v1'); localStorage.removeItem('open:gun-build.v1') })
+  await p.evaluate(() => { localStorage.removeItem('open:gun-stats.v1'); localStorage.removeItem('open:gun-build.v1'); localStorage.removeItem('open:gun-tune.v2') })
   await p.close()
 }
 
