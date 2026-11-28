@@ -19,7 +19,7 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms)); let fails = 0
 const ok = (c: boolean, m: string) => { console.log(`${c ? 'PASS' : 'FAIL'} ${m}`); if (!c) fails++ }
 const ONLY = flag('--only', '').split(',').filter(Boolean).map(Number)
 const AW = GALLERY.filter(r => r.aw && (!ONLY.length || ONLY.includes(r.num)))
-ok(GALLERY.filter(r => r.aw).length === 16, `16 awakened rows in the roster (${GALLERY.filter(r => r.aw).map(r => `#${r.num} ${r.name}`).join(', ')})`)
+ok(GALLERY.filter(r => r.aw).length === 20, `20 awakened rows in the roster (${GALLERY.filter(r => r.aw).map(r => `#${r.num} ${r.name}`).join(', ')})`)
 const br = await puppeteer.launch({ protocolTimeout: 900000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--mute-audio', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] })
 try {
   const errs: string[] = []
@@ -112,6 +112,14 @@ try {
       const s1 = await sample('lie', 6, 250), lo = Math.min(...(s1?.out ?? [{ low: -9 }]).map(o => o.low))
       const cl = await p.evaluate(() => { const r = (window as any).__spiritModel?.rigs?.get('gallery')?.body; return !!r?.bones?.some((b: any) => b.name === 'b_cloud') && !!r?.meshes?.aura })
       ok(cl && lo >= -0.0015 && lo < 0.02, `#${row.num} her ${look === 'vulnitar' ? 'splash ring' : 'still pool'} on its cloud bone stays at the ground in the lie (lowest ${(lo * 1000).toFixed(1)} mm glb)`)
+    }
+    if (['luminok', 'lumilys', 'lumivex', 'elhae'].includes(look)) {   // sheet 5: Luminel's four HOVER like her: the hover rig, every clip (body + aura) up in the air
+      const s1 = await sample('idle', 2, 100), names = s1?.names ?? []
+      ok(names.includes('b_hover') && names.includes('b_fw_l') && !names.some(x => /^b_(fl|fr|hl|hr|leg)_/.test(x)), `#${row.num} on the hover rig (${names.length} bones, b_hover + wing bones, no legs)`)
+      for (const c of ['idle', 'walk', 'run', 'sit', 'lie']) {
+        const s2 = await sample(c, 6, 250), lo = Math.min(...(s2?.out ?? [{ low: -9 }]).map(o => o.low))
+        ok(lo > 1.0, `#${row.num} ${c}: in the air, lowest body / aura vertex ${lo.toFixed(3)} glb (> 1.0)`)
+      }
     }
     if (look === 'vulnarok') {
       const s1 = await sample('walk', 14, 70)

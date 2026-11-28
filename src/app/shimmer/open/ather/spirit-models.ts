@@ -544,11 +544,21 @@ export const SECOND_FORMS: Partial<Record<Species, Partial<Record<SpiritElement,
 // M244 sheet 2 (sprites, 11-27): VULNARC's four (Storm), owner preview, same tools (sculpt_awaken.py kor / celle / arcvex / ceth;
 // Vulnarkor on the biped rig, rig_biped.py), Vulnarc's own look as the base: Vulnarkor a crystal-shard mantle + bolts round her,
 // Vulnarcelle a big crackling mane, Arcvex a jagged crest + two ice-white copies that run, Vulnarceth her storm cloud + two discs.
-export const AWAKEN_LEN: Readonly<Record<string, number>> = { vulnarok: 1.463, vulnalys: 1.487, vulnavex: 1.87, vulnamyr: 1.283, vulnarkor: 1.393, vulnarcelle: 1.366, arcvex: 1.817, vulnarceth: 1.377, orethar: 1.317, vulnoraya: 1.744, vulnoris: 1.489, vulnorun: 1.599, vulnitar: 1.489, marelle: 1.394, vulnisk: 1.841, vulnixeth: 1.377 }
-export const AWAKEN_GROW: Readonly<Record<string, number>> = { vulnarok: 1.8, vulnalys: 1.7, vulnavex: 1.65, vulnamyr: 1.75, vulnarkor: 1.8, vulnarcelle: 1.75, arcvex: 1.8, vulnarceth: 1.75, orethar: 1.8, vulnoraya: 1.75, vulnoris: 1.8, vulnorun: 1.75, vulnitar: 1.8, marelle: 1.8, vulnisk: 1.8, vulnixeth: 1.75 }
+export const AWAKEN_LEN: Readonly<Record<string, number>> = { vulnarok: 1.463, vulnalys: 1.487, vulnavex: 1.87, vulnamyr: 1.283, vulnarkor: 1.393, vulnarcelle: 1.366, arcvex: 1.817, vulnarceth: 1.377, orethar: 1.317, vulnoraya: 1.744, vulnoris: 1.489, vulnorun: 1.599, vulnitar: 1.489, marelle: 1.394, vulnisk: 1.841, vulnixeth: 1.377, luminok: 0.7608, lumilys: 0.6819, lumivex: 1.2647, elhae: 0.714 }
+export const AWAKEN_GROW: Readonly<Record<string, number>> = { vulnarok: 1.8, vulnalys: 1.7, vulnavex: 1.65, vulnamyr: 1.75, vulnarkor: 1.8, vulnarcelle: 1.75, arcvex: 1.8, vulnarceth: 1.75, orethar: 1.8, vulnoraya: 1.75, vulnoris: 1.8, vulnorun: 1.75, vulnitar: 1.8, marelle: 1.8, vulnisk: 1.8, vulnixeth: 1.75, luminok: 2.0, lumilys: 1.9, lumivex: 1.8, elhae: 2.0 }
 const awakened = (name: string, glbLen: number, aura: string, far: number, el: 'mana' | 'storm' | 'earth' | 'water' = 'mana'): SpiritLook => {
   const b = SECOND_FORMS.fox![el]!, h = VRIG_H * AWAKEN_GROW[name]
   return { ...b, name, url: `/open/spirits/${name}-rigged.glb`, h, trot: grownTrot(b.trot, b.h, h), rig: { ...b.rig!, glbLen, avatar: { z: b.rig!.avatar.z, far } },
+    glow: { part: 'aura', emissive: aura, lo: 0.35, hi: 0.7, hz: 0.35 } }
+}
+// M244 sheet 5 (sprites, 11-28): LUMINEL's four (Mana), owner preview, HOVERERS like her parent (docs/looks/m244-luminel-2026-11-28): each the
+// live Luminel's sculpt re-shaped by name to a new silhouette (sculpt_lumaw.py) on the base Luminara's hover rig (rig_lumaw.py: 19 bones, the
+// base unit, b_hover unkeyed). Her rig hangs at 1.35 m / her dial, so grown she still hangs at Luminel's height; low / top + culling from her
+// metrics (glb units, body + eyes + lamp + aura over every clip). Her 'aura' = her lamp + her motif (Luminok's gold sunburst round her belly
+// lamp, Lumilys's nimbus ring + two constellations, Lumivex's light trail off her tail, Elhae's roots of light out of her blazing core).
+const lumAwakened = (name: string, aura: string, low: number, top: number, cull: Cull): SpiritLook => {
+  const b = SECOND_FORMS.firefly!.mana!, base = BASE_PREVIEW.firefly!, h = base.h * AWAKEN_GROW[name]
+  return { ...b, name, url: `/open/spirits/${name}-rigged.glb`, h, trot: grownTrot(base.trot, base.h, h), rig: { ...b.rig!, glbLen: AWAKEN_LEN[name], hover: { ...b.rig!.hover!, low, top }, cull },
     glow: { part: 'aura', emissive: aura, lo: 0.35, hi: 0.7, hz: 0.35 } }
 }
 /** by look name (spirit.ts AWAKENED_NAMES, lower-cased) */
@@ -575,6 +585,10 @@ export const AWAKENED_FORMS: Readonly<Record<string, SpiritLook>> = {
   marelle: awakened('marelle', AWAKEN_LEN.marelle, '#c8f2f2', 1.8, 'water'),
   vulnisk: awakened('vulnisk', AWAKEN_LEN.vulnisk, '#bdf0f2', 2.6, 'water'),
   vulnixeth: awakened('vulnixeth', AWAKEN_LEN.vulnixeth, '#bff0f4', 1.9, 'water'),
+  luminok: lumAwakened('luminok', '#ffc848', 1.791, 3.133, { c: [0, 2.27, -0.03], r: 1.35, min: [-0.77, 1.3, -0.75], max: [0.77, 3.25, 0.68] }),
+  lumilys: lumAwakened('lumilys', '#ffd870', 1.781, 3.546, { c: [0, 2.53, 0.06], r: 1.51, min: [-0.84, 1.39, -0.67], max: [0.85, 3.67, 0.78] }),
+  lumivex: lumAwakened('lumivex', '#ffd060', 2.096, 3.351, { c: [0, 2.69, -0.79], r: 1.76, min: [-0.76, 1.9, -2.26], max: [0.76, 3.48, 0.68] }),
+  elhae: lumAwakened('elhae', '#fff0b0', 1.613, 3.139, { c: [-0.01, 2.15, 0.05], r: 1.5, min: [-0.89, 1.04, -0.66], max: [0.87, 3.26, 0.76] }),
 }
 /** M202: her second form's look when she has evolved (`element` set) and her species has its forms modelled, else null */
 export const formLook = (s: Species | null | undefined, el: SpiritElement | null | undefined): SpiritLook | null =>

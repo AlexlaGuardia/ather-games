@@ -1,6 +1,6 @@
 // BETA M244 sheet 1: the four awakened Vulnara forms (owner preview). Run: npx tsx src/app/shimmer/open/ather/spirit-awakened.test.ts
 import { existsSync, readFileSync } from 'node:fs'
-import { AWAKENED_FORMS, AWAKEN_GROW, SECOND_FORMS, formGrow } from './spirit-models'
+import { AWAKENED_FORMS, AWAKEN_GROW, AWAKEN_LEN, SECOND_FORMS, formGrow } from './spirit-models'
 import { AWAKENED_BRANCHES, AWAKENED_NAMES } from '../../spirits/spirit'
 import { PUBLIC_FORMS } from './spirit-public'
 let pass = 0; const fails: string[] = []
@@ -16,7 +16,10 @@ ok(earthNames.join() === 'orethar,vulnoraya,vulnoris,vulnorun', `Vulnore's four 
 // M244 sheet 4: Vulnix's (Water) four, canon-named (Alex 11-27), art LOCKED-AFK athernyx 3501ec6
 const waterNames = AWAKENED_BRANCHES.map(b => AWAKENED_NAMES.vulnix![b].toLowerCase())
 ok(waterNames.join() === 'vulnitar,marelle,vulnisk,vulnixeth', `Vulnix's four in branch order (${waterNames})`)
-ok(Object.keys(AWAKENED_FORMS).sort().join() === [...names, ...stormNames, ...earthNames, ...waterNames].sort().join(), 'one look per name, no more')
+// M244 sheet 5: Luminel's (Mana) four, canon-named (Alex 11-28), art LOCKED-AFK athernyx #017-020: HOVERERS on the base Luminara's hover rig
+const lumNames = AWAKENED_BRANCHES.map(b => AWAKENED_NAMES.luminel![b].toLowerCase())
+ok(lumNames.join() === 'luminok,lumilys,lumivex,elhae', `Luminel's four in branch order (${lumNames})`)
+ok(Object.keys(AWAKENED_FORMS).sort().join() === [...names, ...stormNames, ...earthNames, ...waterNames, ...lumNames].sort().join(), 'one look per name, no more')
 for (const [el, list] of [['mana', names], ['storm', stormNames], ['earth', earthNames], ['water', waterNames]] as const) for (const n of list) {
   const vulnara = SECOND_FORMS.fox![el]!, parent = el === 'mana' ? 'vulnara' : el === 'storm' ? 'vulnarc' : el === 'earth' ? 'vulnore' : 'vulnix'
   const L = AWAKENED_FORMS[n]
@@ -144,6 +147,31 @@ for (const n of waterNames) {
   ok(m.quality.spring.peak_rad['walk:ear_l'] >= 1.5 * o.quality.spring.peak_rad['walk:ear_l'], `marelle: her ears swing wider in the walk (${m.quality.spring.peak_rad['walk:ear_l']} vs Vulnitar ${o.quality.spring.peak_rad['walk:ear_l']} rad)`)
   const vul = glbJson('vulnitar'); ok(vul.nodes.some((x: { name?: string }) => x.name === 'b_cloud') && glbJson('vulnixeth').nodes.some((x: { name?: string }) => x.name === 'b_cloud'), 'vulnitar + vulnixeth: ring / pool on their own cloud bone')
   const rv: string[] = glbJson('vulnisk').nodes.map((x: { name?: string }) => x.name); ok([0, 1].every(k => rv.includes(`b_e${k}_head`)), 'vulnisk: two water copies on their own skeletons')
+}
+// M244 sheet 5: Luminel's four hover like her (the hover rig: b_hover unkeyed, every clip in the air), each her own silhouette + motif on the aura
+{
+  const parent = SECOND_FORMS.firefly!.mana!, pj = glbJson('luminel'), pb = (pj.nodes as { name?: string }[]).filter(x => x.name?.startsWith('b_')).length
+  const lens: number[] = []
+  for (const n of lumNames) {
+    const L = AWAKENED_FORMS[n], f = `public${L.url}`
+    ok(L.name === n && L.form === 'mana' && L.url === `/open/spirits/${n}-rigged.glb` && L.glow?.part === 'aura', `${n}: her own glb, a mana form look, aura = glow part`)
+    ok(AWAKEN_GROW[n] > formGrow('luminel') && L.h > parent.h * 1.15, `${n}: grown past Luminel (dial ${AWAKEN_GROW[n]} vs ${formGrow('luminel')})`)
+    ok(!!L.rig?.hover && !!L.rig?.cull && L.rig.hover.low > 1 && L.rig.hover.top > L.rig.hover.low, `${n}: hover rig fields (low ${L.rig?.hover?.low}, top ${L.rig?.hover?.top}) + own culling`)
+    ok(!PUBLIC_FORMS.has(n), `${n}: owner preview only`)
+    if (!existsSync(f)) { ok(false, `${f} exists`); continue }
+    const j = glbJson(n), nodes: string[] = j.nodes.map((x: { name?: string }) => x.name), bones = nodes.filter(x => x?.startsWith('b_'))
+    ok(['body', 'eyes', 'aura', 'b_hover', 'b_head', 'b_fw_l', 'b_hw_r'].every(x => nodes.includes(x)) && bones.length === pb, `${n}: body / eyes / aura + the hover rig's ${pb} bones (${bones.length})`)
+    const hov = nodes.indexOf('b_hover'), keyed = (j.animations as { channels: { target: { node: number } }[] }[]).some(a => a.channels.some(c => c.target.node === hov))
+    ok(!keyed && (j.animations as { name: string }[]).map(a => a.name).sort().join() === 'idle,lie,run,sit,walk', `${n}: five clips, b_hover unkeyed`)
+    const met = JSON.parse(readFileSync(`docs/looks/m244-luminel-2026-11-28/${n}-metrics.json`, 'utf8'))
+    ok(met.all_lowest_with_aura_glb > 1 && Math.abs(met.hover_low - L.rig!.hover!.low) < 1e-3 && Math.abs(met.glb_long - AWAKEN_LEN[n]) < 1e-3, `${n}: wired numbers = her metrics; every clip (aura too) in the air (lowest ${met.all_lowest_with_aura_glb} glb)`)
+    ok(Math.abs(met.hover_m * AWAKEN_GROW[n] - 1.35) < 0.01, `${n}: hangs at Luminel's ~1.35 m grown (${met.hover_m} m x ${AWAKEN_GROW[n]})`)
+    lens.push(met.glb_long)
+  }
+  // silhouette, not a reskin: Lumivex the long racer, the others as long as Luminel; Luminok wide (her span), Elhae's roots spread past her wings
+  const met = (n: string) => JSON.parse(readFileSync(`docs/looks/m244-luminel-2026-11-28/${n}-metrics.json`, 'utf8'))
+  ok(met('lumivex').glb_long > 1.6 * met('lumilys').glb_long, `lumivex: a long low racer (glb_long ${met('lumivex').glb_long} vs lumilys ${met('lumilys').glb_long})`)
+  ok(met('lumilys').body_mean_top > met('luminok').body_mean_top && met('lumivex').body_mean_top < 0.75 * met('luminok').body_mean_top, `tall slender Lumilys (${met('lumilys').body_mean_top}) vs low Lumivex (${met('lumivex').body_mean_top})`)
 }
 console.log(`spirit-awakened: ${pass} pass, ${fails.length} fail`)
 if (fails.length) { for (const f of fails) console.log('  FAIL', f); process.exit(1) }
