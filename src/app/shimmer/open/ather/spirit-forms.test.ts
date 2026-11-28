@@ -267,7 +267,7 @@ ok(new Set(SPIRIT_ELEMENTS.map(e => formLook('hummingbird', e)!.url)).size === 4
     else ok(!!L.rig && L.rig !== b.rig && L.rig.neck === b.rig!.neck && !!L.rig.hover && L.rig.hover.flap === b.rig!.hover!.flap && L.rig.hover.low > 2 && !!L.rig.cull && L.rig.cull !== b.rig!.cull, `firefly ${el}: her own RigLook, still a hoverer with her own culling (glbLen ${L.rig?.glbLen})`)
     ok(formGrow(name) === 1.5 && Math.abs(L.h / b.h - 1.5) < 1e-9, `firefly ${el}: size dial ${formGrow(name)}, grown past her base`)
     ok(L.glow?.part === 'lamp' && L.glow.emissive !== b.glow?.emissive, `firefly ${el}: the lamp glows her own ${L.glow?.emissive}`)
-    ok(!PUBLIC_FORMS.has(name), `firefly ${el}: owner preview only (not in PUBLIC_FORMS)`)
+    ok(PUBLIC_FORMS.has(name), `firefly ${el}: every keeper's (PUBLIC_FORMS, hub YAY 11-28 AFK, Alex delegated; was owner preview)`)
     ok(fs.existsSync('public' + L.url), `firefly ${el}: ${L.url} shipped`)
     const { j, col, n } = glb(L.url), names = (j.nodes as { name: string }[]).map(x => x.name), clips = (j.animations as { name: string }[]).map(a => a.name), bx = box(L.url, 'body')
     if (EGG(el)) { ok(['body', 'eyes', 'lamp', 'b_root', 'b_hips', 'b_abd', 'b_neck', 'b_head', 'b_lids', 'b_lids_r', 'b_leg_l', 'b_leg_r'].every(x => names.includes(x)) && j.skins?.[0]?.joints?.length === 10 && !names.some(x => /^b_(hover|fw|hw|ant|arm)/.test(x)), `firefly ${el}: the egg's ground rig, 10 bones, no hover / wing / antenna / arm bone`)

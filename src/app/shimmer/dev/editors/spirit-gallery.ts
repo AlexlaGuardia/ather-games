@@ -23,7 +23,7 @@ export const DISCOVERY: readonly (readonly [Species, GalleryElement])[] = [
 ]
 
 /** M244: the awakened forms built so far, stage-3 ledger order (n = index + 1) */
-export const AWAKENED: readonly (readonly [Species, GalleryElement, AwakenedBranch])[] = (['mana', 'storm', 'earth'] as const).flatMap(el => AWAKENED_BRANCHES.map(b => ['fox', el, b] as const))   // sheet 2: Vulnarc's four (#055-#058); sheet 3: Vulnore's (#059-#062)
+export const AWAKENED: readonly (readonly [Species, GalleryElement, AwakenedBranch])[] = (['mana', 'storm', 'earth', 'water'] as const).flatMap(el => AWAKENED_BRANCHES.map(b => ['fox', el, b] as const))   // sheet 2: Vulnarc's four (#055-#058); sheet 3: Vulnore's (#059-#062); sheet 4: Vulnix's (#063-#066)
 
 export type GalleryRow = {
   /** grimoire # (1-50) */ num: number

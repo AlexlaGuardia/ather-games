@@ -19,7 +19,7 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms)); let fails = 0
 const ok = (c: boolean, m: string) => { console.log(`${c ? 'PASS' : 'FAIL'} ${m}`); if (!c) fails++ }
 const ONLY = flag('--only', '').split(',').filter(Boolean).map(Number)
 const AW = GALLERY.filter(r => r.aw && (!ONLY.length || ONLY.includes(r.num)))
-ok(GALLERY.filter(r => r.aw).length === 12, `12 awakened rows in the roster (${GALLERY.filter(r => r.aw).map(r => `#${r.num} ${r.name}`).join(', ')})`)
+ok(GALLERY.filter(r => r.aw).length === 16, `16 awakened rows in the roster (${GALLERY.filter(r => r.aw).map(r => `#${r.num} ${r.name}`).join(', ')})`)
 const br = await puppeteer.launch({ protocolTimeout: 900000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--mute-audio', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] })
 try {
   const errs: string[] = []
@@ -77,7 +77,7 @@ try {
       }
       return { len: z1 - z0, tall: y1, n }
     }))
-    if (['vulnarkor', 'vulnarcelle', 'arcvex', 'vulnarceth', 'orethar', 'vulnoraya', 'vulnoris', 'vulnorun'].includes(look)) {   // sheets 2 + 3: clear of the ground in every clip (body + aura)
+    if (['vulnarkor', 'vulnarcelle', 'arcvex', 'vulnarceth', 'orethar', 'vulnoraya', 'vulnoris', 'vulnorun', 'vulnitar', 'marelle', 'vulnisk', 'vulnixeth'].includes(look)) {   // sheets 2 + 3 + 4: clear of the ground in every clip (body + aura)
       for (const c of ['idle', 'walk', 'run', 'sit', 'lie']) {
         const s1 = await sample(c, 6, 250), lo = Math.min(...(s1?.out ?? [{ low: -9 }]).map(o => o.low))
         ok(lo >= -0.0015, `#${row.num} ${c}: lowest body / aura vertex ${(lo * 1000).toFixed(1)} mm glb (>= 0)`)
@@ -89,9 +89,29 @@ try {
       ok(legs.length === 8 && !(s1?.names ?? []).some(x => /^b_(fl|fr|hl|hr)_/.test(x)), `#${row.num} upright on the biped rig (${legs.length} leg bones), no quadruped legs`)
       ok(d.length > 0 && Math.max(...d) > 0.05 && Math.min(...d) < -0.05, `#${row.num} walks with feet alternating (${Math.min(...d).toFixed(3)} .. ${Math.max(...d).toFixed(3)} glb)`)
     }
-    if (look === 'arcvex' || look === 'vulnoris') {
+    if (look === 'arcvex' || look === 'vulnoris' || look === 'vulnisk') {
       const s1 = await sample('run', 12, 60), e = (s1?.out ?? []).map(o => o.bones.b_e0_head ?? [0, 0, 0]), ex = e.length ? Math.max(...e.map(q => Math.hypot(q[0] - e[0][0], q[1] - e[0][1], q[2] - e[0][2]))) : 0
       ok(ex > 0.2, `#${row.num} her copies move during the run (copy 0 head travels ${ex.toFixed(3)} glb)`)
+    }
+    if (look === 'marelle') {   // sheet 4: her hanging jester ears hang (tip below the ear root) and SWING in the walk (the baked springs)
+      await p.click('[data-gallery-clip="walk"]').catch(() => {}); await sleep(800)
+      const ear = await p.evaluate(async () => {
+        const r = (window as any).__spiritModel?.rigs?.get('gallery')?.body; if (!r) return null
+        const by = (n: string) => r.bones.find((b: any) => b.name === n), E = by('b_ear_l'), H = by('b_head'), out: number[][] = []
+        if (!E || !H) return null
+        for (let k = 0; k < 16; k++) { await new Promise(z => setTimeout(z, 60)); r.root.updateMatrixWorld(true); const inv = H.matrixWorld.clone().invert()
+          const tip = E.children[0] ?? null, v = (tip ?? E).getWorldPosition(new (E.position.constructor)()).applyMatrix4(inv); out.push([v.x, v.y, v.z]) }
+        const e = E.getWorldPosition(new (E.position.constructor)()), h = H.getWorldPosition(new (H.position.constructor)()); return { out, below: e.y < h.y + 0.5 }
+      })
+      const pts = ear?.out ?? [], spread = pts.length ? Math.max(...pts.map(q => Math.hypot(q[0] - pts[0][0], q[1] - pts[0][1], q[2] - pts[0][2]))) : 0
+      const quat = await p.evaluate(async () => { const r = (window as any).__spiritModel?.rigs?.get('gallery')?.body; const E = r?.bones?.find((b: any) => b.name === 'b_ear_l'); if (!E) return 0
+        const q0 = E.quaternion.clone(); let mx = 0; for (let k = 0; k < 16; k++) { await new Promise(z => setTimeout(z, 60)); mx = Math.max(mx, 2 * Math.acos(Math.min(1, Math.abs(q0.dot(E.quaternion))))) } return mx })
+      ok(quat > 0.15, `#${row.num} Marelle's ears swing in the walk (b_ear_l turns ${quat.toFixed(3)} rad over 1 s; spread ${spread.toFixed(3)})`)
+    }
+    if (look === 'vulnitar' || look === 'vulnixeth') {   // sheet 4: the splash ring / still pool rides the cloud bone and stays on the ground in the lie
+      const s1 = await sample('lie', 6, 250), lo = Math.min(...(s1?.out ?? [{ low: -9 }]).map(o => o.low))
+      const cl = await p.evaluate(() => { const r = (window as any).__spiritModel?.rigs?.get('gallery')?.body; return !!r?.bones?.some((b: any) => b.name === 'b_cloud') && !!r?.meshes?.aura })
+      ok(cl && lo >= -0.0015 && lo < 0.02, `#${row.num} her ${look === 'vulnitar' ? 'splash ring' : 'still pool'} on its cloud bone stays at the ground in the lie (lowest ${(lo * 1000).toFixed(1)} mm glb)`)
     }
     if (look === 'vulnarok') {
       const s1 = await sample('walk', 14, 70)

@@ -9,7 +9,7 @@ are quadrupeds (the art is four-legged); Vulnix's own ears stay upright, the han
 | form | rig | dial | what carries it |
 |---|---|---|---|
 | Vulnitar (Champion) | quadruped | 1.8 | dire-wolf build, dark teal, cyan crystal plates on shoulders + hip; a SPLASH RING round her feet: a wave ring + plumes curling over outward ('aura' on the 'cloud' bone, stays on the ground) |
-| Marelle (Virtuoso, pure) | quadruped | 1.75 | slender; LONG HANGING JESTER EARS to the chest (own skin selector, springs target 0.30 rad so they swing); a big plume tail trailing into MIST puffs ('aura' on b_tail4) |
+| Marelle (Virtuoso, pure) | quadruped | 1.8 | slender; LONG HANGING JESTER EARS to the chest (own skin selector, springs target 0.30 rad so they swing); a big plume tail trailing into MIST puffs ('aura' on b_tail4) |
 | Vulnisk (Ace) | quadruped | 1.8 | the wave-rider: long low racer, big upright ears, streaming brush; two WHOLE pale-aqua water copies that run behind her, drift back and shrink (echoes.py) |
 | Vulnixeth (Enigma) | quadruped | 1.75 | still, a full chest ruff, ONE curled tail, short drips under the belly and down the legs; stands in a STILL POOL (a disc + two ripple rings, 'aura' on the 'cloud' bone) |
 

@@ -14,7 +14,7 @@ const CANON = '/root/athernyx/CANON/world/spirits-species.md'
 ok(existsSync(LEDGER), `ledger present (${LEDGER})`)
 ok(existsSync(CANON), `canon base table present (${CANON})`)
 
-ok(GALLERY.length === 62, `62 rows: 10 base + 40 forms + 12 awakened (got ${GALLERY.length})`)
+ok(GALLERY.length === 66, `66 rows: 10 base + 40 forms + 16 awakened (got ${GALLERY.length})`)
 GALLERY.forEach((r, i) => ok(r.num === i + 1, `row ${i} numbered ${i + 1} (got ${r.num})`))
 ok(GALLERY.slice(0, 10).every(r => r.el === null) && GALLERY.slice(10).every(r => r.el !== null), 'base 10 first, then the 40 forms')
 ok(new Set(GALLERY.map(r => r.name)).size === GALLERY.length, 'every name unique')
@@ -79,6 +79,12 @@ ok(steepAdd(steepAdd(STEEP_NONE, 'mana', 8), 'storm', 5).storm === 2, 'add is he
   for (const r of ea) ok(en.includes(`**${r.name}** (${r.aw!.branch[0].toUpperCase()}${r.aw!.branch.slice(1)}`), `canon names ${r.name} (${r.aw!.branch})`)
   ea.forEach((r, i) => { const l = locks.find(x => x.n === 9 + i); ok(!!l && l.name === r.name && l.second_form === 'Vulnore' && l.branch_name.toLowerCase() === r.aw!.branch, `#${r.num} = stage-3 lock n${9 + i} ${l?.name} (got ${r.name})`) })
   ok(ea.every(r => r.icon.startsWith('/open/spirits/') && !r.icon.includes('stage3')), 'Vulnore awakened icons are our renders')
+  // M244 sheet 4: Vulnix's four (#063-#066) = the canon's 'Named — Vulnyx › Vulnix (Water)' line + the stage-3 ledger locks 13-16
+  const wa = GALLERY.filter(r => r.aw && r.el === 'water'), wn = readFileSync(CANON, 'utf8').split('\n').find(x => x.includes('Named') && x.includes('Vulnix (Water)')) ?? ''
+  ok(wa.length === 4 && wa.every((r, i) => r.num === 63 + i), `Vulnix's awakened rows #063-#066 (got ${wa.map(r => r.num)})`)
+  for (const r of wa) ok(wn.includes(`**${r.name}** (${r.aw!.branch[0].toUpperCase()}${r.aw!.branch.slice(1)}`), `canon names ${r.name} (${r.aw!.branch})`)
+  wa.forEach((r, i) => { const l = locks.find(x => x.n === 13 + i); ok(!!l && l.name === r.name && l.second_form === 'Vulnix' && l.branch_name.toLowerCase() === r.aw!.branch, `#${r.num} = stage-3 lock n${13 + i} ${l?.name} (got ${r.name})`) })
+  ok(wa.every(r => r.icon.startsWith('/open/spirits/') && !r.icon.includes('stage3') && existsSync(`public${r.icon.split('?')[0]}`)), 'Vulnix awakened icons are our renders (on disk)')
 }
 console.log(`spirit-gallery: ${pass} pass, ${fails.length} fail`)
 if (fails.length) { for (const f of fails) console.log('  FAIL', f); process.exit(1) }
