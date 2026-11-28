@@ -18,5 +18,7 @@ AWAKEN=kor ... python rig_biped.py ../../m244-vulnarc-2026-11-27/kor.glb <out>/v
 ... python rig_awaken.py <celle|arcvex|ceth> <form>.glb <out>/<name>-rigged.glb <name>-metrics.json     (rigged glbs ship in public/open/spirits)
 ```
 ## Known (for Alex)
-Vulnarcelle meshes 1 pinched edge (not closed; the rig does not need it); Vulnarkor's shard mantle reads small at a distance; the lie pose
+s2b (Alex 11-28, fix-before-after.jpg): Vulnarkor's mantle bigger + bolder (60-point spread, longer thicker shards, swept up and out),
+each shard its own flat-faced closed crystal (shard_mesh) on a body meshed alone; Vulnarcelle's body, mane mass and mane points meshed
+and decimated as separate pieces (one budget for all of it had pinched her chin). The lie pose
 rolls oddly (as sheet 1). Icons = our Blender renders.

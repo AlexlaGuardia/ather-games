@@ -213,20 +213,30 @@ if FORM == 'celle':   # the crackling MANE: a round mass of crystal points round
         ln = .13 + .045 * np.sin(7 * d[0] + 5 * d[1]) + (.03 if d[1] < .1 else 0); o = d * (1 - .25 * max(d[2], 0))
         SHARDS.append((MC + MR * o * .75, MC + MR * o + o * ln, .085 if d[1] > -.2 else .075))
 elif FORM == 'kor':   # a mantle of crystal shards over neck + shoulders, swept back (the art's spiky crest)
-    for d in _fib(40):
-        if d[2] > .25 or d[1] < -.15: continue
-        c = V3(0, 1.02, -.02); r0 = V3(.20, .09, .14) * d; ln = .12 + .04 * np.sin(9 * d[0] + 4 * d[2])
-        SHARDS.append((c + r0 * .6, c + r0 + (d + V3(0, .25, -.45)) / np.linalg.norm(d + V3(0, .25, -.45)) * ln, .045))
+    # s2b (Alex 11-28: 'reads small'): more, longer, thicker shards spread wider over the shoulders, still her own ice crystal
+    for d in _fib(60):
+        if d[2] > .30 or d[1] < -.22: continue
+        c = V3(0, 1.02, -.02); r0 = V3(.27, .11, .17) * d; ln = .22 + .06 * np.sin(9 * d[0] + 4 * d[2]) + .05 * max(d[1], 0)
+        w = d + V3(0, .30, -.30); SHARDS.append((c + r0 * .45, c + r0 + w / np.linalg.norm(w) * ln, .066))
 elif FORM in ('arcvex', 'ceth'):   # the jagged crest from the crown down the spine (Vulnarc's own)
     crest = [(.62, .30, .07, .028), (.56, .20, .075, .03), (.49, .08, .08, .03), (.47, -.04, .075, .03), (.45, -.15, .065, .028), (.43, -.24, .05, .024)] if FORM == 'arcvex' else \
             [(.70, .30, .06, .026), (.64, .22, .065, .028), (.56, .12, .065, .028), (.54, .02, .06, .026), (.53, -.08, .055, .024), (.51, -.16, .045, .02)]
     for y, z, ln, r in crest: SHARDS.append((V3(0, y - .03, z), V3(0, y + ln, z - .035), r))
+def shard_mesh():   # s2b: kor's shards / celle's mane points as their own flat-faced crystals (a diamond base sunk in her, an apex), closed, 5 verts each
+    Vs, Fs = [], []
+    for a, b, r in SHARDS:
+        a, b = V3(*a), V3(*b); u = (b - a) / np.linalg.norm(b - a); e1 = np.cross(u, V3(0, 1, 0) if abs(u[1]) < .9 else V3(1, 0, 0)); e1 /= np.linalg.norm(e1); e2 = np.cross(u, e1)
+        o = len(Vs) * 5; a0 = a - u * .03
+        Vs.append(np.array([a0 + e1 * r, a0 + e2 * r, a0 - e1 * r, a0 - e2 * r, b]))
+        Fs.append(np.array([(0, 1, 4), (1, 2, 4), (2, 3, 4), (3, 0, 4), (0, 2, 1), (0, 3, 2)]) + o)
+    return np.vstack(Vs), np.vstack(Fs)
 MANE = lambda P: ell(P, MC, MR) if FORM == 'celle' else np.full(P.shape[:-1], 9.)
 def storm(P):
     d = np.full(P.shape[:-1], 9.)
     for a, b, r in SHARDS: d = np.minimum(d, l1cone(P, a, b, r, .004))
     return su(d, MANE(P), .04) if FORM == 'celle' else d
 
+STORM_ON = [True]   # s2b: celle meshes her body and her mane as two pieces (each decimated on its own budget)
 def body(P):
     M = np.stack([np.abs(P[..., 0]), P[..., 1], P[..., 2]], -1)
     a, b, ra, rb = G['trunk']; bd = cone(P, a, b, ra, rb)
@@ -244,7 +254,7 @@ def body(P):
             bd = su(bd, cone(M, (x, y, z), (tx, ty, tz), r, .004), .03)
     f, h = legs(P); bd = su(bd, f, .02 if G.get('biped') else .045); bd = su(bd, h, .05)
     if FORM != 'myr': bd = su(bd, tail(P), .035)    # Vulnamyr's tails are their own pieces (TAILS), joined after meshing
-    return su(su(su(bd, head(P), .03), ruff(P), .02), storm(P), .012)
+    return su(su(su(bd, head(P), .03), ruff(P), .02), storm(P) if STORM_ON[0] else np.full(P.shape[:-1], 9.), .012)
 
 # ── crystal facet plates (the ledger's 'violet crystal facets'): low four-sided pyramids proud of the coat ──
 PLATES_AT = dict(
@@ -472,6 +482,15 @@ if __name__ == '__main__':
             assert tl.is_watertight and tl.body_count == 1 and tl.volume > 0, 'tail %d not closed' % k
             Vs.append(np.array(tl.vertices)); Fs.append(np.array(tl.faces) + o); o += len(tl.vertices)
         t = trimesh.Trimesh(np.vstack(Vs), np.vstack(Fs), process=False)
+    elif FORM == 'kor':   # s2b: the body meshed alone (decimates clean, as before), then each crystal shard its own closed piece
+        STORM_ON[0] = False; t = piece(field, lo, hi, float(os.environ.get('AW_H', .0070)), TRIS); STORM_ON[0] = True
+        sv, sf = shard_mesh(); sm = trimesh.Trimesh(sv, sf, process=False); sm.fix_normals(); assert sm.is_watertight and sm.volume > 0, 'shards not closed'
+        t = trimesh.Trimesh(np.vstack([t.vertices, sm.vertices]), np.vstack([t.faces, sm.faces + len(t.vertices)]), process=False)
+    elif FORM == 'celle':   # s2b (Alex 11-28): one budget for body + 70 mane points pinched her chin; the body and the mane are each their own closed piece
+        STORM_ON[0] = False; t = piece(field, lo, hi, float(os.environ.get('AW_H', .0062)), int(TRIS * .85)); STORM_ON[0] = True
+        ext = MR + .03; m = piece(MANE, MC - ext, MC + ext, .0080, 1200)   # the mane's round mass alone, then each point a flat crystal (shard_mesh)
+        sv, sf = shard_mesh(); sm = trimesh.Trimesh(sv, sf, process=False); sm.fix_normals(); assert sm.is_watertight and sm.volume > 0, 'shards not closed'
+        t = trimesh.Trimesh(np.vstack([t.vertices, m.vertices, sm.vertices]), np.vstack([t.faces, m.faces + len(t.vertices), sm.faces + len(t.vertices) + len(m.vertices)]), process=False)
     else: t = piece(field, lo, hi, float(os.environ.get('AW_H', .0070)), TRIS)
     eV, eF, eC = SF.eyes(); eV = fwd(eV + HO)
     finish(np.array(t.vertices), np.array(t.faces), OUT, (eV, eF, eC))
