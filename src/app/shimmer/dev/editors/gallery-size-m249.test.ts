@@ -37,6 +37,17 @@ ok(unmapped.length === 0, `keys with no table slot: ${unmapped.join(', ')}`)
 ok(written === 96, `96 form/awakened values written (got ${written})`)
 ok(pending.sort().join() === [...PENDING_CANON].sort().join(), `canon-pending set is exactly the four bases (got ${pending.join(', ')})`)
 ok(GROWN.firefly.height === 0.1 && GROWN.bat.height === 0.45, 'GROWN still canon values')
+// hub call 2 (11-28): the awakened lines Alex did NOT size keep their look against their 2nd form: each dial x that form's factor
+// (Arclotl x1.61, Aurmere x1.39, Craglotl x2.0). tables-before.json 'follow:<TABLE>:<name>' = the dial before.
+const FOLLOW_FORM: Record<string, string> = { ARCLOTL_AW_DIAL: 'arclotl', AURMERE_AW_DIAL: 'aurmere', CRAGLOTL_AW_DIAL: 'craglotl' }
+let followed = 0
+for (const [k, was] of Object.entries(before)) {
+  if (!k.startsWith('follow:')) continue
+  const [, table, name] = k.split(':'), a = awakenedSlot(name), f = sizes[`form:${FOLLOW_FORM[table]}`]
+  ok(!sizes[`awakened:${name}`] && a?.table === table && a.was === r2(was * f), `${name}: follows ${FOLLOW_FORM[table]} x${f}: ${a?.was} = ${r2(was * f)} (${was})`)
+  followed++
+}
+ok(followed === 12, `12 unsized awakened dials follow their 2nd form (got ${followed})`)
 // the awakened lines on their own dials are now visible to Copy values (they printed nothing before)
 ok(awakenedSlot('mesamun')?.table === 'MESAMERE_AW_DIAL' && awakenedSlot('croakarkor')?.table === 'CROAK_AW_DIAL', 'dial lookup')
 ok(awakenedSlot('vulnitar')?.table === 'AWAKEN_GROW', 'AWAKEN_GROW lookup')

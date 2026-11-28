@@ -98,5 +98,17 @@
  "awakened:mesathar": 2.1,
  "awakened:mesamelle": 1.75,
  "awakened:mesamis": 1.7,
- "awakened:mesamun": 1.85
+ "awakened:mesamun": 1.85,
+ "follow:ARCLOTL_AW_DIAL:arclotar": 1.85,
+ "follow:ARCLOTL_AW_DIAL:arclelle": 1.75,
+ "follow:ARCLOTL_AW_DIAL:arcis": 1.8,
+ "follow:ARCLOTL_AW_DIAL:arclun": 1.85,
+ "follow:AURMERE_AW_DIAL:aurmerok": 2.1,
+ "follow:AURMERE_AW_DIAL:aurmelys": 1.75,
+ "follow:AURMERE_AW_DIAL:aurmevex": 1.7,
+ "follow:AURMERE_AW_DIAL:aurhael": 1.85,
+ "follow:CRAGLOTL_AW_DIAL:cragkor": 1.85,
+ "follow:CRAGLOTL_AW_DIAL:craglaya": 1.8,
+ "follow:CRAGLOTL_AW_DIAL:craglix": 1.75,
+ "follow:CRAGLOTL_AW_DIAL:craglomyr": 1.85
 }

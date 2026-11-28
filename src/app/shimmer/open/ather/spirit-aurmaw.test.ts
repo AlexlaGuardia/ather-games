@@ -4,7 +4,6 @@ import { AWAKENED_FORMS, AURMERE_AWAKENED, AURMERE_AW_DIAL, SECOND_FORMS, formGr
 import { AWAKENED_BRANCHES, AWAKENED_NAMES } from '../../spirits/spirit'
 import { PUBLIC_FORMS } from './spirit-public'
 import { GALLERY } from '../../dev/editors/spirit-gallery'
-import { alexSized } from '../../dev/editors/m249-sized'  // M249 s2: sizes Alex set in the gallery pass (pinned exactly by gallery-size-m249.test.ts)
 let pass = 0; const fails: string[] = []
 const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
 const CANON = '/root/athernyx/CANON/world/spirits-species.md', DIR = 'docs/looks/m244-aurmere-2026-11-28'
@@ -27,7 +26,7 @@ for (const n of looks) {
   ok(L.url === `/open/spirits/${n}-rigged.glb` && existsSync(`public${L.url}`) && statSync(`public${L.url}`).size === m.glb_bytes, `${n}: his glb is in public/ and is the one the metrics measured (${m.glb_bytes} B)`)
   ok(existsSync(`public/open/spirits/${n}-icon.png`), `${n}: gallery icon (our render)`)
   ok(!PUBLIC_FORMS.has(n), `${n}: not in PUBLIC_FORMS (owner preview only)`)
-  ok(alexSized('form:aurmere') || (AURMERE_AW_DIAL[n] > formGrow('aurmere') && L.h > parent.h * 1.1), `${n}: grown past Aurmere (dial ${AURMERE_AW_DIAL[n]} vs ${formGrow('aurmere')})`)
+  ok(AURMERE_AW_DIAL[n] > formGrow('aurmere') && L.h > parent.h * 1.1, `${n}: grown past Aurmere (dial ${AURMERE_AW_DIAL[n]} vs ${formGrow('aurmere')})`)
   ok(L.glow?.part === 'aura' && m.aura_tris > 0, `${n}: the motif (aura part, ${m.aura_tris} tris) glows`)
   ok(Math.abs(L.rig!.glbLen - m.glb_long) < 1e-3, `${n}: glbLen = his metrics (${m.glb_long})`)
   ok(m.body_verts <= 9800, `${n}: body under ~9k verts (${m.body_verts})`)

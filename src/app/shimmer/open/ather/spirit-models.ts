@@ -56,7 +56,7 @@ export type SpiritLook = {
   skin: { emissive: string; emissiveI: number }
   hull: { color: string; opacity: number }
   /** a glb node drawn with its own toon + a pulsing emissive (the Manalotl's frills: the element's expression point) */
-  glow?: { part: string; emissive: string; lo: number; hi: number; hz: number }
+  glow?: { part: string; emissive: string; lo: number; hi: number; hz: number; /** BETA M250: the part is ENERGY (lightning, storm): drawn see-through + additive, no outline, and it crackles (spirit-rig-body glowAt / energize; rigged looks) */ energy?: boolean }
   sway: SpiritSway
   /** the Vulnyx's ear-tip flick (top of the head, off the tail side) */
   ears?: boolean
@@ -514,7 +514,7 @@ export const MESAMERE_AWAKENED: Readonly<Record<string, SpiritLook>> = {
 // legs, arms, a four-bone tail; clipV = the metrics' v_glb); Arclun stays on four legs (rig_arclun.py = the live rig_lotl.py + a 'halo'
 // bone for her rings). 'aura' = her motif: Arclotar's bolts (chest), Arclelle's ribbons of current (chest), Arcis's lightning orb (root),
 // Arclun's sound rings (halo). glbLen = her rest nose-to-tail, glb units.
-export const ARCLOTL_AW_DIAL: Readonly<Record<string, number>> = { arclotar: 1.85, arclelle: 1.75, arcis: 1.8, arclun: 1.85 }
+export const ARCLOTL_AW_DIAL: Readonly<Record<string, number>> = { arclotar: 2.98, arclelle: 2.82, arcis: 2.9, arclun: 2.98 }
 const arcAw = (name: string, aura: string, rig: RigLook): SpiritLook => {
   const b = lotlForm('storm', 'arclotl', '#a8d2ff', '#dcecff', ARCLOTL_RIG), h = LOTL_UNIT * ARCLOTL_AW_DIAL[name] / formGrow('marlotl')
   return { ...b, name, url: `/open/spirits/${name}-rigged.glb`, h, trot: grownTrot(b.trot, b.h, h), rig, glow: { part: 'aura', emissive: aura, lo: 0.35, hi: 0.7, hz: 0.35 } }
@@ -530,7 +530,7 @@ export const ARCLOTL_AWAKENED: Readonly<Record<string, SpiritLook>> = {
 // rig_mesaaw.py with her names: 18 bones, five clips at the base's 0.464 m per glb unit + baked head / tail springs). h = the base
 // Shellmere's x her dial. 'aura' = the motif: Aurmerok's gold sun disc, Aurmelys's sound rings + spiral, Aurmevex's gold ring + dots,
 // Aurhael's gold crown, halo + dots. glbLen = her metrics' glb_long.
-export const AURMERE_AW_DIAL: Readonly<Record<string, number>> = { aurmerok: 2.1, aurmelys: 1.75, aurmevex: 1.7, aurhael: 1.85 }
+export const AURMERE_AW_DIAL: Readonly<Record<string, number>> = { aurmerok: 2.92, aurmelys: 2.43, aurmevex: 2.36, aurhael: 2.57 }
 const aurAw = (name: string, aura: string, glbLen: number): SpiritLook => {
   const b = shellForm('mana', 'aurmere', '#b49cff', '#e8dcff', glbLen), base = BASE_PREVIEW.turtle!, h = base.h * AURMERE_AW_DIAL[name]
   return { ...b, name, url: `/open/spirits/${name}-rigged.glb`, h, trot: grownTrot(base.trot, base.h, h), glow: { part: 'aura', emissive: aura, lo: 0.35, hi: 0.7, hz: 0.35 } }
@@ -546,7 +546,7 @@ export const AURMERE_AWAKENED: Readonly<Record<string, SpiritLook>> = {
 // biped (rig_cragaw.py = rig_arcaw.py); Craglaya, Craglix and Craglomyr stay on four legs (rig_cragq.py = rig_arclun.py: the live rig_lotl.py
 // + a 'halo' bone). 'aura' = her motif: Cragkor's crystal spires (root), Craglaya's pebble ring + Craglix's ripple rings (halo), Craglomyr's
 // brow crystals (head). glbLen = her rest nose-to-tail, glb units.
-export const CRAGLOTL_AW_DIAL: Readonly<Record<string, number>> = { cragkor: 1.85, craglaya: 1.8, craglix: 1.75, craglomyr: 1.85 }
+export const CRAGLOTL_AW_DIAL: Readonly<Record<string, number>> = { cragkor: 3.7, craglaya: 3.6, craglix: 3.5, craglomyr: 3.7 }
 const cragAw = (name: string, aura: string, rig: RigLook): SpiritLook => {
   const b = lotlForm('earth', 'craglotl', '#ffae4a', '#ffe2b4', CRAGLOTL_RIG), h = LOTL_UNIT * CRAGLOTL_AW_DIAL[name] / formGrow('marlotl')
   return { ...b, name, url: `/open/spirits/${name}-rigged.glb`, h, trot: grownTrot(b.trot, b.h, h), rig, glow: { part: 'aura', emissive: aura, lo: 0.35, hi: 0.7, hz: 0.35 } }
@@ -556,6 +556,23 @@ export const CRAGLOTL_AWAKENED: Readonly<Record<string, SpiritLook>> = {
   craglaya: cragAw('craglaya', '#ffc46e', lotlRig(1.5064, -0.2)),
   craglix: cragAw('craglix', '#ffe2aa', lotlRig(1.8815, -0.2)),
   craglomyr: cragAw('craglomyr', '#96f0dc', lotlRig(1.4846, -0.2)),
+}
+// M244 sheet 17 (assets, 11-28): VOLTMERE's four AWAKENED forms (Storm), OWNER PREVIEW (docs/looks/m244-voltmere-2026-11-28): the live
+// Voltmere's sculpt re-shaped by name (sculpt_voltaw.py), all four WALK on the Shellmere line's own legged rig (rig_voltaw.py = sheet 15b's
+// rig_aurmaw.py with her names: 18 bones, five clips at the base's 0.464 m per glb unit + baked head / tail springs). h = the base Shellmere's
+// x her dial (sheet 15b's dials x 1.95 / 1.4, as M249 grew Voltmere 1.4 -> 1.95). 'aura' = the motif, ENERGY per BETA M250 (see-through,
+// additive, crackling): Voltmerkor's ice-crystal crown + flank lightning, Voltmeraya's faint arcs + plate sheen, Voltvis's lightning jet off
+// her tail, Voltmeth's storm cloud + its bolts. glbLen = her metrics' glb_long.
+export const VOLTMERE_AW_DIAL: Readonly<Record<string, number>> = { voltmerkor: 2.93, voltmeraya: 2.44, voltvis: 2.37, voltmeth: 2.58 }
+const voltAw = (name: string, aura: string, glbLen: number): SpiritLook => {
+  const b = shellForm('storm', 'voltmere', '#a8d2ff', '#dcecff', glbLen), base = BASE_PREVIEW.turtle!, h = base.h * VOLTMERE_AW_DIAL[name]
+  return { ...b, name, url: `/open/spirits/${name}-rigged.glb`, h, trot: grownTrot(base.trot, base.h, h), glow: { part: 'aura', emissive: aura, lo: 0.45, hi: 1.1, hz: 0.6, energy: true } }
+}
+export const VOLTMERE_AWAKENED: Readonly<Record<string, SpiritLook>> = {
+  voltmerkor: voltAw('voltmerkor', '#a8e4ff', 1.542),
+  voltmeraya: voltAw('voltmeraya', '#cdeeff', 1.569),
+  voltvis: voltAw('voltvis', '#a8e4ff', 1.623),
+  voltmeth: voltAw('voltmeth', '#d8ecff', 1.532),
 }
 // M202 the Lepara line (docs/looks/m202-lepara-line-2026-11-27): Lepaura (Mana, the ledger's MOON-HARE: taller, a plume tail, a gold
 // crescent on her brow, a gold necklace + diamond, gold infusion ribbons = pattern only), Leparc (Storm: silver-blue, cheek + ear-tip tufts,
@@ -747,6 +764,7 @@ export const AWAKENED_FORMS: Readonly<Record<string, SpiritLook>> = {
   ...ARCLOTL_AWAKENED,   // M244 sheet 15: Arclotl's four (above)
   ...AURMERE_AWAKENED,   // M244 sheet 15b: Aurmere's four (above)
   ...CRAGLOTL_AWAKENED,   // M244 sheet 16: Craglotl's four (above)
+  ...VOLTMERE_AWAKENED,   // M244 sheet 17: Voltmere's four (above)
   vulnarok: awakened('vulnarok', AWAKEN_LEN.vulnarok, '#ffcf5a', 2.4),
   vulnalys: awakened('vulnalys', AWAKEN_LEN.vulnalys, '#b48cff', 1.7),
   vulnavex: awakened('vulnavex', AWAKEN_LEN.vulnavex, '#ffcf5a', 2.6),
