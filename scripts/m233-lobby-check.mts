@@ -100,7 +100,10 @@ const lobbyOf = (p: Page) => p.evaluate(() => {
 const clickIn = async (p: Page, sel: string) => { const b = await p.$(`${sel} button`); if (!b) return false; await p.evaluate(e => (e as HTMLButtonElement).click(), b); return true }
 /** the ring to its result: the tree, the champion, both keepers' seats */
 async function ringOut(p: Page) {
-  await p.waitForSelector('[data-clash-ring="ring"]', { timeout: 30000 })
+  // the ring comes up after the models load (swiftshader + a heavy page: tens of seconds), so wait 120 s and say WHAT phase it stalled in
+  await p.waitForSelector('[data-clash-ring="ring"]', { timeout: 120000 }).catch(async (e) => {
+    const ph = await p.evaluate(() => ({ ring: (document.querySelector('[data-clash-ring]') as HTMLElement | null)?.dataset.clashRing ?? 'none', load: !!document.querySelector('[data-clash-load]'), panel: !!document.querySelector('[data-panel]'), txt: document.body.innerText.slice(0, 160) }))
+    console.log('   ring stalled:', JSON.stringify(ph)); throw e })
   const first = await p.evaluate(() => (document.querySelector('[data-bracket-bout="0"]') as HTMLElement | null)?.innerText ?? '')
   for (let i = 0; i < 1600 && !(await p.$('[data-clash-ring-result]')); i++) await sleep(250)
   return p.evaluate((f: string) => {

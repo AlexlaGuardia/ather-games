@@ -13,6 +13,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
+import { useProgress } from '@react-three/drei'
 import { H } from '../../ui/hearth'
 import { SpiritFigure } from './spirit-model'
 import { formLook, spiritModelFor, type SpiritElement } from './spirit-models'
@@ -39,7 +40,13 @@ export function SmashBellView({ contestants, over = true, speed, title, onExit, 
   const x = useMemo(() => speed ?? speedDial(), [speed])
   const [i, setI] = useState(0)
   const startAt = useRef<number | null>(null), [tick, setTick] = useState(0)
-  if (startAt.current === null) startAt.current = performance.now()   // her show starts at the first render (never 0: a 0 start reads as long over)
+  // the LOAD CARD: while the bell scene's models load (heavy pages: seconds) her show waits, so no beat plays on an empty ring
+  const { active } = useProgress()
+  const [ready, setReady] = useState(false), [capped, setCapped] = useState(false)
+  useEffect(() => { if (active) { setReady(false); return }; const t = setTimeout(() => setReady(true), 500); return () => clearTimeout(t) }, [active])
+  useEffect(() => { const t = setTimeout(() => setCapped(true), 25000); return () => clearTimeout(t) }, [])
+  const loaded = ready || capped
+  if (startAt.current === null || !loaded) startAt.current = performance.now()   // her show starts at the first render (never 0: a 0 start reads as long over)
   const log = useRef<string[]>([]), lastBeat = useRef('')
   const noSwing = useRef<Set<number>>(new Set())
   useEffect(() => { const t = setInterval(() => setTick(n => n + 1), 50); return () => clearInterval(t) }, [])
@@ -76,7 +83,7 @@ export function SmashBellView({ contestants, over = true, speed, title, onExit, 
 
   return (
     <div data-smash-bell-view data-bell-beat={st.beat} data-bell-i={st.i} data-bell-log={log.current.join(',')} data-bell-score={shown ?? ''} data-bell-cracked={cracked ? '1' : '0'}
-      data-bell-n={contestants.length} data-bell-order={contestants.map(q => q.keeper).join('|')} data-bell-winner={winner === null ? '' : `${contestants[winner].keeper}:${contestants[winner].score}`}
+      data-bell-loaded={loaded ? '1' : '0'} data-bell-n={contestants.length} data-bell-order={contestants.map(q => q.keeper).join('|')} data-bell-winner={winner === null ? '' : `${contestants[winner].keeper}:${contestants[winner].score}`}
       style={{ position: 'fixed', inset: 0, zIndex: 60, background: '#1d1712', color: H.ink }}>
       <Canvas data-bell-canvas dpr={[1, 1.5]} gl={{ antialias: true }} camera={{ position: [0, cam.height, cam.distance], fov: cam.fov, near: 0.05, far: 300 }}>
         <color attach="background" args={['#a9c8d8']} />
@@ -88,6 +95,8 @@ export function SmashBellView({ contestants, over = true, speed, title, onExit, 
         {!c && last && <Striker key={`end:${last.key}`} c={last} live={live} />}
         <BellCamera cam={cam} />
       </Canvas>
+
+      {!loaded && <div data-bell-loading style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#1d1712', color: '#fff4d8', fontSize: 20, fontWeight: 800, zIndex: 5 }}>{L.loading}</div>}
 
       {title && <div style={{ position: 'absolute', top: 10, left: 12, fontSize: 12, fontWeight: 800, color: '#fff4d8', textShadow: '0 2px 6px rgba(0,0,0,.6)', pointerEvents: 'none' }}>{title} · {Math.min(i + 1, contestants.length)}/{contestants.length}</div>}
 

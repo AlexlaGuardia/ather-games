@@ -46,6 +46,15 @@ const CHORD = `M246${Math.random().toString(36).slice(2, 7).toUpperCase()}`
 const RECORDER = () => {
   const w = window as any
   w.__bell = { logs: [] as string[], score: '', cracked: false, judge: '', shout: '', backWalk: [] as string[], backStrike: [] as string[], order: '', winner: '', rows: '' }
+  // her facing is stamped by the page's frame loop (data-bell-back); a MutationObserver sees every beat + facing change, a slow poll does not
+  let obsOn: Element | null = null
+  const watch = () => {
+    const v = document.querySelector('[data-smash-bell-view]'); if (!v || v === obsOn) return
+    obsOn = v
+    const read = () => { const d = (v as HTMLElement).dataset, r = w.__bell; if (d.bellBeat === 'walk') r.backWalk.push(d.bellBack ?? ''); if (d.bellBeat === 'strike') r.backStrike.push(d.bellBack ?? '') }
+    new MutationObserver(read).observe(v, { attributes: true, attributeFilter: ['data-bell-beat', 'data-bell-back'] }); read()
+  }
+  setInterval(watch, 100)
   setInterval(() => {
     const v = document.querySelector('[data-smash-bell-view]') as HTMLElement | null; if (!v) return
     const r = w.__bell, d = v.dataset
@@ -54,8 +63,6 @@ const RECORDER = () => {
     if (d.bellCracked === '1') r.cracked = true
     const j = document.querySelector('[data-bell-judge-line]') as HTMLElement | null; if (j) r.judge = j.innerText
     const s = document.querySelector('[data-bell-shout]') as HTMLElement | null; if (s) r.shout = s.innerText
-    if (d.bellBeat === 'walk') r.backWalk.push(d.bellBack ?? '')
-    if (d.bellBeat === 'strike') r.backStrike.push(d.bellBack ?? '')
     if (d.bellOrder) r.order = d.bellOrder
     if (d.bellWinner) r.winner = d.bellWinner
     const rows = [...document.querySelectorAll('[data-bell-row]')].map(e => `${(e as HTMLElement).dataset.bellRow}=${(e as HTMLElement).dataset.bellRowScore}`).join(' ')

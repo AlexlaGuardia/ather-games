@@ -57,6 +57,7 @@ export function showWinner(c: readonly BellContestant[]): number | null {
 /** plain UI words (@lark: the shout-out and the judge's line are PLACEHOLDERS; the judge must never say the famous meme line) */
 export const BELL_UI = {
   upNext: 'Up next',
+  loading: 'Getting the bell ready',
   shout: (keeper: string, you: boolean) => (you ? 'For you, keeper!' : `For ${keeper}!`),   // placeholder shout-out -> @lark
   form: (el: string) => (el === 'base' ? 'Base form' : `${el[0].toUpperCase()}${el.slice(1)} form`),
   score: 'Score',
