@@ -199,8 +199,9 @@ function Racer3D({ e, rt, lane, n, at, clip, probe }: { e: Entry; rt: RaceTrack;
 function Follow({ rt, lane, n, at, phone }: { rt: RaceTrack; lane: number; n: number; at: () => RunState; phone: boolean }) {
   const cam = useThree(s => s.camera), look = useRef(new THREE.Vector3()), first = useRef(true)
   useFrame((_, dt) => {
-    const s = at(), p = racerAt(rt, s.d, laneOffset(lane, n, rt.width) * 0.5), y = Math.max(trackY(rt.track, s.d), sectionAt(s.d, rt.track).kind === 'glide' ? 0 : -0.5)
     const back = phone ? 8 : 6.5, up = phone ? 5 : 3.8, ahead = racerAt(rt, s.d + 4, 0)
+    // the cam rides over the track UNDER it too (down a gap it stays above the top of the climb behind her, never inside the berm)
+    const s = at(), p = racerAt(rt, s.d, laneOffset(lane, n, rt.width) * 0.5), y = Math.max(trackY(rt.track, s.d), trackY(rt.track, Math.max(0, s.d - back)), trackY(rt.track, Math.max(0, s.d - back / 2)), -0.5)
     const want = new THREE.Vector3(p.x - Math.sin(p.heading) * back, y + up, p.z - Math.cos(p.heading) * back)
     const lk = new THREE.Vector3(ahead.x, trackY(rt.track, Math.min(rt.track.len, s.d + 4)) + 0.6, ahead.z)
     const k = first.current ? 1 : 1 - Math.exp(-dt * 3); first.current = false
