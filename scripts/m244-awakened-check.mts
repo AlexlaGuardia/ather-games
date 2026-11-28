@@ -19,7 +19,7 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms)); let fails = 0
 const ok = (c: boolean, m: string) => { console.log(`${c ? 'PASS' : 'FAIL'} ${m}`); if (!c) fails++ }
 const ONLY = flag('--only', '').split(',').filter(Boolean).map(Number)
 const AW = GALLERY.filter(r => r.aw && (!ONLY.length || ONLY.includes(r.num)))
-ok(GALLERY.filter(r => r.aw).length === 28, `28 awakened rows in the roster (${GALLERY.filter(r => r.aw).map(r => `#${r.num} ${r.name}`).join(', ')})`)
+ok(GALLERY.filter(r => r.aw).length === 32, `32 awakened rows in the roster (${GALLERY.filter(r => r.aw).map(r => `#${r.num} ${r.name}`).join(', ')})`)
 const br = await puppeteer.launch({ protocolTimeout: 900000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--mute-audio', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] })
 try {
   const errs: string[] = []
@@ -121,7 +121,7 @@ try {
         ok(lo > 1.0, `#${row.num} ${c}: in the air, lowest body / aura vertex ${lo.toFixed(3)} glb (> 1.0)`)
       }
     }
-    if (['orebrak', 'lumoraya', 'lumorvex', 'lumorun'].includes(look)) {   // sheet 7: Luminore's four BROKE OUT of the egg: on the ground (no hover), on two legs with two arms
+    if (['orebrak', 'lumoraya', 'lumorvex', 'lumorun', 'lumixok', 'marisse', 'lumixis', 'lumixeth'].includes(look)) {   // + sheet 9: Luminix's four (the same break-out)   // sheet 7: Luminore's four BROKE OUT of the egg: on the ground (no hover), on two legs with two arms
       const s1 = await sample('walk', 14, 70), names = s1?.names ?? []
       const BODY_UP: Record<string, number> = { idle: 0.02, walk: 0.03, run: 0.04, sit: 0.03, lie: 0.10 }   // the lie: a folded motif or a raised arm may hold her a little up
       const limbs = ['b_leg_l', 'b_shin_l', 'b_leg_r', 'b_shin_r', 'b_arm_l', 'b_farm_l', 'b_arm_r', 'b_farm_r'].filter(x => names.includes(x))

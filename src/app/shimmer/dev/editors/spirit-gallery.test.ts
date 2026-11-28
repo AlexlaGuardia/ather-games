@@ -14,7 +14,7 @@ const CANON = '/root/athernyx/CANON/world/spirits-species.md'
 ok(existsSync(LEDGER), `ledger present (${LEDGER})`)
 ok(existsSync(CANON), `canon base table present (${CANON})`)
 
-ok(GALLERY.length === 78, `78 rows: 10 base + 40 forms + 28 awakened (got ${GALLERY.length})`)
+ok(GALLERY.length === 82, `82 rows: 10 base + 40 forms + 32 awakened (got ${GALLERY.length})`)
 GALLERY.forEach((r, i) => ok(r.num === i + 1, `row ${i} numbered ${i + 1} (got ${r.num})`))
 ok(GALLERY.slice(0, 10).every(r => r.el === null) && GALLERY.slice(10).every(r => r.el !== null), 'base 10 first, then the 40 forms')
 ok(new Set(GALLERY.map(r => r.name)).size === GALLERY.length, 'every name unique')
@@ -82,6 +82,11 @@ ok(steepAdd(steepAdd(STEEP_NONE, 'mana', 8), 'storm', 5).storm === 2, 'add is he
   ok(lo.length === 4 && lo.every((r, i) => r.num === 75 + i), `Luminore's awakened rows #075-#078 (got ${lo.map(r => r.num)})`)
   ok(lo.map(r => r.name).join() === lb.replace(/.*\*\*Luminore \(Earth\):\*\*/, '').replace(/\*|\([^)]*\)/g, '').split('·').map(x => x.trim()).join(), `Luminore's four = the canon line (${lb.slice(0, 90)})`)
   for (const r of lo) ok(locks.some(l => l.name === r.name && l.second_form === 'Luminore' && l.branch_name.toLowerCase() === r.aw!.branch), `${r.name}: a stage-3 lock off Luminore, ${r.aw!.branch}`)
+  // M244 sheet 9: Luminix's four = rows #079-#082, word for word off the canon line ('Luminix (Water):') and the stage-3 ledger
+  const lx = GALLERY.filter(r => r.aw && r.sp === 'firefly' && r.el === 'water'), lxl = readFileSync(CANON, 'utf8').split('\n').find(x => x.includes('**Luminix (Water):**')) ?? ''
+  ok(lx.length === 4 && lx.every((r, i) => r.num === 79 + i), `Luminix's awakened rows #079-#082 (got ${lx.map(r => r.num)})`)
+  ok(lx.map(r => r.name).join() === lxl.replace(/.*\*\*Luminix \(Water\):\*\*/, '').replace(/\*|\([^)]*\)/g, '').split('·').map(x => x.trim()).join(), `Luminix's four = the canon line (${lxl.slice(0, 90)})`)
+  for (const r of lx) ok(locks.some(l => l.name === r.name && l.second_form === 'Luminix' && l.branch_name.toLowerCase() === r.aw!.branch), `${r.name}: a stage-3 lock off Luminix, ${r.aw!.branch}`)
   ok(aw.every(r => r.icon.startsWith('/open/spirits/') && !r.icon.includes('stage3')), 'awakened icons are our renders, not the private art')
   // M244 sheet 2: Vulnarc's four (#055-#058, art pending lock) = the canon's 'Named — Vulnyx › Vulnarc (Storm)' line, word for word
   const st = GALLERY.filter(r => r.aw && r.el === 'storm' && r.sp === 'fox'), named = readFileSync(CANON, 'utf8').split('\n').find(x => x.includes('Named') && x.includes('Vulnarc (Storm)')) ?? ''
@@ -95,7 +100,7 @@ ok(steepAdd(steepAdd(STEEP_NONE, 'mana', 8), 'storm', 5).storm === 2, 'add is he
   ea.forEach((r, i) => { const l = locks.find(x => x.n === 9 + i); ok(!!l && l.name === r.name && l.second_form === 'Vulnore' && l.branch_name.toLowerCase() === r.aw!.branch, `#${r.num} = stage-3 lock n${9 + i} ${l?.name} (got ${r.name})`) })
   ok(ea.every(r => r.icon.startsWith('/open/spirits/') && !r.icon.includes('stage3')), 'Vulnore awakened icons are our renders')
   // M244 sheet 4: Vulnix's four (#063-#066) = the canon's 'Named — Vulnyx › Vulnix (Water)' line + the stage-3 ledger locks 13-16
-  const wa = GALLERY.filter(r => r.aw && r.el === 'water'), wn = readFileSync(CANON, 'utf8').split('\n').find(x => x.includes('Named') && x.includes('Vulnix (Water)')) ?? ''
+  const wa = GALLERY.filter(r => r.aw && r.el === 'water' && r.sp === 'fox'), wn = readFileSync(CANON, 'utf8').split('\n').find(x => x.includes('Named') && x.includes('Vulnix (Water)')) ?? ''
   ok(wa.length === 4 && wa.every((r, i) => r.num === 63 + i), `Vulnix's awakened rows #063-#066 (got ${wa.map(r => r.num)})`)
   for (const r of wa) ok(wn.includes(`**${r.name}** (${r.aw!.branch[0].toUpperCase()}${r.aw!.branch.slice(1)}`), `canon names ${r.name} (${r.aw!.branch})`)
   wa.forEach((r, i) => { const l = locks.find(x => x.n === 13 + i); ok(!!l && l.name === r.name && l.second_form === 'Vulnix' && l.branch_name.toLowerCase() === r.aw!.branch, `#${r.num} = stage-3 lock n${13 + i} ${l?.name} (got ${r.name})`) })
