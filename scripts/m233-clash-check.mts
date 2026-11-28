@@ -133,10 +133,11 @@ try {
     // M233 v2d: an observer in the page records every ceremony beat as it renders (a 250 ms poll misses a 500 ms beat)
     await p.evaluate(() => {
       const w = window as any; w.__v2d?.mo?.disconnect()
-      const rec = w.__v2d = { begin: false, intro: 0, trees: [] as string[], order: [] as string[], advanced: false, cheerUsed: false, mo: null as MutationObserver | null }
+      const rec = w.__v2d = { begin: false, intro: 0, trees: [] as string[], order: [] as string[], advanced: false, cheerUsed: false, skip: false, mo: null as MutationObserver | null }
       const look = () => {
         rec.intro = Math.max(rec.intro, document.querySelectorAll('[data-clash-intro]').length)
         if (document.querySelector('[data-clash-begin]')) rec.begin = true
+        if (document.querySelector('[data-clash-skip]')) rec.skip = true   // the Skip button shows during the ceremony
         // M233 v2d (87c): bout order, tree advance and the Cheer press are read here too (a 250 ms poll at 390 on swiftshader missed whole bouts)
         const bo = document.querySelector('[data-clash-bout]') as HTMLElement | null
         if (bo) {
@@ -183,8 +184,8 @@ try {
       if (st.res) { result = st.res; break }
       await sleep(250)
     }
-    { const r = await p.evaluate(() => { const v = (window as any).__v2d; return v ? { begin: v.begin, intro: v.intro, trees: v.trees, order: v.order as string[], advanced: !!v.advanced, cheerUsed: !!v.cheerUsed } : null })
-      if (r) { if (r.order.length > order.length) order = r.order; if (r.advanced) advanced = true; if (r.cheerUsed) cheer = '1'; if (r.begin) shot.add('begin'); if (r.intro >= 2) shot.add('intro'); for (const t of r.trees) if (treeSeen[treeSeen.length - 1] !== t) treeSeen.push(t) } }
+    { const r = await p.evaluate(() => { const v = (window as any).__v2d; return v ? { begin: v.begin, intro: v.intro, trees: v.trees, order: v.order as string[], advanced: !!v.advanced, cheerUsed: !!v.cheerUsed, skip: !!v.skip } : null })
+      if (r) { if (r.order.length > order.length) order = r.order; if (r.advanced) advanced = true; if (r.cheerUsed) cheer = '1'; if (r.begin) shot.add('begin'); if (r.skip) shot.add('skip'); if (r.intro >= 2) shot.add('intro'); for (const t of r.trees) if (treeSeen[treeSeen.length - 1] !== t) treeSeen.push(t) } }
     if (tries === 1 || result === 'won') await p.screenshot({ path: `${out}/2d-ring-result-${result}.png` })
     const ex = await p.$('[data-clash-exit]'); if (ex) { await ex.click(); await sleep(800) }
     exited = !(await p.$('[data-clash-ring]')) && !!(await p.$('[data-panel="clash"] [data-clash-result]'))
@@ -229,6 +230,7 @@ try {
   const fights = ev.filter(e => e.startsWith('fight:')).map(e => e.split(':')[1])
   ok(fights.length >= 2 && fights.every(i => at('intro', i) >= 0 && at('intro', i) < at('begin', i) && at('begin', i) < at('fight', i)), `14a. before every bout: corner INTROS then 'Begin' then the fight (${ev.filter(e => /^(intro|begin|fight)/.test(e)).join(' ')})`)
   ok(shot.has('intro') && shot.has('begin'), `14b. the two corner cards and 'Begin' were on screen (${[...shot].join(',')})`)
+  ok(shot.has('skip'), `14h. the Skip button (data-clash-skip) shows during the ceremony (${[...shot].join(',')})`)
   const dones = ev.filter(e => e.startsWith('done:'))
   ok(dones.length === fights.length && dones.every(d => { const i = d.split(':')[1]; return at('winner', i) >= 0 && at('winner', i) < ev.indexOf(d) && at('tree', i) > ev.indexOf(d) }), `14c. after every bout: the WINNER banner, then the TREE (${ev.filter(e => /^(winner|tree)/.test(e)).join(' ')})`)
   const t0 = treeSeen.find(t => /^0:x\d/.test(t))
