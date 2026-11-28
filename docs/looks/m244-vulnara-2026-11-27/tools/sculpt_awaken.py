@@ -111,7 +111,7 @@ FORMS['noris'] = dict(FORMS['arcvex'], ear=((.128, .655, .222), (.262, .985, .10
                       tail=[(0, .40, -.33), (0, .44, -.44), (0, .50, -.55), (0, .58, -.64), (0, .68, -.70), (0, .78, -.72), (0, .86, -.70), (0, .91, -.66), (0, .93, -.63)],
                       tailr=[.05, .08, .12, .15, .16, .15, .12, .07, .004])
 FORMS['norun'] = dict(FORMS['myr'], ear=((.128, .655, .222), (.236, 1.04, .150)),
-                      tail=[(0, .48, -.22), (0, .46, -.34), (0, .43, -.46), (0, .41, -.58), (0, .41, -.70), (0, .43, -.81), (0, .46, -.90), (0, .48, -.96), (0, .49, -.99)],
+                      tail=[(0, .48, -.22), (0, .50, -.34), (0, .53, -.46), (0, .56, -.58), (0, .60, -.70), (0, .64, -.81), (0, .68, -.90), (0, .70, -.96), (0, .71, -.99)],   # streams out level (a lower brush dipped 80 mm in the run)
                       tailr=[.05, .09, .14, .18, .20, .19, .15, .085, .004])
 # ── M244 sheet 4 (2026-11-28): VULNIX's four (Water), art LOCKED-AFK athernyx 3501ec6 (assets/stage3/013-016, private: read for shape +
 # colour, never copied here). Vulnix's teal water coat off that art, cream chest, cyan crystal, the CYAN TEARDROP BROW GEM (sculpt_forms
@@ -125,7 +125,7 @@ FORMS['norun'] = dict(FORMS['myr'], ear=((.128, .655, .222), (.236, 1.04, .150))
 #   nixeth   Vulnixeth (Enigma) fluffy and still, ONE curled tail, water always pouring off her (drips off belly + legs); she stands in a
 #                      STILL POOL ('aura' on the 'cloud' bone)
 FORMS['nitar'] = dict(FORMS['lys'], ear=((.128, .655, .222), (.252, 1.06, .150)), fr=(.084, .055, .047), paw=1.3)
-FORMS['marelle'] = dict(FORMS['celle'], ear=((.150, .665, .205), (.300, .300, .180)),
+FORMS['marelle'] = dict(FORMS['celle'], ear=((.150, .665, .205), (.310, .235, .190)),
                         tailr=[.06, .10, .155, .205, .235, .23, .19, .11, .004])
 FORMS['nisk'] = dict(FORMS['noris'], ear=((.128, .655, .222), (.272, 1.000, .095)), tail=FORMS['vex']['tail'],
                      tailr=[.05, .08, .12, .145, .15, .14, .11, .06, .004])
@@ -279,21 +279,21 @@ elif FORM == 'raya':  # the leaf mantle: green crystal leaves from the neck base
     c = V3(0, .56, .21)
     for d in _fib(46):
         if d[2] > .35 or d[1] < -.2: continue
-        o = c + V3(.13, .09, .10) * d; t = d + V3(0, .15, -.85); t /= np.linalg.norm(t); ln = .10 + .03 * np.sin(6 * d[0] + 3 * d[1])
+        o = c + V3(.16, .13, .14) * d; t = d * .8 + V3(0, .15, -.6); t /= np.linalg.norm(t); ln = .12 + .03 * np.sin(6 * d[0] + 3 * d[1])   # proud of the neck (the first cut sat buried)
         SHARDS.append((o, o + t * ln, .040))
 elif FORM == 'noris':  # a mantle of rough stones over her shoulders, a crystal crest on the brow
     for x, y, z, r in ((0, .50, .10, .060), (.07, .48, .12, .052), (-.07, .48, .12, .052), (.10, .44, .06, .048), (-.10, .44, .06, .048), (0, .51, .03, .055),
                        (.05, .49, -.02, .046), (-.05, .49, -.02, .046), (.11, .40, .14, .040), (-.11, .40, .14, .040), (0, .47, .18, .044)):
-        ROCKS.append((V3(x, y, z), V3(r * 1.15, r * .85, r), 5 + len(ROCKS)))
+        ROCKS.append((V3(x, y + .065, z), V3(r * 1.15, r * .85, r) * 1.3, 5 + len(ROCKS)))   # proud of the back (the first cut sat buried)
     SHARDS.append((_brow(.66, .30), _brow(.79, .24), .024)); SHARDS.append((_brow(.66, .25), _brow(.76, .19), .020))
 elif FORM == 'norun':  # a small tree from her back (trunk + three branches; the crown is the aura) + blooms on her back
-    b0 = V3(0, .52, .04); top = V3(0, .86, .02)
-    TRUNK.append((np.array([b0, b0 + V3(0, .12, -.01), b0 + V3(.01, .23, .00), top]), .028, .016))
+    b0 = V3(0, .52, .04); top = V3(0, 1.00, .00)   # the art's tree stands about a head above her back
+    TRUNK.append((np.array([b0, b0 + V3(0, .16, -.015), b0 + V3(.012, .32, .00), top]), .034, .018))
     for d in (V3(.12, .10, .02), V3(-.11, .12, -.03), V3(.02, .13, -.10)): TRUNK.append((np.array([top - V3(0, .06, 0), top + d * .5, top + d]), .014, .006))
 elif FORM == 'nitar':   # sheet 4: cyan crystal plates over the shoulders + the hip, pointing up and back (the art's crystal armour)
     for sx in (1, -1):
-        for ox, oy, oz, tx, ty, tz, r in ((.11, .56, .20, .17, .66, .12, .050), (.13, .52, .24, .21, .58, .21, .042), (.12, .55, .14, .17, .64, .05, .044),
-                                          (.10, .55, -.20, .15, .64, -.28, .046), (.12, .50, -.24, .19, .56, -.31, .038)):
+        for ox, oy, oz, tx, ty, tz, r in ((.10, .57, .19, .20, .74, .10, .075), (.13, .52, .25, .25, .62, .24, .062), (.12, .56, .12, .21, .71, .00, .066),
+                                          (.14, .46, .22, .24, .50, .26, .050), (.10, .56, -.20, .18, .70, -.31, .068), (.13, .50, -.25, .23, .58, -.35, .056)):
             SHARDS.append((V3(sx * ox, oy, oz), V3(sx * tx, ty, tz), r))
 def ear_sel(V, x):
     """sheet 4 (rig side): Marelle's hanging ear vertices (near the ear's axis, on her side), in world space"""
@@ -364,6 +364,10 @@ def body(P):
     if FORM == 'myr':   # a ruff of pale fur over the chest, above the gem
         for x, y, z, tx, ty, tz, r in ((0, .52, .23, 0, .44, .30, .055), (.06, .53, .21, .085, .44, .27, .05), (.10, .52, .17, .135, .43, .22, .045)):
             bd = su(bd, cone(M, (x, y, z), (tx, ty, tz), r, .004), .03)
+    if FORM == 'marelle':  # sheet 4: the jester ears widen into long hanging lobes below the jaw (the art's long swinging ears)
+        for sx in (1, -1):
+            A_, T_ = fwd(V3(sx * .150, .665, .205) + HO), fwd(V3(sx * .310, .235, .190) + HO)
+            bd = su(bd, ell(P, A_ + (T_ - A_) * .66, (.030 * HK, .125 * HK, .075 * HK)), .03)
     if FORM == 'nixeth':   # sheet 4: water pouring off her: short drips under the belly + down the backs of the legs
         for x, y, z, ln in ((.05, .37, .08, .07), (-.04, .37, -.02, .08), (.03, .37, -.10, .06), (.11, .23, .14, .05), (.11, .20, -.21, .05), (.10, .30, -.04, .05)):
             bd = su(bd, cone(P, (x, y, z), (x, y - ln, z - .004), .014, .003), .015)
@@ -406,7 +410,7 @@ if FORM == 'norun':   # her blooms, set on the back's surface (found from above,
     for k in range(16):
         x = _rng.uniform(-.09, .09); z = _rng.uniform(-.17, .14)
         if abs(x) < .035 and -.02 < z < .10: continue   # clear of the trunk
-        FLOWERS.append((_surf(body, (x, .9, z), (0, -1, 0)) + V3(0, .006, 0), .017, k % 3 == 0))
+        FLOWERS.append((_surf(body, (x, .9, z), (0, 1, 0)) + V3(0, .004, 0), .019, k % 3 == 0))   # _surf's dirn is the OUTWARD side
     STORM_ON[0] = True
 def plates(P):
     d = np.full(P.shape[:-1], 9.)
@@ -494,7 +498,7 @@ def classes(V):
     out.append(.006 - chest_gem(V))                 # 10 chest gem
     out.append(.013 - tail(V) if FORM == 'myr' else np.full(len(V), -1.))   # 11 crystal tails
     if FORM == 'oreth':   # her stone armour as broad plates: pauldrons, gauntlets, shins, a V chest plate (the art's dark olive)
-        A_ = np.abs(x); arm_ = np.maximum.reduce([np.minimum(A_ - .16, y - .93), np.minimum.reduce([A_ - .215, y - .58, .86 - y]), np.minimum.reduce([.36 - y, y - .09, A_ - .06]),
+        A_ = np.abs(x); arm_ = np.maximum.reduce([np.minimum.reduce([A_ - .16, y - .93, 1.13 - y, z + .16]), np.minimum.reduce([A_ - .215, y - .58, .86 - y]), np.minimum.reduce([.36 - y, y - .09, A_ - .06, z + .16]),
                                                  np.minimum.reduce([z - .10, .17 - A_ + (y - .80) * .5, y - .74, 1.0 - y])])
         out[7] = np.maximum(out[7], arm_)
     if WATER: out[8] = np.maximum(.004 - ruff(V), .005 - shards_d(V))
@@ -508,7 +512,7 @@ def palette():
         return [C('#f4dcae'), C('#fbeed4'), C('#fbeed4'), tip, C('#e8a070'), C('#fbeed4'), C('#2a1a12'), C('#5e5a3a'), C('#86c050'),
                 C('#6b4524') if FORM == 'norun' else C('#f2c440'), C('#f2c440'), C('#86c050'), C('#6b4524'), C('#f08aa0'), C('#f6c838')]
     if WATER:   # Vulnix's, off the locked art: pale aqua muzzle, cream chest, pink ear insides (Marelle's ears all coat), cyan crystal + gem
-        return [C('#a6e4ea'), C('#e8f8f6'), C('#e8f8f6'), C('#c4f0f2'), C('#3cb8c0') if FORM == 'marelle' else C('#e8aab4'), C('#e8f8f6'), C('#10242c'),
+        return [C('#a6e4ea'), C('#c4eeee'), C('#e8f8f6'), C('#c4f0f2'), C('#3cb8c0') if FORM == 'marelle' else C('#e8aab4'), C('#e8f8f6'), C('#10242c'),
                 C('#6fe0d8'), C('#7ee8e0'), C('#c8fbff'), C('#4fd8f0'), C('#6fe0d8')]
     if STORM:   # Vulnarc: pale ice coat lights, cream-white ruff, ice crystal, cyan lightning, violet gem
         return [C('#dff0ff'), C('#f6fafd'), C('#f6fafd'), C('#e6f0fa'), C('#e6a8a4'), C('#f6fafd'), C('#1c2030'), C('#bfe6ff'), C('#d8f2ff'), C('#7fe6ff'), C('#c46ad8'), C('#bfe6ff')]
@@ -516,7 +520,7 @@ def palette():
                                  C('#9a7ce6'), gold, gold, C('#c46ad8'), C('#8f7fe0')]
 CRYSTAL = (C('#9a7ce6'), C('#6e52c4'), C('#cdbcff')), (C('#8f7fe0'), C('#6a5cc8'), C('#d8d0ff')), (C('#c46ad8'), C('#8a3cb0'), C('#f2b8ff'))
 if STORM: CRYSTAL = (C('#bfe6ff'), C('#6aa8dc'), C('#eefaff')), (C('#d8f2ff'), C('#7cb6e4'), C('#ffffff'))
-if WATER: CRYSTAL = (C('#6fe0d8'), C('#2a9aa0'), C('#d0fff8')), (C('#7ee8e0'), C('#30a4a8'), C('#e0fffa'))
+if WATER: CRYSTAL = (C('#6fe0d8'), C('#3ab8bc'), C('#e0fffa')), (C('#7ee8e0'), C('#5cd4d8'), C('#f0fffd'))
 if EARTH: CRYSTAL = (C('#86c050'), C('#4a8a2a'), C('#c8f08a')), (C('#5e5a3a'), C('#3c3a24'), C('#8c8656'))
 
 # ── the aura part (drawn as the look's glow part): echoes, spirals, halo ──
@@ -564,7 +568,7 @@ def aura(Vb, Fb):
     elif FORM == 'raya':           # sheet 3: the CROWN of crystal flowers on her head, an arc from ear to ear over the brow
         fl = []
         for k, a in enumerate(np.linspace(-1.25, 1.25, 7)):
-            cc = fwd(V3(np.sin(a) * .115, .675 + .02 * np.cos(a), .225 + np.cos(a) * .075) + HO); up = V3(np.sin(a) * .5, 1, np.cos(a) * .35); up /= np.linalg.norm(up)
+            cc = fwd(V3(np.sin(a) * .13, .735 + .02 * np.cos(a), .225 + np.cos(a) * .085) + HO)   # on top of the head (the first cut sat inside it); up = V3(np.sin(a) * .5, 1, np.cos(a) * .35); up /= np.linalg.norm(up)
             e1 = np.cross(up, V3(1, 0, 0) if abs(up[0]) < .9 else V3(0, 0, 1)); e1 /= np.linalg.norm(e1); e2 = np.cross(up, e1); s_ = 1.0 if k % 2 == 0 else .8
             for j in range(5):
                 t = 2 * np.pi * j / 5 + k; d = (e1 * np.cos(t) + e2 * np.sin(t)) * .75 + up * .65; d /= np.linalg.norm(d); fl.append((cc, cc + d * .055 * s_, .018 * s_))
@@ -577,16 +581,17 @@ def aura(Vb, Fb):
     elif FORM == 'norun':          # sheet 3: the tree's crown (leaf clumps over the trunk + branches)
         import trimesh
         top = TRUNK[0][0][-1]
-        for d, r in ((V3(0, .10, 0), .11), (V3(.12, .10, .02), .085), (V3(-.11, .12, -.03), .085), (V3(.02, .13, -.10), .08), (V3(.05, .17, .05), .075), (V3(-.04, .18, -.02), .07)):
+        for d, r in ((V3(0, .10, 0), .15), (V3(.15, .10, .02), .11), (V3(-.14, .12, -.03), .11), (V3(.02, .13, -.13), .10), (V3(.06, .19, .06), .10), (V3(-.05, .21, -.02), .09)):
             s_ = trimesh.creation.icosphere(1, r); q = np.asarray(s_.vertices) * V3(1, .72, 1) + top + d; parts.append((q, np.asarray(s_.faces)))
         col = '#7fcf5a'
     elif FORM == 'nitar':          # sheet 4: the SPLASH RING: a wave ring round her feet + splash plumes curling up and out of it
         th = np.linspace(0, 2 * np.pi, 73); R0 = .50
         parts.append(tube(np.c_[R0 * np.sin(th), .035 + .015 * np.sin(5 * th), R0 * .82 * np.cos(th) - .02], .028))
         parts.append(tube(np.c_[(R0 + .07) * np.sin(th), .02 + .01 * np.cos(7 * th), (R0 + .07) * .82 * np.cos(th) - .02], .016))
-        for k, a in enumerate(np.linspace(0, 2 * np.pi, 11)[:-1] + .2):
-            h = .28 + .14 * np.sin(3 * a + 1); o = V3(np.sin(a) * R0, .03, np.cos(a) * R0 * .82 - .02); out_ = V3(np.sin(a), 0, np.cos(a) * .82)
-            pts = np.array([o + out_ * (.05 * u * u) + V3(0, h * u, 0) for u in np.linspace(0, 1, 6)]); parts.append(tube(pts, lambda u: .030 * (1 - u) + .004))
+        for k, a in enumerate(np.linspace(0, 2 * np.pi, 9)[:-1] + .2):   # each plume rises and curls OVER outward, like a breaking wave
+            h = .22 + .10 * np.sin(3 * a + 1); o = V3(np.sin(a) * R0, .03, np.cos(a) * R0 * .82 - .02); out_ = V3(np.sin(a), 0, np.cos(a) * .82)
+            pts = np.array([o + out_ * (.16 * u ** 2.2) + V3(0, h * np.sin(u * np.pi * .75) / np.sin(np.pi * .75) * (1 if u < .75 else 1), 0) for u in np.linspace(0, 1, 9)])
+            parts.append(tube(pts, lambda u: .046 * (1 - u) ** .8 + .005))
         col = '#9fe8ec'
     elif FORM == 'marelle':        # sheet 4: her tail trailing into MIST: soft puffs over + past the brush's tip
         import trimesh
@@ -661,7 +666,9 @@ def rigid_extras(V0, F, W):
     for c in np.unique(comp):
         if c == big: continue
         idx = np.flatnonzero(comp == c); d, j = kd.query(V0[idx]); W[idx] = W[bi[j[d.argmin()]]]; n += 1
+    global XMASK; XMASK = comp != big   # the rig's ground solves count these pieces too (a leaf on a mixed-weight vertex dipped 3 mm in the lie)
     print('rigid pieces', n); return W
+XMASK = None
 
 if __name__ == '__main__':
     OUT = sys.argv[2]; TRIS = int(sys.argv[3]) if len(sys.argv) > 3 else 7600

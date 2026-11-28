@@ -1,0 +1,110 @@
+{
+ "bones": 25,
+ "glb_bytes": 440680,
+ "weights_bad": 0,
+ "walk": {
+  "dur_s": 0.57,
+  "lowest_m": -0.0011,
+  "rest_lowest_m": 0.0,
+  "edge_stretch_p99": 1.36,
+  "edge_stretch_max": 3.44,
+  "leg_reach_ratio_max": 0.98,
+  "stride_m": 0.314,
+  "plays_1to1_at_mps": 0.55,
+  "cadence_at_mps": {
+   "0.55": 1.75,
+   "1.15": 3.67,
+   "1.92": 6.12,
+   "4.2": 13.39,
+   "6.5": 20.73
+  },
+  "planted_foot_drift_max_m": 0.0001,
+  "length_m": 0.994,
+  "height_m": 0.831,
+  "lowest_bone": "fl_paw"
+ },
+ "run": {
+  "dur_s": 0.432,
+  "lowest_m": -0.0008,
+  "rest_lowest_m": 0.0,
+  "edge_stretch_p99": 1.65,
+  "edge_stretch_max": 4.58,
+  "leg_reach_ratio_max": 0.97,
+  "stride_m": 1.211,
+  "plays_1to1_at_mps": 2.8,
+  "cadence_at_mps": {
+   "0.55": 0.45,
+   "1.15": 0.95,
+   "1.92": 1.59,
+   "2.8": 2.31,
+   "4.2": 3.47,
+   "6.5": 5.37
+  },
+  "planted_foot_drift_max_m": 0.0002,
+  "length_m": 1.065,
+  "height_m": 0.783,
+  "lowest_bone": "fr_paw"
+ },
+ "idle": {
+  "dur_s": 4.8,
+  "lowest_m": -0.0,
+  "rest_lowest_m": 0.0,
+  "edge_stretch_p99": 1.29,
+  "edge_stretch_max": 3.78,
+  "length_m": 0.964,
+  "height_m": 0.865,
+  "lowest_bone": "fr_paw"
+ },
+ "sit": {
+  "dur_s": 5.0,
+  "lowest_m": -0.0,
+  "rest_lowest_m": 0.0,
+  "edge_stretch_p99": 2.04,
+  "edge_stretch_max": 5.49,
+  "leg_reach_ratio_max": 0.69,
+  "length_m": 0.761,
+  "height_m": 0.728,
+  "lowest_bone": "fr_paw"
+ },
+ "lie": {
+  "dur_s": 5.6,
+  "lowest_m": -0.0,
+  "rest_lowest_m": 0.0,
+  "edge_stretch_p99": 2.57,
+  "edge_stretch_max": 8.06,
+  "leg_reach_ratio_max": 0.54,
+  "length_m": 1.039,
+  "height_m": 0.578,
+  "lowest_bone": "hr_paw"
+ },
+ "quality": {
+  "standard": "m244-quality-2026-11-28 (a) palette (no blaze in the art), (c) springs",
+  "ear_target": 0.16,
+  "ground": {
+   "aura_lift": 0.0
+  },
+  "spring": {
+   "gain": {
+    "ear": 51.82517,
+    "tail": 9.77602
+   },
+   "peak_rad": {
+    "walk:ear_l": 0.16,
+    "walk:ear_r": 0.16,
+    "walk:tail1": 0.11,
+    "run:ear_l": 0.256,
+    "run:ear_r": 0.256,
+    "run:tail1": 0.164,
+    "idle:ear_l": 0.054,
+    "idle:ear_r": 0.05,
+    "idle:tail1": 0.001,
+    "sit:ear_l": 0.045,
+    "sit:ear_r": 0.043,
+    "sit:tail1": 0.0,
+    "lie:ear_l": 0.035,
+    "lie:ear_r": 0.032,
+    "lie:tail1": 0.0
+   }
+  }
+ }
+}
