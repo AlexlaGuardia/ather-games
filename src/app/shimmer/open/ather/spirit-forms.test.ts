@@ -3,7 +3,7 @@
 // Reads the shipped glbs: each form is rigged on the Vulnyx's own M132 plan (same bones, every clip), is bigger than her base
 // (every evolution grows the spirit: spirits-species.md, Spirit Scale), and carries the coat of its locked picture.
 import * as fs from 'fs'
-import { BASE_PREVIEW } from './spirit-base-preview'
+import { BASE_PREVIEW, LUMINARA_UNIT } from './spirit-base-preview'
 import { SHELL_GLB_TALL } from './spirit-models'   // M202 the Shellmere line
 import { LEP_GLB_TALL } from './spirit-models'   // M202 the Lepara line
 import { LUM_GLB_TALL } from './spirit-models'   // M202 the Luminara line
@@ -256,28 +256,35 @@ for (const [el, name, rig] of HOVS) {
 ok(new Set(SPIRIT_ELEMENTS.map(e => formLook('hummingbird', e)!.url)).size === 4, 'the Hovari line: four distinct forms')
 // M202 the Luminara line: each form the base Luminara's sculpt + rig re-shaped by name (19 bones, the hover plan, the `lamp` glow part),
 // in the base's unit (h = the base's x her dial), owner preview only; read off the shipped glbs
-{ const b = BASE_PREVIEW.firefly!, LUMS: [SpiritElement, string][] = [['mana', 'luminel'], ['storm', 'luminarc'], ['earth', 'luminore'], ['water', 'luminix']]
+// M202 v2 (Alex 11-28): Luminore + Luminix lost their flight: grounded wingless EGG forms on their own 10-bone ground rig (rig_lum_ground.py)
+{ const EGG = (el: SpiritElement) => el === 'earth' || el === 'water'
+  const b = BASE_PREVIEW.firefly!, LUMS: [SpiritElement, string][] = [['mana', 'luminel'], ['storm', 'luminarc'], ['earth', 'luminore'], ['water', 'luminix']]
   const box = (u: string, part: string) => { const { j } = glb(u), a = j.accessors[j.meshes.find((m: { name: string }) => m.name === part).primitives[0].attributes.POSITION]; return { max: a.max as number[], min: a.min as number[] } }
   for (const [el, name] of LUMS) {
     const L = formLook('firefly', el)!
     ok(!!L && L.name === name && L.url === `/open/spirits/${name}-rigged.glb` && L.form === el, `firefly ${el}: ${name} ${L?.url}`)
-    ok(!!L.rig && L.rig !== b.rig && L.rig.neck === b.rig!.neck && !!L.rig.hover && L.rig.hover.flap === b.rig!.hover!.flap && L.rig.hover.low > 2 && !!L.rig.cull && L.rig.cull !== b.rig!.cull, `firefly ${el}: her own RigLook, still a hoverer with her own culling (glbLen ${L.rig?.glbLen})`)
+    if (EGG(el)) ok(!!L.rig && L.rig !== b.rig && L.rig.neck === b.rig!.neck && !L.rig.hover && !L.rig.cull && !L.rig.fly && L.rig.avatar.y === undefined && L.rig.clipV.walk < b.rig!.clipV.walk, `firefly ${el}: her own RigLook, GROUNDED (no hover, no own culling, the panel copy not set down; waddle clipV ${L.rig?.clipV.walk.toFixed(2)})`)
+    else ok(!!L.rig && L.rig !== b.rig && L.rig.neck === b.rig!.neck && !!L.rig.hover && L.rig.hover.flap === b.rig!.hover!.flap && L.rig.hover.low > 2 && !!L.rig.cull && L.rig.cull !== b.rig!.cull, `firefly ${el}: her own RigLook, still a hoverer with her own culling (glbLen ${L.rig?.glbLen})`)
     ok(formGrow(name) === 1.5 && Math.abs(L.h / b.h - 1.5) < 1e-9, `firefly ${el}: size dial ${formGrow(name)}, grown past her base`)
     ok(L.glow?.part === 'lamp' && L.glow.emissive !== b.glow?.emissive, `firefly ${el}: the lamp glows her own ${L.glow?.emissive}`)
     ok(!PUBLIC_FORMS.has(name), `firefly ${el}: owner preview only (not in PUBLIC_FORMS)`)
     ok(fs.existsSync('public' + L.url), `firefly ${el}: ${L.url} shipped`)
     const { j, col, n } = glb(L.url), names = (j.nodes as { name: string }[]).map(x => x.name), clips = (j.animations as { name: string }[]).map(a => a.name), bx = box(L.url, 'body')
-    ok(['body', 'eyes', 'lamp', 'b_root', 'b_hover', 'b_abd', 'b_neck', 'b_head', 'b_lids', 'b_fw_l', 'b_hw_r', 'b_ant2_l', 'b_arm_l'].every(x => names.includes(x)) && j.skins?.[0]?.joints?.length === 19, `firefly ${el}: nodes + 19 bones`)
+    if (EGG(el)) { ok(['body', 'eyes', 'lamp', 'b_root', 'b_hips', 'b_abd', 'b_neck', 'b_head', 'b_lids', 'b_lids_r', 'b_leg_l', 'b_leg_r'].every(x => names.includes(x)) && j.skins?.[0]?.joints?.length === 10 && !names.some(x => /^b_(hover|fw|hw|ant|arm)/.test(x)), `firefly ${el}: the egg's ground rig, 10 bones, no hover / wing / antenna / arm bone`)
+      const M = JSON.parse(fs.readFileSync(`docs/looks/m202-luminara-line-2026-11-27/${name}-metrics.json`, 'utf8')), cl = ['idle', 'walk', 'run', 'sit', 'lie']
+      ok(M.ground === true && cl.every(c => M[c].lowest_glb > -0.002 && M[c].lowest_glb < 0.01 && M[c].body_lowest_glb < 0.03), `firefly ${el}: on the ground in every clip (lowest ${cl.map(c => M[c].lowest_glb).join(' / ')} glb)`)
+      ok(Math.abs(M.body_mean_top - LUM_GLB_TALL[name]) < 0.01 && Math.abs(M.walk.plays_1to1_at_mps - L.rig!.clipV.walk * LUMINARA_UNIT) < 1e-3 && Math.abs(M.run.plays_1to1_at_mps - L.rig!.clipV.run * LUMINARA_UNIT) < 1e-3, `firefly ${el}: LUM_GLB_TALL + clipV match her rig metrics`) }
+    else ok(['body', 'eyes', 'lamp', 'b_root', 'b_hover', 'b_abd', 'b_neck', 'b_head', 'b_lids', 'b_fw_l', 'b_hw_r', 'b_ant2_l', 'b_arm_l'].every(x => names.includes(x)) && j.skins?.[0]?.joints?.length === 19, `firefly ${el}: nodes + 19 bones`)
     ok(['idle', 'walk', 'run', 'sit', 'lie'].every(c => clips.includes(c)) && !(j.animations as { channels: { target: { node: number } }[] }[]).some(a => a.channels.some(c => j.nodes[c.target.node].name === 'b_hover')), `firefly ${el}: five clips, none keys b_hover`)
-    ok(Math.abs((bx.max[1] - bx.min[1]) / LUM_GLB_TALL[name] - 1) < 0.08 && bx.min[1] > 1.9, `firefly ${el}: body ${(bx.max[1] - bx.min[1]).toFixed(3)} ~ LUM_GLB_TALL ${LUM_GLB_TALL[name]}, hung at ${bx.min[1].toFixed(2)}`)
+    ok(Math.abs((bx.max[1] - bx.min[1]) / LUM_GLB_TALL[name] - 1) < 0.08 && (EGG(el) ? Math.abs(bx.min[1]) < 0.005 : bx.min[1] > 1.9), `firefly ${el}: body ${(bx.max[1] - bx.min[1]).toFixed(3)} ~ LUM_GLB_TALL ${LUM_GLB_TALL[name]}, ${EGG(el) ? 'feet on the ground' : 'hung'} at ${bx.min[1].toFixed(2)}`)
     const [r, g, bb] = mean(col, n)   // her element's coat, never the base's amber
     ok(el === 'mana' ? bb > g + 25 && r > g + 10 : el === 'storm' ? bb > r + 40 && bb > g + 15 : el === 'earth' ? r > g + 20 && g > bb : g > r + 40 && bb > r + 40, `firefly ${el}: her ${el} coat ${[r, g, bb].map(Math.round)}`)
   }
   const B = (el: SpiritElement, part = 'body') => box(formLook('firefly', el)!.url, part), all = SPIRIT_ELEMENTS, base0 = box(b.url, 'body')
-  ok(all.filter(e => e !== 'mana').every(e => B('mana').min[1] < B(e).min[1] - 0.03) && B('mana').min[1] < base0.min[1] - 0.03, `Luminel: her gem drawn to the lowest point (${B('mana').min[1].toFixed(3)})`)
-  ok(all.filter(e => e !== 'storm').every(e => B('storm', 'eyes').max[1] > B(e, 'eyes').max[1] + 0.1), `Luminarc: her branched antennae the tallest (${B('storm', 'eyes').max[1].toFixed(3)})`)
+  ok(B('mana').min[1] < B('storm').min[1] - 0.03 && B('mana').min[1] < base0.min[1] - 0.03, `Luminel: her gem drawn to the lowest point of the hoverers (${B('mana').min[1].toFixed(3)})`)
+  ok(B('storm', 'eyes').max[1] > B('mana', 'eyes').max[1] + 0.1, `Luminarc: her branched antennae the tallest hoverer (${B('storm', 'eyes').max[1].toFixed(3)})`)
   ok(all.filter(e => e !== 'earth').every(e => B('earth').max[2] > B(e).max[2] + 0.02) && ['earth', 'water'].every(e => B(e as SpiritElement).max[0] > base0.max[0] + 0.05), `Luminore + Luminix: round, no waist (wider than the base); Luminore the deepest front (${B('earth').max[2].toFixed(3)})`)
-  ok(all.filter(e => e !== 'water').every(e => B('water').max[1] > B(e).max[1] + 0.02), `Luminix: her crown fin the highest body point (${B('water').max[1].toFixed(3)})`) }
+  ok(B('water').max[1] > B('earth').max[1] + 0.02, `Luminix: her crown fin over Luminore's crown (${B('water').max[1].toFixed(3)})`) }
 ok(new Set(SPIRIT_ELEMENTS.map(e => formLook('firefly', e)!.url)).size === 4, 'the Luminara line: four distinct forms')
 // M202 the Croakling line: each form the base Croakling's sculpt + rig re-shaped (19 bones, the lure chain; Croakarc's tail rides it)
 { const b = BASE_PREVIEW.frog!, FROGS: [SpiritElement, string][] = [['water', 'croakrill'], ['mana', 'croakara'], ['earth', 'croakore'], ['storm', 'croakarc']]

@@ -1,10 +1,12 @@
-"""M202 LUMINIX (Luminara's Water form; locked art athernyx assets/stage2/031-luminix.png, looked at, never traced, never in this repo).
-python sculpt_luminix.py <out.glb>. Starts from the base Luminara (lum_common.base()); what is HERS, not the base's:
-  a round WATER drop of a body (head and abdomen one ball, no waist), teal, paler down the front; a curling wave FIN on the crown and a
-  small one behind it; side fins and lower fins in place of wings (thin, beating like a swimmer's); two pointed fin-feet below; pale
-  water swirls flowing over her (unlit strips); BUBBLES on her and in her big pale belly lamp; no antennae; dark teal eyes."""
+"""M202 LUMINIX v2, the EGG form (Luminara's Water form; locked art athernyx assets/stage2/031-luminix.png, looked at, never traced, never in
+this repo). Alex 11-28: she loses her flight, "like it turned into an egg form before awakening". python sculpt_luminix.py <out.glb>.
+Starts from the base Luminara (lum_common.base()); what is HERS, not the base's:
+  a round WATER-DROP EGG of a body (head and abdomen one ball, no waist), teal, paler down the front, the shell cut into soft water PLATES
+  (deeper teal seams); a curling wave FIN on the crown and a small one behind it (head fins, not wings); NO wings, no wing fins, no arms, no
+  antennae (lum_egg.wingless); a pale aqua HATCH LINE glowing round her (where she will break out); pale water swirls and BUBBLES on her
+  and in her big pale belly lamp; two short pointed feet to waddle on; dark teal eyes. Grounded: rig_lum_ground.py."""
 import sys, numpy as np
-import lum_common as C
+import lum_common as C, lum_egg as G
 from lum_common import cone, ell, su, V3
 S = C.base(); S.TRIS = 9500
 S.HC, S.HR = V3(0, .63, .18), V3(.245, .235, .235)
@@ -17,33 +19,29 @@ def head(M):
 def thorax(M): return ell(M, (0, .47, .06), (.22, .16, .20))
 def abdomen(M): q = S.aq(M); return ell(q, (0, 0, 0), S.AR_)
 S.ARM = ((.240, .420, .040), (.300, .380, .060)); S.HAND = V3(.305, .375, .062)
-S.LEG = ((.130, .120, .060), (.175, -.040, .110)); S.FOOTL = V3(.180, -.048, .114)
+S.LEG = ((.130, .110, .060), (.150, -.010, .090)); S.FOOTL = V3(.152, -.020, .100)
 def arms(M): return su(cone(M, S.ARM[0], S.ARM[1], .040, .030), ell(M, S.HAND, (.032, .028, .032)), .012)
-def legs(M): return cone(M, S.LEG[0], S.LEG[1], .075, .010)                                          # pointed fin-feet
+def legs(M): return su(cone(M, S.LEG[0], S.LEG[1], .085, .030), ell(M, S.FOOTL + V3(0, .008, .01), (.045, .030, .060)), .03)   # short stubby feet, a point to the toe
 def field(P):
     M = np.stack([np.abs(P[..., 0]), P[..., 1], P[..., 2]], -1)
-    d = su(abdomen(M), thorax(M), .12); d = su(d, head(M), .12); d = su(d, legs(M), .05); return su(d, arms(M), .03)
-S.head, S.thorax, S.abdomen, S.arms, S.legs, S.field = head, thorax, abdomen, arms, legs, field
-TEAL, TEAL_L, TEAL_D, FACE, LIMB = map(S.C8, ('#47aab6', '#86d2d4', '#2f8696', '#9edcd8', '#3c98a8'))
+    d = su(abdomen(M), thorax(M), .14); d = su(d, head(M), .14); return su(d, legs(M), .05)
+S.head, S.thorax, S.abdomen, S.arms, S.legs, S.field = head, thorax, abdomen, arms, legs, field; G.wingless(S)
+PLATE_C, PLATE_U = V3(0, .42, .0), G.seeds(14, 21)
+TEAL, TEAL_L, TEAL_D, FACE, LIMB, SEAM = map(S.C8, ('#47aab6', '#86d2d4', '#2f8696', '#9edcd8', '#3c98a8', '#246c7c'))
 S.GOLD, S.FACE, S.HEADC = TEAL, FACE, FACE
 def classes(V):
     M, ab, hd, tx, ar, lg = C.regions(S, V); core = np.minimum(np.minimum(ab, hd), tx); body = core < np.minimum(ar, lg) - .004
     front = (V[:, 2] - .12) - .5 * np.abs(V[:, 0]); back = (-.05 - V[:, 2]) + .25 * (V[:, 1] - .4)
     return [np.where(body, np.clip(back, -.05, .05), -.05), np.where(body & (M[:, 1] < .55), np.clip(front, -.05, .05), -.05),
+            np.where(body & (V[:, 1] > .02), G.plates(V, PLATE_C, PLATE_U, .035), -.05),
             C.face(S, M, hd, ab, .19, .60, .14, .25), np.where(np.minimum(ar, lg) < core - .002, .02, -.05)]
-S.classes = classes; S.PAL = [TEAL_D, TEAL_L, FACE, LIMB]
+S.classes = classes; S.PAL = [TEAL_D, TEAL_L, SEAM, FACE, LIMB]
 S.ANT = False
 S.MEMB, S.VEIN, S.RIM = (92, 186, 198), (156, 224, 230), (52, 140, 160)
 S.REMAP = {C.EYE_LIT['rim']: (22, 62, 74), C.EYE_LIT['iris']: (44, 122, 142), C.EYE_LIT['pupil']: (12, 30, 40), C.EYE_LIT['blush']: (238, 214, 128)}
-S.WROOT = {'f': V3(.270, .440, -.020), 'h': V3(.230, .230, -.120)}
-S.WINGS = {'f': (S.WROOT['f'], *S.wdir(-.35, .3, .25), .24, .13), 'h': (S.WROOT['h'], *S.wdir(-.75, .3, .70), .20, .11)}
-def wing_outline(L, W, k=30):
-    th = np.linspace(0, 2 * np.pi, k, endpoint=False); s = L * (.5 - .5 * np.cos(th)); t = W * np.sin(th) * (1 - s / L) ** .8 * 1.2   # a fin: broad at the root, pointed
-    return np.c_[s, t]
-S.wing_outline = wing_outline
 S.LAMP_R = .22; S.LAMP_U = V3(0, -.30, 1.); S.LAMP_COLS = ((170, 236, 240), (206, 246, 246), (238, 255, 250))
-SWIRL, BUB, BUBHI = (176, 238, 242), (224, 250, 255), (250, 255, 255)
-S.DECO = [SWIRL, BUB, BUBHI]
+SWIRL, BUB, BUBHI, HATCH = (176, 238, 242), (224, 250, 255), (250, 255, 255), (200, 255, 248)
+S.DECO = [SWIRL, BUB, BUBHI, HATCH]
 def deco():
     parts = []; rng = np.random.default_rng(9); c = V3(0, .45, .02)
     for k in range(7):                                                                                       # water swirls flowing over her
@@ -59,6 +57,7 @@ def deco():
     lp = S.ray(S.AC, (S.LAMP_U / np.linalg.norm(S.LAMP_U))[None], .7)[0]; n, t1, t2 = S.frame(lp)              # bubbles in the lamp
     for k, (a, b, r) in enumerate(((-.07, .06, .028), (.06, -.04, .022), (.02, .10, .014), (-.03, -.11, .034), (.10, .07, .012))):
         q = lp + a * t1 + b * t2; q = S.ray(S.AC, ((q - S.AC) / np.linalg.norm(q - S.AC))[None], .8)[0] + n * .042; parts.append(S.ball(q, V3(r, r, r * .5), BUB, 6, 10))
+    parts += G.crack(S, V3(0, .44, .0), .02, .06, HATCH, lambda a: abs(a) < .9, n=11, seed=6)              # the hatch line, a gap over her lamp
     return parts
 S.deco = deco
 if __name__ == '__main__': C.build(S, sys.argv[1])

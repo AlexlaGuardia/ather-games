@@ -14,7 +14,7 @@ import type { Species } from '../../spirits/spirit'
 import { TROT, type TrotDials } from './spirit-trot'
 import { GROWN } from '../../sprites/creature-size'
 import type { RigLook } from './spirit-rig'
-import { BASE_PREVIEW } from './spirit-base-preview'   // M202 the Croakling line builds off the owner-preview base (type-only import back, no cycle)
+import { BASE_PREVIEW, LUMINARA_UNIT } from './spirit-base-preview'   // M202 the Croakling line builds off the owner-preview base (type-only import back, no cycle)
 
 // ── SPIRITS DRAW FULL-GROWN (Alex 2026-11-24 "the manalotl is way too small"; Magii RULED-AFK athernyx 2a8b028) ─────────
 // The heights come from creature-size.ts GROWN (canon-diffed by `npm run canon`, gate grown-sizes). The model is scaled
@@ -441,13 +441,27 @@ const lepForm = (el: SpiritElement, name: string, emissive: string, hull: string
 // unit), so each draws the base's h x her dial and hangs at the base's hover x her dial. Living light: her crystals / markings / bolts /
 // moss / bubbles ride the unlit part (they glow). LUM_GLB_TALL = each body's idle mean height (rig metrics body_mean_top). OWNER PREVIEW
 // (not in spirit-public PUBLIC_FORMS) until Alex OKs the line.
-export const LUM_GLB_TALL: Readonly<Record<string, number>> = { luminel: 0.98, luminarc: 1.011, luminore: 0.93, luminix: 1.053 }
+export const LUM_GLB_TALL: Readonly<Record<string, number>> = { luminel: 0.98, luminarc: 1.011, luminore: 0.936, luminix: 1.048 }
 type Cull = NonNullable<RigLook['cull']>
 // glbLen = her nose to tail (rig metrics glb_long); low / top = her idle hover's lowest + highest point and cull = her bounds over every clip (glb units)
 const lumForm = (el: SpiritElement, name: string, emissive: string, hull: string, lamp: string, glbLen: number, low: number, top: number, cull: Cull): SpiritLook => {
   const b = BASE_PREVIEW.firefly!, g = formGrow(name)
   return { ...b, name, form: el, url: `/open/spirits/${name}-rigged.glb`, h: b.h * g, skin: { emissive, emissiveI: 0.12 }, hull: { color: hull, opacity: 0.45 },
     trot: grownTrot(b.trot, b.h, b.h * g), rig: { ...b.rig!, glbLen, hover: { ...b.rig!.hover!, low, top }, cull }, glow: { ...b.glow!, emissive: lamp } }
+}
+// M202 v2 (Alex 11-28: "luminore and luminix both lose their flight in these two evos.. let's get rid of the wings kind of like it turned
+// into an egg form before awakening"): Luminore + Luminix are GROUNDED, wingless EGG forms (a rounded plated shell-body on two stubby feet,
+// a glowing hatch line round her). The hover contract is OFF for these two: no `hover`, no own culling (she stands where the shared one
+// looks), the panel copy is not set down. Her own ground rig (tools/rig_lum_ground.py, 10 bones, feet on y = 0 in every clip): walk = a
+// waddle, run = a quick scoot; clipV = each clip's speed at 1:1 in the base unit (metrics plays_1to1_at_mps); a cadence a little over the
+// shared cap (short legs patter), past it her feet slide = she glides.
+const LUM_EGG_V = { walk: 0.2088, run: 0.3782 }
+const lumEgg = (el: SpiritElement, name: string, emissive: string, hull: string, lamp: string, glbLen: number): SpiritLook => {
+  const b = BASE_PREVIEW.firefly!, g = formGrow(name), { hover: _h, cull: _c, avatar, ...rig } = b.rig!
+  return { ...b, name, form: el, url: `/open/spirits/${name}-rigged.glb`, h: b.h * g, skin: { emissive, emissiveI: 0.12 }, hull: { color: hull, opacity: 0.45 },
+    trot: grownTrot(b.trot, b.h, b.h * g),
+    rig: { ...rig, glbLen, clipV: { walk: LUM_EGG_V.walk / LUMINARA_UNIT, run: LUM_EGG_V.run / LUMINARA_UNIT }, runAt: [0.9, 0.7], cadence: 6.5, avatar: { z: avatar.z, far: avatar.far } },
+    glow: { ...b.glow!, emissive: lamp } }
 }
 export const SECOND_FORMS: Partial<Record<Species, Partial<Record<SpiritElement, SpiritLook>>>> = {
   rabbit: {
@@ -501,8 +515,8 @@ export const SECOND_FORMS: Partial<Record<Species, Partial<Record<SpiritElement,
   firefly: {
     mana: lumForm('mana', 'luminel', '#b49cff', '#e8dcff', '#fff4d6', 0.717, 2.444, 3.787, { c: [0, 2.98, 0.04], r: 1.26, min: [-0.74, 2.05, -0.61], max: [0.74, 3.91, 0.68] }),
     storm: lumForm('storm', 'luminarc', '#a8d2ff', '#dcecff', '#e0f4ff', 0.7709, 2.501, 3.907, { c: [0, 3.08, 0.02], r: 1.35, min: [-0.82, 2.13, -0.67], max: [0.82, 4.03, 0.72] }),
-    earth: lumForm('earth', 'luminore', '#ffae4a', '#ffe2b4', '#ffc870', 0.7656, 2.525, 3.685, { c: [0, 2.89, 0.09], r: 1.17, min: [-0.65, 1.98, -0.48], max: [0.65, 3.8, 0.66] }),
-    water: lumForm('water', 'luminix', '#3fc4c0', '#b4f0ea', '#d4fbf6', 0.7607, 2.527, 3.66, { c: [0, 2.88, 0.05], r: 1.16, min: [-0.64, 1.98, -0.52], max: [0.64, 3.78, 0.62] }),
+    earth: lumEgg('earth', 'luminore', '#ffae4a', '#ffe2b4', '#ffc870', 0.7803),   // 11-28 v2: a grounded egg (no wings, no hover)
+    water: lumEgg('water', 'luminix', '#3fc4c0', '#b4f0ea', '#d4fbf6', 0.7608),   // 11-28 v2: a grounded egg (no wings, no hover)
   },
   fox: {
     mana: secondForm('fox', 'mana', 'vulnara', '#b49cff', '#e8dcff'),

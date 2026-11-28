@@ -44,3 +44,24 @@ $P sculpt_<form>.py ../<form>.glb && $P rig_lum.py <form>; cp ../<form>-rigged.g
 npx tsx docs/looks/m202-luminara-line-2026-11-27/tools/three-check.mts <el>
 (m174 tools) LOOK_H=.3438 blender -b -P look.py -- ../<form>.glb <dir>/<form> 300;  $P sheet.py <dir> ../line-sheet.jpg [<art dir> for the private sheet]
 ```
+
+## v2 (2026-11-28): LUMINORE + LUMINIX are grounded wingless EGG forms
+Alex 11-28: "luminore and luminix both lose their flight in these two evos.. let's get rid of the wings kind of like it turned into an egg form
+before awakening". **`line-sheet-v2.jpg`** is the sheet now (PRIVATE vs-locked: athernyx assets/stage2/sheets/m202-luminara-vs-locked-v2.jpg).
+- Sculpt (`sculpt_luminore.py` / `sculpt_luminix.py` + `lum_egg.py`): NO wings, no wing fins, no arms (the base eyes() builds wings through
+  `S.wing`, now empty); head + abdomen one rounded EGG on two stubby feet; the shell cut into PLATES (dark seams, a spherical Voronoi colour
+  class); a glowing HATCH LINE (unlit zigzag strip) round her back + sides with a gap over her lamp, where she will break out. Luminore keeps
+  her amber crystal crown + moss (moss now on her upper plates), Luminix her crown wave fin + the small one behind (head fins), swirls, bubbles.
+- Rig (`rig_lum_ground.py`, her own, not the base's hover rig): 10 bones (root, hips low in the egg, abd + lamp, chest, neck, head, two lids,
+  two legs on the ROOT so a planted foot stays planted), feet on y = 0. Clips: idle (stands, breathes, rocks, looks round), walk (a WADDLE:
+  rocks onto each foot, the other patters forward), run (a quick SCOOT, leaned in), sit (bottom down on the ground, feet out in front), lie
+  (asleep tipped onto her side). Every frame solved onto the ground (root up by any dip, body held 0.012 glb over it). Base unit 0.3438.
+- Game: `spirit-models.ts` `lumEgg`: no `hover`, no own `cull`, avatar not set down, clipV from metrics (walk 0.209 / run 0.378 m/s at 1:1),
+  cadence 6.5 (past it her feet slide: she glides). Luminel + Luminarc unchanged (hover).
+- Checks: `npx tsx tools/three-check-ground.mts <earth|water>` (game makeRigBody: every clip lowest -0.0..0.6 mm, every blend > -5 mm);
+  spirit-forms.test egg block; prod `scripts/m202-forms-check.mts --species firefly` asserts GROUNDED (lowest body point over her ground).
+| form | tris body / unlit / lamp | glb_long | LUM_GLB_TALL | stretch p99 idle / walk / run / sit / lie |
+|---|---|---|---|---|
+| luminore v2 | 20.3k / 5.2k / 560 | 0.780 | 0.936 | 1.60 / 1.77 / 2.07 / 1.84 / 2.03 |
+| luminix v2 | 15.4k / 4.9k / 560 | 0.761 | 1.048 | 1.68 / 1.55 / 1.75 / 1.56 / 1.66 |
+Rebuild: `$P sculpt_<form>.py ../<form>.glb && $P rig_lum_ground.py <form>; cp ../<form>-rigged.glb ../../../../public/open/spirits/`.

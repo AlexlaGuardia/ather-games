@@ -67,10 +67,12 @@ const measure = (p: Page) => p.evaluate(async (hover: boolean) => {
   // M202 Hovari redo: a hoverer's drift pitches her forward (her height read 0.86-0.93 of her hover's while she followed the keeper),
   // so read her once she hangs still (two reads 0.5 s apart within 2 cm; 12 s cap): HOV_GLB_TALL is her hover (idle) height
   if (hover) { let last = { x: 1e9, z: 1e9 }; for (let k = 0; k < 24; k++) { await new Promise(res => setTimeout(res, 500)); if (Math.hypot(r.x - last.x, r.z - last.z) < 0.02) break; last = { x: r.x, z: r.z } } }
-  let hi = 0, n = 0
+  let hi = 0, n = 0, low = 1e9
   for (let f = 0; f < 40; f++) { await raf(); const b = r.body, geo = b.meshes.body.geometry, ps = geo.getAttribute('position'), V = b.bones[0].position.clone(); let lo = 1e9, top = -1e9
-    for (let i = 0; i < ps.count; i += 3) { b.at('body', i, V); lo = Math.min(lo, V.y); top = Math.max(top, V.y) } hi += top - lo; n++ }
-  return { h: hi / n, look: r.h, sp: r.sp, x: r.x, z: r.z, rigs: W.__spiritModel.rigs.size, urls: { ...W.__spiritModel.urls }, live: W.__spiritModel.rigCount.live }
+    for (let i = 0; i < ps.count; i += 3) { b.at('body', i, V); lo = Math.min(lo, V.y); top = Math.max(top, V.y) } hi += top - lo; n++
+    // M202 v2: her lowest drawn point over her own ground (the root bone = the ground under her: a hoverer hangs ~1.2 m over it, an egg stands on it)
+    const R = b.bones.find((x: any) => x.name === 'b_root') ?? b.bones[0], G = R.getWorldPosition(V.clone()); low = Math.min(low, lo - G.y) }
+  return { h: hi / n, low, look: r.h, sp: r.sp, x: r.x, z: r.z, rigs: W.__spiritModel.rigs.size, urls: { ...W.__spiritModel.urls }, live: W.__spiritModel.rigCount.live }
 }, SP === 'hummingbird' || SP === 'firefly')
 const hideCard = (p: Page) => p.evaluate(() => { const h = [...document.querySelectorAll('div')].filter(d => d.textContent?.includes('Click to play')); for (const d of h.filter(d => !h.some(o => o !== d && d.contains(o)))) (d as HTMLElement).style.visibility = 'hidden' }).catch(() => {})
 
@@ -87,6 +89,9 @@ for (const el of SPIRIT_ELEMENTS.filter(e => SECOND_FORMS[SP]?.[e] && (!only.len
   ok(got.includes(file), `1 ${el}: ${file} asked for`); console.log(`NOTE 1 ${el}: glbs asked for: ${got.join(', ')}`)
   // M202 Marlotl: the Manalotl line is sized by LENGTH (0.90 m x her dial), so her standing height is her glb's (rig metrics) x look h
   const want = SP === 'fox' ? 0.70 * formGrow(L.name) : (SP === 'water-bear' ? BEAR_GLB_TALL[L.name] : SP === 'bat' ? NOCT_GLB_TALL[L.name] : SP === 'owl' ? OWL_GLB_TALL[L.name] : SP === 'hummingbird' ? HOV_GLB_TALL[L.name] : SP === 'frog' ? CROAK_GLB_TALL[L.name] : SP === 'turtle' ? SHELL_GLB_TALL[L.name] : SP === 'rabbit' ? LEP_GLB_TALL[L.name] : SP === 'firefly' ? LUM_GLB_TALL[L.name] : LOTL_GLB_TALL[L.name]) * L.h
+  // M202 v2 (Alex 11-28): Luminore + Luminix lost their flight: grounded egg forms, her lowest point ON her ground, not at the line's hover height
+  if (L.name === 'luminore' || L.name === 'luminix') ok(!!m && m.low > -0.02 && m.low < 0.03, `1 ${el}: ${L.name} GROUNDED: lowest body point ${((m?.low ?? 0) * 1000).toFixed(1)} mm over her ground (not hovering)`)
+  else if (SP === 'firefly') ok(!!m && m.low > 0.5, `1 ${el}: ${L.name} hovers: lowest body point ${(m?.low ?? 0).toFixed(3)} m over her ground`)
   ok(!!m && m.h > want * 0.9 && m.h < want * 1.1, `1 ${el}: grown past her base to ~${want.toFixed(2)} m: ${m?.h.toFixed(3)} m standing (look h ${m?.look.toFixed(3)})`)
   // M202 11-28 LEPNIX'S OWN GAIT: the foal trots on four two-bone legs. Her RUN clip is sampled on her live bones (24 keys, restored after):
   // leg stretch = each leg's upper->lower joint distance over its bind length (the rabbit clips drew her hind leg out 2.7x); no hop =
