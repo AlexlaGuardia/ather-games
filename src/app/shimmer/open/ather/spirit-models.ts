@@ -492,6 +492,22 @@ const shellForm = (el: SpiritElement, name: string, emissive: string, hull: stri
   return { ...b, name, form: el, url: shellGlb(name), h: b.h * g, skin: { emissive, emissiveI: 0.12 }, hull: { color: hull, opacity: 0.38 },
     trot: grownTrot(b.trot, b.h, b.h * g), rig: { ...b.rig!, glbLen } }
 }
+// M244 sheet 14 (sprites, 11-28): MESAMERE's four AWAKENED forms (Earth), OWNER PREVIEW (docs/looks/m244-mesamere-2026-11-28): the live
+// Mesamere's sculpt re-shaped by name (sculpt_mesaaw.py), all four WALK on the Shellmere line's own legged rig (rig_mesaaw.py = the base
+// rig_shellmere.py with the line's swaps: 18 bones, five clips at the base's 0.464 m per glb unit + baked head / tail springs). h = the base
+// Shellmere's x his dial. 'aura' = the motif: Mesathar's amber chest + leg cracks, Mesamelle's opal scute panels, Mesamis's golden dust,
+// Mesamun's amber crystal spires + flowers. glbLen = his metrics' glb_long.
+export const MESAMERE_AW_DIAL: Readonly<Record<string, number>> = { mesathar: 2.1, mesamelle: 1.75, mesamis: 1.7, mesamun: 1.85 }
+const mesaAw = (name: string, aura: string, glbLen: number): SpiritLook => {
+  const b = shellForm('earth', 'mesamere', '#ffc25a', '#f4e6c4', glbLen), base = BASE_PREVIEW.turtle!, h = base.h * MESAMERE_AW_DIAL[name]
+  return { ...b, name, url: `/open/spirits/${name}-rigged.glb`, h, trot: grownTrot(base.trot, base.h, h), glow: { part: 'aura', emissive: aura, lo: 0.35, hi: 0.7, hz: 0.35 } }
+}
+export const MESAMERE_AWAKENED: Readonly<Record<string, SpiritLook>> = {
+  mesathar: mesaAw('mesathar', '#ffb040', 1.638),
+  mesamelle: mesaAw('mesamelle', '#f0dcff', 1.572),
+  mesamis: mesaAw('mesamis', '#ffd070', 1.595),
+  mesamun: mesaAw('mesamun', '#ffbc48', 1.534),
+}
 // M202 the Lepara line (docs/looks/m202-lepara-line-2026-11-27): Lepaura (Mana, the ledger's MOON-HARE: taller, a plume tail, a gold
 // crescent on her brow, a gold necklace + diamond, gold infusion ribbons = pattern only), Leparc (Storm: silver-blue, cheek + ear-tip tufts,
 // a violet brow crystal, pale lightning veins, a puff tail), Lepore (Earth, her natural form, the heaviest: barrel belly, leaf-stone
@@ -678,6 +694,7 @@ export const AWAKENED_FORMS: Readonly<Record<string, SpiritLook>> = {
   ...CROAKORE_AWAKENED,   // M244 sheet 12: Croakore's four (above)
   ...CROAKRILL_AWAKENED,   // M244 sheet 12b: Croakrill's four (above)
   ...TIDEOWL_AWAKENED,   // M244 sheet 13: Tideowl's four (above)
+  ...MESAMERE_AWAKENED,   // M244 sheet 14: Mesamere's four (above)
   vulnarok: awakened('vulnarok', AWAKEN_LEN.vulnarok, '#ffcf5a', 2.4),
   vulnalys: awakened('vulnalys', AWAKEN_LEN.vulnalys, '#b48cff', 1.7),
   vulnavex: awakened('vulnavex', AWAKEN_LEN.vulnavex, '#ffcf5a', 2.6),

@@ -163,6 +163,8 @@ export const AWAKENED_NAMES: Readonly<Partial<Record<string, Readonly<Record<Awa
   croakrill: { champion: 'Croakrillok', virtuoso: 'Rillesse', ace: 'Croakrillvex', enigma: 'Croakrilleth' },
   // M244 sheet 13: Tideowl (Water), canon spirits-species.md 'Named, the Athowl line' (art LOCKED athernyx #073-076; hub yay 11-28)
   tideowl: { champion: 'Tidowrok', virtuoso: 'Tidelle', ace: 'Tidowsk', enigma: 'Tidowmyr' },
+  // M244 sheet 14: Mesamere (Earth), canon spirits-species.md 'Mesamere (Earth)' (art LOCKED athernyx #049-052; hub yay 11-28)
+  mesamere: { champion: 'Mesathar', virtuoso: 'Mesamelle', ace: 'Mesamis', enigma: 'Mesamun' },
 }
 
 /** Get second form name, or null if base element */

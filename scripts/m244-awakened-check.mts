@@ -19,7 +19,7 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms)); let fails = 0
 const ok = (c: boolean, m: string) => { console.log(`${c ? 'PASS' : 'FAIL'} ${m}`); if (!c) fails++ }
 const ONLY = flag('--only', '').split(',').filter(Boolean).map(Number)
 const AW = GALLERY.filter(r => r.aw && (!ONLY.length || ONLY.includes(r.num)))
-ok(GALLERY.filter(r => r.aw).length === 56, `56 awakened rows in the roster (${GALLERY.filter(r => r.aw).map(r => `#${r.num} ${r.name}`).join(', ')})`)
+ok(GALLERY.filter(r => r.aw).length === 60, `60 awakened rows in the roster (${GALLERY.filter(r => r.aw).map(r => `#${r.num} ${r.name}`).join(', ')})`)
 const br = await puppeteer.launch({ protocolTimeout: 900000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--mute-audio', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] })
 try {
   const errs: string[] = []
@@ -164,6 +164,14 @@ try {
       for (const c of ['idle', 'walk', 'run', 'sit', 'lie']) {
         const s2 = await sample(c, 6, 250), o = s2?.out ?? [{ low: -9, blow: 9 }], lo = Math.min(...o.map(x => x.low)), bhi = Math.max(...o.map(x => x.blow))
         ok(lo >= -0.003 && bhi < (c === 'lie' ? 0.10 : 0.04), `#${row.num} ${c}: nothing under the ground (lowest body / aura ${(lo * 1000).toFixed(1)} mm glb) and her body on it (body lowest at most ${(bhi * 1000).toFixed(1)} mm)`)
+      }
+    }
+    if (['mesathar', 'mesamelle', 'mesamis', 'mesamun'].includes(look)) {   // sheet 14: Mesamere's four WALK on the Shellmere line's own legged rig (four legs + feet, no flippers): on the ground in every clip
+      const s1 = await sample('idle', 2, 100), names = s1?.names ?? []
+      ok(['b_shell', 'b_neck', 'b_head', 'b_leg0_l', 'b_foot1_r', 'b_tail'].every(x => names.includes(x)) && !names.some(x => /^b_(flip|blade)/.test(x)), `#${row.num} on the Shellmere legged rig (${names.length} bones: shell, four legs + feet, no flippers)`)
+      for (const c of ['idle', 'walk', 'run', 'sit', 'lie']) {
+        const s2 = await sample(c, 6, 250), o = s2?.out ?? [{ low: -9, blow: 9 }], lo = Math.min(...o.map(x => x.low)), bhi = Math.max(...o.map(x => x.blow))
+        ok(lo >= -0.003 && bhi < 0.04, `#${row.num} ${c}: nothing under the ground (lowest body / aura ${(lo * 1000).toFixed(1)} mm glb) and his body on it (body lowest at most ${(bhi * 1000).toFixed(1)} mm)`)
       }
     }
     if (look === 'vulnavex') {
