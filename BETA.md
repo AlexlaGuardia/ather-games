@@ -334,6 +334,7 @@ Steps (one worker each, in order; each keeps `beta-m7-saves` green):
 - **HUB chores between reviews:** prod check suite rotation; morning checkpoint 09:00 with every sheet for Alex in one batch
 
 ## Inbox (Alex's brain dump: hub writes here at once, dated, his words; triaged into rows / queue / CANON_GAPS / killed)
+- 11-28 05:5x Alex (gallery size pass): 'the luminara line in the gallery look like they are in the ground' -> play lane agent, fix the feet line
 - 11-28 19:38 Alex: yay Vulnarc sheet; fix Vulnarkor's mantle + Vulnarcelle's chin; 'in the gallery we can have a few sliders on each spirits card to tune the size of each spirit as needed with a keeper avatar standing nearby as a reference' -> M249
 - 11-27 18:17 Alex on champions: 'still too easy.. i was ripping through the champions one after another' (before 500/bar); next rework = the champion's MOVES (today slam ring / lunge line / volley fan); he playtests the live 500/bar first and answers. Hub take sent: harder by skill (armored outside punish windows, a new move per bar, adds that shield it), not by raw HP/damage, so the newcomer rule can hold.
 - 11-27 17:58 Alex: Smash redo (intro + keeper shout-out, walk-out back to camera facing a big bell, strongest move, bell scores, over 9000 cracks it + Moglin judge yells), Dash = dirt-bike course in a sandbox tent with bleachers, course carved in Creative tonight with a SPRAY PAINT CAN tool + a dash-cam preview panel with a test Vulnyx -> M246, M247
