@@ -128,7 +128,8 @@ for (const el of SPIRIT_ELEMENTS.filter(e => SECOND_FORMS[SP]?.[e] && (!only.len
     ok(a.legs.length === 0 && a.flips === 8, `1 water: Tidemere has NO leg bones, 8 flipper bones (${a.names.join(' ')})`)
     ok(a.sheet && a.grp === 'spirit-model-tidemere' && a.sy > 0 && a.sy < 0.03 && a.trail, `1 water: a water sheet mounted in her group (${a.grp}) on her ground under her (${(a.sy * 1000).toFixed(1)} mm up), trail mounted ${a.trail}`)
     await p.evaluate((x: number, z: number) => (window as any).__ather.tp(x + 4.5, z + 3.5, 0), m.x, m.z)
-    const tr = await p.evaluate(async () => { const W = window as any, raf = () => new Promise(r => requestAnimationFrame(r)), r = [...W.__spiritModel.rigs.values()][0], w = [...W.__spiritModel.waters.values()][0], B = r.body
+    const tr = await p.evaluate(async () => { const W = window as any, raf = () => new Promise(r => requestAnimationFrame(r)), r = [...W.__spiritModel.rigs.values()][0], w = [...(W.__spiritModel.waters?.values() ?? [])][0], B = r.body
+      if (!w) return null
       const geo = B.meshes.body.geometry, si = geo.getAttribute('skinIndex'), sw = geo.getAttribute('skinWeight'), fin: number[] = []
       for (let i = 0; i < si.count; i += 2) { let bi = 0, bw = -1; for (let k = 0; k < 4; k++) { const wk = sw.getComponent(i, k); if (wk > bw) { bw = wk; bi = si.getComponent(i, k) } } if (/flip|blade/.test(B.bones[bi]?.name ?? '')) fin.push(i) }
       const R = B.bones.find((x: any) => x.name === 'b_root'), V = R.position.clone(), G = R.position.clone()
@@ -141,10 +142,11 @@ for (const el of SPIRIT_ELEMENTS.filter(e => SECOND_FORMS[SP]?.[e] && (!only.len
         prev = { wet: s.wet, laid: s.laid }; if (dried && wetMax > 0 && performance.now() - t0 > 8000) break }
       for (let i = 0; i < geo.getAttribute('position').count; i += 5) { B.at('body', i, V); bodyLow = Math.min(bodyLow, V.y - G.y) }
       const s = w.stats(); return { finLow, bodyLow, wetMax, laid: s.laid, wet: s.wet, cap: s.cap, dried, moved, frames, fin: fin.length } })
-    ok(tr.moved > 1 && tr.laid > 0 && tr.wetMax > 0 && tr.wetMax <= tr.cap, `1 water: she moved ${tr.moved.toFixed(2)} m and laid a wet trail (${tr.laid} laid, up to ${tr.wetMax} wet at once, cap ${tr.cap})`)
+    if (!tr) ok(false, '1 water: no water glide on her (no trail, no sheet)')
+    else { ok(tr.moved > 1 && tr.laid > 0 && tr.wetMax > 0 && tr.wetMax <= tr.cap, `1 water: she moved ${tr.moved.toFixed(2)} m and laid a wet trail (${tr.laid} laid, up to ${tr.wetMax} wet at once, cap ${tr.cap})`)
     ok(tr.dried, `1 water: her trail dries (a patch went dry with none laid; ${tr.wet} wet at the end, ${tr.frames} frames)`)
     ok(tr.fin > 50 && tr.finLow > 0.004, `1 water: no step: her flippers never touch her ground while she moves (lowest flipper point ${(tr.finLow * 1000).toFixed(1)} mm over it, ${tr.fin} flipper verts)`)
-    ok(tr.bodyLow > 0.004 && tr.bodyLow < 0.05, `1 water: her body rides her sheet (lowest point ${(tr.bodyLow * 1000).toFixed(1)} mm over her ground)`)
+    ok(tr.bodyLow > 0.004 && tr.bodyLow < 0.05, `1 water: her body rides her sheet (lowest point ${(tr.bodyLow * 1000).toFixed(1)} mm over her ground)`) }
   }
   if (shots && m) { await p.evaluate((x: number, z: number) => (window as any).__ather.tp(x + 1.4, z + 1.1, 0), m.x, m.z); await sleep(900)
     // after the tp she walks to the keeper: aim only once she has SETTLED (two reads 0.5 s apart within 2 cm; 12 s cap), else the still
