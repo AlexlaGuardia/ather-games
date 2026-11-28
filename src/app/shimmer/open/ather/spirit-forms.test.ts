@@ -4,7 +4,7 @@
 // (every evolution grows the spirit: spirits-species.md, Spirit Scale), and carries the coat of its locked picture.
 import * as fs from 'fs'
 import { BASE_PREVIEW, LUMINARA_UNIT } from './spirit-base-preview'
-import { SHELL_GLB_TALL } from './spirit-models'   // M202 the Shellmere line
+import { SHELL_GLB_TALL, shellGlb } from './spirit-models'   // M202 the Shellmere line
 import { LEP_GLB_TALL } from './spirit-models'   // M202 the Lepara line
 import { LUM_GLB_TALL } from './spirit-models'   // M202 the Luminara line
 import { PUBLIC_FORMS } from './spirit-public'
@@ -322,15 +322,23 @@ ok(new Set(SPIRIT_ELEMENTS.map(e => formLook('firefly', e)!.url)).size === 4, 't
     const e = j.accessors[j.meshes.find((m: { name: string }) => m.name === 'eyes').primitives[0].attributes.POSITION]; return { max: a.max as number[], min: a.min as number[], emax: e.max as number[] } }
   for (const [el, name] of TURTLES) {
     const L = formLook('turtle', el)!
-    ok(!!L && L.name === name && L.url === `/open/spirits/${name}-rigged.glb` && L.form === el, `turtle ${el}: ${name} ${L?.url}`)
+    ok(!!L && L.name === name && L.url === shellGlb(name) && L.url.endsWith('-rigged.glb') && L.url.includes(name) && L.form === el, `turtle ${el}: ${name} ${L?.url}`)
     ok(!!L.rig && L.rig !== b.rig && L.rig.neck === b.rig!.neck && L.rig.lie === b.rig!.lie && L.rig.glbLen > 1.2, `turtle ${el}: her own RigLook on the base's plan (glbLen ${L.rig?.glbLen})`)
     ok(Math.abs(L.h / b.h - formGrow(name)) < 1e-9 && formGrow(name) >= 1.4, `turtle ${el}: grows past the base (dial ${formGrow(name)})`)
     ok(L.skin.emissive !== b.skin.emissive && L.hull.color !== b.hull.color, `turtle ${el}: her element's tints`)
     ok(fs.existsSync('public' + L.url), `turtle ${el}: ${L.url} shipped`)
     const { j, col, n } = glb(L.url), names = (j.nodes as { name: string }[]).map(x => x.name), clips = (j.animations as { name: string }[]).map(a => a.name)
-    ok(['body', 'eyes', 'b_root', 'b_shell', 'b_neck', 'b_head', 'b_lids', 'b_tail', 'b_ant_l', 'b_ant2_r', 'b_leg0_l', 'b_foot1_r'].every(x => names.includes(x)) && j.skins?.[0]?.joints?.length === 18, `turtle ${el}: nodes + 18 bones`)
+    // M202 11-28 Tidemere CARRIES HER OWN WATER (canon spirits-species.md): her own 14-bone rig, a flipper + blade bone per flipper and NO
+    // leg / foot / paw bones (she never steps), no antennae; the other three keep the base's 18
+    if (name === 'tidemere') ok(['body', 'eyes', 'b_root', 'b_shell', 'b_neck', 'b_head', 'b_lids', 'b_tail', 'b_flip0_l', 'b_blade0_r', 'b_flip1_r', 'b_blade1_l'].every(x => names.includes(x))
+      && !names.some(x => /leg|foot|paw|ant/.test(x)) && j.skins?.[0]?.joints?.length === 14, `turtle water: Tidemere nodes + 14 bones, flippers only, no legs (${names.filter(x => x.startsWith('b_')).join(' ')})`)
+    else ok(['body', 'eyes', 'b_root', 'b_shell', 'b_neck', 'b_head', 'b_lids', 'b_tail', 'b_ant_l', 'b_ant2_r', 'b_leg0_l', 'b_foot1_r'].every(x => names.includes(x)) && j.skins?.[0]?.joints?.length === 18, `turtle ${el}: nodes + 18 bones`)
     ok(['idle', 'walk', 'run', 'sit', 'lie'].every(c => clips.includes(c)), `turtle ${el}: clips ${clips}`)
-    const p = prof(L.url), top = p.max[1] - p.min[1]; ok(Math.abs(top / SHELL_GLB_TALL[name] - 1) < 0.06, `turtle ${el}: body ${top.toFixed(3)} ~ SHELL_GLB_TALL ${SHELL_GLB_TALL[name]}`)
+    // the bind pose = her sculpt; Tidemere's SHELL_GLB_TALL is her glide rig's idle body (flippers lifted off her ground), lower than her
+    // sculpt by 0.05-0.10 units (moved assert, 11-28: her sculpt is still the 0.581 the line was built at)
+    const p = prof(L.url), top = p.max[1] - p.min[1]
+    if (name === 'tidemere') ok(Math.abs(top / 0.581 - 1) < 0.06 && top - SHELL_GLB_TALL[name] > 0.04 && top - SHELL_GLB_TALL[name] < 0.11, `turtle water: sculpt ${top.toFixed(3)} ~ 0.581, rides at SHELL_GLB_TALL ${SHELL_GLB_TALL[name]} (flippers off the ground)`)
+    else ok(Math.abs(top / SHELL_GLB_TALL[name] - 1) < 0.06, `turtle ${el}: body ${top.toFixed(3)} ~ SHELL_GLB_TALL ${SHELL_GLB_TALL[name]}`)
     ok(SHELL_GLB_TALL[name] * L.h > 0.30, `turtle ${el}: stands ${(SHELL_GLB_TALL[name] * L.h).toFixed(2)} m`)
     const [r, g, bb] = mean(col, n)
     ok(el === 'mana' ? bb > g + 25 && r > g + 10 : el === 'storm' ? bb > r + 20 && bb > g + 5 : el === 'earth' ? r > bb + 40 && g > bb + 25 : g > r + 50 && bb > r + 40, `turtle ${el}: her ${el} coat ${[r, g, bb].map(Math.round)}`)

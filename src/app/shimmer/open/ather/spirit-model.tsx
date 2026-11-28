@@ -36,6 +36,7 @@ import { GROUND_Y } from './plot'
 import { GROWN } from '../../sprites/creature-size'
 import { accentOf, accentAt } from './spirit-accent'   // M204 s2: her glow accent from her bar
 import { isFxForm, makeSpiritFx, type SpiritFx } from './spirit-fx'   // M204 s2: the second forms' effects
+import { isWaterForm, makeTideGlide, type TideGlide } from './spirit-water'   // M202: Tidemere glides on her own water
 
 export const VULNYX_URL = SPIRIT_MODELS.fox!.url
 /** World height of the model (the glb is 1 unit tall). Small and lithe: ~0.55 m, about a third of a keeper. */
@@ -78,8 +79,8 @@ const accUniforms = (sh: { uniforms: Record<string, unknown>; vertexShader: stri
 // pose (the M107 asserts read it), `trots[species]` = each species' latest pose.
 type TrotProbe = { x: number; y: number; z: number; mode: string; home: { x: number; z: number }; rMin: number; rMax: number; beats: number; homes: number; tilt: number; h: number; hWorld?: number; len?: number; keepMax?: number; cheers: number; yMax: number; calling: boolean; near: boolean; plays: number; playing: string | null; playYMax: number; braceMax: number }
 type RigProbe = { id: string; sp: Species; h: number; yaw: number; x: number; y: number; z: number; mode: string; v: number; /** M173: a flier's metres off the ground (0 walking) */ alt: number; body: RigBody }
-type Probe = { /** M204 s2 */ accents: Record<string, { hex: string; s: number; n: number; locked: boolean } | null>; fxs: Map<string, SpiritFx>; rigs: Map<string, RigProbe>; rigCount: typeof rigCount; mounted: number; url: string; h: number; species: Record<string, number>; urls: Record<string, number>; trot?: TrotProbe; trots: Record<string, TrotProbe> }
-const probe = (): Probe => { const w = window as unknown as { __spiritModel?: Probe }; return (w.__spiritModel ??= { accents: {}, fxs: new Map(), mounted: 0, url: VULNYX_URL, h: VULNYX_H, species: {}, urls: {}, trots: {}, rigs: new Map(), rigCount }) }
+type Probe = { /** M204 s2 */ accents: Record<string, { hex: string; s: number; n: number; locked: boolean } | null>; fxs: Map<string, SpiritFx>; /** M202 Tidemere */ waters: Map<string, TideGlide>; rigs: Map<string, RigProbe>; rigCount: typeof rigCount; mounted: number; url: string; h: number; species: Record<string, number>; urls: Record<string, number>; trot?: TrotProbe; trots: Record<string, TrotProbe> }
+const probe = (): Probe => { const w = window as unknown as { __spiritModel?: Probe }; return (w.__spiritModel ??= { accents: {}, fxs: new Map(), waters: new Map(), mounted: 0, url: VULNYX_URL, h: VULNYX_H, species: {}, urls: {}, trots: {}, rigs: new Map(), rigCount }) }
 
 /** M202 s1 OWNER PREVIEW of the second forms while no player path evolves a spirit yet (M201): `?form=mana|storm|earth|water`
  *  draws every evolvable garden spirit in that form, for the owner only (/api/owner). Players never see it. */
@@ -110,7 +111,7 @@ function SpiritModel({ sp, look, nav, id, avatar, dev, meals, gallery, clip }: {
   const g = useRef<THREE.Group>(null)
   const mealKey = (meals ?? []).join(), accent = useMemo(() => accentOf(mealKey ? mealKey.split(',') : []), [mealKey])
   const acc = useMemo<AccU>(() => ({ c: { value: new THREE.Color(0, 0, 0) }, s: { value: 0 }, n: { value: 1 }, t: { value: 0 }, slots: { value: Array.from({ length: 10 }, () => new THREE.Color(0, 0, 0)) } }), []), haloRef = useRef<THREE.MeshBasicMaterial | null>(null)
-  const fx = useRef<SpiritFx | null>(null), fxOk = useFx()
+  const fx = useRef<SpiritFx | null>(null), fxOk = useFx(), water = useRef<{ w: TideGlide; shell: THREE.Object3D | null } | null>(null)
   const time = useMemo(() => ({ value: 0 }), []), sw = useMemo(() => ({ value: 0 }), []), lift = useMemo(() => ({ value: 0 }), []), tiltU = useMemo(() => ({ value: 0 }), [])
   // M107: the procedural trot (spirit-trot.ts) when a nav is given, with this species' dials; seeded by home so two
   // planters never move in step
@@ -200,6 +201,14 @@ function SpiritModel({ sp, look, nav, id, avatar, dev, meals, gallery, clip }: {
     if (id) probe().fxs.set(id, f)
     return () => { fx.current = null; if (id) probe().fxs.delete(id); f.dispose() }
   }, [body, rig, avatar, fxOk, look.name, look.h, id])
+  // M202 (Alex 11-28, canon spirits-species.md): Tidemere CARRIES HER OWN WATER: the sheet she rides goes in her group, the wet
+  // trail she leaves beside it (spirit-water.ts). The gallery shows the sheet too (she stands on it); the panel's turntable does not.
+  useEffect(() => {
+    if (!body || !rig || avatar || !isWaterForm(look.name) || !g.current?.parent) return
+    const w = makeTideGlide(look.h); g.current.add(w.sheet); g.current.parent.add(w.trail)
+    water.current = { w, shell: body.bones.find(b => b.name === 'b_shell') ?? null }; const p = probe(); p.waters ??= new Map(); if (id) p.waters.set(id, w)
+    return () => { water.current = null; if (id) probe().waters?.delete(id); w.dispose() }
+  }, [body, rig, avatar, look.name, look.h, id])
   useEffect(() => { if (!id || !rig) return; return () => { probe().rigs.delete(id) } }, [id, rig])
   // M109 s1 FOLLOW: she walks with the keeper while her planter id is in the follow list (kept across reloads)
   useEffect(() => {
@@ -234,6 +243,7 @@ function SpiritModel({ sp, look, nav, id, avatar, dev, meals, gallery, clip }: {
     const t = clock.elapsedTime; time.value = t
     acc.s.value = accentAt(accent, t); acc.t.value = t
     if (fx.current) fx.current.update(t, Math.min(1, step.v / Math.max(0.1, look.h * 1.5)), gl.domElement.height)
+    if (water.current && g.current) water.current.w.update(t, g.current, water.current.shell)
     if (parts?.glow && look.glow) { const G = look.glow; parts.glow.emissiveIntensity = G.lo + (G.hi - G.lo) * (0.5 + 0.5 * Math.sin(t * Math.PI * 2 * G.hz)) }
     if (glowRef.current && look.glow) { const G = look.glow; glowRef.current.emissiveIntensity = G.lo + (G.hi - G.lo) * (0.5 + 0.5 * Math.sin(t * Math.PI * 2 * G.hz)) }
     if (!g.current) return

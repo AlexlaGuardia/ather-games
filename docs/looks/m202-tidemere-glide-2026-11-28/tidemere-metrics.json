@@ -1,0 +1,92 @@
+{
+ "bones": 14,
+ "bone_names": [
+  "root",
+  "shell",
+  "neck",
+  "head",
+  "lids",
+  "tail",
+  "flip0_l",
+  "blade0_l",
+  "flip1_l",
+  "blade1_l",
+  "flip0_r",
+  "blade0_r",
+  "flip1_r",
+  "blade1_r"
+ ],
+ "glb_bytes": 514344,
+ "tris": {
+  "body": 13540,
+  "eyes": 1866
+ },
+ "height_m": 0.464,
+ "clear": 0.03,
+ "clear_sit": 0.016,
+ "fin_floor": 0.04,
+ "idle": {
+  "dur_s": 9.0,
+  "lowest_m": 0.0139,
+  "body_low_min": 0.03,
+  "body_low_max": 0.036,
+  "fin_low_min": 0.0401,
+  "edge_stretch_p99": 1.32,
+  "edge_stretch_max": 3.37,
+  "mean_top": 0.543,
+  "span_m": 0.651,
+  "length_m": 0.749
+ },
+ "walk": {
+  "dur_s": 0.6,
+  "lowest_m": 0.0139,
+  "body_low_min": 0.03,
+  "body_low_max": 0.034,
+  "fin_low_min": 0.0401,
+  "edge_stretch_p99": 1.35,
+  "edge_stretch_max": 5.01,
+  "mean_top": 0.547,
+  "stroke_m_at_base": 0.33,
+  "span_m": 0.677,
+  "length_m": 0.75
+ },
+ "run": {
+  "dur_s": 0.3,
+  "lowest_m": 0.014,
+  "body_low_min": 0.0301,
+  "body_low_max": 0.0339,
+  "fin_low_min": 0.0401,
+  "edge_stretch_p99": 1.45,
+  "edge_stretch_max": 6.51,
+  "mean_top": 0.547,
+  "stroke_m_at_base": 0.57,
+  "span_m": 0.677,
+  "length_m": 0.75
+ },
+ "sit": {
+  "dur_s": 7.0,
+  "lowest_m": 0.0074,
+  "body_low_min": 0.016,
+  "body_low_max": 0.018,
+  "fin_low_min": 0.0441,
+  "edge_stretch_p99": 1.47,
+  "edge_stretch_max": 4.52,
+  "mean_top": 0.592,
+  "span_m": 0.648,
+  "length_m": 0.746
+ },
+ "lie": {
+  "dur_s": 5.0,
+  "lowest_m": 0.0074,
+  "body_low_min": 0.0191,
+  "body_low_max": 0.0211,
+  "fin_low_min": 0.0645,
+  "edge_stretch_p99": 1.87,
+  "edge_stretch_max": 6.43,
+  "mean_top": 0.468,
+  "span_m": 0.51,
+  "length_m": 0.699
+ },
+ "body_mean_top": 0.51,
+ "glb_long": 1.608
+}

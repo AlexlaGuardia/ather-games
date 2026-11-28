@@ -411,10 +411,15 @@ function croakarc(): SpiritLook { return { ...croakForm('storm', 'croakarc', '#a
 // Shellmere's sculpt + rig modules re-shaped by name (tools/shell_common.py, rig_mere.py), the base's 18 bones and five clips timed at the
 // base's 0.464 m per glb unit, so the clips play 1:1 at the base's speeds; h = the base's x her dial. SHELL_GLB_TALL = each body's idle mean
 // height (rig metrics body_mean_top: antennae + crystal not counted; what the prod check measures). PUBLIC since Alex's OK 11-27 (spirit-public PUBLIC_FORMS).
-export const SHELL_GLB_TALL: Readonly<Record<string, number>> = { mesamere: 0.869, aurmere: 0.799, voltmere: 0.716, tidemere: 0.581 }
+// M202 11-28 TIDEMERE CARRIES HER OWN WATER (canon spirits-species.md): her own legless rig (docs/looks/m202-tidemere-glide-2026-11-28,
+// flipper + blade bones, the plastron riding 0.03 units over her ground on the sheet spirit-water.ts draws, the flippers stroking over it);
+// her 0.51 = that rig's idle body (lower than her sculpt's 0.581: the flippers lift off the ground).
+export const SHELL_GLB_TALL: Readonly<Record<string, number>> = { mesamere: 0.869, aurmere: 0.799, voltmere: 0.716, tidemere: 0.51 }
+/** M202 11-28: a Shellmere form's glb file (Tidemere's glide rig ships under a new name, so the old page never draws it without her water) */
+export const shellGlb = (name: string) => `/open/spirits/${name === 'tidemere' ? 'tidemere-v2' : name}-rigged.glb`
 const shellForm = (el: SpiritElement, name: string, emissive: string, hull: string, glbLen: number): SpiritLook => {
   const b = BASE_PREVIEW.turtle!, g = formGrow(name)
-  return { ...b, name, form: el, url: `/open/spirits/${name}-rigged.glb`, h: b.h * g, skin: { emissive, emissiveI: 0.12 }, hull: { color: hull, opacity: 0.38 },
+  return { ...b, name, form: el, url: shellGlb(name), h: b.h * g, skin: { emissive, emissiveI: 0.12 }, hull: { color: hull, opacity: 0.38 },
     trot: grownTrot(b.trot, b.h, b.h * g), rig: { ...b.rig!, glbLen } }
 }
 // M202 the Lepara line (docs/looks/m202-lepara-line-2026-11-27): Lepaura (Mana, the ledger's MOON-HARE: taller, a plume tail, a gold

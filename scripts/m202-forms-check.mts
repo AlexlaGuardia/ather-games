@@ -17,6 +17,7 @@
 //   SHELL_GLB_TALL = her body, antennae + crystal not counted; player ?form=earth sees her base Shellmere, public since M226).
 // M202 Luminara line: --species firefly (owner ?form=mana|storm|earth|water = Luminel / Luminarc / Luminore / Luminix, sized by
 //   LUM_GLB_TALL = her body height, the hover not counted, read once she hangs still; player ?form=mana sees her base Luminara).
+// M202 11-28 Tidemere glide: --species turtle --forms water adds the water-sheet / wet-trail / no-legs / no-step asserts (leg 1 water).
 // M202 Lepara line: --species rabbit (owner ?form=mana|storm|earth|water = Lepaura / Leparc / Lepore / Lepnix, sized by LEP_GLB_TALL =
 //   her body idle mean height, ears counted as the base's; player ?form=earth sees her base Lepara). 11-28: Lepnix's own trot rig:
 //   her run clip sampled on her live bones = no leg past 1.3x, root rise < 0.05 glb units, hind hooves not in step (no hop).
@@ -116,6 +117,35 @@ for (const el of SPIRIT_ELEMENTS.filter(e => SECOND_FORMS[SP]?.[e] && (!only.len
       return { st, rise: Math.max(...ry) - Math.min(...ry), corr, n: its.filter((x: any) => x.b).length } })
     ok(!!g && g.st < 1.3, `1 water: Lepnix's run stretches no leg past 1.3x its bind length (max ${g?.st.toFixed(2)}x, ${g?.n} tracks)`)
     ok(!!g && g.rise < 0.05 && g.corr < 0.3, `1 water: Lepnix trots, no hop (root rise ${g?.rise.toFixed(3)} glb units < 0.05; hind hooves in step ${g?.corr.toFixed(2)} < 0.3)`) }
+  // M202 11-28 TIDEMERE CARRIES HER OWN WATER (canon spirits-species.md; spirit-water.ts + her legless glide rig): (a) her rig has no leg /
+  // foot / paw bones, flippers only; (b) a water sheet is mounted IN her group, on her ground under her body; (c) the keeper steps away so
+  // she moves: wet patches appear while she moves, then dry (a patch's wet count falls / reaches 0 with none newly laid), capped; (d) over
+  // every frame of that, no flipper vertex touches her ground (lowest flipper point over the root bone = her ground) and her body rides the sheet
+  if (L.name === 'tidemere') {
+    const a = await p.evaluate(() => { const W = window as any, r = [...W.__spiritModel.rigs.values()][0], w = [...(W.__spiritModel.waters?.values() ?? [])][0], names = r.body.bones.map((b: any) => b.name)
+      const grp = w?.sheet.parent, V = r.body.bones[0].position.clone(), R = r.body.bones.find((x: any) => x.name === 'b_root'), sy = w ? w.sheet.getWorldPosition(V.clone()).y - R.getWorldPosition(V.clone()).y : NaN
+      return { names, legs: names.filter((n: string) => /leg|foot|paw/.test(n)), flips: names.filter((n: string) => /flip|blade/.test(n)).length, sheet: !!w && w.stats().sheet, grp: grp?.name, sy, trail: !!w?.trail.parent } })
+    ok(a.legs.length === 0 && a.flips === 8, `1 water: Tidemere has NO leg bones, 8 flipper bones (${a.names.join(' ')})`)
+    ok(a.sheet && a.grp === 'spirit-model-tidemere' && a.sy > 0 && a.sy < 0.03 && a.trail, `1 water: a water sheet mounted in her group (${a.grp}) on her ground under her (${(a.sy * 1000).toFixed(1)} mm up), trail mounted ${a.trail}`)
+    await p.evaluate((x: number, z: number) => (window as any).__ather.tp(x + 4.5, z + 3.5, 0), m.x, m.z)
+    const tr = await p.evaluate(async () => { const W = window as any, raf = () => new Promise(r => requestAnimationFrame(r)), r = [...W.__spiritModel.rigs.values()][0], w = [...W.__spiritModel.waters.values()][0], B = r.body
+      const geo = B.meshes.body.geometry, si = geo.getAttribute('skinIndex'), sw = geo.getAttribute('skinWeight'), fin: number[] = []
+      for (let i = 0; i < si.count; i += 2) { let bi = 0, bw = -1; for (let k = 0; k < 4; k++) { const wk = sw.getComponent(i, k); if (wk > bw) { bw = wk; bi = si.getComponent(i, k) } } if (/flip|blade/.test(B.bones[bi]?.name ?? '')) fin.push(i) }
+      const R = B.bones.find((x: any) => x.name === 'b_root'), V = R.position.clone(), G = R.position.clone()
+      let finLow = 1e9, bodyLow = 1e9, wetMax = 0, laidAt = -1, dried = false, prev = { wet: 0, laid: 0 }, moved = 0, frames = 0, x0 = r.x, z0 = r.z
+      const t0 = performance.now()
+      while (performance.now() - t0 < 45000) { await raf(); frames++; const s = w.stats(); R.getWorldPosition(G)
+        if (frames % 3 === 0) { for (const i of fin) { B.at('body', i, V); finLow = Math.min(finLow, V.y - G.y) } }
+        moved = Math.max(moved, Math.hypot(r.x - x0, r.z - z0)); wetMax = Math.max(wetMax, s.wet); if (s.laid > 0 && laidAt < 0) laidAt = performance.now()
+        if (s.laid > 0 && s.laid === prev.laid && s.wet < prev.wet) dried = true
+        prev = { wet: s.wet, laid: s.laid }; if (dried && wetMax > 0 && performance.now() - t0 > 8000) break }
+      for (let i = 0; i < geo.getAttribute('position').count; i += 5) { B.at('body', i, V); bodyLow = Math.min(bodyLow, V.y - G.y) }
+      const s = w.stats(); return { finLow, bodyLow, wetMax, laid: s.laid, wet: s.wet, cap: s.cap, dried, moved, frames, fin: fin.length } })
+    ok(tr.moved > 1 && tr.laid > 0 && tr.wetMax > 0 && tr.wetMax <= tr.cap, `1 water: she moved ${tr.moved.toFixed(2)} m and laid a wet trail (${tr.laid} laid, up to ${tr.wetMax} wet at once, cap ${tr.cap})`)
+    ok(tr.dried, `1 water: her trail dries (a patch went dry with none laid; ${tr.wet} wet at the end, ${tr.frames} frames)`)
+    ok(tr.fin > 50 && tr.finLow > 0.004, `1 water: no step: her flippers never touch her ground while she moves (lowest flipper point ${(tr.finLow * 1000).toFixed(1)} mm over it, ${tr.fin} flipper verts)`)
+    ok(tr.bodyLow > 0.004 && tr.bodyLow < 0.05, `1 water: her body rides her sheet (lowest point ${(tr.bodyLow * 1000).toFixed(1)} mm over her ground)`)
+  }
   if (shots && m) { await p.evaluate((x: number, z: number) => (window as any).__ather.tp(x + 1.4, z + 1.1, 0), m.x, m.z); await sleep(900)
     // after the tp she walks to the keeper: aim only once she has SETTLED (two reads 0.5 s apart within 2 cm; 12 s cap), else the still
     // frames the place she left (the Vulnara still showed only her brush)
