@@ -67,6 +67,7 @@ def no_smile(parts):
         col = tuple(int(x) for x in p[2])
         if col == tuple(HATCH): continue
         if not KEEP_SMILE and col == tuple(S.SEAMLIN) and p[0][:, 1].mean() < .615: continue
+        if p[0][:, 1].min() < S.KNEE[1]: continue   # no egg bubble dangling under her belly by her feet (it swung below them in the sway)
         out.append(p)
     return out
 base_eyes = C.eyes

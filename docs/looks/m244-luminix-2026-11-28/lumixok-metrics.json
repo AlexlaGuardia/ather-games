@@ -4,10 +4,10 @@
  "biped": true,
  "dial": 2.1,
  "bones": 18,
- "glb_bytes": 891020,
+ "glb_bytes": 876764,
  "tris": {
   "body": 14554,
-  "eyes": 6308,
+  "eyes": 5780,
   "lamp": 560,
   "aura": 8248
  },
@@ -16,9 +16,9 @@
  "idle": {
   "dur_s": 2.6,
   "lowest_glb": -0.0,
-  "body_lowest_glb": 0.0035,
+  "body_lowest_glb": -0.0,
   "max_lowest_glb": 0.0,
-  "top_glb": 1.398,
+  "top_glb": 1.38,
   "edge_stretch_p99": 1.51,
   "edge_stretch_max": 3.98
  },
@@ -26,7 +26,7 @@
   "dur_s": 0.64,
   "lowest_glb": 0.0012,
   "body_lowest_glb": 0.0012,
-  "max_lowest_glb": 0.002,
+  "max_lowest_glb": 0.0018,
   "top_glb": 1.404,
   "edge_stretch_p99": 1.54,
   "edge_stretch_max": 4.12,
@@ -35,10 +35,10 @@
  },
  "run": {
   "dur_s": 0.44,
-  "lowest_glb": 0.0006,
+  "lowest_glb": 0.0007,
   "body_lowest_glb": 0.0007,
-  "max_lowest_glb": 0.0048,
-  "top_glb": 1.382,
+  "max_lowest_glb": 0.0051,
+  "top_glb": 1.375,
   "edge_stretch_p99": 2.12,
   "edge_stretch_max": 6.82,
   "plays_1to1_at_mps": 0.7709,
@@ -64,7 +64,7 @@
  },
  "body_mean_top": 1.373,
  "all_lowest_with_aura_glb": -0.0001,
- "all_max_lowest_glb": 0.0048,
+ "all_max_lowest_glb": 0.0051,
  "cull": {
   "c": [
    -0.03,

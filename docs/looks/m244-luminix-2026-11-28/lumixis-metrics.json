@@ -4,10 +4,10 @@
  "biped": true,
  "dial": 2.0,
  "bones": 17,
- "glb_bytes": 608908,
+ "glb_bytes": 605068,
  "tris": {
   "body": 13288,
-  "eyes": 4490,
+  "eyes": 4354,
   "lamp": 560,
   "aura": 1016
  },

@@ -4,10 +4,10 @@
  "biped": true,
  "dial": 1.95,
  "bones": 18,
- "glb_bytes": 812944,
+ "glb_bytes": 808020,
  "tris": {
   "body": 12812,
-  "eyes": 6146,
+  "eyes": 5974,
   "lamp": 560,
   "aura": 5360
  },
@@ -16,9 +16,9 @@
  "idle": {
   "dur_s": 2.6,
   "lowest_glb": -0.0,
-  "body_lowest_glb": 0.0,
-  "max_lowest_glb": 0.0,
-  "top_glb": 1.449,
+  "body_lowest_glb": -0.0,
+  "max_lowest_glb": 0.0001,
+  "top_glb": 1.448,
   "edge_stretch_p99": 1.26,
   "edge_stretch_max": 2.13
  },
@@ -26,7 +26,7 @@
   "dur_s": 0.64,
   "lowest_glb": 0.0013,
   "body_lowest_glb": 0.0013,
-  "max_lowest_glb": 0.0022,
+  "max_lowest_glb": 0.0019,
   "top_glb": 1.417,
   "edge_stretch_p99": 1.38,
   "edge_stretch_max": 2.54,
@@ -37,7 +37,7 @@
   "dur_s": 0.44,
   "lowest_glb": 0.0008,
   "body_lowest_glb": 0.0008,
-  "max_lowest_glb": 0.0044,
+  "max_lowest_glb": 0.0039,
   "top_glb": 1.378,
   "edge_stretch_p99": 1.77,
   "edge_stretch_max": 4.03,
@@ -64,7 +64,7 @@
  },
  "body_mean_top": 1.27,
  "all_lowest_with_aura_glb": -0.0002,
- "all_max_lowest_glb": 0.0044,
+ "all_max_lowest_glb": 0.0039,
  "cull": {
   "c": [
    0.13,
