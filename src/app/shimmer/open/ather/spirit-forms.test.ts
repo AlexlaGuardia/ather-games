@@ -6,6 +6,8 @@ import * as fs from 'fs'
 import { BASE_PREVIEW } from './spirit-base-preview'
 import { SHELL_GLB_TALL } from './spirit-models'   // M202 the Shellmere line
 import { LEP_GLB_TALL } from './spirit-models'   // M202 the Lepara line
+import { LUM_GLB_TALL } from './spirit-models'   // M202 the Luminara line
+import { PUBLIC_FORMS } from './spirit-public'
 import { type SpiritElement, CROAK_GLB_TALL, AURLOTL_RIG, ARCLOTL_RIG, CRAGLOTL_RIG, LOTL_GLB_TALL, BEAR_GLB_TALL, LUMEBEAR_RIG, VOLTBEAR_RIG, TIDEBEAR_RIG, NOCT_GLB_TALL, NOCTARC_RIG, NOCTARA_RIG, NOCTORE_RIG, NOCTIX_RIG, NOCTYX_RIG, OWL_GLB_TALL, MYSTOWL_RIG, VOLTOWL_RIG, CRAGOWL_RIG, TIDEOWL_RIG, ATHOWL_RIG, HOV_GLB_TALL, VOLTARI_RIG, LUMARI_RIG, OBSIDARI_RIG, TIDARI_RIG, HOVARI_RIG, CRAGBEAR_GLB_TALL, CRAGBEAR_RIG, MARLOTL_RIG, CROAKARC_RIG, SECOND_FORMS, formGrow, SPIRIT_ELEMENTS, SPIRIT_MODELS, SPIRIT_RIGS, formLook, rigLook, spiritModelFor } from './spirit-models'
 
 let pass = 0
@@ -252,6 +254,31 @@ for (const [el, name, rig] of HOVS) {
   ok(others(tide).every(x => tide.min[2] < x.min[2] - 0.03), `Tidari: her long tail the longest back (${tide.min[2].toFixed(3)})`)
   ok(others(obs).every(x => obs.max[1] > x.max[1] + 0.03), `Obsidari: her chip crest the highest crown (${obs.max[1].toFixed(3)})`) }
 ok(new Set(SPIRIT_ELEMENTS.map(e => formLook('hummingbird', e)!.url)).size === 4, 'the Hovari line: four distinct forms')
+// M202 the Luminara line: each form the base Luminara's sculpt + rig re-shaped by name (19 bones, the hover plan, the `lamp` glow part),
+// in the base's unit (h = the base's x her dial), owner preview only; read off the shipped glbs
+{ const b = BASE_PREVIEW.firefly!, LUMS: [SpiritElement, string][] = [['mana', 'luminel'], ['storm', 'luminarc'], ['earth', 'luminore'], ['water', 'luminix']]
+  const box = (u: string, part: string) => { const { j } = glb(u), a = j.accessors[j.meshes.find((m: { name: string }) => m.name === part).primitives[0].attributes.POSITION]; return { max: a.max as number[], min: a.min as number[] } }
+  for (const [el, name] of LUMS) {
+    const L = formLook('firefly', el)!
+    ok(!!L && L.name === name && L.url === `/open/spirits/${name}-rigged.glb` && L.form === el, `firefly ${el}: ${name} ${L?.url}`)
+    ok(!!L.rig && L.rig !== b.rig && L.rig.neck === b.rig!.neck && !!L.rig.hover && L.rig.hover.flap === b.rig!.hover!.flap && L.rig.hover.low > 2 && !!L.rig.cull && L.rig.cull !== b.rig!.cull, `firefly ${el}: her own RigLook, still a hoverer with her own culling (glbLen ${L.rig?.glbLen})`)
+    ok(formGrow(name) === 1.5 && Math.abs(L.h / b.h - 1.5) < 1e-9, `firefly ${el}: size dial ${formGrow(name)}, grown past her base`)
+    ok(L.glow?.part === 'lamp' && L.glow.emissive !== b.glow?.emissive, `firefly ${el}: the lamp glows her own ${L.glow?.emissive}`)
+    ok(!PUBLIC_FORMS.has(name), `firefly ${el}: owner preview only (not in PUBLIC_FORMS)`)
+    ok(fs.existsSync('public' + L.url), `firefly ${el}: ${L.url} shipped`)
+    const { j, col, n } = glb(L.url), names = (j.nodes as { name: string }[]).map(x => x.name), clips = (j.animations as { name: string }[]).map(a => a.name), bx = box(L.url, 'body')
+    ok(['body', 'eyes', 'lamp', 'b_root', 'b_hover', 'b_abd', 'b_neck', 'b_head', 'b_lids', 'b_fw_l', 'b_hw_r', 'b_ant2_l', 'b_arm_l'].every(x => names.includes(x)) && j.skins?.[0]?.joints?.length === 19, `firefly ${el}: nodes + 19 bones`)
+    ok(['idle', 'walk', 'run', 'sit', 'lie'].every(c => clips.includes(c)) && !(j.animations as { channels: { target: { node: number } }[] }[]).some(a => a.channels.some(c => j.nodes[c.target.node].name === 'b_hover')), `firefly ${el}: five clips, none keys b_hover`)
+    ok(Math.abs((bx.max[1] - bx.min[1]) / LUM_GLB_TALL[name] - 1) < 0.08 && bx.min[1] > 1.9, `firefly ${el}: body ${(bx.max[1] - bx.min[1]).toFixed(3)} ~ LUM_GLB_TALL ${LUM_GLB_TALL[name]}, hung at ${bx.min[1].toFixed(2)}`)
+    const [r, g, bb] = mean(col, n)   // her element's coat, never the base's amber
+    ok(el === 'mana' ? bb > g + 25 && r > g + 10 : el === 'storm' ? bb > r + 40 && bb > g + 15 : el === 'earth' ? r > g + 20 && g > bb : g > r + 40 && bb > r + 40, `firefly ${el}: her ${el} coat ${[r, g, bb].map(Math.round)}`)
+  }
+  const B = (el: SpiritElement, part = 'body') => box(formLook('firefly', el)!.url, part), all = SPIRIT_ELEMENTS, base0 = box(b.url, 'body')
+  ok(all.filter(e => e !== 'mana').every(e => B('mana').min[1] < B(e).min[1] - 0.03) && B('mana').min[1] < base0.min[1] - 0.03, `Luminel: her gem drawn to the lowest point (${B('mana').min[1].toFixed(3)})`)
+  ok(all.filter(e => e !== 'storm').every(e => B('storm', 'eyes').max[1] > B(e, 'eyes').max[1] + 0.1), `Luminarc: her branched antennae the tallest (${B('storm', 'eyes').max[1].toFixed(3)})`)
+  ok(all.filter(e => e !== 'earth').every(e => B('earth').max[2] > B(e).max[2] + 0.02) && ['earth', 'water'].every(e => B(e as SpiritElement).max[0] > base0.max[0] + 0.05), `Luminore + Luminix: round, no waist (wider than the base); Luminore the deepest front (${B('earth').max[2].toFixed(3)})`)
+  ok(all.filter(e => e !== 'water').every(e => B('water').max[1] > B(e).max[1] + 0.02), `Luminix: her crown fin the highest body point (${B('water').max[1].toFixed(3)})`) }
+ok(new Set(SPIRIT_ELEMENTS.map(e => formLook('firefly', e)!.url)).size === 4, 'the Luminara line: four distinct forms')
 // M202 the Croakling line: each form the base Croakling's sculpt + rig re-shaped (19 bones, the lure chain; Croakarc's tail rides it)
 { const b = BASE_PREVIEW.frog!, FROGS: [SpiritElement, string][] = [['water', 'croakrill'], ['mana', 'croakara'], ['earth', 'croakore'], ['storm', 'croakarc']]
   const prof = (u: string) => { const { j } = glb(u), a = j.accessors[j.meshes.find((m: { name: string }) => m.name === 'body').primitives[0].attributes.POSITION]
@@ -338,10 +365,10 @@ ok(new Set(SPIRIT_ELEMENTS.map(e => formLook('hummingbird', e)!.url)).size === 4
 ok(formLook('fox', null) === null && formLook('fox', undefined) === null, 'no element = no form (her base)')
 ok(formLook(null, 'mana') === null, 'no species = no form')
 // M202: the whole Manalotl line is modelled (Marlotl, Aurlotl, Arclotl, Craglotl); see the line block above
-ok(formLook('firefly', 'earth') === null, 'a species whose forms are not modelled yet keeps her base')   // M202: was the Hovari, then Lepara (11-28), now modelled
+ok(SPIRIT_ELEMENTS.every(e => !!formLook('firefly', e)), 'the last line modelled: no species keeps her base for a form any more')   // M202: was "a species whose forms are not modelled yet keeps her base" (Hovari, Lepara, then Luminara 11-28: all ten modelled)
 // M202 Cragbear (the Dewbear line begins): her Earth form is modelled, the other three Dewbear forms are not yet
 ok(new Set(SPIRIT_ELEMENTS.map(e => formLook('water-bear', e)!.url)).size === 4, 'the Dewbear line: four distinct forms')
-ok(Object.keys(SECOND_FORMS).sort().join() === 'axolotl,bat,fox,frog,hummingbird,owl,rabbit,turtle,water-bear', 'the Vulnyx line + the Manalotl line + the Dewbear line + the Noctyx line + the Athowl line + the Hovari line + the Croakling line + the Shellmere line + the Lepara line')
+ok(Object.keys(SECOND_FORMS).sort().join() === 'axolotl,bat,firefly,fox,frog,hummingbird,owl,rabbit,turtle,water-bear', 'the Vulnyx line + the Manalotl line + the Dewbear line + the Noctyx line + the Athowl line + the Hovari line + the Croakling line + the Shellmere line + the Lepara line + the Luminara line')
 ok(new Set(SPIRIT_ELEMENTS.map(e => formLook('fox', e)!.url)).size === 4, 'four distinct forms')
 // rigLook: a form stays itself when rigs are on; ?rig=0 (the frame measure) gives her species' old model, never a rigged glb unrigged
 const v = formLook('fox', 'storm')!

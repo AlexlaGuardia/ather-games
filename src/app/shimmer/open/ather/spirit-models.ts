@@ -278,7 +278,7 @@ export const FORM_GROW = 1.2
 // sisters; her floor + hull are deeper than s1's so she keeps the art's teal (Vulnarc read paler than her art).
 // Marlotl (Manalotl's Water form, the first of the Manalotl line; her own body: webbed gill fins, a dorsal crest, a tall paddle
 // tail fin, a long slim trunk on sprawled legs; docs/looks/m202-marlotl-2026-11-26) 1.4 x the Manalotl's 0.90 m nose to tail.
-export const FORM_GROW_BY: Readonly<Record<string, number>> = { vulnore: 1.4, vulnara: 1.4, vulnarc: 1.4, vulnix: 1.4, marlotl: 1.4, cragbear: 1.4, aurlotl: 1.4, arclotl: 1.4, craglotl: 1.4, lumebear: 1.4, voltbear: 1.4, tidebear: 1.4, noctarc: 1.4, noctara: 1.4, noctore: 1.4, noctix: 1.4, mystowl: 1.4, voltowl: 1.4, cragowl: 1.4, tideowl: 1.4, croakrill: 1.4, croakara: 1.4, croakore: 1.5, croakarc: 1.4, mesamere: 1.5, aurmere: 1.4, voltmere: 1.4, tidemere: 1.4, lepaura: 1.4, leparc: 1.4, lepore: 1.5, lepnix: 1.4, voltari: 1.5, lumari: 1.5, obsidari: 1.5, tidari: 1.5 }
+export const FORM_GROW_BY: Readonly<Record<string, number>> = { vulnore: 1.4, vulnara: 1.4, vulnarc: 1.4, vulnix: 1.4, marlotl: 1.4, cragbear: 1.4, aurlotl: 1.4, arclotl: 1.4, craglotl: 1.4, lumebear: 1.4, voltbear: 1.4, tidebear: 1.4, noctarc: 1.4, noctara: 1.4, noctore: 1.4, noctix: 1.4, mystowl: 1.4, voltowl: 1.4, cragowl: 1.4, tideowl: 1.4, croakrill: 1.4, croakara: 1.4, croakore: 1.5, croakarc: 1.4, mesamere: 1.5, aurmere: 1.4, voltmere: 1.4, tidemere: 1.4, lepaura: 1.4, leparc: 1.4, lepore: 1.5, lepnix: 1.4, voltari: 1.5, lumari: 1.5, obsidari: 1.5, tidari: 1.5, luminel: 1.5, luminarc: 1.5, luminore: 1.5, luminix: 1.5 }
 export const formGrow = (name: string): number => FORM_GROW_BY[name] ?? FORM_GROW
 const secondForm = (sp: Species, form: SpiritElement, name: string, emissive: string, hull: string): SpiritLook => {
   const b = SPIRIT_RIGS[sp]!, g = formGrow(name)
@@ -431,6 +431,24 @@ const lepForm = (el: SpiritElement, name: string, emissive: string, hull: string
   return { ...b, name, form: el, url: `/open/spirits/${name}-rigged.glb`, h: b.h * g, skin: { emissive, emissiveI: 0.12 }, hull: { color: hull, opacity: 0.38 },
     trot: grownTrot(b.trot, b.h, b.h * g), rig: { ...b.rig!, glbLen } }
 }
+// M202 the Luminara line (docs/looks/m202-luminara-line-2026-11-27): Luminel (Mana: an upright violet GEM of a body drawn to a point and cut
+// in diamond facets, a brow crystal, broad aqua wings with gold veins, gold flowing infusion markings on her flanks, a bigger lamp), Luminarc
+// (Storm: icy pale blue, an angular crowned head, branched lightning antennae, an ice-crystal collar, white lightning forks, long dangling
+// legs, long narrow wings, an open happy mouth), Luminore (Earth: a round brown STONE pear, no waist, a crown of amber crystals packed in
+// moss, short brown wing-case paddles, stubby feet, an amber lamp), Luminix (Water: a round teal water drop, a wave fin on the crown, fins
+// for wings, pointed fin-feet, water swirls and bubbles, bubbles in her pale lamp). Each is the BASE Luminara's sculpt + rig modules
+// re-shaped by name (tools/lum_common.py, rig_lum.py): the base's 19-bone hover plan and five clips, in the base's unit (0.3438 m per glb
+// unit), so each draws the base's h x her dial and hangs at the base's hover x her dial. Living light: her crystals / markings / bolts /
+// moss / bubbles ride the unlit part (they glow). LUM_GLB_TALL = each body's idle mean height (rig metrics body_mean_top). OWNER PREVIEW
+// (not in spirit-public PUBLIC_FORMS) until Alex OKs the line.
+export const LUM_GLB_TALL: Readonly<Record<string, number>> = { luminel: 0.98, luminarc: 1.011, luminore: 0.93, luminix: 1.053 }
+type Cull = NonNullable<RigLook['cull']>
+// glbLen = her nose to tail (rig metrics glb_long); low / top = her idle hover's lowest + highest point and cull = her bounds over every clip (glb units)
+const lumForm = (el: SpiritElement, name: string, emissive: string, hull: string, lamp: string, glbLen: number, low: number, top: number, cull: Cull): SpiritLook => {
+  const b = BASE_PREVIEW.firefly!, g = formGrow(name)
+  return { ...b, name, form: el, url: `/open/spirits/${name}-rigged.glb`, h: b.h * g, skin: { emissive, emissiveI: 0.12 }, hull: { color: hull, opacity: 0.45 },
+    trot: grownTrot(b.trot, b.h, b.h * g), rig: { ...b.rig!, glbLen, hover: { ...b.rig!.hover!, low, top }, cull }, glow: { ...b.glow!, emissive: lamp } }
+}
 export const SECOND_FORMS: Partial<Record<Species, Partial<Record<SpiritElement, SpiritLook>>>> = {
   rabbit: {
     mana: lepForm('mana', 'lepaura', '#b49cff', '#e8dcff', 0.832),
@@ -479,6 +497,12 @@ export const SECOND_FORMS: Partial<Record<Species, Partial<Record<SpiritElement,
     mana: hovForm('mana', 'lumari', '#b49cff', '#e8dcff', '#e2d0ff', LUMARI_RIG),
     earth: hovForm('earth', 'obsidari', '#ffae4a', '#ffe2b4', '#ffdc9a', OBSIDARI_RIG),
     water: hovForm('water', 'tidari', '#3fc4c0', '#b4f0ea', '#b8f6f2', TIDARI_RIG),
+  },
+  firefly: {
+    mana: lumForm('mana', 'luminel', '#b49cff', '#e8dcff', '#fff4d6', 0.717, 2.444, 3.787, { c: [0, 2.98, 0.04], r: 1.26, min: [-0.74, 2.05, -0.61], max: [0.74, 3.91, 0.68] }),
+    storm: lumForm('storm', 'luminarc', '#a8d2ff', '#dcecff', '#e0f4ff', 0.7709, 2.501, 3.907, { c: [0, 3.08, 0.02], r: 1.35, min: [-0.82, 2.13, -0.67], max: [0.82, 4.03, 0.72] }),
+    earth: lumForm('earth', 'luminore', '#ffae4a', '#ffe2b4', '#ffc870', 0.7656, 2.525, 3.685, { c: [0, 2.89, 0.09], r: 1.17, min: [-0.65, 1.98, -0.48], max: [0.65, 3.8, 0.66] }),
+    water: lumForm('water', 'luminix', '#3fc4c0', '#b4f0ea', '#d4fbf6', 0.7607, 2.527, 3.66, { c: [0, 2.88, 0.05], r: 1.16, min: [-0.64, 1.98, -0.52], max: [0.64, 3.78, 0.62] }),
   },
   fox: {
     mana: secondForm('fox', 'mana', 'vulnara', '#b49cff', '#e8dcff'),
