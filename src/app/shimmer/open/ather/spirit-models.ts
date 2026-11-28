@@ -278,7 +278,7 @@ export const FORM_GROW = 1.2
 // sisters; her floor + hull are deeper than s1's so she keeps the art's teal (Vulnarc read paler than her art).
 // Marlotl (Manalotl's Water form, the first of the Manalotl line; her own body: webbed gill fins, a dorsal crest, a tall paddle
 // tail fin, a long slim trunk on sprawled legs; docs/looks/m202-marlotl-2026-11-26) 1.4 x the Manalotl's 0.90 m nose to tail.
-export const FORM_GROW_BY: Readonly<Record<string, number>> = { vulnore: 1.4, vulnara: 1.4, vulnarc: 1.4, vulnix: 1.4, marlotl: 1.4, cragbear: 1.4, aurlotl: 1.4, arclotl: 1.4, craglotl: 1.4, lumebear: 1.4, voltbear: 1.4, tidebear: 1.4, noctarc: 1.4, noctara: 1.4, noctore: 1.4, noctix: 1.4, mystowl: 1.4, voltowl: 1.4, cragowl: 1.4, tideowl: 1.4, croakrill: 1.4, croakara: 1.4, croakore: 1.5, croakarc: 1.4, mesamere: 1.5, aurmere: 1.4, voltmere: 1.4, tidemere: 1.4, voltari: 1.5, lumari: 1.5, obsidari: 1.5, tidari: 1.5 }
+export const FORM_GROW_BY: Readonly<Record<string, number>> = { vulnore: 1.4, vulnara: 1.4, vulnarc: 1.4, vulnix: 1.4, marlotl: 1.4, cragbear: 1.4, aurlotl: 1.4, arclotl: 1.4, craglotl: 1.4, lumebear: 1.4, voltbear: 1.4, tidebear: 1.4, noctarc: 1.4, noctara: 1.4, noctore: 1.4, noctix: 1.4, mystowl: 1.4, voltowl: 1.4, cragowl: 1.4, tideowl: 1.4, croakrill: 1.4, croakara: 1.4, croakore: 1.5, croakarc: 1.4, mesamere: 1.5, aurmere: 1.4, voltmere: 1.4, tidemere: 1.4, lepaura: 1.4, leparc: 1.4, lepore: 1.5, lepnix: 1.4, voltari: 1.5, lumari: 1.5, obsidari: 1.5, tidari: 1.5 }
 export const formGrow = (name: string): number => FORM_GROW_BY[name] ?? FORM_GROW
 const secondForm = (sp: Species, form: SpiritElement, name: string, emissive: string, hull: string): SpiritLook => {
   const b = SPIRIT_RIGS[sp]!, g = formGrow(name)
@@ -417,7 +417,27 @@ const shellForm = (el: SpiritElement, name: string, emissive: string, hull: stri
   return { ...b, name, form: el, url: `/open/spirits/${name}-rigged.glb`, h: b.h * g, skin: { emissive, emissiveI: 0.12 }, hull: { color: hull, opacity: 0.38 },
     trot: grownTrot(b.trot, b.h, b.h * g), rig: { ...b.rig!, glbLen } }
 }
+// M202 the Lepara line (docs/looks/m202-lepara-line-2026-11-27): Lepaura (Mana, the ledger's MOON-HARE: taller, a plume tail, a gold
+// crescent on her brow, a gold necklace + diamond, gold infusion ribbons = pattern only), Leparc (Storm: silver-blue, cheek + ear-tip tufts,
+// a violet brow crystal, pale lightning veins, a puff tail), Lepore (Earth, her natural form, the heaviest: barrel belly, leaf-stone
+// pauldrons + bracers, amber brow + chest crystals; dial 1.5), Lepnix (Water, the ledger's UNICORN divergence: an aqua foal standing on four
+// legs, a horn, a water-mane, a plume tail; the base head kept). Each is the BASE Lepara's sculpt + rig re-shaped by name (tools/lep_common.py,
+// rig_lep.py: the base's 20 bones + five clips at the base's 0.48 m per glb unit; Lepnix's joints moved onto her foal body).
+// LEP_GLB_TALL = each body's idle mean height (rig metrics body_mean_top, ears counted as the base's LEPARA_GLB_TALL). OWNER PREVIEW (not in
+// spirit-public PUBLIC_FORMS) until Alex OKs the line.
+export const LEP_GLB_TALL: Readonly<Record<string, number>> = { lepaura: 1.042, leparc: 1.096, lepore: 0.976, lepnix: 0.895 }
+const lepForm = (el: SpiritElement, name: string, emissive: string, hull: string, glbLen: number): SpiritLook => {
+  const b = BASE_PREVIEW.rabbit!, g = formGrow(name)
+  return { ...b, name, form: el, url: `/open/spirits/${name}-rigged.glb`, h: b.h * g, skin: { emissive, emissiveI: 0.12 }, hull: { color: hull, opacity: 0.38 },
+    trot: grownTrot(b.trot, b.h, b.h * g), rig: { ...b.rig!, glbLen } }
+}
 export const SECOND_FORMS: Partial<Record<Species, Partial<Record<SpiritElement, SpiritLook>>>> = {
+  rabbit: {
+    mana: lepForm('mana', 'lepaura', '#b49cff', '#e8dcff', 0.832),
+    storm: lepForm('storm', 'leparc', '#a8d2ff', '#dcecff', 0.759),
+    earth: lepForm('earth', 'lepore', '#ffae4a', '#ffe2b4', 0.762),
+    water: lepForm('water', 'lepnix', '#3fc4c0', '#b4f0ea', 0.947),
+  },
   turtle: {
     earth: shellForm('earth', 'mesamere', '#ffc25a', '#f4e6c4', 1.42),
     mana: shellForm('mana', 'aurmere', '#b49cff', '#e8dcff', 1.317),

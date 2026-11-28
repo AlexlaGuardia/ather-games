@@ -5,6 +5,7 @@
 import * as fs from 'fs'
 import { BASE_PREVIEW } from './spirit-base-preview'
 import { SHELL_GLB_TALL } from './spirit-models'   // M202 the Shellmere line
+import { LEP_GLB_TALL } from './spirit-models'   // M202 the Lepara line
 import { type SpiritElement, CROAK_GLB_TALL, AURLOTL_RIG, ARCLOTL_RIG, CRAGLOTL_RIG, LOTL_GLB_TALL, BEAR_GLB_TALL, LUMEBEAR_RIG, VOLTBEAR_RIG, TIDEBEAR_RIG, NOCT_GLB_TALL, NOCTARC_RIG, NOCTARA_RIG, NOCTORE_RIG, NOCTIX_RIG, NOCTYX_RIG, OWL_GLB_TALL, MYSTOWL_RIG, VOLTOWL_RIG, CRAGOWL_RIG, TIDEOWL_RIG, ATHOWL_RIG, HOV_GLB_TALL, VOLTARI_RIG, LUMARI_RIG, OBSIDARI_RIG, TIDARI_RIG, HOVARI_RIG, CRAGBEAR_GLB_TALL, CRAGBEAR_RIG, MARLOTL_RIG, CROAKARC_RIG, SECOND_FORMS, formGrow, SPIRIT_ELEMENTS, SPIRIT_MODELS, SPIRIT_RIGS, formLook, rigLook, spiritModelFor } from './spirit-models'
 
 let pass = 0
@@ -306,14 +307,41 @@ ok(new Set(SPIRIT_ELEMENTS.map(e => formLook('hummingbird', e)!.url)).size === 4
   ok([base, mesa, aur, volt].every(x => long(tide) > long(x) + 0.1 && tall(tide) < tall(x) - 0.05), `Tidemere: a sea turtle, the longest and lowest (${long(tide).toFixed(3)} x ${tall(tide).toFixed(3)})`)
   ok(new Set(SPIRIT_ELEMENTS.map(e => formLook('turtle', e)!.url)).size === 4, 'the Shellmere line: four distinct forms') }
 
+// M202 the Lepara line: each form the base Lepara's sculpt + rig re-shaped (20 bones, five clips), her own silhouette
+{ const b = BASE_PREVIEW.rabbit!, RABBITS: [SpiritElement, string][] = [['mana', 'lepaura'], ['storm', 'leparc'], ['earth', 'lepore'], ['water', 'lepnix']]
+  const prof = (u: string) => { const { j } = glb(u), a = j.accessors[j.meshes.find((m: { name: string }) => m.name === 'body').primitives[0].attributes.POSITION]; return { max: a.max as number[], min: a.min as number[] } }
+  for (const [el, name] of RABBITS) {
+    const L = formLook('rabbit', el)!
+    ok(!!L && L.name === name && L.url === `/open/spirits/${name}-rigged.glb` && L.form === el, `rabbit ${el}: ${name} ${L?.url}`)
+    ok(!!L.rig && L.rig !== b.rig && L.rig.neck === b.rig!.neck && L.rig.lie === b.rig!.lie && L.rig.glbLen > 0.7, `rabbit ${el}: her own RigLook on the base's plan (glbLen ${L.rig?.glbLen})`)
+    ok(Math.abs(L.h / b.h - formGrow(name)) < 1e-9 && formGrow(name) >= 1.4, `rabbit ${el}: grows past the base (dial ${formGrow(name)})`)
+    ok(LEP_GLB_TALL[name] * L.h > 1.25 * 0.982 * b.h, `rabbit ${el}: stands taller than her base (${(LEP_GLB_TALL[name] * L.h).toFixed(2)} m vs ${(0.982 * b.h).toFixed(2)} m)`)
+    ok(L.skin.emissive !== b.skin.emissive && L.hull.color !== b.hull.color, `rabbit ${el}: her element's tints`)
+    ok(fs.existsSync('public' + L.url), `rabbit ${el}: ${L.url} shipped`)
+    const { j, col, n } = glb(L.url), names = (j.nodes as { name: string }[]).map(x => x.name), clips = (j.animations as { name: string }[]).map(a => a.name)
+    ok(['body', 'eyes', 'b_root', 'b_hips', 'b_neck', 'b_head', 'b_lids', 'b_nose', 'b_tail', 'b_ear_l', 'b_ear2_r', 'b_arm_l', 'b_foot_r'].every(x => names.includes(x)) && j.skins?.[0]?.joints?.length === 20, `rabbit ${el}: nodes + 20 bones`)
+    ok(['idle', 'walk', 'run', 'sit', 'lie'].every(c => clips.includes(c)), `rabbit ${el}: clips ${clips}`)
+    const p = prof(L.url), top = p.max[1] - p.min[1]; ok(top > LEP_GLB_TALL[name] * 0.9 && top < LEP_GLB_TALL[name] * 1.15, `rabbit ${el}: rest body ${top.toFixed(3)} ~ LEP_GLB_TALL ${LEP_GLB_TALL[name]}`)
+    const [r, g, bb] = mean(col, n)
+    ok(el === 'mana' ? bb > g + 15 && r > g + 10 : el === 'storm' ? bb > r + 8 && bb > g : el === 'earth' ? r > bb + 40 && g > bb + 15 : g > r + 50 && bb > r + 40, `rabbit ${el}: her ${el} coat ${[r, g, bb].map(Math.round)}`)
+  }
+  const [base, aura, arc, ore, nix] = [b.url, ...RABBITS.map(x => formLook('rabbit', x[0])!.url)].map(prof)
+  const wide = (x: typeof base) => x.max[0] - x.min[0], long = (x: typeof base) => x.max[2] - x.min[2]
+  ok(formGrow('lepore') > Math.max(...['lepaura', 'leparc', 'lepnix'].map(formGrow)), 'Lepore: the heaviest dial (her natural element)')
+  ok(long(aura) > long(base) + 0.05 && aura.min[2] < arc.min[2] - 0.05, `Lepaura: the plume tail reaches furthest back of the rabbits (${long(aura).toFixed(3)})`)
+  ok(wide(arc) > wide(base) + 0.02, `Leparc: cheek tufts widen her face (${wide(arc).toFixed(3)} vs ${wide(base).toFixed(3)})`)
+  ok(wide(ore) > wide(base) + 0.05, `Lepore: wider than the base (${wide(ore).toFixed(3)})`)
+  ok(long(nix) > long(base) + 0.15 && nix.max[1] < base.max[1] - 0.05, `Lepnix: a foal, long and level, ears lower than the base's (${long(nix).toFixed(3)} x ${nix.max[1].toFixed(3)} vs ${base.max[1].toFixed(3)})`)
+  ok(new Set(SPIRIT_ELEMENTS.map(e => formLook('rabbit', e)!.url)).size === 4, 'the Lepara line: four distinct forms') }
+
 // ── picking ──
 ok(formLook('fox', null) === null && formLook('fox', undefined) === null, 'no element = no form (her base)')
 ok(formLook(null, 'mana') === null, 'no species = no form')
 // M202: the whole Manalotl line is modelled (Marlotl, Aurlotl, Arclotl, Craglotl); see the line block above
-ok(formLook('rabbit', 'earth') === null, 'a species whose forms are not modelled yet keeps her base')   // M202: was the Hovari, now modelled
+ok(formLook('firefly', 'earth') === null, 'a species whose forms are not modelled yet keeps her base')   // M202: was the Hovari, then Lepara (11-28), now modelled
 // M202 Cragbear (the Dewbear line begins): her Earth form is modelled, the other three Dewbear forms are not yet
 ok(new Set(SPIRIT_ELEMENTS.map(e => formLook('water-bear', e)!.url)).size === 4, 'the Dewbear line: four distinct forms')
-ok(Object.keys(SECOND_FORMS).sort().join() === 'axolotl,bat,fox,frog,hummingbird,owl,turtle,water-bear', 'the Vulnyx line + the Manalotl line + the Dewbear line + the Noctyx line + the Athowl line + the Hovari line + the Croakling line + the Shellmere line')
+ok(Object.keys(SECOND_FORMS).sort().join() === 'axolotl,bat,fox,frog,hummingbird,owl,rabbit,turtle,water-bear', 'the Vulnyx line + the Manalotl line + the Dewbear line + the Noctyx line + the Athowl line + the Hovari line + the Croakling line + the Shellmere line + the Lepara line')
 ok(new Set(SPIRIT_ELEMENTS.map(e => formLook('fox', e)!.url)).size === 4, 'four distinct forms')
 // rigLook: a form stays itself when rigs are on; ?rig=0 (the frame measure) gives her species' old model, never a rigged glb unrigged
 const v = formLook('fox', 'storm')!
