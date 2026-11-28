@@ -26,7 +26,7 @@ EL, ENL = S.eye_normal(); DH = S.HC - C.HC0; HC = np.array(S.HC)
 SK = {'root': (None, (0, 0, 0)), 'hips': ('root', (0, Y0 + .10, .02)), 'abd': ('hips', tuple(S.AC)), 'chest': ('hips', (0, .47, .05)),
       'neck': ('chest', tuple(DH * .5 + (0, .55, .09))), 'head': ('neck', tuple(HC - (0, .02, .02))), 'lids': ('head', tuple(EL)), 'lids_r': ('head', tuple(EL * (-1, 1, 1)))}
 for s, x in (('l', 1), ('r', -1)): SK['leg_' + s] = ('root', tuple(np.array(S.LEG[0]) * (x, 1, 1)))
-SK = {b: (p, tuple(np.array(j) + UP)) for b, (p, j) in SK.items()}
+SK = {b: (p, tuple(np.array(j) + (UP if p else 0))) for b, (p, j) in SK.items()}   # the root stays AT the ground (y = 0): the game + the prod check read it as her ground
 nb = list(SK); ix = nb.index; V0 = V + UP; U = lambda *v: np.array(v, float) + UP
 AB, HD, TX, LG = S.abdomen(A), S.head(A), S.thorax(A), S.legs(A); mn = np.min([AB, HD, TX, LG], 0); isp = lambda d: d <= mn + 1e-9
 leg = isp(LG) & (V[:, 1] < S.LEG[0][1] + .02); hed = isp(HD) & (V[:, 1] > HC[1] - .12); abd = isp(AB) & ~leg & ~hed; thx = ~(leg | hed | abd)

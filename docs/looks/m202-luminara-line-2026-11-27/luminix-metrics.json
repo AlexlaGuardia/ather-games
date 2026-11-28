@@ -2,7 +2,7 @@
  "form": "luminix",
  "ground": true,
  "bones": 10,
- "glb_bytes": 672204,
+ "glb_bytes": 672168,
  "tris": {
   "body": 15448,
   "eyes": 4866,
@@ -46,9 +46,9 @@
  },
  "sit": {
   "dur_s": 3.0,
-  "lowest_glb": 0.0003,
-  "body_lowest_glb": 0.01,
-  "mean_low": 0.0017,
+  "lowest_glb": 0.0016,
+  "body_lowest_glb": 0.0111,
+  "mean_low": 0.0019,
   "top_glb": 1.003,
   "mean_top": 0.995,
   "edge_stretch_p99": 1.56,
@@ -57,8 +57,8 @@
  "lie": {
   "dur_s": 4.4,
   "lowest_glb": 0.0002,
-  "body_lowest_glb": 0.0053,
-  "mean_low": 0.0054,
+  "body_lowest_glb": 0.0051,
+  "mean_low": 0.0053,
   "top_glb": 1.0,
   "mean_top": 0.988,
   "edge_stretch_p99": 1.66,

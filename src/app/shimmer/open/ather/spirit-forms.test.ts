@@ -271,6 +271,8 @@ ok(new Set(SPIRIT_ELEMENTS.map(e => formLook('hummingbird', e)!.url)).size === 4
     ok(fs.existsSync('public' + L.url), `firefly ${el}: ${L.url} shipped`)
     const { j, col, n } = glb(L.url), names = (j.nodes as { name: string }[]).map(x => x.name), clips = (j.animations as { name: string }[]).map(a => a.name), bx = box(L.url, 'body')
     if (EGG(el)) { ok(['body', 'eyes', 'lamp', 'b_root', 'b_hips', 'b_abd', 'b_neck', 'b_head', 'b_lids', 'b_lids_r', 'b_leg_l', 'b_leg_r'].every(x => names.includes(x)) && j.skins?.[0]?.joints?.length === 10 && !names.some(x => /^b_(hover|fw|hw|ant|arm)/.test(x)), `firefly ${el}: the egg's ground rig, 10 bones, no hover / wing / antenna / arm bone`)
+      { const rt = (j.nodes as { name: string; translation?: number[] }[]).find(x => x.name === 'b_root')?.translation ?? [0, 0, 0]
+        ok(Math.abs(rt[1]) < 1e-4, `firefly ${el}: b_root AT the ground (y ${rt[1]}): the prod check reads her ground off it`) }
       const M = JSON.parse(fs.readFileSync(`docs/looks/m202-luminara-line-2026-11-27/${name}-metrics.json`, 'utf8')), cl = ['idle', 'walk', 'run', 'sit', 'lie']
       ok(M.ground === true && cl.every(c => M[c].lowest_glb > -0.002 && M[c].lowest_glb < 0.01 && M[c].body_lowest_glb < 0.03), `firefly ${el}: on the ground in every clip (lowest ${cl.map(c => M[c].lowest_glb).join(' / ')} glb)`)
       ok(Math.abs(M.body_mean_top - LUM_GLB_TALL[name]) < 0.01 && Math.abs(M.walk.plays_1to1_at_mps - L.rig!.clipV.walk * LUMINARA_UNIT) < 1e-3 && Math.abs(M.run.plays_1to1_at_mps - L.rig!.clipV.run * LUMINARA_UNIT) < 1e-3, `firefly ${el}: LUM_GLB_TALL + clipV match her rig metrics`) }
