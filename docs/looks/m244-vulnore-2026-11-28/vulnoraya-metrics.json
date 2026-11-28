@@ -1,13 +1,13 @@
 {
  "bones": 24,
- "glb_bytes": 437760,
+ "glb_bytes": 441320,
  "weights_bad": 0,
  "walk": {
   "dur_s": 0.57,
-  "lowest_m": -0.0012,
+  "lowest_m": -0.0011,
   "rest_lowest_m": 0.0,
   "edge_stretch_p99": 1.3,
-  "edge_stretch_max": 3.1,
+  "edge_stretch_max": 3.21,
   "leg_reach_ratio_max": 0.97,
   "stride_m": 0.314,
   "plays_1to1_at_mps": 0.55,
@@ -19,16 +19,16 @@
    "6.5": 20.73
   },
   "planted_foot_drift_max_m": 0.0,
-  "length_m": 1.233,
-  "height_m": 0.793,
-  "lowest_bone": "fr_paw"
+  "length_m": 1.219,
+  "height_m": 0.773,
+  "lowest_bone": "fl_paw"
  },
  "run": {
   "dur_s": 0.432,
   "lowest_m": -0.0008,
   "rest_lowest_m": 0.0,
-  "edge_stretch_p99": 1.55,
-  "edge_stretch_max": 3.75,
+  "edge_stretch_p99": 1.58,
+  "edge_stretch_max": 3.27,
   "leg_reach_ratio_max": 0.97,
   "stride_m": 1.211,
   "plays_1to1_at_mps": 2.8,
@@ -41,48 +41,59 @@
    "6.5": 5.37
   },
   "planted_foot_drift_max_m": 0.0002,
-  "length_m": 1.23,
-  "height_m": 0.745,
+  "length_m": 1.217,
+  "height_m": 0.727,
   "lowest_bone": "fr_paw"
  },
  "idle": {
   "dur_s": 4.8,
   "lowest_m": -0.0,
   "rest_lowest_m": 0.0,
-  "edge_stretch_p99": 1.38,
-  "edge_stretch_max": 3.42,
-  "length_m": 1.221,
-  "height_m": 0.818,
+  "edge_stretch_p99": 1.36,
+  "edge_stretch_max": 3.69,
+  "length_m": 1.208,
+  "height_m": 0.799,
   "lowest_bone": "fl_paw"
  },
  "sit": {
   "dur_s": 5.0,
   "lowest_m": -0.0,
   "rest_lowest_m": 0.0,
-  "edge_stretch_p99": 2.01,
-  "edge_stretch_max": 5.18,
+  "edge_stretch_p99": 2.09,
+  "edge_stretch_max": 5.1,
   "leg_reach_ratio_max": 0.84,
-  "length_m": 0.847,
-  "height_m": 0.784,
-  "lowest_bone": "hl_paw"
+  "length_m": 0.842,
+  "height_m": 0.764,
+  "lowest_bone": "fl_paw"
  },
  "lie": {
   "dur_s": 5.6,
   "lowest_m": -0.0,
   "rest_lowest_m": 0.0,
-  "edge_stretch_p99": 2.39,
-  "edge_stretch_max": 6.57,
+  "edge_stretch_p99": 2.43,
+  "edge_stretch_max": 10.0,
   "leg_reach_ratio_max": 0.53,
-  "length_m": 1.034,
-  "height_m": 0.591,
-  "lowest_bone": "hr_paw"
+  "length_m": 1.021,
+  "height_m": 0.571,
+  "lowest_bone": "hl_paw"
+ },
+ "silhouette": {
+  "prop": {
+   "head": 0.94
+  },
+  "motif": {
+   "shard": 1.35,
+   "crown": 2.4
+  },
+  "shoulder_over_eyes": 1.346,
+  "top_over_eyes": 1.662
  },
  "quality": {
   "standard": "m244-quality-2026-11-28 (a) palette + projection, (c) springs",
   "project": null,
   "spring": {
    "gain": {
-    "ear": 50.33134,
+    "ear": 51.40708,
     "tail": 9.97203
    },
    "peak_rad": {
@@ -92,14 +103,14 @@
     "run:ear_l": 0.256,
     "run:ear_r": 0.256,
     "run:tail1": 0.166,
-    "idle:ear_l": 0.056,
-    "idle:ear_r": 0.052,
+    "idle:ear_l": 0.054,
+    "idle:ear_r": 0.05,
     "idle:tail1": 0.001,
-    "sit:ear_l": 0.047,
-    "sit:ear_r": 0.044,
+    "sit:ear_l": 0.045,
+    "sit:ear_r": 0.043,
     "sit:tail1": 0.0,
-    "lie:ear_l": 0.037,
-    "lie:ear_r": 0.034,
+    "lie:ear_l": 0.035,
+    "lie:ear_r": 0.032,
     "lie:tail1": 0.0
    }
   },

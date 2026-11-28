@@ -33,6 +33,17 @@ tail = lambda V: (V[:, 2] < -.20) & (V[:, 1] < .70) | (V[:, 2] < -.34)
 arm = lambda V: (ax(V) > .168) & (V[:, 1] > .40) & (V[:, 1] < 1.07) & ~tail(V) & ~((V[:, 1] < .74) & (ax(V) < .205) & (V[:, 2] < .02))
 leg = lambda V: (V[:, 1] < .70) & ~tail(V) & ~arm(V)
 head = lambda V: (V[:, 1] > 1.04) & (V[:, 2] > -.06)
+if SV.PROP.get(BF):   # v2 PROP re-fit: the wide stance + big gauntlets overlap in x, and the pauldrons rise past 1.07: a vertex is arm when it is
+    # nearer the arm chain than the thigh chain (up to the pauldron top), the head keeps to the middle (the pauldrons stay off the head bone)
+    def _segd(V, pts):
+        M = np.c_[ax(V), V[:, 1], V[:, 2]]; d = np.full(len(V), 9.)
+        for p0, p1 in zip(pts[:-1], pts[1:]):
+            p0, p1 = np.array(p0), np.array(p1); ab = p1 - p0; t = np.clip(((M - p0) @ ab) / (ab @ ab), 0, 1); d = np.minimum(d, np.linalg.norm(M - p0 - t[:, None] * ab, axis=1))
+        return d
+    PTOP = 1.07 + .12 * (SV.PQ('shoulder') - 1) / .45
+    arm = lambda V: (ax(V) > .168) & (V[:, 1] > .40) & (V[:, 1] < PTOP) & ~tail(V) & (_segd(V, A) < _segd(V, Lg[:3]))
+    leg = lambda V: (V[:, 1] < .70) & ~tail(V) & ~arm(V)
+    head = lambda V: (V[:, 1] > 1.04) & (V[:, 2] > -.06) & (ax(V) < .19)
 trunk = lambda V: ~tail(V) & ~arm(V) & (V[:, 1] > .48)
 CAPS = [('pelvis', (0, .52, -.06), (0, .70, -.06), .15, trunk), ('spine', (0, .70, -.05), (0, .85, -.03), .15, trunk), ('chest', (0, .85, -.02), (0, 1.0, 0), .17, trunk),
         ('neck', J['neck'], J['head'], .11, lambda V: (V[:, 1] > .96) & ~arm(V)), ('head', tuple(np.array((0, .57, .2)) + HO), tuple(np.array((0, .6, .3)) + HO), .2, head)]
@@ -56,6 +67,12 @@ MASKS = dict(tail=TB, rump=bw(['pelvis']) > .5, belly=bw(['pelvis', 'spine', 'ch
 low = lambda p, M: K.skin(V0[M], W[M], SK, p)[:, 1].min()
 plan = B.Plan(SK, low=low, masks=MASKS)
 C, T, ST, FEET, SOLVED = plan.clips(H); print('solved', SOLVED, 'reach', ST)
+if SV.PROP.get(BF):   # v2: the plan solves the sit / lie at the breath's middle; with PROP's heavy thighs the breath's low (feet re-planted) dipped
+    for c in ('sit', 'lie'):   # her crotch 15 mm under: lift each rest clip by its own measured deficit (every frame, the whole mesh)
+        lo = min(K.skin(V0, W, SK, p)[:, 1].min() for p in C[c])
+        if lo < .001:
+            for p in C[c]: p.T['root'] = p.T['root'] + np.array([0, .001 - lo, 0])
+            SOLVED[c]['v2_lift'] = round(float(.001 - lo), 4)
 # ── the four echoes: where the sculpt stood them, each playing her clip a beat behind (left and right a beat apart) ──
 SPECS = [dict(off=(-.50, 0, -.46), s=.80, delay=.10), dict(off=(.50, 0, -.46), s=.80, delay=.16), dict(off=(-.90, 0, -.80), s=.70, delay=.22), dict(off=(.90, 0, -.80), s=.70, delay=.28)]
 if BF == 'rok':

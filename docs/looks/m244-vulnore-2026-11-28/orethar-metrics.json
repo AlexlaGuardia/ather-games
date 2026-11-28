@@ -1,15 +1,17 @@
 {
  "bones": 26,
  "bones_with_echoes": 26,
- "glb_bytes": 519868,
+ "glb_bytes": 484568,
  "solved": {
   "sit": {
-   "drop": -0.42447373867034927,
-   "tail": 0.8754006385803224
+   "drop": -0.43596954345703137,
+   "tail": 0.8440496206283572,
+   "v2_lift": 0.0165
   },
   "lie": {
-   "drop": -0.3019688844680786,
-   "tail": -0.00821704864501947
+   "drop": -0.3274133920669555,
+   "tail": -0.01019322872161859,
+   "v2_lift": 0.0017
   }
  },
  "legs": [
@@ -33,8 +35,8 @@
  "walk": {
   "dur_s": 0.636,
   "lowest_m": -0.0001,
-  "height_m": 1.132,
-  "length_m": 0.957,
+  "height_m": 1.057,
+  "length_m": 0.919,
   "lead_l_minus_r_z": [
    0.25,
    0.2,
@@ -45,13 +47,13 @@
   ],
   "feet_alternate": true,
   "echo0_head_travel": 0.023,
-  "leg_reach_ratio_max": 0.85
+  "leg_reach_ratio_max": 0.86
  },
  "run": {
   "dur_s": 0.45,
-  "lowest_m": 0.0006,
-  "height_m": 1.061,
-  "length_m": 0.976,
+  "lowest_m": 0.0005,
+  "height_m": 0.99,
+  "length_m": 0.924,
   "lead_l_minus_r_z": [
    0.466,
    -0.053,
@@ -62,13 +64,13 @@
   ],
   "feet_alternate": true,
   "echo0_head_travel": 0.038,
-  "leg_reach_ratio_max": 0.89
+  "leg_reach_ratio_max": 0.9
  },
  "idle": {
   "dur_s": 4.8,
   "lowest_m": -0.0,
-  "height_m": 1.144,
-  "length_m": 0.922,
+  "height_m": 1.07,
+  "length_m": 0.867,
   "lead_l_minus_r_z": [
    0.0,
    0.0,
@@ -82,9 +84,9 @@
  },
  "sit": {
   "dur_s": 5.0,
-  "lowest_m": -0.0,
-  "height_m": 0.85,
-  "length_m": 0.938,
+  "lowest_m": 0.0009,
+  "height_m": 0.779,
+  "length_m": 0.961,
   "lead_l_minus_r_z": [
    0.0,
    0.0,
@@ -95,13 +97,13 @@
   ],
   "feet_alternate": false,
   "echo0_head_travel": 0.003,
-  "leg_reach_ratio_max": 0.63
+  "leg_reach_ratio_max": 0.62
  },
  "lie": {
   "dur_s": 5.6,
-  "lowest_m": -0.0007,
-  "height_m": 0.634,
-  "length_m": 1.168,
+  "lowest_m": 0.0004,
+  "height_m": 0.541,
+  "length_m": 1.195,
   "lead_l_minus_r_z": [
    0.0,
    0.0,
@@ -114,13 +116,33 @@
   "echo0_head_travel": 0.001,
   "leg_reach_ratio_max": 1.0
  },
+ "silhouette": {
+  "prop": {
+   "head": 0.78,
+   "chest": 1.22,
+   "neck": 1.35,
+   "shoulder": 1.45,
+   "span": 1.32,
+   "arm": 1.4,
+   "forearm": 1.5,
+   "thigh": 1.35,
+   "stance": 1.3,
+   "paw": 1.3,
+   "tail": 0.85
+  },
+  "motif": {
+   "shard": 1.4
+  },
+  "shoulder_over_eyes": 3.62,
+  "top_over_eyes": 1.312
+ },
  "quality": {
   "standard": "m244-quality-2026-11-28 (a) palette + projection, (c) springs",
   "project": {
-   "roi": 1767,
-   "gold": 444,
-   "crystal": 97,
-   "stone": 616
+   "roi": 1482,
+   "gold": 326,
+   "crystal": 85,
+   "stone": 581
   },
   "spring": {
    "gain": {
@@ -147,8 +169,8 @@
   },
   "dense": {
    "passes": 1,
-   "verts_before": 7270,
-   "verts_after": 8524
+   "verts_before": 6787,
+   "verts_after": 7760
   }
  }
 }

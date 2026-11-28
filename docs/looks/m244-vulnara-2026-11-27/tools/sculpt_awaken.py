@@ -133,7 +133,35 @@ FORMS['nixeth'] = dict(FORMS['ceth'], ear=((.128, .655, .222), (.250, 1.06, .150
 STORM = FORM in ('kor', 'celle', 'arcvex', 'ceth')
 EARTH = FORM in ('oreth', 'raya', 'noris', 'norun')
 WATER = FORM in ('nitar', 'marelle', 'nisk', 'nixeth')
-G = FORMS[FORM]; HO = V3(*G['HO'])
+# ── v2 SILHOUETTE (hub 11-28: 'every awakened form is the parent fox with props stuck on'): a per-form PROPORTION + MOTIF-SCALE spec.
+# PROP rescales body regions on the landmarks / radii BEFORE the body is built; the rigs (rig_biped / rig_awaken) read G, so they re-fit
+# on the new proportions. All multipliers, 1 = as is; a form with no entry builds exactly as before (rok / kor / sheet 1-2 unchanged).
+#   head      head size about its centre (eyes, gem, ears follow)        chest   trunk + chest girth      neck   neck girth
+#   lean      quad trunk girth only (< 1 = racer)                         tail    brush girth              paw    paw size
+#   stance    feet set out wider (x of every leg landmark)                thigh   hind / biped leg girth   fore   quad foreleg girth
+#   biped:    shoulder (shoulder + pauldron mass), span (arms set wider), arm (upper-arm girth), forearm (forearm + gauntlet + hand + claws)
+# MOTIF scales the form's own pieces: shard (crystal / leaf length + width), crown (Vulnoraya's flowers: size + how far they stand up), tree (Vulnorun's tree height +
+# crown), trunk (its girth), bloom (Vulnorun's blooms), rock (Vulnoris's stones). Vulnix v2 = one PROP + one MOTIF line per form.
+PROP = dict(oreth=dict(head=.78, chest=1.22, neck=1.35, shoulder=1.45, span=1.32, arm=1.4, forearm=1.5, thigh=1.35, stance=1.3, paw=1.3, tail=.85),
+            raya=dict(head=.94), noris=dict(lean=.82, fore=.9, thigh=.92, head=.94, tail=.9), norun=dict(chest=1.15, fore=1.1, thigh=1.1, head=.94))
+MOTIF = dict(oreth=dict(shard=1.4), raya=dict(shard=1.35, crown=2.4), noris=dict(rock=1.2, shard=1.4), norun=dict(tree=1.35, trunk=2.0, bloom=1.8))
+PQ = lambda k: PROP.get(FORM, {}).get(k, 1.)
+MQ = lambda k: MOTIF.get(FORM, {}).get(k, 1.)
+def proportion(g, p):
+    if not p: return g
+    g = dict(g); q = lambda k: p.get(k, 1.); X = lambda pts, s: [(x * s, y, z) for x, y, z in pts]
+    if 'head' in p: g['hk'] = g.get('hk', 1.) * q('head')
+    a, b, ra, rb = g['trunk']; c = q('chest') * q('lean'); g['trunk'] = (a, b, ra * c, rb * c)
+    ce, cr = g['chestE']; g['chestE'] = (ce, tuple(r * c for r in cr)); n0, n1, nr = g['neck']; g['neck'] = (n0, n1, nr * q('neck'))
+    g['paw'] = g['paw'] * q('paw'); g['tailr'] = [r * q('tail') for r in g['tailr']]
+    if g.get('biped'):
+        g['arm'] = X(g['arm'], q('span')); g['f'] = g['arm'][:3]; ar = g['ar']; g['ar'] = g['fr'] = (ar[0] * q('arm'), ar[1] * q('forearm'), ar[2] * q('forearm'))
+        g['leg'] = g['h'] = X(g['leg'], q('stance')); g['lr'] = g['hr'] = tuple(r * q('thigh') for r in g['lr'])
+    else:
+        g['f'] = X(g['f'], q('stance')); g['h'] = X(g['h'], q('stance'))
+        g['fr'] = tuple(r * q('fore') for r in g['fr']); g['hr'] = tuple(r * q('thigh') for r in g['hr'])
+    return g
+G = proportion(FORMS[FORM], PROP.get(FORM)); HO = V3(*G['HO'])
 S.EAR_A, S.EAR_T = V3(*G['ear'][0]), V3(*G['ear'][1])
 L = dict(head=tuple(V3(0, .565, .255) + HO), chest=G['chest'], pelvis=G['pelvis'], f=G['f'], h=G['h'], tail=G['tail'], tailr=G['tailr'], HO=G['HO'])
 TC = S.catmull([(*a, r) for a, r in zip(L['tail'], L['tailr'])], 5); S.TC = TC
@@ -159,13 +187,14 @@ def l1cone(P, a, b, ra, rb):
 def biped_limbs(P):
     """Vulnarok upright: two free arms off big shoulders (claws), two digitigrade legs (thigh, shin, the long hock bone, a foot)"""
     M = np.stack([np.abs(P[..., 0]), P[..., 1], P[..., 2]], -1); A, (a, b, c) = G['arm'], G['ar']
-    d = ell(M, (.18, .99, .0), (.088, .078, .088))                                             # the war-form's shoulders
+    sh, fa = PQ('shoulder'), PQ('forearm')   # v2 PROP (1 = as before)
+    d = ell(M, (A[0][0] - .01, .99, .0), (.088 * sh, .078 * sh, .088 * sh))                       # the war-form's shoulders
     d = su(d, cone(M, A[0], A[1], a, b), .03); d = su(d, cone(M, A[1], A[2], b + .004, c), .025)
-    d = su(d, ell(M, (A[1][0] + .005, A[1][1] - .07, A[1][2] + .01), (.064, .085, .062)), .03)     # the heavy forearm
-    d = su(d, ell(M, A[3], (.046, .052, .042)), .02)
-    for x in (-.026, 0, .026): d = su(d, cone(M, (A[3][0] + x, A[3][1] - .03, A[3][2] + .02), (A[3][0] + x * 1.15, A[3][1] - .085, A[3][2] + .055), .013, .002), .006)
-    Lg, (a, b, c) = G['leg'], G['lr']; k = G['paw']
-    t = ell(M, (Lg[0][0] + .01, Lg[0][1] - .07, Lg[0][2] + .005), (.080, .125, .098))              # thigh
+    d = su(d, ell(M, (A[1][0] + .005, A[1][1] - .07, A[1][2] + .01), (.064 * fa, .085 * fa, .062 * fa)), .03)     # the heavy forearm
+    d = su(d, ell(M, A[3], (.046 * fa, .052 * fa, .042 * fa)), .02)
+    for x in (-.026, 0, .026): x *= fa; d = su(d, cone(M, (A[3][0] + x, A[3][1] - .03 * fa, A[3][2] + .02), (A[3][0] + x * 1.15, A[3][1] - .085 * fa, A[3][2] + .055 * fa), .013 * fa, .002), .006)
+    Lg, (a, b, c) = G['leg'], G['lr']; k = G['paw']; th = PQ('thigh')
+    t = ell(M, (Lg[0][0] + .01, Lg[0][1] - .07, Lg[0][2] + .005), (.080 * th, .125 * th, .098 * th))              # thigh
     t = su(t, cone(M, Lg[0], Lg[1], a, b), .04); t = su(t, cone(M, Lg[1], Lg[2], b, c), .03); t = su(t, cone(M, Lg[2], Lg[3], c, c * .9), .025)
     px, pz = Lg[3][0], Lg[3][2]
     t = su(t, ell(M, (px, .030 * k, pz + .02), (.046 * k, .030 * k, .058 * k)), .03)
@@ -273,23 +302,25 @@ if FORM == 'oreth':
         for ox, oy, oz, tx, ty, tz, r in ((.20, 1.04, .00, .30, 1.27, -.02, .050), (.25, 1.02, .05, .36, 1.18, .07, .042), (.16, 1.06, -.06, .20, 1.26, -.13, .044),
                                           (.27, .98, -.04, .40, 1.08, -.06, .036), (.29, .80, .00, .39, .86, -.02, .030), (.30, .72, .03, .40, .74, .02, .028),
                                           (.29, .64, .05, .37, .64, .07, .024), (.15, .41, .10, .20, .45, .19, .026), (.11, .89, -.12, .14, 1.00, -.24, .036)):
-            if oy > .45: SHARDS.append((V3(sx * ox, oy, oz), V3(sx * tx, ty, tz), r * 1.8))   # chunky crystals (knee spikes dropped: they dipped in the sit)
+            if oy > .45:   # v2: set out with the wider span, lifted onto the bigger pauldrons, grown by MOTIF shard
+                lift = .07 * (PQ('shoulder') - 1) / .45 if oy > .95 else 0; o_ = V3(sx * ox * PQ('span'), oy + lift, oz); t_ = V3(sx * tx * PQ('span'), ty + lift, tz)
+                SHARDS.append((o_, o_ + (t_ - o_) * MQ('shard'), r * 1.8 * MQ('shard') ** .5))   # chunky crystals (knee spikes dropped: they dipped in the sit)
     SHARDS.append((_brow(.66, .30), _brow(.80, .25), .030))   # the green crystal crest on the brow, above the gem
 elif FORM == 'raya':  # the leaf mantle: green crystal leaves from the neck base, laid back + down over the shoulders
     c = V3(0, .56, .21)
     for d in _fib(46):
         if d[2] > .35 or d[1] < -.2: continue
         o = c + V3(.16, .13, .14) * d; t = d * .8 + V3(0, .15, -.6); t /= np.linalg.norm(t); ln = .12 + .03 * np.sin(6 * d[0] + 3 * d[1])   # proud of the neck (the first cut sat buried)
-        SHARDS.append((o, o + t * ln, .040))
+        SHARDS.append((o, o + t * ln * MQ('shard'), .040 * MQ('shard') ** .5))
 elif FORM == 'noris':  # a mantle of rough stones over her shoulders, a crystal crest on the brow
     for x, y, z, r in ((0, .50, .10, .060), (.07, .48, .12, .052), (-.07, .48, .12, .052), (.10, .44, .06, .048), (-.10, .44, .06, .048), (0, .51, .03, .055),
                        (.05, .49, -.02, .046), (-.05, .49, -.02, .046), (.11, .40, .14, .040), (-.11, .40, .14, .040), (0, .47, .18, .044)):
-        ROCKS.append((V3(x, y + .065, z), V3(r * 1.15, r * .85, r) * 1.3, 5 + len(ROCKS)))   # proud of the back (the first cut sat buried)
-    SHARDS.append((_brow(.66, .30), _brow(.79, .24), .024)); SHARDS.append((_brow(.66, .25), _brow(.76, .19), .020))
+        ROCKS.append((V3(x, y + .065 + r * (MQ('rock') - 1), z), V3(r * 1.15, r * .85, r) * 1.3 * MQ('rock'), 5 + len(ROCKS)))   # proud of the back (the first cut sat buried)
+    for a_, b_, r_ in ((_brow(.66, .30), _brow(.79, .24), .024), (_brow(.66, .25), _brow(.76, .19), .020)): SHARDS.append((a_, a_ + (b_ - a_) * MQ('shard'), r_ * MQ('shard') ** .5))
 elif FORM == 'norun':  # a small tree from her back (trunk + three branches; the crown is the aura) + blooms on her back
-    b0 = V3(0, .52, .04); top = V3(0, 1.00, .00)   # the art's tree stands about a head above her back
-    TRUNK.append((np.array([b0, b0 + V3(0, .16, -.015), b0 + V3(.012, .32, .00), top]), .034, .018))
-    for d in (V3(.12, .10, .02), V3(-.11, .12, -.03), V3(.02, .13, -.10)): TRUNK.append((np.array([top - V3(0, .06, 0), top + d * .5, top + d]), .014, .006))
+    tq = MQ('tree'); b0 = V3(0, .52, .04 - .10 * (tq - 1)); top = b0 + V3(0, .48 * tq, -.04 * tq)   # the art's tree stands about a head above her back (v2: taller, set back behind the ears)
+    TRUNK.append((np.array([b0, b0 + (top - b0) * .33 + V3(0, 0, -.015), b0 + (top - b0) * .66 + V3(.012, 0, 0), top]), .034 * MQ('trunk'), .018 * MQ('trunk')))
+    for d in (V3(.12, .10, .02), V3(-.11, .12, -.03), V3(.02, .13, -.10)): d = d * tq; TRUNK.append((np.array([top - V3(0, .06, 0), top + d * .5, top + d]), .014 * MQ('trunk'), .006 * MQ('trunk')))
 elif FORM == 'nitar':   # sheet 4: cyan crystal plates over the shoulders + the hip, pointing up and back (the art's crystal armour)
     for sx in (1, -1):
         for ox, oy, oz, tx, ty, tz, r in ((.10, .57, .19, .20, .74, .10, .075), (.13, .52, .25, .25, .62, .24, .062), (.12, .56, .12, .21, .71, .00, .066),
@@ -356,11 +387,12 @@ def body(P):
     bd = ss(bd, ell(P, *G['tuck']), .07)
     n0, n1, nr = G['neck']; bd = su(bd, cone(P, n0, n1, nr, nr), .06)
     if FORM in ('rok', 'kor', 'oreth'):   # pecs, a heavy back, hips
-        bd = su(bd, ell(M, (.068, .95, .115), (.075, .082, .055)), .04); bd = su(bd, ell(P, (0, .92, -.08), (.16, .17, .11)), .06)
-        bd = su(bd, ell(P, (0, .62, -.07), (.150, .12, .12)), .05)
+        cq = PQ('chest'); bd = su(bd, ell(M, (.068 * cq, .95, .115), V3(.075, .082, .055) * cq), .04); bd = su(bd, ell(P, (0, .92, -.08), V3(.16, .17, .11) * cq), .06)
+        bd = su(bd, ell(P, (0, .62, -.07), V3(.150, .12, .12) * cq), .05)
     if FORM == 'oreth':   # the hulk: big pauldrons, gauntlet forearms, heavy thighs (the art's armoured mass)
-        bd = su(bd, ell(M, (.215, 1.00, .00), (.125, .105, .125)), .03); bd = su(bd, ell(M, (.262, .70, .01), (.090, .125, .088)), .03)
-        bd = su(bd, ell(M, (.125, .50, .00), (.100, .12, .085)), .04)   # thigh mass kept off the back (it dipped 4 mm in the sit); bd = su(bd, ell(M, (.128, .25, .00), (.072, .10, .075)), .03)
+        sp, sh, fa, th, st = PQ('span'), PQ('shoulder'), PQ('forearm'), PQ('thigh'), PQ('stance')   # v2 PROP
+        bd = su(bd, ell(M, (.215 * sp, 1.00 + .05 * (sh - 1), .00), (.125 * sh, .105 * sh, .125 * sh)), .03); bd = su(bd, ell(M, (.262 * sp, .70, .01), (.090 * fa, .125 * fa, .088 * fa)), .03)
+        bd = su(bd, ell(M, (.125 * st, .50, .00), (.100 * th, .12 * th, .085 * th)), .04)   # thigh mass kept off the back (it dipped 4 mm in the sit); bd = su(bd, ell(M, (.128, .25, .00), (.072, .10, .075)), .03)
     if FORM == 'myr':   # a ruff of pale fur over the chest, above the gem
         for x, y, z, tx, ty, tz, r in ((0, .52, .23, 0, .44, .30, .055), (.06, .53, .21, .085, .44, .27, .05), (.10, .52, .17, .135, .43, .22, .045)):
             bd = su(bd, cone(M, (x, y, z), (tx, ty, tz), r, .004), .03)
@@ -410,7 +442,7 @@ if FORM == 'norun':   # her blooms, set on the back's surface (found from above,
     for k in range(16):
         x = _rng.uniform(-.09, .09); z = _rng.uniform(-.17, .14)
         if abs(x) < .035 and -.02 < z < .10: continue   # clear of the trunk
-        FLOWERS.append((_surf(body, (x, .9, z), (0, 1, 0)) + V3(0, .004, 0), .019, k % 3 == 0))   # _surf's dirn is the OUTWARD side
+        FLOWERS.append((_surf(body, (x, .9, z), (0, 1, 0)) + V3(0, .004 + .010 * (MQ('bloom') - 1), 0), .019 * MQ('bloom'), k % 3 == 0))   # _surf's dirn is the OUTWARD side
     STORM_ON[0] = True
 def plates(P):
     d = np.full(P.shape[:-1], 9.)
@@ -498,7 +530,7 @@ def classes(V):
     out.append(.006 - chest_gem(V))                 # 10 chest gem
     out.append(.013 - tail(V) if FORM == 'myr' else np.full(len(V), -1.))   # 11 crystal tails
     if FORM == 'oreth':   # her stone armour as broad plates: pauldrons, gauntlets, shins, a V chest plate (the art's dark olive)
-        A_ = np.abs(x); arm_ = np.maximum.reduce([np.minimum.reduce([A_ - .16, y - .93, 1.13 - y, z + .16]), np.minimum.reduce([A_ - .215, y - .58, .86 - y]), np.minimum.reduce([.36 - y, y - .09, A_ - .06, z + .16]),
+        A_ = np.abs(x); arm_ = np.maximum.reduce([np.minimum.reduce([A_ - .16, y - .93, 1.22 - y, z + .16]), np.minimum.reduce([A_ - .215, y - .58, .86 - y]), np.minimum.reduce([.36 - y, y - .09, A_ - .06, z + .16]),
                                                  np.minimum.reduce([z - .10, .17 - A_ + (y - .80) * .5, y - .74, 1.0 - y])])
         out[7] = np.maximum(out[7], arm_)
     if WATER: out[8] = np.maximum(.004 - ruff(V), .005 - shards_d(V))
@@ -569,10 +601,12 @@ def aura(Vb, Fb):
         fl = []
         for k, a in enumerate(np.linspace(-1.25, 1.25, 7)):
             cc = fwd(V3(np.sin(a) * .13, .735 + .02 * np.cos(a), .225 + np.cos(a) * .085) + HO); up = V3(np.sin(a) * .5, 1, np.cos(a) * .35); up /= np.linalg.norm(up)   # on top of the head (the first cut sat inside it)
-            e1 = np.cross(up, V3(1, 0, 0) if abs(up[0]) < .9 else V3(0, 0, 1)); e1 /= np.linalg.norm(e1); e2 = np.cross(up, e1); s_ = 1.0 if k % 2 == 0 else .8
+            e1 = np.cross(up, V3(1, 0, 0) if abs(up[0]) < .9 else V3(0, 0, 1)); e1 /= np.linalg.norm(e1); e2 = np.cross(up, e1); s_ = (1.0 if k % 2 == 0 else .8) * MQ('crown')
+            cc = cc + up * .035 * (MQ('crown') - 1)   # v2: a bigger crown stands proud of the head, petals opening upward
+            up_ = up * (1 + .4 * (MQ('crown') - 1))
             for j in range(5):
-                t = 2 * np.pi * j / 5 + k; d = (e1 * np.cos(t) + e2 * np.sin(t)) * .75 + up * .65; d /= np.linalg.norm(d); fl.append((cc, cc + d * .055 * s_, .018 * s_))
-            fl.append((cc - up * .01, cc + up * .03 * s_, .014))
+                t = 2 * np.pi * j / 5 + k; d = (e1 * np.cos(t) + e2 * np.sin(t)) * .75 + up_ * .65; d /= np.linalg.norm(d); fl.append((cc, cc + d * .055 * s_, .018 * s_))
+            fl.append((cc - up * (.01 + .035 * (MQ('crown') - 1)), cc + up * .03 * s_, .014 * MQ('crown') ** .5))   # v2: + a stem down into the head
         Vs, Fs = [], []
         for a_, b_, r in fl:
             u = (b_ - a_) / np.linalg.norm(b_ - a_); e1 = np.cross(u, V3(0, 1, 0) if abs(u[1]) < .9 else V3(1, 0, 0)); e1 /= np.linalg.norm(e1); e2 = np.cross(u, e1)
@@ -582,7 +616,7 @@ def aura(Vb, Fb):
         import trimesh
         top = TRUNK[0][0][-1]
         for d, r in ((V3(0, .10, 0), .15), (V3(.15, .10, .02), .11), (V3(-.14, .12, -.03), .11), (V3(.02, .13, -.13), .10), (V3(.06, .19, .06), .10), (V3(-.05, .21, -.02), .09)):
-            s_ = trimesh.creation.icosphere(1, r); q = np.asarray(s_.vertices) * V3(1, .72, 1) + top + d; parts.append((q, np.asarray(s_.faces)))
+            d, r = d * MQ('tree') ** .8, r * MQ('tree') ** .8; s_ = trimesh.creation.icosphere(1, r); q = np.asarray(s_.vertices) * V3(1, .72, 1) + top + d; parts.append((q, np.asarray(s_.faces)))
         col = '#7fcf5a'
     elif FORM == 'nitar':          # sheet 4: the SPLASH RING: a wave ring round her feet + splash plumes curling up and out of it
         th = np.linspace(0, 2 * np.pi, 73); R0 = .50
@@ -691,7 +725,7 @@ if __name__ == '__main__':
         print('pinched edges', best[0]); return best[1]
     S.field = lambda P: field(fwd(P + HO)) / HK         # SF.eyes lays the eyes on the face at Vulnara's place: shifted back by HO (+ the head's growth)
     SF.F = dict(SF.FORMS['earth'], form='earth', lo=PAL[0], hi=PAL[1]) if EARTH else dict(SF.FORMS['water'], form='water', lo=PAL[0], hi=PAL[1]) if WATER else dict(SF.FORMS['mana'], form='mana', lo=PAL[0], hi=PAL[1])   # sheet 3: amber eyes + the gold brow gem
-    xr = .52
+    xr = .52 if FORM != 'oreth' else .66   # v2: Orethar's span + gauntlets reach past .52
     lo = V3(-xr, -.033, min(-1.36, TC[:, 2].min() - .25)); hi = V3(xr, 1.80 if FORM in ('rok', 'kor', 'oreth') else 1.48 if FORM in ('celle', 'ceth', 'nitar', 'marelle', 'nixeth') else 1.30 if FORM in ('lys', 'myr') else 1.20, .80 if FORM in ('lys', 'celle', 'nitar', 'marelle') else .66)
     def piece(fld, lo, hi, h, n):
         Vr, Fr = surface(fld, lo, hi, h); m = trimesh.Trimesh(Vr, Fr, process=False); print('raw', len(Fr), 'closed', m.is_watertight, 'parts', m.body_count)

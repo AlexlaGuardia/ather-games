@@ -45,4 +45,9 @@ if FORM == 'oreth':
     os.environ['AWAKEN'] = 'oreth'; sys.argv = [os.path.join(LIVE, 'rig_biped.py'), IN, OUT, MET]; runpy.run_path(sys.argv[0], run_name='__main__')
 else:
     sys.argv = [os.path.join(LIVE, 'rig_awaken.py'), FORM, IN, OUT, MET]; runpy.run_path(sys.argv[0], run_name='__main__')
-m = json.load(open(MET)); m['quality'] = dict(standard='m244-quality-2026-11-28 (a) palette + projection, (c) springs', project=STATS.get('project'), spring=STATS.get('jiggle'), dense=STATS.get('dense')); json.dump(m, open(MET, 'w'), indent=1)
+# v2 silhouette receipt: the PROP / MOTIF spec she was built with + a measured shape ratio (shoulder half-width over the eyes' half-spread,
+# off the rest mesh in the file): the 'hulk vs fox' number the v2 test reads
+SVm = sys.modules.get('sculpt_awaken'); Pq = K.Player(OUT); bv, ev = Pq.m['body']['POSITION'], Pq.m['eyes']['POSITION']
+band = (bv[:, 1] > ev[:, 1].min() - .45) & (bv[:, 1] < ev[:, 1].min() - .05)
+SIL = dict(prop=SVm.PROP.get(FORM, {}), motif=SVm.MOTIF.get(FORM, {}), shoulder_over_eyes=round(float(np.abs(bv[band, 0]).max() / np.abs(ev[:, 0]).max()), 3), top_over_eyes=round(float(bv[:, 1].max() / ev[:, 1].mean()), 3))
+m = json.load(open(MET)); m['silhouette'] = SIL; m['quality'] = dict(standard='m244-quality-2026-11-28 (a) palette + projection, (c) springs', project=STATS.get('project'), spring=STATS.get('jiggle'), dense=STATS.get('dense')); json.dump(m, open(MET, 'w'), indent=1)

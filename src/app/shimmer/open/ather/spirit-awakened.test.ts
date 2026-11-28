@@ -130,6 +130,15 @@ for (const n of earthNames) {
   ok(['b_ear_l', 'b_ear_r', 'b_tail4'].every(b => idle.channels.some((c: { target: { node: number; path: string } }) => c.target.node === nodes.indexOf(b) && c.target.path === 'rotation')), `${n}: ears + tail tip carry rotation tracks in the walk (springs)`)
 }
 ok(JSON.parse(readFileSync('docs/looks/m244-vulnore-2026-11-28/orethar-metrics.json', 'utf8')).quality?.project?.gold > 20, "orethar: her chest gold projected from the locked art")
+// M244 v2 SILHOUETTE (11-28, hub: 'the parent fox with props stuck on'): each built with a per-form PROP + MOTIF spec (sculpt_awaken.py),
+// measured off the rest mesh in her file: Orethar a hulk (v1 shoulders 1.95x the eyes' spread), Vulnoris leaner than v1 (1.005)
+{
+  const sil = (n: string) => JSON.parse(readFileSync(`docs/looks/m244-vulnore-2026-11-28/${n}-metrics.json`, 'utf8')).silhouette
+  for (const n of earthNames) ok(!!sil(n) && Object.keys(sil(n).prop).length > 0 && Object.keys(sil(n).motif).length > 0, `${n}: built with a v2 PROP + MOTIF spec`)
+  ok(sil('orethar')?.shoulder_over_eyes >= 3 && sil('orethar')?.prop?.head < 1, `orethar: a hulk, shoulders ${sil('orethar')?.shoulder_over_eyes}x the eyes' spread (v1 1.95), a smaller head`)
+  ok(sil('vulnoris')?.shoulder_over_eyes < 0.97, `vulnoris: leaner than v1 (shoulders ${sil('vulnoris')?.shoulder_over_eyes}x the eyes, v1 1.005)`)
+  ok(sil('vulnoraya')?.motif?.crown >= 2 && sil('vulnorun')?.motif?.tree > 1 && sil('vulnorun')?.motif?.trunk > 1, 'vulnoraya: crown grown; vulnorun: tree taller + trunk thicker')
+}
 // M244 sheet 4: Vulnix's four, all quadrupeds, built to the 11-28 quality standard, every clip clear of the ground
 for (const n of waterNames) {
   const nodes: string[] = glbJson(n).nodes.map((x: { name?: string }) => x.name)
