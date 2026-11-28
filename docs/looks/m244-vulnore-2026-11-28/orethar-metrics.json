@@ -1,0 +1,154 @@
+{
+ "bones": 26,
+ "bones_with_echoes": 26,
+ "glb_bytes": 519868,
+ "solved": {
+  "sit": {
+   "drop": -0.42447373867034927,
+   "tail": 0.8754006385803224
+  },
+  "lie": {
+   "drop": -0.3019688844680786,
+   "tail": -0.00821704864501947
+  }
+ },
+ "legs": [
+  "leg_l_up",
+  "leg_l_lo",
+  "leg_l_mt",
+  "leg_l_paw",
+  "leg_r_up",
+  "leg_r_lo",
+  "leg_r_mt",
+  "leg_r_paw"
+ ],
+ "arms": [
+  "arm_l_up",
+  "arm_l_lo",
+  "hand_l",
+  "arm_r_up",
+  "arm_r_lo",
+  "hand_r"
+ ],
+ "walk": {
+  "dur_s": 0.636,
+  "lowest_m": -0.0001,
+  "height_m": 1.132,
+  "length_m": 0.957,
+  "lead_l_minus_r_z": [
+   0.25,
+   0.2,
+   -0.056,
+   -0.25,
+   -0.2,
+   0.056
+  ],
+  "feet_alternate": true,
+  "echo0_head_travel": 0.023,
+  "leg_reach_ratio_max": 0.85
+ },
+ "run": {
+  "dur_s": 0.45,
+  "lowest_m": 0.0006,
+  "height_m": 1.061,
+  "length_m": 0.976,
+  "lead_l_minus_r_z": [
+   0.466,
+   -0.053,
+   -0.509,
+   -0.466,
+   0.053,
+   0.509
+  ],
+  "feet_alternate": true,
+  "echo0_head_travel": 0.038,
+  "leg_reach_ratio_max": 0.89
+ },
+ "idle": {
+  "dur_s": 4.8,
+  "lowest_m": -0.0,
+  "height_m": 1.144,
+  "length_m": 0.922,
+  "lead_l_minus_r_z": [
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0
+  ],
+  "feet_alternate": false,
+  "echo0_head_travel": 0.014
+ },
+ "sit": {
+  "dur_s": 5.0,
+  "lowest_m": -0.0,
+  "height_m": 0.85,
+  "length_m": 0.938,
+  "lead_l_minus_r_z": [
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0
+  ],
+  "feet_alternate": false,
+  "echo0_head_travel": 0.003,
+  "leg_reach_ratio_max": 0.63
+ },
+ "lie": {
+  "dur_s": 5.6,
+  "lowest_m": -0.0007,
+  "height_m": 0.634,
+  "length_m": 1.168,
+  "lead_l_minus_r_z": [
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0
+  ],
+  "feet_alternate": false,
+  "echo0_head_travel": 0.001,
+  "leg_reach_ratio_max": 1.0
+ },
+ "quality": {
+  "standard": "m244-quality-2026-11-28 (a) palette + projection, (c) springs",
+  "project": {
+   "roi": 1767,
+   "gold": 444,
+   "crystal": 97,
+   "stone": 616
+  },
+  "spring": {
+   "gain": {
+    "ear": 49.48763,
+    "tail": 4.65421
+   },
+   "peak_rad": {
+    "walk:ear_l": 0.16,
+    "walk:ear_r": 0.16,
+    "walk:tail1": 0.11,
+    "run:ear_l": 0.256,
+    "run:ear_r": 0.256,
+    "run:tail1": 0.176,
+    "idle:ear_l": 0.048,
+    "idle:ear_r": 0.045,
+    "idle:tail1": 0.0,
+    "sit:ear_l": 0.024,
+    "sit:ear_r": 0.022,
+    "sit:tail1": 0.0,
+    "lie:ear_l": 0.019,
+    "lie:ear_r": 0.017,
+    "lie:tail1": 0.0
+   }
+  },
+  "dense": {
+   "passes": 1,
+   "verts_before": 7270,
+   "verts_after": 8524
+  }
+ }
+}

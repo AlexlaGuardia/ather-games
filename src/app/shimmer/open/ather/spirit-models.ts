@@ -544,9 +544,9 @@ export const SECOND_FORMS: Partial<Record<Species, Partial<Record<SpiritElement,
 // M244 sheet 2 (sprites, 11-27): VULNARC's four (Storm), owner preview, same tools (sculpt_awaken.py kor / celle / arcvex / ceth;
 // Vulnarkor on the biped rig, rig_biped.py), Vulnarc's own look as the base: Vulnarkor a crystal-shard mantle + bolts round her,
 // Vulnarcelle a big crackling mane, Arcvex a jagged crest + two ice-white copies that run, Vulnarceth her storm cloud + two discs.
-export const AWAKEN_LEN: Readonly<Record<string, number>> = { vulnarok: 1.463, vulnalys: 1.487, vulnavex: 1.87, vulnamyr: 1.283, vulnarkor: 1.393, vulnarcelle: 1.366, arcvex: 1.817, vulnarceth: 1.377 }
-export const AWAKEN_GROW: Readonly<Record<string, number>> = { vulnarok: 1.8, vulnalys: 1.7, vulnavex: 1.65, vulnamyr: 1.75, vulnarkor: 1.8, vulnarcelle: 1.75, arcvex: 1.8, vulnarceth: 1.75 }
-const awakened = (name: string, glbLen: number, aura: string, far: number, el: 'mana' | 'storm' = 'mana'): SpiritLook => {
+export const AWAKEN_LEN: Readonly<Record<string, number>> = { vulnarok: 1.463, vulnalys: 1.487, vulnavex: 1.87, vulnamyr: 1.283, vulnarkor: 1.393, vulnarcelle: 1.366, arcvex: 1.817, vulnarceth: 1.377, orethar: 1.317, vulnoraya: 1.744, vulnoris: 1.489, vulnorun: 1.599 }
+export const AWAKEN_GROW: Readonly<Record<string, number>> = { vulnarok: 1.8, vulnalys: 1.7, vulnavex: 1.65, vulnamyr: 1.75, vulnarkor: 1.8, vulnarcelle: 1.75, arcvex: 1.8, vulnarceth: 1.75, orethar: 1.8, vulnoraya: 1.75, vulnoris: 1.8, vulnorun: 1.75 }
+const awakened = (name: string, glbLen: number, aura: string, far: number, el: 'mana' | 'storm' | 'earth' = 'mana'): SpiritLook => {
   const b = SECOND_FORMS.fox![el]!, h = VRIG_H * AWAKEN_GROW[name]
   return { ...b, name, url: `/open/spirits/${name}-rigged.glb`, h, trot: grownTrot(b.trot, b.h, h), rig: { ...b.rig!, glbLen, avatar: { z: b.rig!.avatar.z, far } },
     glow: { part: 'aura', emissive: aura, lo: 0.35, hi: 0.7, hz: 0.35 } }
@@ -561,6 +561,13 @@ export const AWAKENED_FORMS: Readonly<Record<string, SpiritLook>> = {
   vulnarcelle: awakened('vulnarcelle', AWAKEN_LEN.vulnarcelle, '#9fe6ff', 1.8, 'storm'),
   arcvex: awakened('arcvex', AWAKEN_LEN.arcvex, '#cdeeff', 2.6, 'storm'),
   vulnarceth: awakened('vulnarceth', AWAKEN_LEN.vulnarceth, '#a8e4ff', 1.9, 'storm'),
+  // M244 sheet 3 (assets, 11-28): VULNORE's four (Earth), owner preview, same tools + the 11-28 quality standard (art palette, Orethar's
+  // projected gold blaze, baked ear / tail springs; docs/looks/m244-vulnore-2026-11-28). Orethar on the biped rig with her gold heart-gem
+  // (aura), Vulnoraya's crystal-flower crown (aura, head), Vulnoris's two pale-gold copies that run, Vulnorun's tree crown (aura, back).
+  orethar: awakened('orethar', AWAKEN_LEN.orethar, '#ffd24a', 2.0, 'earth'),
+  vulnoraya: awakened('vulnoraya', AWAKEN_LEN.vulnoraya, '#c8f0b0', 1.8, 'earth'),
+  vulnoris: awakened('vulnoris', AWAKEN_LEN.vulnoris, '#f6dc8c', 2.6, 'earth'),
+  vulnorun: awakened('vulnorun', AWAKEN_LEN.vulnorun, '#7fcf5a', 1.9, 'earth'),
 }
 /** M202: her second form's look when she has evolved (`element` set) and her species has its forms modelled, else null */
 export const formLook = (s: Species | null | undefined, el: SpiritElement | null | undefined): SpiritLook | null =>

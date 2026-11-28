@@ -568,7 +568,7 @@ def aura(Vb, Fb):
     elif FORM == 'raya':           # sheet 3: the CROWN of crystal flowers on her head, an arc from ear to ear over the brow
         fl = []
         for k, a in enumerate(np.linspace(-1.25, 1.25, 7)):
-            cc = fwd(V3(np.sin(a) * .13, .735 + .02 * np.cos(a), .225 + np.cos(a) * .085) + HO)   # on top of the head (the first cut sat inside it); up = V3(np.sin(a) * .5, 1, np.cos(a) * .35); up /= np.linalg.norm(up)
+            cc = fwd(V3(np.sin(a) * .13, .735 + .02 * np.cos(a), .225 + np.cos(a) * .085) + HO); up = V3(np.sin(a) * .5, 1, np.cos(a) * .35); up /= np.linalg.norm(up)   # on top of the head (the first cut sat inside it)
             e1 = np.cross(up, V3(1, 0, 0) if abs(up[0]) < .9 else V3(0, 0, 1)); e1 /= np.linalg.norm(e1); e2 = np.cross(up, e1); s_ = 1.0 if k % 2 == 0 else .8
             for j in range(5):
                 t = 2 * np.pi * j / 5 + k; d = (e1 * np.cos(t) + e2 * np.sin(t)) * .75 + up * .65; d /= np.linalg.norm(d); fl.append((cc, cc + d * .055 * s_, .018 * s_))

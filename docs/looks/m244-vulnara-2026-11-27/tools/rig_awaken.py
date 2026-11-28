@@ -167,6 +167,8 @@ FANM = W[:, [nb.index(b) for b in D['tail']]].sum(1) > (.02 if FORM == 'myr' els
 def _st(v): global SITT; SITT = [v, -.12, -.05, 0]; return min(low((lambda p: (sitpost(p, u), p)[1])(sitpose(0)), FANM) for u in (0, .25, .5, .75)) - .010
 if FORM != 'myr': _st(solve(_st, -.3, 2.6))   # myr: the fan's clearance is not monotone in the lift: take the best
 BODY = W[:, [nb.index(b) for b in ('pelvis', 'spine', 'chest')]].sum(1) > .6
+if FORM == 'raya': BODY = BODY | (W[:, [nb.index(b) for b in ('pelvis', 'spine', 'chest')]].sum(1) > .5)   # sheet 3: her under-chest (spine .32 + chest .22) sat 3 mm under in the lie
+if SV.XMASK is not None: BODY = BODY | (SV.XMASK & (W[:, [nb.index(b) for b in nb if b.endswith(('_lo', '_paw'))]].sum(1) < .3))   # sheet 3
 def _ly(v): global LIEY; LIEY = v; p = liepose(-1); liepost(p, 0); return low(p, BODY) - .008
 LIEY = solve(_ly, -.50, 0)
 def _lt(v): global LIET; LIET = v; return min(low((lambda p: (liepost(p, u), p)[1])(liepose(-1)), TB) for u in (.25, .75)) - .010

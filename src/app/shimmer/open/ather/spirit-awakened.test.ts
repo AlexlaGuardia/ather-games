@@ -10,9 +10,12 @@ ok(names.join() === 'vulnarok,vulnalys,vulnavex,vulnamyr', `the four names in br
 // M244 sheet 2: Vulnarc's (Storm) four, canon-named a00621e
 const stormNames = AWAKENED_BRANCHES.map(b => AWAKENED_NAMES.vulnarc![b].toLowerCase())
 ok(stormNames.join() === 'vulnarkor,vulnarcelle,arcvex,vulnarceth', `Vulnarc's four in branch order (${stormNames})`)
-ok(Object.keys(AWAKENED_FORMS).sort().join() === [...names, ...stormNames].sort().join(), 'one look per name, no more')
-for (const [el, list] of [['mana', names], ['storm', stormNames]] as const) for (const n of list) {
-  const vulnara = SECOND_FORMS.fox![el]!, parent = el === 'mana' ? 'vulnara' : 'vulnarc'
+// M244 sheet 3: Vulnore's (Earth) four, canon-named (Alex 11-27), art LOCKED-AFK athernyx 3501ec6
+const earthNames = AWAKENED_BRANCHES.map(b => AWAKENED_NAMES.vulnore![b].toLowerCase())
+ok(earthNames.join() === 'orethar,vulnoraya,vulnoris,vulnorun', `Vulnore's four in branch order (${earthNames})`)
+ok(Object.keys(AWAKENED_FORMS).sort().join() === [...names, ...stormNames, ...earthNames].sort().join(), 'one look per name, no more')
+for (const [el, list] of [['mana', names], ['storm', stormNames], ['earth', earthNames]] as const) for (const n of list) {
+  const vulnara = SECOND_FORMS.fox![el]!, parent = el === 'mana' ? 'vulnara' : el === 'storm' ? 'vulnarc' : 'vulnore'
   const L = AWAKENED_FORMS[n]
   ok(L.name === n && L.url === `/open/spirits/${n}-rigged.glb` && L.form === el, `${n}: her own glb + a form look (rigLook keeps it)`)
   ok(AWAKEN_GROW[n] > formGrow(parent) && L.h > vulnara.h * 1.15, `${n}: grown past ${parent} (dial ${AWAKEN_GROW[n]} vs ${formGrow(parent)}, h ${L.h.toFixed(3)} vs ${vulnara.h.toFixed(3)})`)
@@ -98,5 +101,28 @@ for (const n of stormNames) {
   const L = body(n), V = body('vulnarc'), k = AWAKEN_GROW[n] / formGrow('vulnarc')
   ok(L.tall * k >= 1.2 * V.tall, `${n}: bigger than Vulnarc as drawn (height x${(L.tall * k / V.tall).toFixed(2)})`)
 }
+// M244 sheet 3: Orethar upright on the biped rig (no echoes), Vulnoris's copies run, the three others four-legged; every clip clear;
+// the 11-28 quality standard: ears + tail ride baked springs (every clip moves the ear bones), Orethar's chest projected from the art
+{
+  const j = glbJson('orethar'), nodes: string[] = j.nodes.map((x: { name?: string }) => x.name)
+  for (const s of ['l', 'r']) ok(['up', 'lo', 'mt', 'paw'].every(b => nodes.includes(`b_leg_${s}_${b}`)) && ['arm_' + s + '_up', 'arm_' + s + '_lo', 'hand_' + s].every(b => nodes.includes('b_' + b)), `orethar: ${s} leg chain + ${s} arm (upright hulk, the biped rig)`)
+  ok(!nodes.some(x => /^b_(fl|fr|hl|hr)_/.test(x)) && !nodes.some(x => /^b_e\d_/.test(x)), 'orethar: no quadruped legs, no echoes')
+  const run = glbJson('vulnoris').animations.find((a: { name: string }) => a.name === 'run'), vn: string[] = glbJson('vulnoris').nodes.map((x: { name?: string }) => x.name)
+  ok(run.channels.some((c: { target: { node: number; path: string } }) => c.target.node === vn.indexOf('b_e0_root') && c.target.path === 'scale') && run.channels.some((c: { target: { node: number } }) => c.target.node === vn.indexOf('b_e1_fl_up')), 'vulnoris: two whole copies that run, drift + fade (as Vulnavex / Arcvex)')
+}
+for (const n of ['vulnoraya', 'vulnoris', 'vulnorun']) {
+  const nodes: string[] = glbJson(n).nodes.map((x: { name?: string }) => x.name)
+  ok(['fl', 'fr', 'hl', 'hr'].every(l => nodes.includes(`b_${l}_paw`)) && !nodes.some(x => /^b_leg_/.test(x)), `${n}: four-legged (the art is not upright)`)
+}
+for (const n of earthNames) {
+  const m = JSON.parse(readFileSync(`docs/looks/m244-vulnore-2026-11-28/${n}-metrics.json`, 'utf8'))
+  for (const c of ['idle', 'walk', 'run', 'sit', 'lie']) ok(m[c].lowest_m >= -0.0015, `${n}: ${c} lowest point ${m[c].lowest_m} m (clears the ground)`)
+  ok(Object.keys(m.quality?.spring?.peak_rad ?? {}).filter(k => k.startsWith('walk:')).length >= 3, `${n}: built with the spring pass (ears + tail peaks in the walk)`)
+  const L = body(n), V = body('vulnore'), k = AWAKEN_GROW[n] / formGrow('vulnore')
+  ok(L.tall * k >= 1.2 * V.tall, `${n}: bigger than Vulnore as drawn (height x${(L.tall * k / V.tall).toFixed(2)})`)
+  const j = glbJson(n), nodes: string[] = j.nodes.map((x: { name?: string }) => x.name), idle = j.animations.find((a: { name: string }) => a.name === 'walk')
+  ok(['b_ear_l', 'b_ear_r', 'b_tail4'].every(b => idle.channels.some((c: { target: { node: number; path: string } }) => c.target.node === nodes.indexOf(b) && c.target.path === 'rotation')), `${n}: ears + tail tip carry rotation tracks in the walk (springs)`)
+}
+ok(JSON.parse(readFileSync('docs/looks/m244-vulnore-2026-11-28/orethar-metrics.json', 'utf8')).quality?.project?.gold > 20, "orethar: her chest gold projected from the locked art")
 console.log(`spirit-awakened: ${pass} pass, ${fails.length} fail`)
 if (fails.length) { for (const f of fails) console.log('  FAIL', f); process.exit(1) }

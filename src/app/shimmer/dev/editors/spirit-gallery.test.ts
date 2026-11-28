@@ -14,10 +14,10 @@ const CANON = '/root/athernyx/CANON/world/spirits-species.md'
 ok(existsSync(LEDGER), `ledger present (${LEDGER})`)
 ok(existsSync(CANON), `canon base table present (${CANON})`)
 
-ok(GALLERY.length === 58, `58 rows: 10 base + 40 forms + 8 awakened (got ${GALLERY.length})`)
+ok(GALLERY.length === 62, `62 rows: 10 base + 40 forms + 12 awakened (got ${GALLERY.length})`)
 GALLERY.forEach((r, i) => ok(r.num === i + 1, `row ${i} numbered ${i + 1} (got ${r.num})`))
 ok(GALLERY.slice(0, 10).every(r => r.el === null) && GALLERY.slice(10).every(r => r.el !== null), 'base 10 first, then the 40 forms')
-ok(new Set(GALLERY.map(r => r.name)).size === 58, 'every name unique')
+ok(new Set(GALLERY.map(r => r.name)).size === GALLERY.length, 'every name unique')
 ok(new Set(DISCOVERY.map(([s, e]) => `${s}/${e}`)).size === 40, 'every species x element once')
 
 if (existsSync(LEDGER)) {
@@ -73,6 +73,12 @@ ok(steepAdd(steepAdd(STEEP_NONE, 'mana', 8), 'storm', 5).storm === 2, 'add is he
   ok(st.length === 4 && st.every((r, i) => r.num === 55 + i), `Vulnarc's awakened rows #055-#058 (got ${st.map(r => r.num)})`)
   for (const r of st) ok(named.includes(`**${r.name}** (${r.aw!.branch[0].toUpperCase()}${r.aw!.branch.slice(1)}`), `canon names ${r.name} (${r.aw!.branch})`)
   ok(st.every(r => r.icon.startsWith('/open/spirits/') && !r.icon.includes('stage3')), 'Vulnarc awakened icons are our renders')
+  // M244 sheet 3: Vulnore's four (#059-#062) = the canon's 'Named — Vulnyx › Vulnore (Earth)' line + the stage-3 ledger locks 9-12
+  const ea = GALLERY.filter(r => r.aw && r.el === 'earth'), en = readFileSync(CANON, 'utf8').split('\n').find(x => x.includes('Named') && x.includes('Vulnore (Earth)')) ?? ''
+  ok(ea.length === 4 && ea.every((r, i) => r.num === 59 + i), `Vulnore's awakened rows #059-#062 (got ${ea.map(r => r.num)})`)
+  for (const r of ea) ok(en.includes(`**${r.name}** (${r.aw!.branch[0].toUpperCase()}${r.aw!.branch.slice(1)}`), `canon names ${r.name} (${r.aw!.branch})`)
+  ea.forEach((r, i) => { const l = locks.find(x => x.n === 9 + i); ok(!!l && l.name === r.name && l.second_form === 'Vulnore' && l.branch_name.toLowerCase() === r.aw!.branch, `#${r.num} = stage-3 lock n${9 + i} ${l?.name} (got ${r.name})`) })
+  ok(ea.every(r => r.icon.startsWith('/open/spirits/') && !r.icon.includes('stage3')), 'Vulnore awakened icons are our renders')
 }
 console.log(`spirit-gallery: ${pass} pass, ${fails.length} fail`)
 if (fails.length) { for (const f of fails) console.log('  FAIL', f); process.exit(1) }

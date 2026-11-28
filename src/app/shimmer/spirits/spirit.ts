@@ -139,6 +139,8 @@ export const AWAKENED_NAMES: Readonly<Partial<Record<string, Readonly<Record<Awa
   vulnara: { champion: 'Vulnarok', virtuoso: 'Vulnalys', ace: 'Vulnavex', enigma: 'Vulnamyr' },
   // M244 sheet 2: Vulnarc (Storm), canon spirits-species.md 'Named — Vulnyx › Vulnarc (Storm)' (Magii a00621e, Alex 11-27); art pending lock
   vulnarc: { champion: 'Vulnarkor', virtuoso: 'Vulnarcelle', ace: 'Arcvex', enigma: 'Vulnarceth' },
+  // M244 sheet 3: Vulnore (Earth), canon spirits-species.md 'Named — Vulnyx › Vulnore (Earth)' (Alex 11-27; art LOCKED-AFK athernyx 3501ec6)
+  vulnore: { champion: 'Orethar', virtuoso: 'Vulnoraya', ace: 'Vulnoris', enigma: 'Vulnorun' },
 }
 
 /** Get second form name, or null if base element */
