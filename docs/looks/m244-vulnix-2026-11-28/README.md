@@ -42,5 +42,5 @@ ears are flat triangles + a lobe, not feathered. Player-facing text: none (galle
 | Vulnisk | lean .84, fore .9, thigh .92, head .95, tail 1.08 | ear 1.12 | the lean wave-rider; copies unchanged |
 | Vulnixeth | tall 1.24, neck 1.15, tail 1.08 | pool 1.5, drip 2.2 | taller (longer legs, eyes 0.763 glb vs 0.655), ONE tail as before; the pool 1.5x wider + a third ripple; ten thicker streams pouring off chin, ruff, belly + legs, each ending in a drop |
 Sheet: `v2-before-after.jpg` (tools/v2_sheet.py; private side-by-side athernyx assets/stage3/sheets/m244-vulnix-v2-vs-locked.jpg). rig_q.py writes
-`silhouette` into each metrics json and lifts walk + run by any between-key deficit (+0.8 mm headroom). Still not modelled: Vulnitar's snarl
+`silhouette` into each metrics json and lifts walk + run to 1 mm over the ground at the keys (prod samples between keys: Marelle keyed 0 and read -1.7 mm; Vulnitar + Vulnixeth were built at the earlier 0.8 mm rule). Still not modelled: Vulnitar's snarl
 (open mouth); Marelle's ear root is still the parent's flat ear plate on top of the head.

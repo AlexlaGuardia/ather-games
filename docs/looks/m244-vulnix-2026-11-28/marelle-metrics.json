@@ -1,10 +1,10 @@
 {
  "bones": 24,
- "glb_bytes": 409576,
+ "glb_bytes": 410072,
  "weights_bad": 0,
  "walk": {
   "dur_s": 0.57,
-  "lowest_m": -0.0012,
+  "lowest_m": -0.0005,
   "rest_lowest_m": 0.0,
   "edge_stretch_p99": 1.4,
   "edge_stretch_max": 3.09,
@@ -20,12 +20,12 @@
   },
   "planted_foot_drift_max_m": 0.0,
   "length_m": 1.016,
-  "height_m": 0.984,
+  "height_m": 0.985,
   "lowest_bone": "fl_paw"
  },
  "run": {
   "dur_s": 0.432,
-  "lowest_m": -0.0008,
+  "lowest_m": -0.0001,
   "rest_lowest_m": 0.0,
   "edge_stretch_p99": 2.51,
   "edge_stretch_max": 9.0,
@@ -103,7 +103,9 @@
     "start": 0.0125
    },
    "lie_lift": 0.0046,
-   "sit_lift": 0.0017
+   "sit_lift": 0.0017,
+   "walk_lift": 0.001,
+   "run_lift": 0.001
   },
   "spring": {
    "gain": {

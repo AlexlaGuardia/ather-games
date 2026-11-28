@@ -57,8 +57,9 @@ def lift_clip(parts, sk, clips, c):
     undoes the root, is moved back down by the same amount so a pool / ring stays on the ground)"""
     if c not in clips: return
     lo = min(low(parts, sk, p) for p in clips[c])
-    if lo >= -.0003: return
-    d = -lo + (.0008 if c in ('walk', 'run') else .0004)
+    hd = .0010 if c in ('walk', 'run') else .0004   # walk / run: 1 mm headroom over the keys (prod samples between them: Marelle's walk keyed 0, read -1.7 mm live)
+    if lo >= (hd if c in ('walk', 'run') else -.0003): return
+    d = -lo + hd
     for p in clips[c]:
         p.T['root'] = np.asarray(p.T['root'], float) + (0, d, 0)
         if 'cloud' in p.T: p.T['cloud'] = np.asarray(p.T['cloud'], float) - (0, d, 0)
