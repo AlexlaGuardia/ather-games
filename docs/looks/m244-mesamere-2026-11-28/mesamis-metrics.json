@@ -1,0 +1,172 @@
+{
+ "bones": 18,
+ "glb_bytes": 571948,
+ "tris": {
+  "body": 13266,
+  "eyes": 1008
+ },
+ "height_m": 0.464,
+ "idle": {
+  "dur_s": 9.0,
+  "lowest_m": 0.0005,
+  "edge_stretch_p99": 1.2,
+  "edge_stretch_max": 5.1,
+  "worst_edge_at": [
+   "head",
+   -0.1899999976158142,
+   0.33000001311302185,
+   0.550000011920929
+  ],
+  "leg_reach_ratio_max": 1.02,
+  "mean_top": 0.678,
+  "span_m": 0.506,
+  "length_m": 0.74,
+  "top_m": 0.316
+ },
+ "walk": {
+  "dur_s": 0.217,
+  "lowest_m": 0.0004,
+  "edge_stretch_p99": 1.36,
+  "edge_stretch_max": 4.97,
+  "worst_edge_at": [
+   "leg1_l",
+   0.30000001192092896,
+   0.07999999821186066,
+   -0.5299999713897705
+  ],
+  "leg_reach_ratio_max": 1.21,
+  "mean_top": 0.675,
+  "planted_foot_drift_max_m": 0.0005,
+  "stride_m": 0.119,
+  "plays_1to1_at_mps": 0.55,
+  "cadence_at_mps": {
+   "0.55": 4.61,
+   "1.15": 9.64,
+   "1.92": 16.09,
+   "2.8": 23.47,
+   "4.2": 35.2,
+   "6.5": 54.48,
+   "9": 75.43
+  },
+  "span_m": 0.514,
+  "length_m": 0.741,
+  "top_m": 0.315
+ },
+ "run": {
+  "dur_s": 0.169,
+  "lowest_m": 0.0003,
+  "edge_stretch_p99": 1.69,
+  "edge_stretch_max": 7.41,
+  "worst_edge_at": [
+   "leg1_l",
+   0.30000001192092896,
+   0.07999999821186066,
+   -0.5299999713897705
+  ],
+  "leg_reach_ratio_max": 1.31,
+  "mean_top": 0.672,
+  "planted_foot_drift_max_m": 0.0021,
+  "stride_m": 0.32,
+  "plays_1to1_at_mps": 1.9,
+  "cadence_at_mps": {
+   "0.55": 1.72,
+   "1.15": 3.59,
+   "1.92": 5.99,
+   "2.8": 8.74,
+   "4.2": 13.11,
+   "6.5": 20.29,
+   "9": 28.09
+  },
+  "span_m": 0.518,
+  "length_m": 0.74,
+  "top_m": 0.314
+ },
+ "sit": {
+  "dur_s": 7.0,
+  "lowest_m": 0.0005,
+  "edge_stretch_p99": 1.49,
+  "edge_stretch_max": 5.97,
+  "worst_edge_at": [
+   "head",
+   -0.1899999976158142,
+   0.33000001311302185,
+   0.550000011920929
+  ],
+  "leg_reach_ratio_max": 1.08,
+  "mean_top": 0.605,
+  "span_m": 0.571,
+  "length_m": 0.74,
+  "top_m": 0.282
+ },
+ "lie": {
+  "dur_s": 5.0,
+  "lowest_m": 0.0004,
+  "edge_stretch_p99": 1.38,
+  "edge_stretch_max": 6.5,
+  "worst_edge_at": [
+   "head",
+   -0.1899999976158142,
+   0.33000001311302185,
+   0.550000011920929
+  ],
+  "leg_reach_ratio_max": 0.66,
+  "mean_top": 0.592,
+  "span_m": 0.497,
+  "length_m": 0.688,
+  "top_m": 0.276
+ },
+ "form": "mesamis",
+ "dial": 1.7,
+ "body_mean_top": 0.677,
+ "glb_long": 1.595,
+ "all_lowest_with_aura_glb": 0.0006,
+ "extent_lo": [
+  -0.616,
+  0.001,
+  -1.105
+ ],
+ "extent_hi": [
+  0.615,
+  0.681,
+  0.778
+ ],
+ "body_verts": 9475,
+ "aura_tris": 1360,
+ "quality": {
+  "standard": "m244-quality-2026-11-28 (springs: head, tail; aura on bones; ground headroom)",
+  "aura": {
+   "root": 336,
+   "shell": 378
+  },
+  "spring_gain": {
+   "head": 5.5413,
+   "tail": 3.0758
+  },
+  "springs": {
+   "idle:head": 0.002,
+   "idle:tail": 0.0,
+   "walk:head": 0.05,
+   "walk:tail": 0.14,
+   "run:head": 0.08,
+   "run:tail": 0.16,
+   "sit:head": 0.0,
+   "sit:tail": 0.0,
+   "lie:head": 0.0,
+   "lie:tail": 0.0
+  },
+  "key_low": {
+   "idle": -0.0,
+   "walk": -0.0,
+   "run": -0.0,
+   "sit": -0.0,
+   "lie": -0.0
+  },
+  "lift": {
+   "idle": 0.001,
+   "walk": 0.001,
+   "run": 0.001,
+   "sit": 0.001,
+   "lie": 0.001
+  }
+ }
+}
