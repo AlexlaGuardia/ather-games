@@ -19,7 +19,7 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms)); let fails = 0
 const ok = (c: boolean, m: string) => { console.log(`${c ? 'PASS' : 'FAIL'} ${m}`); if (!c) fails++ }
 const ONLY = flag('--only', '').split(',').filter(Boolean).map(Number)
 const AW = GALLERY.filter(r => r.aw && (!ONLY.length || ONLY.includes(r.num)))
-ok(GALLERY.filter(r => r.aw).length === 44, `44 awakened rows in the roster (${GALLERY.filter(r => r.aw).map(r => `#${r.num} ${r.name}`).join(', ')})`)
+ok(GALLERY.filter(r => r.aw).length === 48, `48 awakened rows in the roster (${GALLERY.filter(r => r.aw).map(r => `#${r.num} ${r.name}`).join(', ')})`)
 const br = await puppeteer.launch({ protocolTimeout: 900000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--mute-audio', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] })
 try {
   const errs: string[] = []
@@ -149,7 +149,7 @@ try {
       const e = (s1?.out ?? []).map(o => o.bones.b_e0_head ?? [0, 0, 0]), ex = Math.max(...e.map(q => Math.hypot(q[0] - e[0][0], q[1] - e[0][1], q[2] - e[0][2])))
       ok(ex > 0.005, `#${row.num} her echoes move with her (echo 0 head travels ${ex.toFixed(3)} glb in the walk)`)
     }
-    if (['croakgulp', 'croakavis', 'araeth'].includes(look)) {   // sheet 11: Croakara's three sitting frogs on the live Croakara rig (hops lift her): nothing under the ground in any clip, her body on it at rest
+    if (['croakgulp', 'croakavis', 'araeth', 'oregrak', 'croakorelle', 'croakoris', 'croakormyr'].includes(look)) {   // + sheet 12: Croakore's four, the same frog rig   // sheet 11: Croakara's three sitting frogs on the live Croakara rig (hops lift her): nothing under the ground in any clip, her body on it at rest
       const s1 = await sample('idle', 2, 100), names = s1?.names ?? []
       ok(['b_thigh_l', 'b_foot_r', 'b_paw_l', 'b_lure3', 'b_throat'].every(x => names.includes(x)) && !names.includes('b_tail4'), `#${row.num} on the live Croakara frog rig (${names.length} bones: thighs, paws, throat, the lure chain)`)
       for (const c of ['idle', 'walk', 'run', 'sit', 'lie']) {
