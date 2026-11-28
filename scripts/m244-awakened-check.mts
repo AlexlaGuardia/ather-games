@@ -19,7 +19,7 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms)); let fails = 0
 const ok = (c: boolean, m: string) => { console.log(`${c ? 'PASS' : 'FAIL'} ${m}`); if (!c) fails++ }
 const ONLY = flag('--only', '').split(',').filter(Boolean).map(Number)
 const AW = GALLERY.filter(r => r.aw && (!ONLY.length || ONLY.includes(r.num)))
-ok(GALLERY.filter(r => r.aw).length === 32, `32 awakened rows in the roster (${GALLERY.filter(r => r.aw).map(r => `#${r.num} ${r.name}`).join(', ')})`)
+ok(GALLERY.filter(r => r.aw).length === 36, `36 awakened rows in the roster (${GALLERY.filter(r => r.aw).map(r => `#${r.num} ${r.name}`).join(', ')})`)
 const br = await puppeteer.launch({ protocolTimeout: 900000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--mute-audio', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] })
 try {
   const errs: string[] = []
@@ -130,6 +130,16 @@ try {
         const s2 = await sample(c, 6, 250), o = s2?.out ?? [{ low: -9, blow: 9 }], lo = Math.min(...o.map(x => x.low)), bhi = Math.max(...o.map(x => x.blow))
         ok(lo >= -0.0015 && bhi < BODY_UP[c], `#${row.num} ${c}: nothing under the ground (lowest body / aura ${(lo * 1000).toFixed(1)} mm glb) and her body on it (body lowest at most ${(bhi * 1000).toFixed(1)} mm)`)
       }
+    }
+    if (['mystowk', 'mystowelle', 'mystowis', 'mysteth'].includes(look)) {   // sheet 8: Mystowl's four are OWLS on the live owl rig: on the ground in idle / walk / sit, the run is flight
+      const s1 = await sample('idle', 2, 100), names = s1?.names ?? []
+      ok(['b_tuft_l', 'b_wing4_r', 'b_foot_l', 'b_tail2', 'b_lids'].every(x => names.includes(x)) && !names.includes('b_hover'), `#${row.num} on the owl rig (${names.length} bones: tufts, four-joint wings, feet, no hover)`)
+      for (const c of ['idle', 'walk', 'sit', 'lie']) {   // the walk is a two-footed HOP (up in the air between landings), so only idle / sit / lie must sit ON the ground
+        const s2 = await sample(c, 6, 250), o = s2?.out ?? [{ low: -9, blow: 9 }], lo = Math.min(...o.map(x => x.low)), bhi = Math.max(...o.map(x => x.blow))
+        ok(lo >= -0.0015 && (c === 'walk' || bhi < 0.03), `#${row.num} ${c}: nothing under the ground (lowest body / aura ${(lo * 1000).toFixed(1)} mm glb${c === 'walk' ? '' : `, body lowest at most ${(bhi * 1000).toFixed(1)} mm`})`)
+      }
+      const s3 = await sample('run', 6, 250), lr = Math.min(...(s3?.out ?? [{ low: -9 }]).map(o => o.low))
+      ok(lr > 0.08, `#${row.num} run: she FLIES (lowest ${lr.toFixed(3)} glb up)`)
     }
     if (look === 'vulnarok') {
       const s1 = await sample('walk', 14, 70)

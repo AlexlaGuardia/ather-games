@@ -28,7 +28,10 @@ ok(oreNames.join() === 'orebrak,lumoraya,lumorvex,lumorun', `Luminore's four in 
 // M244 sheet 9: Luminix's (Water) four, canon-named (spirits-species.md 'Named, the Luminara line'), art LOCKED athernyx #045-048: the egg's BREAK-OUT
 const mixNames = AWAKENED_BRANCHES.map(b => AWAKENED_NAMES.luminix![b].toLowerCase())
 ok(mixNames.join() === 'lumixok,marisse,lumixis,lumixeth', `Luminix's four in branch order (${mixNames})`)
-ok(Object.keys(AWAKENED_FORMS).sort().join() === [...names, ...stormNames, ...earthNames, ...waterNames, ...lumNames, ...arcNames, ...oreNames, ...mixNames].sort().join(), 'one look per name, no more')
+// M244 sheet 8: Mystowl's (Mana) four (art LOCKED-AFK athernyx #053-056)
+const mysNames = AWAKENED_BRANCHES.map(b => AWAKENED_NAMES.mystowl![b].toLowerCase())
+ok(mysNames.join() === 'mystowk,mystowelle,mystowis,mysteth', `Mystowl's four in branch order (${mysNames})`)
+ok(Object.keys(AWAKENED_FORMS).sort().join() === [...names, ...stormNames, ...earthNames, ...waterNames, ...lumNames, ...arcNames, ...oreNames, ...mixNames, ...mysNames].sort().join(), 'one look per name, no more')
 for (const [el, list] of [['mana', names], ['storm', stormNames], ['earth', earthNames], ['water', waterNames]] as const) for (const n of list) {
   const vulnara = SECOND_FORMS.fox![el]!, parent = el === 'mana' ? 'vulnara' : el === 'storm' ? 'vulnarc' : el === 'earth' ? 'vulnore' : 'vulnix'
   const L = AWAKENED_FORMS[n]
@@ -287,6 +290,35 @@ for (const n of waterNames) {
   ok(wd('lumixis') < 0.85 * wd('lumixok') && dp('lumixis') > dp('marisse') + 0.25, `lumixis: lean (body ${wd('lumixis').toFixed(2)} wide vs Lumixok ${wd('lumixok').toFixed(2)}) with a tail (${dp('lumixis').toFixed(2)} deep vs Marisse ${dp('marisse').toFixed(2)})`)
   ok(wd('lumixok') > wd('lumixeth') + 0.15 && wd('marisse') > wd('lumixeth') + 0.08, 'lumixok: the broad brute; marisse: a flipper flung out (both wider than Lumixeth, flippers at her sides)')
   ok(ext('lumixok', 'aura').max[1] - ext('lumixok', 'aura').min[1] > 0.9 && ext('lumixeth', 'aura').max[1] - ext('lumixeth', 'aura').min[1] > 0.9, 'motifs: Lumixok\'s wave + spray rise round her, Lumixeth\'s tendrils fall from her crown to the ground')
+}
+// M244 sheet 8: Mystowl's (Mana) four, canon-named (spirits-species.md 'Named, the Athowl line'), art LOCKED-AFK athernyx #053-056: owls on the
+// live owl rig (rig_owl.py: 25 bones, six clips, run = flight), each the live Mystowl's sculpt re-shaped by name + her motif on an aura part
+{
+  const parent = SECOND_FORMS.owl!.mana!, met = (n: string) => JSON.parse(readFileSync(`docs/looks/m244-mystowl-2026-11-28/${n}-metrics.json`, 'utf8'))
+  const pbones = (glbJson('mystowl').nodes as { name?: string }[]).filter(x => x.name?.startsWith('b_')).map(x => x.name).sort().join()
+  for (const n of mysNames) {
+    const L = AWAKENED_FORMS[n], f = `public${L?.url}`, m = met(n)
+    if (!L) { ok(false, `${n}: a look in AWAKENED_FORMS`); continue }
+    ok(L.name === n && L.form === 'mana' && L.url === `/open/spirits/${n}-rigged.glb` && L.glow?.part === 'aura' && L.skin?.emissive === parent.skin?.emissive, `${n}: her own glb, a mana form look off Mystowl, aura = glow part`)
+    ok(AWAKEN_GROW[n] > formGrow('mystowl') && L.h > parent.h * 1.2 && m.dial === AWAKEN_GROW[n], `${n}: grown past Mystowl (dial ${AWAKEN_GROW[n]} vs ${formGrow('mystowl')}; rig dial ${m.dial})`)
+    ok(!L.rig?.hover && !!L.rig?.fly && !PUBLIC_FORMS.has(n) && Math.abs(m.glb_long - AWAKEN_LEN[n]) < 1e-3, `${n}: an owl on the ground that flies (no hover, the owl's fly numbers), owner preview only, glbLen = her metrics (${m.glb_long})`)
+    for (const c of ['idle', 'walk', 'sit', 'lie']) ok(m[c].lowest_m > -0.0005 && m[c].lowest_m < 0.01, `${n} ${c}: on the ground, nothing under it (lowest ${m[c].lowest_m} m)`)
+    ok(m.run.lowest_m > 0.05 && m.all_lowest_with_aura_glb > -0.0015, `${n}: the run is FLIGHT (lowest ${m.run.lowest_m} m); her aura never under the ground (${m.all_lowest_with_aura_glb} glb)`)
+    ok(m.quality.springs.peak['walk:earl'] > 0.05 && m.quality.springs.peak['run:wingl'] > 0.05, `${n}: baked springs on the tufts + wing tips (walk ear ${m.quality.springs.peak['walk:earl']}, run wing ${m.quality.springs.peak['run:wingl']} rad)`)
+    if (!existsSync(f)) { ok(false, `${f} exists`); continue }
+    const j = glbJson(n), nodes: string[] = j.nodes.map((x: { name?: string }) => x.name)
+    ok(['body', 'eyes', 'aura'].every(x => nodes.includes(x)) && nodes.filter(x => x?.startsWith('b_')).sort().join() === pbones, `${n}: body / eyes / aura on Mystowl's own ${pbones.split(',').length} bones`)
+    ok((j.animations as { name: string }[]).map(a => a.name).sort().join() === 'glide,idle,lie,run,sit,walk', `${n}: the owl's six clips`)
+  }
+  // silhouette, not a reskin, read off the files: rest-pose extents (accessor min / max)
+  const ext = (n: string, mesh: string) => { const j = glbJson(n), mi = j.nodes.find((x: { name?: string }) => x.name === mesh).mesh, a = j.accessors[j.meshes[mi].primitives[0].attributes.POSITION]; return { min: a.min as number[], max: a.max as number[] } }
+  const span = (n: string, mesh: string, k: number) => { const e = ext(n, mesh); return e.max[k] - e.min[k] }, base = span('mystowl', 'body', 0)
+  ok(span('mystowk', 'body', 0) > 1.8 * base && span('mysteth', 'body', 0) > 1.8 * base && span('mystowis', 'body', 0) > 1.4 * base, `spread wings: Mystowk ${span('mystowk', 'body', 0).toFixed(2)}, Mysteth ${span('mysteth', 'body', 0).toFixed(2)}, Mystowis ${span('mystowis', 'body', 0).toFixed(2)} wide vs Mystowl ${base.toFixed(2)}`)
+  ok(ext('mystowelle', 'body').max[1] > 1.1 * ext('mystowl', 'body').max[1] && span('mystowelle', 'body', 0) < 1.1 * base, `mystowelle: tall + slim, long tufts (top ${ext('mystowelle', 'body').max[1].toFixed(2)} vs ${ext('mystowl', 'body').max[1].toFixed(2)})`)
+  ok(span('mystowk', 'aura', 0) > 1.3 && ext('mystowk', 'aura').max[2] < -0.2, `mystowk: a halo of rings BEHIND her (${span('mystowk', 'aura', 0).toFixed(2)} wide, front z ${ext('mystowk', 'aura').max[2].toFixed(2)})`)
+  ok(span('mystowelle', 'aura', 0) > 1.5 && span('mystowelle', 'aura', 2) > 1.1, `mystowelle: a ring of floating scrolls round her (${span('mystowelle', 'aura', 0).toFixed(2)} x ${span('mystowelle', 'aura', 2).toFixed(2)})`)
+  ok(ext('mystowis', 'aura').min[2] > -0.03 && ext('mystowis', 'aura').min[1] > 0.45 && ext('mystowis', 'aura').max[1] < 0.95, `mystowis: the gold mask on her face (aura y ${ext('mystowis', 'aura').min[1].toFixed(2)}-${ext('mystowis', 'aura').max[1].toFixed(2)}, z from ${ext('mystowis', 'aura').min[2].toFixed(2)})`)
+  ok(span('mysteth', 'aura', 0) > 1.4 && ext('mysteth', 'aura').max[1] > 1.35, `mysteth: eyes down both wings (${span('mysteth', 'aura', 0).toFixed(2)} wide) + rays over her head (top ${ext('mysteth', 'aura').max[1].toFixed(2)})`)
 }
 console.log(`spirit-awakened: ${pass} pass, ${fails.length} fail`)
 if (fails.length) { for (const f of fails) console.log('  FAIL', f); process.exit(1) }

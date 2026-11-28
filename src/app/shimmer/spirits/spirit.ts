@@ -151,6 +151,8 @@ export const AWAKENED_NAMES: Readonly<Partial<Record<string, Readonly<Record<Awa
   luminore: { champion: 'Orebrak', virtuoso: 'Lumoraya', ace: 'Lumorvex', enigma: 'Lumorun' },
   // M244 sheet 9: Luminix (Water), canon spirits-species.md 'Named, the Luminara line' (art LOCKED athernyx #045-048): the egg's break-out
   luminix: { champion: 'Lumixok', virtuoso: 'Marisse', ace: 'Lumixis', enigma: 'Lumixeth' },
+  // M244 sheet 8: Mystowl (Mana), canon spirits-species.md 'Named, the Athowl line' (Alex 11-28; art LOCKED-AFK athernyx #053-056)
+  mystowl: { champion: 'Mystowk', virtuoso: 'Mystowelle', ace: 'Mystowis', enigma: 'Mysteth' },
 }
 
 /** Get second form name, or null if base element */
