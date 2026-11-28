@@ -167,6 +167,8 @@ export const AWAKENED_NAMES: Readonly<Partial<Record<string, Readonly<Record<Awa
   mesamere: { champion: 'Mesathar', virtuoso: 'Mesamelle', ace: 'Mesamis', enigma: 'Mesamun' },
   // M244 sheet 15: Arclotl (Storm), canon spirits-species.md 'Arclotl (Storm)' (art LOCKED athernyx #081-084; hub yay 11-28)
   arclotl: { champion: 'Arclotar', virtuoso: 'Arclelle', ace: 'Arcis', enigma: 'Arclun' },
+  // M244 sheet 15b: Aurmere (Mana), canon spirits-species.md 'Aurmere (Mana)' (art LOCKED athernyx #057-060)
+  aurmere: { champion: 'Aurmerok', virtuoso: 'Aurmelys', ace: 'Aurmevex', enigma: 'Aurhael' },
 }
 
 /** Get second form name, or null if base element */

@@ -16,7 +16,7 @@ const looks = named.map(n => n.toLowerCase())
 ok(looks.every(n => AWAKENED_FORMS[n] === ARCLOTL_AWAKENED[n]) && Object.keys(ARCLOTL_AWAKENED).sort().join() === [...looks].sort().join(), `each wired once into AWAKENED_FORMS (${Object.keys(ARCLOTL_AWAKENED)})`)
 // gallery: four rows, consecutive, axolotl + storm, the last four rows
 const rows = GALLERY.filter(r => r.aw && r.sp === 'axolotl' && r.el === 'storm')
-ok(rows.length === 4 && rows.every((r, i) => r.num === GALLERY.length - 3 + i && r.name === named[i] && r.aw!.look === looks[i]), `Arclotl's four rows close the gallery (#${rows.map(r => r.num)}: ${rows.map(r => r.name)})`)
+ok(rows.length === 4 && rows.every((r, i) => r.num === rows[0].num + i && r.name === named[i] && r.aw!.look === looks[i]) && rows[0].num === 111, `Arclotl's four rows, consecutive from #111 (sheet 15b's Aurmere rows follow) (#${rows.map(r => r.num)}: ${rows.map(r => r.name)})`)
 const L3 = '/root/athernyx/assets/stage3/grimoire-ledger-stage3.json'
 if (existsSync(L3)) { const locks = JSON.parse(readFileSync(L3, 'utf8')).locks as { name: string; branch_name: string; second_form: string }[]
   for (const r of rows) ok(locks.some(l => l.name === r.name && l.second_form === 'Arclotl' && l.branch_name.toLowerCase() === r.aw!.branch), `${r.name}: a stage-3 lock off Arclotl, ${r.aw!.branch}`) }

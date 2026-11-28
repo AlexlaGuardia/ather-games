@@ -525,6 +525,22 @@ export const ARCLOTL_AWAKENED: Readonly<Record<string, SpiritLook>> = {
   arcis: arcAw('arcis', '#c4e2ff', croakUpRig(1.0987, 0.4518, 1.1195)),
   arclun: arcAw('arclun', '#d2ecff', lotlRig(1.7744, -0.2)),
 }
+// M244 sheet 15b (sprites, 11-28): AURMERE's four AWAKENED forms (Mana), OWNER PREVIEW (docs/looks/m244-aurmere-2026-11-28): the live
+// Aurmere's sculpt re-shaped by name (sculpt_aurmaw.py), all four WALK on the Shellmere line's own legged rig (rig_aurmaw.py = sheet 14's
+// rig_mesaaw.py with her names: 18 bones, five clips at the base's 0.464 m per glb unit + baked head / tail springs). h = the base
+// Shellmere's x her dial. 'aura' = the motif: Aurmerok's gold sun disc, Aurmelys's sound rings + spiral, Aurmevex's gold ring + dots,
+// Aurhael's gold crown, halo + dots. glbLen = her metrics' glb_long.
+export const AURMERE_AW_DIAL: Readonly<Record<string, number>> = { aurmerok: 2.1, aurmelys: 1.75, aurmevex: 1.7, aurhael: 1.85 }
+const aurAw = (name: string, aura: string, glbLen: number): SpiritLook => {
+  const b = shellForm('mana', 'aurmere', '#b49cff', '#e8dcff', glbLen), base = BASE_PREVIEW.turtle!, h = base.h * AURMERE_AW_DIAL[name]
+  return { ...b, name, url: `/open/spirits/${name}-rigged.glb`, h, trot: grownTrot(base.trot, base.h, h), glow: { part: 'aura', emissive: aura, lo: 0.35, hi: 0.7, hz: 0.35 } }
+}
+export const AURMERE_AWAKENED: Readonly<Record<string, SpiritLook>> = {
+  aurmerok: aurAw('aurmerok', '#ffc848', 1.543),
+  aurmelys: aurAw('aurmelys', '#ffd870', 1.464),
+  aurmevex: aurAw('aurmevex', '#ffc848', 1.595),
+  aurhael: aurAw('aurhael', '#ffd060', 1.522),
+}
 // M202 the Lepara line (docs/looks/m202-lepara-line-2026-11-27): Lepaura (Mana, the ledger's MOON-HARE: taller, a plume tail, a gold
 // crescent on her brow, a gold necklace + diamond, gold infusion ribbons = pattern only), Leparc (Storm: silver-blue, cheek + ear-tip tufts,
 // a violet brow crystal, pale lightning veins, a puff tail), Lepore (Earth, her natural form, the heaviest: barrel belly, leaf-stone
@@ -713,6 +729,7 @@ export const AWAKENED_FORMS: Readonly<Record<string, SpiritLook>> = {
   ...TIDEOWL_AWAKENED,   // M244 sheet 13: Tideowl's four (above)
   ...MESAMERE_AWAKENED,   // M244 sheet 14: Mesamere's four (above)
   ...ARCLOTL_AWAKENED,   // M244 sheet 15: Arclotl's four (above)
+  ...AURMERE_AWAKENED,   // M244 sheet 15b: Aurmere's four (above)
   vulnarok: awakened('vulnarok', AWAKEN_LEN.vulnarok, '#ffcf5a', 2.4),
   vulnalys: awakened('vulnalys', AWAKEN_LEN.vulnalys, '#b48cff', 1.7),
   vulnavex: awakened('vulnavex', AWAKEN_LEN.vulnavex, '#ffcf5a', 2.6),
