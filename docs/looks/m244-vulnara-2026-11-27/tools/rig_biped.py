@@ -5,7 +5,7 @@ landmarks from sculpt_awaken.py's rok entry -> skeleton(); skin capsules + gates
 M244 sheet 2: AWAKEN=kor rigs VULNARKOR (Vulnarc's Champion) on the same plan: no echoes, her lightning ('aura') rides her chest."""
 import sys, os, json
 HERE = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, os.path.join(HERE, '../../rig-2026-11-24/tools')); sys.dont_write_bytecode = True
-BF = os.environ.get('AWAKEN', 'rok'); assert BF in ('rok', 'kor'), BF
+BF = os.environ.get('AWAKEN', 'rok'); assert BF in ('rok', 'kor', 'oreth'), BF
 sys.argv = [sys.argv[0], BF, *sys.argv[1:]]
 import numpy as np, rigcore as K
 sys.path.insert(0, HERE); import sculpt_awaken as SV, echoes as E
@@ -49,6 +49,7 @@ RIG = [(nm.index(f'leg_{s}_paw'), (lambda V, x=x: (V[:, 1] < .055) & (V[:, 0] * 
 w = K.skin_weights(V0, m['F'], CAPS, 7, RIG); W = np.zeros((len(V0), len(nb)))
 for i, n in enumerate(nm): W[:, nb.index(n)] += w[:, i]
 W = K.four(W)
+if SV.EARTH: W = SV.rigid_extras(V0, m['F'], W)   # sheet 3: Orethar's crystals ride rigid
 bw = lambda names: W[:, [nb.index(b) for b in names]].sum(1)
 TB = bw(['tail1', 'tail2', 'tail3', 'tail4']) > .5
 MASKS = dict(tail=TB, rump=bw(['pelvis']) > .5, belly=bw(['pelvis', 'spine', 'chest']) > .5, free=~TB & (bw(['leg_l_mt', 'leg_l_paw', 'leg_r_mt', 'leg_r_paw']) < .3))
@@ -59,8 +60,9 @@ C, T, ST, FEET, SOLVED = plan.clips(H); print('solved', SOLVED, 'reach', ST)
 SPECS = [dict(off=(-.50, 0, -.46), s=.80, delay=.10), dict(off=(.50, 0, -.46), s=.80, delay=.16), dict(off=(-.90, 0, -.80), s=.70, delay=.22), dict(off=(.90, 0, -.80), s=.70, delay=.28)]
 if BF == 'rok':
     SK2, aura = E.build(SK, V0, m['F'], W, nb, SPECS); C2 = E.clips(SK, SK2, C, SPECS)
-else:   # Vulnarkor: her crackling bolts ride her chest
-    SK2, C2 = SK, C; aura = dict(live['aura'], W=np.zeros((len(live['aura']['POSITION']), len(nb)))); aura['W'][:, nb.index('chest')] = 1; aura = upper_bolts(aura, .86)
+else:   # Vulnarkor: her crackling bolts ride her chest (sheet 3: Orethar's heart-gem too, whole)
+    SK2, C2 = SK, C; aura = dict(live['aura'], W=np.zeros((len(live['aura']['POSITION']), len(nb)))); aura['W'][:, nb.index('chest')] = 1
+    if BF == 'kor': aura = upper_bolts(aura, .86)
 parts = {'body': dict(m, W=E.pad(W, nb, SK2))}
 e = np.zeros((len(live['eyes']['POSITION']), len(SK2))); e[:, nb.index('head')] = 1; parts['eyes'] = dict(live['eyes'], W=e); parts['aura'] = aura
 K.write(OUT, parts, SK2, C2, {c: (len(v) - 1) / T[c] for c, v in C2.items()})

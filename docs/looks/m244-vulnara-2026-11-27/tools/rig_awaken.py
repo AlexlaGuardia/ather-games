@@ -12,7 +12,7 @@ sys.path.insert(0, HERE); import sculpt_awaken as SV
 FORM = SV.FORM; ARGS = sys.argv[2:]; IN, OUT, MET = [os.path.abspath(x) for x in ARGS[:3]]
 G = SV.G; HO = np.array(G['HO']); vh = lambda p: tuple(float(c) for c in SV.fwd(np.array(p) + HO))   # Vulnara's head space -> world (the grown head, M244 s1c)
 f_, h_ = G['f'], G['h']; T0 = np.array(SV.L['tail'][0]); v = lambda *a: tuple(float(x) for x in np.array(a[0]) + (np.array(a[1]) if len(a) > 1 else 0))
-FZ = .10 if FORM == 'rok' else .02; TZ = dict(rok=-.27, lys=-.31, vex=-.33, myr=-.25, celle=-.31, arcvex=-.33, ceth=-.25)[FORM]
+FZ = .10 if FORM == 'rok' else .02; TZ = dict(rok=-.27, lys=-.31, vex=-.33, myr=-.25, celle=-.31, arcvex=-.33, ceth=-.25, raya=-.31, noris=-.33, norun=-.25)[FORM]
 shellfree = lambda V, m=.012: np.ones(len(V), bool)        # no carapace: every vertex is free
 from plans import quadruped as Q
 from rigcore import Pose
@@ -55,11 +55,11 @@ nb = list(SK); nm = [b[0] for b in B]
 RIG = [(nm.index(a + s + '_paw'), (lambda V, x=x, a=a: (V[:, 1] < .06) & (V[:, 0] * x > 0) & ((V[:, 2] > FZ) == (a == 'f')))) for a in 'fh' for s, x in (('l', 1), ('r', -1))]
 TAU = 2 * np.pi; sm = K.smooth
 D = dict(pitch=0, neck=.5, tail=['tail1', 'tail2', 'tail3', 'tail4'], idletail=[0, 0, 0, 0], idlelift=[0, 0, 0, 0], drop={}, stance={p + s: (x * w, z) for s, x in (('l', 1), ('r', -1)) for p, w, z in (('f', f_[2][0], f_[2][2]), ('h', h_[3][0], h_[3][2] + .012))})
-LIFT0 = .006 if FORM == 'arcvex' else 0.   # sheet 2: Arcvex + her scaled copies grazed the ground 1.5-4 mm in the walk / run
+LIFT0 = .006 if FORM in ('arcvex', 'noris') else 0.   # sheet 2: Arcvex + her scaled copies grazed the ground 1.5-4 mm in the walk / run
 WALK = dict(v=.55, duty=.625, reach=.14, lift=.05, toe=.5, phase=dict(hl=0, fl=.75, hr=.5, fr=.25), beats=2, bob0=.4, bob=.007, dy=-.034 + LIFT0, n=24, over=.25)
-if FORM == 'arcvex': WALK['plant'] = .004   # sheet 2: her stance soles sat 1.7 mm under in the walk
+if FORM in ('arcvex', 'noris'): WALK['plant'] = .004   # sheet 2: her stance soles sat 1.7 mm under in the walk
 # the gallop: a low chest and a spine that opens and closes buy the reach, short contacts buy the air. Stride 1.21 m
-RUN = dict(plant=.006 if FORM == 'arcvex' else .002,   # sheet 2: Arcvex's copies grazed 1.5 mm in the run (prod check)
+RUN = dict(plant=.006 if FORM in ('arcvex', 'noris') else .002,   # sheet 2: Arcvex's copies grazed 1.5 mm in the run (prod check)
             v=2.8, duty=.2, reach=.173, lift=.085, toe=.8, phase=dict(hl=0, hr=.925, fl=.5, fr=.425), beats=1, n=40, over=.06)
 live = K.Glb(IN).meshes(); parts = {}; m = live['body']; V0 = m['POSITION'].astype(float)
 w = K.skin_weights(V0, m['F'], B, 7, RIG); W = np.zeros((len(V0), len(nb)))
@@ -79,9 +79,11 @@ if FORM == 'myr':   # each tail vertex rides its own tail's chain by how far alo
             lo_, hi_ = (at[i - 1] if i else -9), (at[i + 1] if i < 3 else 99); wv = np.interp(j, [lo_, at[i], hi_], [0, 1, 1 if i == 3 else 0])
             W[r, nb.index(b[i])] += max(wv, 0)
         W[r] /= W[r].sum()
-W = K.four(W); parts['body'] = dict(m, W=W); e = np.zeros((len(live['eyes']['POSITION']), len(nb))); e[:, nb.index('head')] = 1; parts['eyes'] = dict(live['eyes'], W=e)
+W = K.four(W)
+if SV.EARTH: W = SV.rigid_extras(V0, m['F'], W)   # sheet 3: crystals / stones / trunk / blooms ride rigid
+parts['body'] = dict(m, W=W); e = np.zeros((len(live['eyes']['POSITION']), len(nb))); e[:, nb.index('head')] = 1; parts['eyes'] = dict(live['eyes'], W=e)
 if FORM == 'ceth': SK['cloud'] = ('root', (0, 0, 0)); nb = list(SK); W = np.c_[W, np.zeros(len(W))]; parts['body'] = dict(m, W=W); parts['eyes'] = dict(live['eyes'], W=np.c_[e, np.zeros(len(e))])
-if 'aura' in live and FORM not in ('vex', 'arcvex'): a = np.zeros((len(live['aura']['POSITION']), len(nb))); a[:, nb.index('head' if FORM in ('lys', 'myr', 'celle') else 'cloud' if FORM == 'ceth' else 'root')] = 1; parts['aura'] = dict(live['aura'], W=a)
+if 'aura' in live and FORM not in ('vex', 'arcvex', 'noris'): a = np.zeros((len(live['aura']['POSITION']), len(nb))); a[:, nb.index('head' if FORM in ('lys', 'myr', 'celle', 'raya') else 'cloud' if FORM == 'ceth' else 'spine' if FORM == 'norun' else 'root')] = 1; parts['aura'] = dict(live['aura'], W=a)
 if FORM == 'celle': parts['aura'] = upper_bolts(parts['aura'], SV.MC[1] - .02)
 LEGS = ('fl', 'fr', 'hl', 'hr'); SOLE = {f: V0[(W[:, nb.index(f + '_paw')] > .5) & (V0[:, 1] < .10)] - np.array(SK[f + '_paw'][1]) for f in LEGS}
 LEN = {f: sum(np.linalg.norm(np.array(SK[f + a][1]) - np.array(SK[f + b][1])) for a, b in (('_up', '_lo'), ('_lo', '_paw'))) for f in LEGS}
@@ -153,11 +155,11 @@ def solve(f, a, b):
     for _ in range(22):
         c = (a + b) / 2; a, b = (a, c) if f(c) > 0 else (c, b)
     return b
-SITX = .185 if FORM == 'lys' else .17 if FORM == 'celle' else .150; SITA = .88; SITY = -.03; SITT = [0, -.12, -.05, 0]; LIEY = -.2; LIET = 0
+SITX = .185 if FORM == 'lys' else .17 if FORM in ('celle', 'raya') else .150; SITA = .88; SITY = -.03; SITT = [0, -.12, -.05, 0]; LIEY = -.2; LIET = 0
 RUMP = W[:, [nb.index('pelvis'), nb.index('spine')]].sum(1) > .5
 def _sy(v): global SITY; SITY = v; p = sitpose(0); sitpost(p, 0); return low(p, RUMP) - .006
 SITY = solve(_sy, -.45, .25)
-if FORM in ('myr', 'lys', 'celle', 'ceth'):   # M244 s1b (+ s1c the dire-wolf Lys): her haunch (hr_up) sat 28 mm under the ground once the fan cleared: nothing but the paws may be lower
+if FORM in ('myr', 'lys', 'celle', 'ceth', 'raya', 'norun'):   # M244 s1b (+ s1c the dire-wolf Lys): her haunch (hr_up) sat 28 mm under the ground once the fan cleared: nothing but the paws may be lower
     NOPAW = (W[:, [nb.index(b) for b in nb if b.endswith('_paw')]].sum(1) < .3) & (W[:, [nb.index(b) for b in nb if b.startswith('tail')]].sum(1) < .5)   # s1c: tails clear on their own
     def _sy2(v): global SITY; SITY = v; p = sitpose(0); sitpost(p, 0); return low(p, NOPAW) - .002
     s0 = SITY; SITY = max(s0, solve(_sy2, -.45, .25))
@@ -200,7 +202,7 @@ if FORM == 'myr':   # M244 s1c: the eight tails' own motion over every clip, the
 if FORM == 'ceth':   # sheet 2: the cloud bone undoes the root's motion every frame (the root drops her into the lie)
     for c in clips:
         for p in clips[c]: p.T['cloud'] = -np.asarray(p.T['root'], float)
-if FORM in ('vex', 'arcvex'):   # M244 s1b (Alex 11-27): her two gold copies RUN: each plays her run a beat behind, left where she just ran (drifting back
+if FORM in ('vex', 'arcvex', 'noris'):   # M244 s1b (Alex 11-27): her two gold copies RUN: each plays her run a beat behind, left where she just ran (drifting back
     import echoes as E   # at her own run speed, 4 glb/s), and shrinks away (the fade; the glow material is opaque); hidden when she is not running
     def trail(k):
         def mv(c, u):
@@ -208,8 +210,8 @@ if FORM in ('vex', 'arcvex'):   # M244 s1b (Alex 11-27): her two gold copies RUN
             q = (u + k * .5) % 1; return -.20 - (RUN['v'] / H) * T['run'] * q, sm(0, .08, q) * (1 - q) ** .8
         return mv
     SPECS = [dict(off=(-.16, 0, 0), s=.92, delay=.12, move=trail(0)), dict(off=(-.30, 0, 0), s=.84, delay=.30, move=trail(1))]
-    if FORM == 'arcvex': SPECS = [dict(sp, off=(sp['off'][0], .008, 0)) for sp in SPECS]   # sheet 2: her copies 8 mm up (grazed 1.5-4 mm in the run)
-    SK2, aura = E.build(SK, V0, m['F'], W, nb, SPECS, **(dict(color=(205, 238, 255)) if FORM == 'arcvex' else {}))
+    if FORM in ('arcvex', 'noris'): SPECS = [dict(sp, off=(sp['off'][0], .008, 0)) for sp in SPECS]   # sheet 2: her copies 8 mm up (grazed 1.5-4 mm in the run)
+    SK2, aura = E.build(SK, V0, m['F'], W, nb, SPECS, **(dict(color=(205, 238, 255)) if FORM == 'arcvex' else dict(color=(246, 220, 140)) if FORM == 'noris' else {}))
     for k in ('body', 'eyes'): parts[k] = dict(parts[k], W=E.pad(parts[k]['W'], nb, SK2))
     parts['aura'] = aura; clips = E.clips(SK, SK2, clips, SPECS); SK = SK2
 path = OUT; K.write(path, parts, SK, clips, {c: (len(v) - 1) / T[c] for c, v in clips.items()})
