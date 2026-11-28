@@ -159,6 +159,8 @@ export const AWAKENED_NAMES: Readonly<Partial<Record<string, Readonly<Record<Awa
   croakara: { champion: 'Croakgulp', virtuoso: 'Croakalys', ace: 'Croakavis', enigma: 'Araeth' },
   // M244 sheet 12: Croakore (Earth), canon spirits-species.md 'Croakore (Earth)' (art LOCKED athernyx #037-040; hub yay 11-28)
   croakore: { champion: 'Oregrak', virtuoso: 'Croakorelle', ace: 'Croakoris', enigma: 'Croakormyr' },
+  // M244 sheet 12b: Croakrill (Water), canon spirits-species.md 'Croakrill (Water)' (art LOCKED athernyx #041-044; hub yay 11-28)
+  croakrill: { champion: 'Croakrillok', virtuoso: 'Rillesse', ace: 'Croakrillvex', enigma: 'Croakrilleth' },
 }
 
 /** Get second form name, or null if base element */

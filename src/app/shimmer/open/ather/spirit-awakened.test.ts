@@ -34,7 +34,7 @@ ok(mysNames.join() === 'mystowk,mystowelle,mystowis,mysteth', `Mystowl's four in
 // M244 sheet 9b: Croakarc's four (their own test: spirit-croakaw.test.ts)
 const croakNames = AWAKENED_BRANCHES.map(b => AWAKENED_NAMES.croakarc![b].toLowerCase())
 // M244 sheets 11 + 12: Croakara's + Croakore's four (their own tests: spirit-croakaraw.test.ts, spirit-croakorew.test.ts)
-const croakMoreNames = (['croakara', 'croakore'] as const).flatMap(f => AWAKENED_BRANCHES.map(b => AWAKENED_NAMES[f]![b].toLowerCase()))
+const croakMoreNames = (['croakara', 'croakore', 'croakrill'] as const).flatMap(f => AWAKENED_BRANCHES.map(b => AWAKENED_NAMES[f]![b].toLowerCase()))
 ok(Object.keys(AWAKENED_FORMS).sort().join() === [...names, ...stormNames, ...earthNames, ...waterNames, ...lumNames, ...arcNames, ...oreNames, ...mixNames, ...mysNames, ...croakNames, ...croakMoreNames].sort().join(), 'one look per name, no more')
 for (const [el, list] of [['mana', names], ['storm', stormNames], ['earth', earthNames], ['water', waterNames]] as const) for (const n of list) {
   const vulnara = SECOND_FORMS.fox![el]!, parent = el === 'mana' ? 'vulnara' : el === 'storm' ? 'vulnarc' : el === 'earth' ? 'vulnore' : 'vulnix'

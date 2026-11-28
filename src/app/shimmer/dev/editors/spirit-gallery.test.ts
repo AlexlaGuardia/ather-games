@@ -14,7 +14,7 @@ const CANON = '/root/athernyx/CANON/world/spirits-species.md'
 ok(existsSync(LEDGER), `ledger present (${LEDGER})`)
 ok(existsSync(CANON), `canon base table present (${CANON})`)
 
-ok(GALLERY.length === 98, `98 rows: 10 base + 40 forms + 48 awakened (got ${GALLERY.length})`)
+ok(GALLERY.length === 102, `102 rows: 10 base + 40 forms + 52 awakened (got ${GALLERY.length})`)
 GALLERY.forEach((r, i) => ok(r.num === i + 1, `row ${i} numbered ${i + 1} (got ${r.num})`))
 ok(GALLERY.slice(0, 10).every(r => r.el === null) && GALLERY.slice(10).every(r => r.el !== null), 'base 10 first, then the 40 forms')
 ok(new Set(GALLERY.map(r => r.name)).size === GALLERY.length, 'every name unique')
