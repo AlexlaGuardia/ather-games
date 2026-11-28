@@ -1,121 +1,216 @@
 'use client'
-// ── DASH: THE RACE ITSELF (BETA M233 s2). A full-screen view over the game, its own small canvas (an instanced space: the
-// course is code-built pieces, cheap, nothing loaded). Five lanes, the course along +x in sections (fair-dash-race.ts COURSE):
-// grass run, a water stretch, a ramp climb, the GAP (fliers glide it from the top of the climb; the rest go down into it and
-// back up), three blocks per lane, the run to the finish arch. Racers are code-built bodies: wings for fliers, a tail for
-// swimmers, a shell for the heavy ones, an element ring underfoot, an ember marker over YOUR spirit. The camera follows yours.
-// The keeper does NOT steer: the only input is CHEER (fair-dash-race.ts cheer: a burst, a cooldown). Labels: DASH_UI (@lark).
-import { useEffect, useMemo, useRef, useState } from 'react'
+// ── DASH: THE RACE ITSELF (BETA M233 s2, M247 s2 the tent). A full-screen view over the game, its own small canvas. Since M247 s2
+// the race runs INSIDE A BIG TENT of the Thistledown troupe (canon: the tents are the Fair's, Magii d2e2dca; thistle + down
+// stripes as the Fair's big top in network-scene.tsx): a sand floor (dash-course ARENA m square), BLEACHERS of fans on its four
+// sides (a generic Moglin crowd, instanced, bobbing; no lines), and the course as a raised dirt track on the sand. The course is
+// the one Alex published in Creative (dash-track raceTrack: its line + sections) or, with none, the fixed M233 course on a
+// stadium loop. Racers are the REAL spirit models (SpiritFigure, the species' glb + rig), each in her lane across the width;
+// the clip follows what she is doing (run / climb + swim at a walk / a trip lies her down / done sits), fliers lift over a gap.
+// The keeper does NOT steer: the only input is CHEER (fair-dash-race.ts cheer). Labels: DASH_UI (@lark).
+import { useEffect, useMemo, useRef, useState, Suspense } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { H } from '../../ui/hearth'
-import { ELEMENT_COLORS, type Element } from '../../spirits/spirit'
-import { COURSE, COURSE_LEN, BLOCKS, CLIMB_H, GAP_DROP, CHEER, FLIERS, SWIMMERS, HEAVY, startState, step, cheer, sectionAt, seeded, type Racer, type RunState } from './fair-dash-race'
+import { ELEMENT_COLORS, type Element, type Species } from '../../spirits/spirit'
+import { CHEER, FLIERS, SWIMMERS, BLOCKS, startState, step, cheer, sectionAt, seeded, type Racer, type RunState, type Doing } from './fair-dash-race'
 import { DASH_UI as L, fmtTime } from './fair-dash-rules'
+import { ARENA, project, type DashCourse } from './dash-course'
+import { raceTrack, trackY, flyY, laneOffset, racerAt, FLOOR, type RaceTrack } from './dash-track'
+import { SpiritFigure } from './spirit-model'
+import { spiritModelFor } from './spirit-models'
+import type { RigClip } from './spirit-rig'
 
 export interface Entry extends Racer { who: string; name: string; you?: boolean }
 export interface RaceResult { ms: number; place: number; order: { who: string; name: string; ms: number | null; you: boolean }[] }
 
-const LANE_W = 1.7
-const laneZ = (i: number, n: number) => (i - (n - 1) / 2) * LANE_W
-/** the ground's height along the course (the non-fliers' path): flat run, sunk water, the ramp, down into the gap and up */
-export function groundY(d: number): number {
-  const s = sectionAt(d), f = Math.min(1, Math.max(0, (d - s.at) / s.len))
-  if (s.kind === 'swim') return -0.45
-  if (s.kind === 'climb') return f * CLIMB_H
-  if (s.kind === 'glide') return f < 0.45 ? CLIMB_H + (-GAP_DROP - CLIMB_H) * (f / 0.45) : -GAP_DROP * (1 - (f - 0.45) / 0.55)
-  return 0
-}
-/** a flier's height over the gap: from the top of the climb, gliding down to the far side */
-const flyY = (d: number) => { const s = sectionAt(d), f = (d - s.at) / s.len; return CLIMB_H * (1 - f) + 0.35 * Math.sin(f * Math.PI) }
-const SP_COLOR: Record<string, string> = { fox: '#e8a04a', axolotl: '#f2a6c0', 'water-bear': '#b8a890', turtle: '#7fa36a', owl: '#9c8466', frog: '#79b85a', firefly: '#e4d36a', rabbit: '#e9e2d4', hummingbird: '#5fc4a8', bat: '#6a5a7a' }
+const KIND_COL: Record<string, string> = { run: '#a07850', climb: '#8d6a48', glide: '#5e4a3a', blocks: '#b39a6e', swim: '#3a5a6a' }
+/** the tent: a striped round wall + cone roof standing round the square floor, and the bleachers on the floor's four sides */
+export const TENT = { r: 80, wall: 16, peak: 46, panels: 32 } as const
+export const BLEACH = { tiers: 5, rise: 0.9, depth: 1.7, seat: 2.2, from: ARENA / 2 + 2 } as const
+const THISTLE = new THREE.Color('#8a5aa8'), DOWN = new THREE.Color('#f3ecdf')
 
-function Course({ n }: { n: number }) {
-  const pieces = useMemo(() => {
-    const out: { x: number; y: number; len: number; rot: number; color: string }[] = []
-    const STEP = 1
-    for (let d = 0; d < COURSE_LEN; d += STEP) {
-      const s = sectionAt(d + STEP / 2), y0 = groundY(d), y1 = groundY(Math.min(COURSE_LEN, d + STEP))
-      if (s.kind === 'swim') continue
-      out.push({ x: d + STEP / 2, y: (y0 + y1) / 2 - 0.1, len: Math.hypot(STEP, y1 - y0) + 0.02, rot: Math.atan2(y1 - y0, STEP), color: s.kind === 'climb' ? '#a08060' : s.kind === 'glide' ? '#6a5848' : s.kind === 'blocks' ? '#b39a6e' : '#6fa65a' })
+/** the raised dirt track: a top strip at the track's height (a trough on a swim) with walls down to the sand */
+function TrackMesh({ rt }: { rt: RaceTrack }) {
+  const geo = useMemo(() => {
+    const pos: number[] = [], col: number[] = [], idx: number[] = [], half = rt.width / 2 + 0.3, len = rt.track.len, c = new THREE.Color()
+    const N = Math.max(2, Math.ceil(len / 0.5))
+    for (let k = 0; k <= N; k++) {
+      const d = (k / N) * len, p = racerAt(rt, d, 0), kind = sectionAt(Math.min(d, len - 1e-6), rt.track).kind
+      const y = kind === 'swim' ? -0.9 : trackY(rt.track, d), nx = Math.cos(p.heading), nz = -Math.sin(p.heading)
+      c.set(KIND_COL[kind] ?? KIND_COL.run)
+      // 4 verts per sample: left wall foot, left top, right top, right wall foot
+      for (const [o, yy] of [[-half, FLOOR], [-half, y], [half, y], [half, FLOOR]] as const) { pos.push(p.x + nx * o, yy, p.z + nz * o); col.push(c.r, c.g, c.b) }
+      if (k) { const a = (k - 1) * 4, b = k * 4; for (const [u, v] of [[0, 1], [1, 2], [2, 3]]) idx.push(a + u, b + u, a + v, a + v, b + u, b + v) }
+    }
+    const g = new THREE.BufferGeometry()
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setIndex(idx); g.computeVertexNormals()
+    return g
+  }, [rt])
+  // each swim stretch's water surface
+  const water = useMemo(() => rt.track.sections.filter(s => s.kind === 'swim').map(s => {
+    const pos: number[] = [], idx: number[] = [], half = rt.width / 2 + 0.25, N = Math.max(2, Math.ceil(s.len / 0.5))
+    for (let k = 0; k <= N; k++) { const p = racerAt(rt, s.at + (k / N) * s.len, 0), nx = Math.cos(p.heading), nz = -Math.sin(p.heading)
+      pos.push(p.x - nx * half, -0.3, p.z - nz * half, p.x + nx * half, -0.3, p.z + nz * half); if (k) { const a = (k - 1) * 2; idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3) } }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals(); return g
+  }), [rt])
+  useEffect(() => () => { geo.dispose(); water.forEach(w => w.dispose()) }, [geo, water])
+  const fin = racerAt(rt, rt.track.len, 0), st = racerAt(rt, 0, 0), w = rt.width + 0.6
+  return (
+    <group>
+      <mesh geometry={geo}><meshLambertMaterial vertexColors side={THREE.DoubleSide} /></mesh>
+      {water.map((g, i) => <mesh key={i} geometry={g}><meshLambertMaterial color="#4aa0d0" transparent opacity={0.6} side={THREE.DoubleSide} /></mesh>)}
+      <mesh position={[st.x, 0.02, st.z]} rotation-y={st.heading}><boxGeometry args={[w, 0.04, 0.3]} /><meshBasicMaterial color="#fbf4e4" /></mesh>
+      <group position={[fin.x, 0, fin.z]} rotation-y={fin.heading} data-dash-finish>
+        <mesh position={[-w / 2, 1.4, 0]}><boxGeometry args={[0.25, 2.8, 0.25]} /><meshLambertMaterial color="#8d4119" /></mesh>
+        <mesh position={[w / 2, 1.4, 0]}><boxGeometry args={[0.25, 2.8, 0.25]} /><meshLambertMaterial color="#8d4119" /></mesh>
+        <mesh position={[0, 2.8, 0]}><boxGeometry args={[w + 0.3, 0.5, 0.35]} /><meshLambertMaterial color="#c8642a" /></mesh>
+      </group>
+    </group>
+  )
+}
+
+function striped(geo: THREE.BufferGeometry, panels: number): THREE.BufferGeometry {
+  const g = geo.toNonIndexed(), p = g.attributes.position, col = new Float32Array(p.count * 3)
+  for (let i = 0; i < p.count; i += 3) {
+    const cx = (p.getX(i) + p.getX(i + 1) + p.getX(i + 2)) / 3, cz = (p.getZ(i) + p.getZ(i + 1) + p.getZ(i + 2)) / 3
+    const c = Math.floor(((Math.atan2(cz, cx) + Math.PI) / (Math.PI * 2)) * panels) % 2 ? THISTLE : DOWN
+    for (let v = 0; v < 3; v++) col.set([c.r, c.g, c.b], (i + v) * 3)
+  }
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3)); g.computeVertexNormals()
+  return g
+}
+/** the big tent round the floor, the sand, and the ground under the bleachers */
+function TentHall() {
+  const g = useMemo(() => ({
+    wall: striped(new THREE.CylinderGeometry(TENT.r, TENT.r, TENT.wall, TENT.panels * 2, 1, true), TENT.panels),
+    roof: striped(new THREE.ConeGeometry(TENT.r * 1.02, TENT.peak - TENT.wall, TENT.panels * 2, 1, true), TENT.panels),
+  }), [])
+  useEffect(() => () => { g.wall.dispose(); g.roof.dispose() }, [g])
+  return (
+    <group data-dash-tent>
+      <mesh geometry={g.wall} position-y={FLOOR + TENT.wall / 2}><meshLambertMaterial vertexColors side={THREE.DoubleSide} /></mesh>
+      <mesh geometry={g.roof} position-y={FLOOR + TENT.wall + (TENT.peak - TENT.wall) / 2}><meshLambertMaterial vertexColors side={THREE.DoubleSide} /></mesh>
+      <mesh position-y={FLOOR + TENT.peak / 2}><cylinderGeometry args={[0.6, 0.6, TENT.peak, 10]} /><meshLambertMaterial color="#6b4a30" /></mesh>
+      <mesh rotation-x={-Math.PI / 2} position-y={FLOOR - 0.02}><circleGeometry args={[TENT.r, 48]} /><meshLambertMaterial color="#6e5a44" /></mesh>
+      <mesh rotation-x={-Math.PI / 2} position-y={FLOOR}><planeGeometry args={[ARENA, ARENA]} /><meshLambertMaterial color="#e2c98f" /></mesh>
+    </group>
+  )
+}
+
+/** the bleachers: TIERS steps on each side of the floor, with a generic Moglin crowd (instanced bodies + heads) that bobs */
+export const fanCount = () => 4 * BLEACH.tiers * Math.floor((ARENA - 4) / BLEACH.seat)
+const FAN_COLS = ['#d9a066', '#b98a5e', '#e2c4a0', '#9c7a5a', '#c99a7a', '#a8b07a', '#c4a0c8']
+function Bleachers({ cheer }: { cheer: () => number }) {
+  const n = fanCount(), bodies = useRef<THREE.InstancedMesh>(null), heads = useRef<THREE.InstancedMesh>(null)
+  const seats = useMemo(() => {
+    const out: { x: number; y: number; z: number; ph: number }[] = [], per = Math.floor((ARENA - 4) / BLEACH.seat)
+    for (let side = 0; side < 4; side++) for (let t = 0; t < BLEACH.tiers; t++) for (let k = 0; k < per; k++) {
+      const along = -((per - 1) * BLEACH.seat) / 2 + k * BLEACH.seat + (t % 2 ? BLEACH.seat / 2 : 0), out_ = BLEACH.from + t * BLEACH.depth + BLEACH.depth / 2
+      const [x, z] = side === 0 ? [along, out_] : side === 1 ? [out_, -along] : side === 2 ? [-along, -out_] : [-out_, along]
+      out.push({ x, y: FLOOR + (t + 1) * BLEACH.rise, z, ph: (side * 97 + t * 31 + k * 13) % 17 })
     }
     return out
   }, [])
-  const swim = COURSE.find(s => s.kind === 'swim')!, w = n * LANE_W + 1
+  useEffect(() => {
+    const c = new THREE.Color()
+    seats.forEach((_, i) => { c.set(FAN_COLS[i % FAN_COLS.length]); bodies.current?.setColorAt(i, c); heads.current?.setColorAt(i, c.multiplyScalar(1.08)) })
+    if (bodies.current?.instanceColor) bodies.current.instanceColor.needsUpdate = true
+    if (heads.current?.instanceColor) heads.current.instanceColor.needsUpdate = true
+  }, [seats])
+  const acc = useRef(1), m = useMemo(() => new THREE.Matrix4(), [])
+  useFrame(({ clock }, dt) => {
+    acc.current += dt; if (acc.current < 0.08) return; acc.current = 0   // a crowd needs no 60 Hz
+    const t = clock.elapsedTime, amp = 0.08 + 0.25 * cheer()
+    seats.forEach((s, i) => {
+      const b = Math.max(0, Math.sin(t * 5 + s.ph)) * amp
+      m.makeTranslation(s.x, s.y + 0.45 + b, s.z); bodies.current?.setMatrixAt(i, m)
+      m.makeTranslation(s.x, s.y + 1.05 + b, s.z); heads.current?.setMatrixAt(i, m)
+    })
+    if (bodies.current) bodies.current.instanceMatrix.needsUpdate = true
+    if (heads.current) heads.current.instanceMatrix.needsUpdate = true
+  })
   return (
-    <group>
-      {pieces.map((p, i) => <mesh key={i} position={[p.x, p.y, 0]} rotation-z={p.rot}><boxGeometry args={[p.len, 0.2, w]} /><meshLambertMaterial color={p.color} /></mesh>)}
-      {/* the water: a pit with a surface */}
-      <mesh position={[swim.at + swim.len / 2, -1.1, 0]}><boxGeometry args={[swim.len, 0.2, w]} /><meshLambertMaterial color="#3a5a6a" /></mesh>
-      <mesh position={[swim.at + swim.len / 2, -0.3, 0]}><boxGeometry args={[swim.len, 0.05, w]} /><meshLambertMaterial color="#4aa0d0" transparent opacity={0.6} /></mesh>
-      {/* start + finish */}
-      <mesh position={[0, 0.02, 0]}><boxGeometry args={[0.25, 0.04, w]} /><meshBasicMaterial color="#fbf4e4" /></mesh>
-      <group position={[COURSE_LEN, 0, 0]}>
-        <mesh position={[0, 1.4, -w / 2]}><boxGeometry args={[0.25, 2.8, 0.25]} /><meshLambertMaterial color="#8d4119" /></mesh>
-        <mesh position={[0, 1.4, w / 2]}><boxGeometry args={[0.25, 2.8, 0.25]} /><meshLambertMaterial color="#8d4119" /></mesh>
-        <mesh position={[0, 2.8, 0]}><boxGeometry args={[0.35, 0.5, w + 0.3]} /><meshLambertMaterial color="#c8642a" /></mesh>
-      </group>
-      {/* flowers along the runs (what a calm spirit stops to sniff) */}
-      {COURSE.filter(s => s.kind === 'run').flatMap((s, k) => Array.from({ length: 8 }, (_, i) => (
-        <mesh key={`${k}:${i}`} position={[s.at + 1 + i * (s.len - 2) / 7, 0.12, (i % 2 ? 1 : -1) * (w / 2 + 0.2)]}><sphereGeometry args={[0.14, 8, 6]} /><meshLambertMaterial color={['#f2c84a', '#e889b8', '#b38ae0'][i % 3]} /></mesh>
-      )))}
-      <mesh rotation-x={-Math.PI / 2} position={[COURSE_LEN / 2, -2.6, 0]}><planeGeometry args={[COURSE_LEN + 60, 60]} /><meshLambertMaterial color="#4c6a3c" /></mesh>
+    <group data-dash-bleachers={n}>
+      {[0, 1, 2, 3].map(side => Array.from({ length: BLEACH.tiers }, (_, t) => {
+        const out_ = BLEACH.from + t * BLEACH.depth + BLEACH.depth / 2, h = (t + 1) * BLEACH.rise, len = ARENA + 2 * (t + 1) * BLEACH.depth
+        const [x, z] = side === 0 ? [0, out_] : side === 1 ? [out_, 0] : side === 2 ? [0, -out_] : [-out_, 0]
+        return <mesh key={`${side}:${t}`} position={[x, FLOOR + h / 2, z]} rotation-y={side % 2 ? Math.PI / 2 : 0}><boxGeometry args={[len, h, BLEACH.depth]} /><meshLambertMaterial color={t % 2 ? '#8a6a48' : '#7a5c3e'} /></mesh>
+      }))}
+      <instancedMesh ref={bodies} args={[undefined, undefined, n]} frustumCulled={false}><sphereGeometry args={[0.45, 8, 6]} /><meshLambertMaterial /></instancedMesh>
+      <instancedMesh ref={heads} args={[undefined, undefined, n]} frustumCulled={false}><sphereGeometry args={[0.32, 8, 6]} /><meshLambertMaterial /></instancedMesh>
     </group>
   )
 }
 
-function Blocks({ lane, n, hp }: { lane: number; n: number; hp: () => number[] }) {
-  const refs = useRef<(THREE.Mesh | null)[]>([])
-  const sec = COURSE.find(s => s.kind === 'blocks')!
+function Blocks({ rt, lane, n, hp }: { rt: RaceTrack; lane: number; n: number; hp: () => number[] }) {
+  const refs = useRef<(THREE.Mesh | null)[]>([]), o = laneOffset(lane, n, rt.width), bw = Math.max(0.6, (rt.width - 0.8) / n * 0.85)
   useFrame(() => { const h = hp(); refs.current.forEach((m, k) => { if (!m) return; const f = h[k] / BLOCKS.hp; m.visible = f > 0; m.scale.setScalar(0.55 + 0.45 * f) }) })
-  return <>{BLOCKS.at.map((a, k) => <mesh key={k} ref={m => { refs.current[k] = m }} position={[sec.at + a, 0.45, laneZ(lane, n)]}><boxGeometry args={[0.7, 0.9, LANE_W * 0.8]} /><meshLambertMaterial color="#b0a49a" /></mesh>)}</>
+  return <>{rt.track.blocks.map((d, k) => { const p = racerAt(rt, d, o), y = trackY(rt.track, d)
+    return <mesh key={k} ref={m => { refs.current[k] = m }} position={[p.x, y + 0.45, p.z]} rotation-y={p.heading}><boxGeometry args={[bw, 0.9, 0.7]} /><meshLambertMaterial color="#b0a49a" /></mesh> })}</>
 }
 
-function Body({ e, at }: { e: Entry; at: () => RunState }) {
-  const g = useRef<THREE.Group>(null), wl = useRef<THREE.Mesh>(null), wr = useRef<THREE.Mesh>(null)
-  const flier = FLIERS.includes(e.species), swimmer = SWIMMERS.includes(e.species), heavy = HEAVY.includes(e.species)
-  useFrame(({ clock }) => {
-    const s = at(), t = clock.elapsedTime, o = g.current
-    if (!o) return
-    const sec = sectionAt(s.d), moving = s.stop <= 0 && s.fin == null
-    let y = groundY(s.d)
-    if (sec.kind === 'glide' && flier && s.d > sec.at) y = flyY(s.d)
-    if (sec.kind === 'swim') y = swimmer ? -0.5 + 0.05 * Math.sin(t * 6) : -0.35
-    o.position.set(s.d, y + (moving && sec.kind !== 'swim' ? Math.abs(Math.sin(t * 10)) * 0.08 : 0), o.position.z)
-    o.rotation.z = s.doing === 'trip' ? -1.2 : sec.kind === 'climb' ? 0.4 : 0
-    o.children[1].position.y = s.doing === 'sniff' ? 0.25 : 0.55   // the head dips to the flower
-    const flap = flier ? (sec.kind === 'glide' && s.d > sec.at ? 0.25 : Math.sin(t * 22) * 0.9) : 0
-    if (wl.current) wl.current.rotation.x = flap
-    if (wr.current) wr.current.rotation.x = -flap
+/** her clip for what she is doing (the race's own state, so the look and the sim never disagree) */
+export function clipFor(doing: Doing, go: boolean, flier: boolean): RigClip {
+  if (!go) return 'idle'
+  switch (doing) {
+    case 'run': return 'run'
+    case 'climb': case 'swim': return 'walk'
+    case 'glide': return flier ? 'idle' : 'run'
+    case 'drop': return 'run'
+    case 'blocks': case 'sniff': return 'idle'
+    case 'trip': return 'lie'
+    case 'done': return 'sit'
+  }
+}
+
+export const RACER_SCALE = 1.6
+type Probe = { track: 'published' | 'fallback'; len: number; width: number; racers: { sp: string; you: boolean; x: number; y: number; z: number; d: number; off: number; clip: string }[] }
+function Racer3D({ e, rt, lane, n, at, clip, probe }: { e: Entry; rt: RaceTrack; lane: number; n: number; at: () => RunState; clip: RigClip; probe: Probe }) {
+  const g = useRef<THREE.Group>(null), flier = FLIERS.includes(e.species), swimmer = SWIMMERS.includes(e.species), o = laneOffset(lane, n, rt.width)
+  const look = useMemo(() => spiritModelFor(e.species as Species), [e.species]), acc = useRef(1)
+  useFrame(({ clock }, dt) => {
+    const s = at(), t = clock.elapsedTime, grp = g.current
+    if (!grp) return
+    const sec = sectionAt(s.d, rt.track), p = racerAt(rt, s.d, o)
+    let y = trackY(rt.track, s.d)
+    if (sec.kind === 'glide' && flier && s.d > sec.at) y = flyY(rt.track, s.d)
+    if (sec.kind === 'swim') y = swimmer ? -0.5 + 0.05 * Math.sin(t * 6) : -0.42
+    const bump = s.doing === 'blocks' ? Math.max(0, Math.sin(t * 9)) * 0.15 : 0   // she butts the block
+    grp.position.set(p.x + Math.sin(p.heading) * bump, y, p.z + Math.cos(p.heading) * bump)
+    grp.rotation.y = p.heading
+    acc.current += dt
+    if (acc.current > 0.25) { acc.current = 0; const q = project(rt.line, rt.cum, grp.position.x, grp.position.z)
+      probe.racers[lane] = { sp: e.species, you: !!e.you, x: +p.x.toFixed(2), y: +y.toFixed(2), z: +p.z.toFixed(2), d: +s.d.toFixed(1), off: +q.d.toFixed(2), clip } }
   })
-  const c = SP_COLOR[e.species] ?? '#d4a843', ring = ELEMENT_COLORS[(e.element as Element)] ?? ELEMENT_COLORS.base
+  const ring = ELEMENT_COLORS[(e.element as Element)] ?? ELEMENT_COLORS.base
   return (
     <group ref={g} data-racer={e.species}>
-      <mesh position={[0, 0.3, 0]} scale={heavy ? [1.25, 0.85, 1.25] : [1, 1, 1]}><sphereGeometry args={[0.3, 14, 10]} /><meshLambertMaterial color={c} /></mesh>
-      <mesh position={[0.28, 0.55, 0]}><sphereGeometry args={[0.2, 12, 9]} /><meshLambertMaterial color={c} /></mesh>
-      {heavy && <mesh position={[0, 0.42, 0]} scale={[1.3, 0.55, 1.3]}><sphereGeometry args={[0.3, 12, 8]} /><meshLambertMaterial color="#6a5a40" /></mesh>}
-      {flier && <><mesh ref={wl} position={[0, 0.4, 0.3]}><boxGeometry args={[0.35, 0.04, 0.5]} /><meshLambertMaterial color={c} /></mesh>
-        <mesh ref={wr} position={[0, 0.4, -0.3]}><boxGeometry args={[0.35, 0.04, 0.5]} /><meshLambertMaterial color={c} /></mesh></>}
-      {swimmer && <mesh position={[-0.38, 0.25, 0]} rotation-z={0.3}><boxGeometry args={[0.35, 0.08, 0.18]} /><meshLambertMaterial color={c} /></mesh>}
-      <mesh rotation-x={-Math.PI / 2} position={[0, 0.02, 0]}><ringGeometry args={[0.34, 0.44, 20]} /><meshBasicMaterial color={ring} side={THREE.DoubleSide} /></mesh>
-      {e.you && <mesh position={[0.1, 1.05, 0]} rotation-x={Math.PI}><coneGeometry args={[0.15, 0.3, 4]} /><meshBasicMaterial color={H.ember} /></mesh>}
+      <group scale={RACER_SCALE}>
+        {look ? <Suspense fallback={null}><SpiritFigure sp={e.species as Species} look={look} clip={clip} /></Suspense>
+          : <mesh position-y={0.3}><sphereGeometry args={[0.25, 12, 10]} /><meshLambertMaterial color="#d4a843" /></mesh>}
+      </group>
+      <mesh rotation-x={-Math.PI / 2} position={[0, 0.03, 0]}><ringGeometry args={[0.45, 0.58, 20]} /><meshBasicMaterial color={ring} side={THREE.DoubleSide} /></mesh>
+      {e.you && <mesh position={[0, 2.3, 0]} rotation-x={Math.PI}><coneGeometry args={[0.2, 0.4, 4]} /><meshBasicMaterial color={H.ember} /></mesh>}
     </group>
   )
 }
 
-function Follow({ at, phone }: { at: () => RunState; phone: boolean }) {
-  const cam = useThree(s => s.camera), look = useRef(new THREE.Vector3())
+/** the dash cam: behind your racer along the course, a little above, looking ahead (snaps on the first frame) */
+function Follow({ rt, lane, n, at, phone }: { rt: RaceTrack; lane: number; n: number; at: () => RunState; phone: boolean }) {
+  const cam = useThree(s => s.camera), look = useRef(new THREE.Vector3()), first = useRef(true)
   useFrame((_, dt) => {
-    const s = at(), y = Math.max(groundY(s.d), sectionAt(s.d).kind === 'glide' ? 0 : -0.5)
-    const want = new THREE.Vector3(s.d - (phone ? 4 : 5), y + (phone ? 4.5 : 3.6), phone ? 8.5 : 7.5)
-    const k = 1 - Math.exp(-dt * 3)
-    cam.position.lerp(want, k); look.current.lerp(new THREE.Vector3(s.d + 3, y + 0.5, 0), k); cam.lookAt(look.current)
+    const s = at(), p = racerAt(rt, s.d, laneOffset(lane, n, rt.width) * 0.5), y = Math.max(trackY(rt.track, s.d), sectionAt(s.d, rt.track).kind === 'glide' ? 0 : -0.5)
+    const back = phone ? 8 : 6.5, up = phone ? 5 : 3.8, ahead = racerAt(rt, s.d + 4, 0)
+    const want = new THREE.Vector3(p.x - Math.sin(p.heading) * back, y + up, p.z - Math.cos(p.heading) * back)
+    const lk = new THREE.Vector3(ahead.x, trackY(rt.track, Math.min(rt.track.len, s.d + 4)) + 0.6, ahead.z)
+    const k = first.current ? 1 : 1 - Math.exp(-dt * 3); first.current = false
+    cam.position.lerp(want, k); look.current.lerp(lk, k); cam.lookAt(look.current)
   })
   return null
 }
 
 const SUB = 0.05, MAX_DT = 0.5
-function Stepper({ racers, states, rolls, onTick, speed }: { racers: Entry[]; states: React.MutableRefObject<RunState[]>; rolls: (() => number)[]; onTick: (dt: number) => void; speed?: number }) {
+function Stepper({ racers, states, rolls, onTick, speed, rt }: { racers: Entry[]; states: React.MutableRefObject<RunState[]>; rolls: (() => number)[]; onTick: (dt: number) => void; speed?: number; rt: RaceTrack }) {
   const acc = useRef(0)
   useFrame((_, raw) => {
     // real time whatever the frame rate (a slow phone still races at the race's pace): sub-steps of at most SUB s, and a
@@ -125,18 +220,22 @@ function Stepper({ racers, states, rolls, onTick, speed }: { racers: Entry[]; st
     // seed runs the same race whatever the frame rate (fair-dev.ts runHeat is the same loop headless)
     if (speed) {
       acc.current += dt * speed
-      for (let n = 0; acc.current >= SUB && n < 400; n++) { acc.current -= SUB; states.current = states.current.map((s, i) => step(racers[i], s, SUB, rolls[i])); onTick(SUB) }
+      for (let n = 0; acc.current >= SUB && n < 400; n++) { acc.current -= SUB; states.current = states.current.map((s, i) => step(racers[i], s, SUB, rolls[i], rt.track)); onTick(SUB) }
       return
     }
-    for (let left = dt; left > 1e-6; left -= SUB) { const h = Math.min(SUB, left); states.current = states.current.map((s, i) => step(racers[i], s, h, rolls[i])) }
+    for (let left = dt; left > 1e-6; left -= SUB) { const h = Math.min(SUB, left); states.current = states.current.map((s, i) => step(racers[i], s, h, rolls[i], rt.track)) }
     onTick(dt)
   })
   return null
 }
 
 const COUNT_S = 3, WAIT_S = 15
-export function DashRace({ racers, seed, phone, onDone, speed }: { racers: Entry[]; seed: number; phone: boolean; onDone: (r: RaceResult) => void; /** M243 dev: fixed steps at this speed */ speed?: number }) {
-  const states = useRef<RunState[]>(racers.map(() => startState()))
+export function DashRace({ racers, seed, phone, onDone, speed, course }: { racers: Entry[]; seed: number; phone: boolean; onDone: (r: RaceResult) => void; /** M243 dev: fixed steps at this speed */ speed?: number
+  /** M247 s2: the published course (GET /shimmer/open/dash-edits); none = the fixed course on the stadium loop */ course?: DashCourse | null }) {
+  const rt = useMemo(() => raceTrack(course), [course])
+  const probe = useMemo<Probe>(() => ({ track: rt.published ? 'published' : 'fallback', len: rt.track.len, width: rt.width, racers: [] }), [rt])
+  useEffect(() => { const w = window as unknown as { __dash?: Probe }; w.__dash = probe; return () => { if (w.__dash === probe) delete w.__dash } }, [probe])
+  const states = useRef<RunState[]>(racers.map(() => startState(rt.track)))
   const rolls = useMemo(() => racers.map((_, i) => seeded(seed + i * 7919)), [racers, seed])
   const me = racers.findIndex(r => r.you)
   const [count, setCount] = useState(COUNT_S), [, setTick] = useState(0), hud = useRef(0), myDone = useRef<number | null>(null), sent = useRef(false)
@@ -157,41 +256,46 @@ export function DashRace({ racers, seed, phone, onDone, speed }: { racers: Entry
     if (S.every(s => s.fin != null) || (myDone.current ?? 0) > WAIT_S) finish()   // the slowest get WAIT_S to come home
     if (hud.current > 0.12) { hud.current = 0; setTick(t => t + 1) }
   }
-  const S = states.current, mine = S[me]
+  const S = states.current, mine = S[me], cheerLevel = () => Math.max(0, ...states.current.map(s => (s.fin != null ? 0.6 : s.burst > 0 ? 1 : 0)))
   const order = racers.map((r, i) => ({ r, s: S[i] })).sort((a, b) => (a.s.fin ?? Infinity) - (b.s.fin ?? Infinity) || b.s.d - a.s.d)
   const cool = mine.cool / CHEER.cooldown
   const n = racers.length
   return (
-    <div data-dash-race data-dash-go={go ? '1' : '0'} style={{ position: 'fixed', inset: 0, zIndex: 60, background: '#9cc6e0' }}>
-      <Canvas dpr={[1, 1.5]} camera={{ position: [-5, 4, 8], fov: phone ? 62 : 50, near: 0.1, far: 300 }} gl={{ antialias: true }}>
-        <color attach="background" args={['#a9d2ea']} />
-        <ambientLight intensity={0.85} />
-        <directionalLight position={[10, 18, 8]} intensity={1.2} />
-        <Course n={n} />
-        {racers.map((e, i) => <group key={i} position-z={laneZ(i, n)}><Body e={e} at={() => states.current[i]} /></group>)}
-        {racers.map((_, i) => <Blocks key={i} lane={i} n={n} hp={() => states.current[i].blocks} />)}
-        <Follow at={() => states.current[me]} phone={phone} />
-        {go && <Stepper racers={racers} states={states} rolls={rolls} onTick={onTick} speed={speed} />}
+    <div data-dash-race data-dash-go={go ? '1' : '0'} data-dash-scene="tent" data-dash-track={probe.track} data-dash-len={rt.track.len.toFixed(1)} data-dash-fans={fanCount()}
+      data-dash-models={racers.filter(r => !!spiritModelFor(r.species as Species)).length} style={{ position: 'fixed', inset: 0, zIndex: 60, background: '#3a2a22' }}>
+      <Canvas dpr={[1, 1.5]} camera={{ position: [-5, 4, 8], fov: phone ? 62 : 50, near: 0.1, far: 400 }} gl={{ antialias: true }}>
+        <color attach="background" args={['#3a2a22']} />
+        <hemisphereLight args={['#fff1d8', '#6e5a44', 0.9]} />
+        <ambientLight intensity={0.35} />
+        <directionalLight position={[10, 40, 8]} intensity={1.0} />
+        <TentHall />
+        <Bleachers cheer={cheerLevel} />
+        <TrackMesh rt={rt} />
+        {racers.map((e, i) => <Racer3D key={i} e={e} rt={rt} lane={i} n={n} at={() => states.current[i]} probe={probe}
+          clip={clipFor(S[i].doing, go, FLIERS.includes(e.species))} />)}
+        {racers.map((_, i) => <Blocks key={i} rt={rt} lane={i} n={n} hp={() => states.current[i].blocks} />)}
+        <Follow rt={rt} lane={me} n={n} at={() => states.current[me]} phone={phone} />
+        {go && <Stepper racers={racers} states={states} rolls={rolls} onTick={onTick} speed={speed} rt={rt} />}
       </Canvas>
       {/* HUD */}
       <div style={{ position: 'absolute', top: 10, left: 10, right: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, pointerEvents: 'none', fontFamily: 'inherit' }}>
         <div data-dash-standings style={{ background: 'rgba(251,244,228,.88)', borderRadius: 10, padding: '6px 10px', fontSize: phone ? 12 : 13, color: H.ink, minWidth: 0 }}>
           {order.map(({ r, s }, k) => (
-            <div key={k} data-dash-racer={r.species} data-doing={s.doing} data-d={s.d.toFixed(1)} data-split={JSON.stringify(Object.fromEntries(Object.entries(s.split).map(([k, v]) => [k, Math.round((v ?? 0) * 10) / 10])))} data-you={r.you ? '1' : '0'}
+            <div key={k} data-dash-racer={r.species} data-doing={s.doing} data-d={s.d.toFixed(1)} data-split={JSON.stringify(Object.fromEntries(Object.entries(s.split).map(([k, v]) => [k, Math.round((v ?? 0) * 10) / 10])))} data-you={r.you ? '1' : '0'} data-fin={s.fin != null ? Math.round(s.fin * 1000) : ''}
               style={{ fontWeight: r.you ? 800 : 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {k + 1}. {r.name} <span style={{ color: H.inkFaint }}>· {r.you ? 'you' : r.who} · {L.doing[s.doing]}</span>
+              {k + 1}. {r.name} <span style={{ color: H.inkFaint }}>· {r.you ? 'you' : r.who} · {s.fin != null ? fmtTime(s.fin * 1000) : L.doing[s.doing]}</span>
             </div>
           ))}
         </div>
         <div style={{ background: 'rgba(251,244,228,.88)', borderRadius: 10, padding: '6px 10px', textAlign: 'right', color: H.ink, flex: 'none' }}>
-          <div data-dash-section={sectionAt(mine.d).kind} style={{ fontWeight: 800, fontSize: 16 }}>{L.sections[sectionAt(mine.d).kind]}</div>
+          <div data-dash-section={sectionAt(mine.d, rt.track).kind} style={{ fontWeight: 800, fontSize: 16 }}>{L.sections[sectionAt(mine.d, rt.track).kind]}</div>
           <div data-dash-clock style={{ fontVariantNumeric: 'tabular-nums', fontSize: 13 }}>{fmtTime(mine.t * 1000)}</div>
-          <div style={{ height: 4, width: 90, background: 'rgba(58,39,22,.15)', borderRadius: 2, marginTop: 4 }}><div style={{ height: 4, width: `${(mine.d / COURSE_LEN) * 100}%`, background: H.ember, borderRadius: 2 }} /></div>
+          <div style={{ height: 4, width: 90, background: 'rgba(58,39,22,.15)', borderRadius: 2, marginTop: 4 }}><div style={{ height: 4, width: `${(mine.d / rt.track.len) * 100}%`, background: H.ember, borderRadius: 2 }} /></div>
         </div>
       </div>
       {!go && <div data-dash-count={count} style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', pointerEvents: 'none', fontSize: 64, fontWeight: 900, color: '#fbf4e4', textShadow: '0 3px 0 rgba(58,39,22,.5)' }}>{count > 0 ? count : L.go}</div>}
       <button data-dash-cheer data-burst={mine.burst > 0 ? '1' : '0'} data-cool={mine.cool.toFixed(1)} disabled={!go || mine.cool > 0 || mine.fin != null}
-        onClick={() => { states.current = states.current.map((s, i) => (i === me ? cheer(s) : s)); setTick(t => t + 1) }}
+        onClick={() => { states.current = states.current.map((s, i) => (i === me ? cheer(s, rt.track) : s)); setTick(t => t + 1) }}
         style={{ position: 'absolute', bottom: phone ? 28 : 36, left: '50%', transform: 'translateX(-50%)', width: phone ? 120 : 140, height: phone ? 120 : 140, borderRadius: '50%', border: 'none', cursor: 'pointer',
           fontSize: 20, fontWeight: 900, color: '#fbf4e4', background: mine.burst > 0 ? `radial-gradient(circle,#ffd25a,${H.ember})` : `conic-gradient(rgba(58,39,22,.55) ${cool * 360}deg, ${H.ember} 0)`,
           boxShadow: '0 4px 0 rgba(58,39,22,.35)', opacity: !go || mine.fin != null ? 0.5 : 1 }}>{L.cheer}</button>

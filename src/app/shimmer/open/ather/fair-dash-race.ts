@@ -20,6 +20,18 @@ export const COURSE: readonly Section[] = PLAN.reduce<Section[]>((a, [kind, len]
 export const COURSE_LEN = COURSE[COURSE.length - 1].at + COURSE[COURSE.length - 1].len
 /** where the blocks stand inside the blocks section (m from its start), and each block's toughness */
 export const BLOCKS = { at: [2.5, 6, 9.5], hp: 150 } as const
+/** M247 s2: a longer carved blocks stretch keeps standing blocks every BLOCK_EVERY m (the fixed one's 2.5 / 6 / 9.5 = this rule) */
+export const BLOCK_EVERY = 3.5
+/** M247 s2: A TRACK = the sections a race runs (the fixed COURSE, or a course carved in Creative: dash-course courseSections),
+ *  its length, and where each block stands (race metres). Every function below takes one; the default is the fixed course. */
+export interface Track { sections: readonly Section[]; len: number; blocks: readonly number[] }
+export function trackOf(sections: readonly Section[]): Track {
+  const blocks: number[] = []
+  for (const s of sections) if (s.kind === 'blocks') for (let a = BLOCKS.at[0]; a <= s.len - 1 + 1e-9; a += BLOCK_EVERY) blocks.push(s.at + a)
+  const last = sections[sections.length - 1]
+  return { sections, len: last ? last.at + last.len : 0, blocks }
+}
+export const FIXED_TRACK: Track = trackOf(COURSE)
 /** the climb's rise and the gap's drop, metres (the view's shapes; the sim only needs the kinds) */
 export const CLIMB_H = 3.5, GAP_DROP = 2.2
 
@@ -50,9 +62,9 @@ export interface RunState {
   fin: number | null // finish time, s
   split: Partial<Record<SectionKind, number>>   // seconds spent in each kind of section so far (stops included)
 }
-export const startState = (): RunState => ({ d: 0, t: 0, doing: 'run', stop: 0, moments: 0, burst: 0, cool: 0, blocks: BLOCKS.at.map(() => BLOCKS.hp), fin: null, split: {} })
+export const startState = (tr: Track = FIXED_TRACK): RunState => ({ d: 0, t: 0, doing: 'run', stop: 0, moments: 0, burst: 0, cool: 0, blocks: tr.blocks.map(() => BLOCKS.hp), fin: null, split: {} })
 
-export const sectionAt = (d: number): Section => COURSE.find(s => d < s.at + s.len) ?? COURSE[COURSE.length - 1]
+export const sectionAt = (d: number, tr: Track = FIXED_TRACK): Section => tr.sections.find(s => d < s.at + s.len) ?? tr.sections[tr.sections.length - 1]
 
 /** her speed in a section (m/s), before cheer and stops */
 export function speedIn(r: Racer, kind: SectionKind): number {
@@ -74,18 +86,18 @@ export function momentOdds(r: Racer): [number, number] {
 }
 
 /** cheer now? returns the new state (a burst; ends a stop) or the same one when on cooldown / finished */
-export function cheer(s: RunState): RunState {
+export function cheer(s: RunState, tr: Track = FIXED_TRACK): RunState {
   if (s.cool > 0 || s.fin != null) return s
-  return { ...s, burst: CHEER.burst, cool: CHEER.cooldown, stop: 0, doing: s.doing === 'sniff' || s.doing === 'trip' ? sectionAt(s.d).kind : s.doing }
+  return { ...s, burst: CHEER.burst, cool: CHEER.cooldown, stop: 0, doing: s.doing === 'sniff' || s.doing === 'trip' ? sectionAt(s.d, tr).kind : s.doing }
 }
 
 /** one step of dt seconds. `rand` = this racer's own roll (seeded by the view, Math.random-free in tests) */
-export function step(r: Racer, s0: RunState, dt: number, rand: () => number): RunState {
+export function step(r: Racer, s0: RunState, dt: number, rand: () => number, tr: Track = FIXED_TRACK): RunState {
   if (s0.fin != null) return s0
-  const k0 = sectionAt(s0.d).kind
+  const k0 = sectionAt(s0.d, tr).kind
   const s: RunState = { ...s0, blocks: s0.blocks.slice(), t: s0.t + dt, burst: Math.max(0, s0.burst - dt), cool: Math.max(0, s0.cool - dt), split: { ...s0.split, [k0]: (s0.split[k0] ?? 0) + dt } }
   if (s.stop > 0) { s.stop = Math.max(0, s.stop - dt); if (s.stop > 0) return s }
-  const sec = sectionAt(s.d)
+  const sec = sectionAt(s.d, tr)
   // a personality moment (run + climb only)
   if ((sec.kind === 'run' || sec.kind === 'climb') && s.moments < MOMENTS && s.burst <= 0 && s.d > 3) {
     const [sn, tr] = momentOdds(r), roll = rand()
@@ -94,13 +106,14 @@ export function step(r: Racer, s0: RunState, dt: number, rand: () => number): Ru
   }
   const mult = s.burst > 0 ? CHEER.mult : 1
   if (sec.kind === 'blocks') {
-    const i = s.blocks.findIndex((hp, k) => hp > 0 && s.d >= sec.at + BLOCKS.at[k] - 0.5)
+    // a block she has reached and not broken holds her (blocks stand in race order, so the first live one is the one ahead)
+    const i = s.blocks.findIndex((hp, k) => hp > 0 && s.d >= tr.blocks[k] - 0.5)
     if (i >= 0) { s.blocks[i] = Math.max(0, s.blocks[i] - breakRate(r) * mult * dt); s.doing = 'blocks'; return s }
-    const next = s.blocks.findIndex(hp => hp > 0), wall = next >= 0 ? sec.at + BLOCKS.at[next] - 0.5 : Infinity
+    const next = s.blocks.findIndex(hp => hp > 0), wall = next >= 0 ? tr.blocks[next] - 0.5 : Infinity
     s.d = Math.min(wall, s.d + speedIn(r, 'blocks') * mult * dt)
   } else s.d += speedIn(r, sec.kind) * mult * dt
-  s.doing = sec.kind === 'glide' && !FLIERS.includes(r.species) ? 'drop' : sectionAt(s.d).kind
-  if (s.d >= COURSE_LEN) { s.fin = s.t - (s.d - COURSE_LEN) / Math.max(0.1, speedIn(r, 'run') * mult); s.d = COURSE_LEN; s.doing = 'done' }
+  s.doing = sec.kind === 'glide' && !FLIERS.includes(r.species) ? 'drop' : sectionAt(s.d, tr).kind
+  if (s.d >= tr.len) { s.fin = s.t - (s.d - tr.len) / Math.max(0.1, speedIn(r, 'run') * mult); s.d = tr.len; s.doing = 'done' }
   return s
 }
 
@@ -111,9 +124,9 @@ export function seeded(seed: number): () => number {
 }
 
 /** the whole race headless (the test; also how long a section takes a racer): fixed dt, no cheer unless `cheerAt` */
-export function runHeadless(r: Racer, seed: number, cheerAt: (s: RunState) => boolean = () => false, dt = 1 / 30): { fin: number; byKind: Record<SectionKind, number> } {
-  let s = startState(); const rand = seeded(seed), byKind = { run: 0, swim: 0, climb: 0, glide: 0, blocks: 0 } as Record<SectionKind, number>
-  for (let i = 0; i < 100_000 && s.fin == null; i++) { if (cheerAt(s)) s = cheer(s); const k = sectionAt(s.d).kind; s = step(r, s, dt, rand); byKind[k] += dt }
+export function runHeadless(r: Racer, seed: number, cheerAt: (s: RunState) => boolean = () => false, dt = 1 / 30, tr: Track = FIXED_TRACK): { fin: number; byKind: Record<SectionKind, number> } {
+  let s = startState(tr); const rand = seeded(seed), byKind = { run: 0, swim: 0, climb: 0, glide: 0, blocks: 0 } as Record<SectionKind, number>
+  for (let i = 0; i < 100_000 && s.fin == null; i++) { if (cheerAt(s)) s = cheer(s, tr); const k = sectionAt(s.d, tr).kind; s = step(r, s, dt, rand, tr); byKind[k] += dt }
   return { fin: s.fin ?? Infinity, byKind }
 }
 

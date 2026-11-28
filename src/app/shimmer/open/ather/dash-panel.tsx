@@ -16,6 +16,7 @@ import { loadStats, statValue } from './spirit-stats'
 import { SPECIES_BASE } from './spirit-growth'
 import { fillIn } from './fair-dash-race'
 import { DashRace, type Entry, type RaceResult } from './dash-view'
+import { cleanCourse, type DashCourse } from './dash-course'
 import { DASH_UI as L, RACERS, RACE_STATS, fmtTime, type DashBoard, type RaceStats } from './fair-dash-rules'
 
 const NONE: readonly string[] = []
@@ -37,6 +38,11 @@ export function DashPanel({ onClose }: { onClose: () => void }) {
     try { const r = await fetch('/api/fair/dash', { cache: 'no-store' }); if (r.ok) setBoard(await r.json()) } catch { /* offline: the board stays blank */ }
   }, [])
   useEffect(() => { void load() }, [load])
+  // M247 s2: the course Alex published in Creative (none / offline = the fixed course: the race always runs)
+  const [course, setCourse] = useState<DashCourse | null>(null)
+  useEffect(() => { let alive = true
+    fetch('/shimmer/open/dash-edits', { cache: 'no-store' }).then(r => (r.ok ? r.json() : null)).then(j => { if (alive) setCourse(cleanCourse(j)) }).catch(() => {})
+    return () => { alive = false } }, [])
   useEffect(() => { if (!pick && spirits.length) setPick(spirits[0].id) }, [pick, spirits])
 
   const chosen = spirits.find(s => s.id === pick) ?? null
@@ -88,7 +94,7 @@ export function DashPanel({ onClose }: { onClose: () => void }) {
     </div>
   )
 
-  if (race && !result) return <DashRace racers={race.racers} seed={race.seed} phone={phone} onDone={r => { void done(r) }} />
+  if (race && !result) return <DashRace racers={race.racers} seed={race.seed} phone={phone} course={course} onDone={r => { void done(r) }} />
   return (
     <FairSignup title={L.title} dataPanel="dash" onClose={onClose} spirits={spirits} pick={pick} onPick={setPick}
       entrants={entrants} canEnter={canEnter && !result} onEnter={enter}
