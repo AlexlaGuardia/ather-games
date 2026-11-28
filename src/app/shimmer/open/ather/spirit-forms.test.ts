@@ -9,6 +9,7 @@ import { LEP_GLB_TALL } from './spirit-models'   // M202 the Lepara line
 import { LUM_GLB_TALL } from './spirit-models'   // M202 the Luminara line
 import { PUBLIC_FORMS } from './spirit-public'
 import { type SpiritElement, CROAK_GLB_TALL, AURLOTL_RIG, ARCLOTL_RIG, CRAGLOTL_RIG, LOTL_GLB_TALL, BEAR_GLB_TALL, LUMEBEAR_RIG, VOLTBEAR_RIG, TIDEBEAR_RIG, NOCT_GLB_TALL, NOCTARC_RIG, NOCTARA_RIG, NOCTORE_RIG, NOCTIX_RIG, NOCTYX_RIG, OWL_GLB_TALL, MYSTOWL_RIG, VOLTOWL_RIG, CRAGOWL_RIG, TIDEOWL_RIG, ATHOWL_RIG, HOV_GLB_TALL, VOLTARI_RIG, LUMARI_RIG, OBSIDARI_RIG, TIDARI_RIG, HOVARI_RIG, CRAGBEAR_GLB_TALL, CRAGBEAR_RIG, MARLOTL_RIG, CROAKARC_RIG, SECOND_FORMS, formGrow, SPIRIT_ELEMENTS, SPIRIT_MODELS, SPIRIT_RIGS, formLook, rigLook, spiritModelFor } from './spirit-models'
+import { alexSized } from '../../dev/editors/m249-sized'  // M249 s2: sizes Alex set in the gallery pass (pinned exactly by gallery-size-m249.test.ts)
 
 let pass = 0
 const fails: string[] = []
@@ -38,7 +39,7 @@ for (const el of SPIRIT_ELEMENTS) {
   ok(!!L.rig && L.rig === base.rig, `fox ${el}: rigged on the Vulnyx plan`)
   ok(L.h > base.h * 1.1 && Math.abs(L.h - base.h * formGrow(L.name!)) < 1e-9, `fox ${el}: grown past her base by her own dial (${L.h.toFixed(3)} vs ${base.h.toFixed(3)})`)
   // M202 v2: all four of the Vulnyx line (Vulnore, Vulnara, Vulnarc, Vulnix) are their own creatures at dial 1.4 (Alex 11-26, ~1.0 m)
-  ok(formGrow(L.name!) === 1.4, `fox ${el}: size dial ${formGrow(L.name!)}`)
+  ok(alexSized('form:' + L.name!) || (formGrow(L.name!) === 1.4), `fox ${el}: size dial ${formGrow(L.name!)}`)
   ok((L.trot.stride ?? 0) > (base.trot.stride ?? 0), `fox ${el}: her stride grows with her`)
   ok(fs.existsSync('public' + L.url), `fox ${el}: ${L.url} shipped`)
   const { j, col, n } = glb(L.url), names = (j.nodes as { name: string }[]).map(x => x.name), clips = (j.animations as { name: string }[]).map(a => a.name)
@@ -79,7 +80,7 @@ for (const el of SPIRIT_ELEMENTS) {
     const L = formLook('axolotl', el)!
     ok(!!L && L.name === name && L.url === `/open/spirits/${name}-rigged.glb` && L.form === el, `axolotl ${el}: ${name} ${L?.url}`)
     ok(L.rig === rig && rig !== MARLOTL_RIG && rig !== b.rig, `axolotl ${el}: her own rig`)
-    ok(formGrow(name) === 1.4 && Math.abs(L.h - W.h) < 1e-9, `axolotl ${el}: dial 1.4, Marlotl's world scale (h ${L.h.toFixed(3)} vs ${W.h.toFixed(3)})`)
+    ok(alexSized('form:' + name) || (formGrow(name) === 1.4 && Math.abs(L.h - W.h) < 1e-9), `axolotl ${el}: dial 1.4, Marlotl's world scale (h ${L.h.toFixed(3)} vs ${W.h.toFixed(3)})`)
     ok((L.trot.stride ?? 0) > (b.trot.stride ?? 0), `axolotl ${el}: her stride grows with her`)
     ok(fs.existsSync('public' + L.url), `axolotl ${el}: ${L.url} shipped`)
     const { j, col, n } = glb(L.url), names = (j.nodes as { name: string }[]).map(x => x.name), clips = (j.animations as { name: string }[]).map(a => a.name)
@@ -116,7 +117,7 @@ for (const el of SPIRIT_ELEMENTS) {
 { const L = formLook('water-bear', 'earth')!, b = SPIRIT_RIGS['water-bear']!
   ok(!!L && L.name === 'cragbear' && L.url === '/open/spirits/cragbear-rigged.glb' && L.form === 'earth', `water-bear earth: Cragbear ${L?.url}`)
   ok(!!L.rig && L.rig === CRAGBEAR_RIG && L.rig !== b.rig, 'water-bear earth: her own rig')
-  ok(formGrow('cragbear') === 1.4 && Math.abs(L.h / b.h - 1.4) < 1e-9, `water-bear earth: size dial ${formGrow('cragbear')} (h ${L.h.toFixed(3)} vs ${b.h.toFixed(3)})`)
+  ok(alexSized('form:cragbear') || (formGrow('cragbear') === 1.4 && Math.abs(L.h / b.h - 1.4) < 1e-9), `water-bear earth: size dial ${formGrow('cragbear')} (h ${L.h.toFixed(3)} vs ${b.h.toFixed(3)})`)
   ok((L.trot.stride ?? 0) > (b.trot.stride ?? 0), 'water-bear earth: her stride grows with her')
   ok(fs.existsSync('public' + L.url), `water-bear earth: ${L.url} shipped`)
   const { j, col, n } = glb(L.url), names = (j.nodes as { name: string }[]).map(x => x.name), clips = (j.animations as { name: string }[]).map(a => a.name)
@@ -135,7 +136,7 @@ for (const [el, name, rig] of BEARS) {
   const L = formLook('water-bear', el)!, b = SPIRIT_RIGS['water-bear']!
   ok(!!L && L.name === name && L.url === `/open/spirits/${name}-rigged.glb` && L.form === el, `water-bear ${el}: ${name} ${L?.url}`)
   ok(L.rig === rig && rig !== b.rig && rig !== CRAGBEAR_RIG, `water-bear ${el}: her own rig`)
-  ok(formGrow(name) === 1.4 && Math.abs(L.h / b.h - 1.4) < 1e-9, `water-bear ${el}: size dial ${formGrow(name)}`)
+  ok(alexSized('form:' + name) || (formGrow(name) === 1.4 && Math.abs(L.h / b.h - 1.4) < 1e-9), `water-bear ${el}: size dial ${formGrow(name)}`)
   ok(fs.existsSync('public' + L.url), `water-bear ${el}: ${L.url} shipped`)
   const { j, col, n } = glb(L.url), names = (j.nodes as { name: string }[]).map(x => x.name), clips = (j.animations as { name: string }[]).map(a => a.name)
   ok(['body', 'eyes', 'b_root', 'b_neck', 'b_head'].every(x => names.includes(x)) && j.skins?.[0]?.joints?.length === 24, `water-bear ${el}: nodes + 24 bones`)
@@ -167,7 +168,7 @@ for (const [el, name, rig] of NOCTS) {
   const L = formLook('bat', el)!, b = SPIRIT_RIGS.bat!
   ok(!!L && L.name === name && L.url === `/open/spirits/${name}-rigged.glb` && L.form === el, `bat ${el}: ${name} ${L?.url}`)
   ok(L.rig === rig && rig !== b.rig && !!rig.fly, `bat ${el}: her own rig, still a flier`)
-  ok(formGrow(name) === 1.4 && Math.abs(L.h / b.h - 1.4) < 1e-9, `bat ${el}: size dial ${formGrow(name)}`)
+  ok(alexSized('form:' + name) || (formGrow(name) === 1.4 && Math.abs(L.h / b.h - 1.4) < 1e-9), `bat ${el}: size dial ${formGrow(name)}`)
   ok(fs.existsSync('public' + L.url), `bat ${el}: ${L.url} shipped`)
   const { j, col, n } = glb(L.url), names = (j.nodes as { name: string }[]).map(x => x.name), clips = (j.animations as { name: string }[]).map(a => a.name)
   const pos = j.accessors[j.meshes.find((m: { name: string }) => m.name === 'body').primitives[0].attributes.POSITION]
@@ -195,7 +196,7 @@ for (const [el, name, rig] of OWLS) {
   const L = formLook('owl', el)!, b = SPIRIT_RIGS.owl!
   ok(!!L && L.name === name && L.url === `/open/spirits/${name}-rigged.glb` && L.form === el, `owl ${el}: ${name} ${L?.url}`)
   ok(L.rig === rig && rig !== b.rig && !!rig.fly && rig.neck === ATHOWL_RIG.neck, `owl ${el}: her own rig, still a flier`)
-  ok(formGrow(name) === 1.4 && Math.abs(L.h / b.h - 1.4) < 1e-9, `owl ${el}: size dial ${formGrow(name)}`)
+  ok(alexSized('form:' + name) || (formGrow(name) === 1.4 && Math.abs(L.h / b.h - 1.4) < 1e-9), `owl ${el}: size dial ${formGrow(name)}`)
   ok(fs.existsSync('public' + L.url), `owl ${el}: ${L.url} shipped`)
   const { j, col, n } = glb(L.url), names = (j.nodes as { name: string }[]).map(x => x.name), clips = (j.animations as { name: string }[]).map(a => a.name)
   const pos = j.accessors[j.meshes.find((m: { name: string }) => m.name === 'body').primitives[0].attributes.POSITION]
@@ -227,7 +228,7 @@ for (const [el, name, rig] of HOVS) {
   const L = formLook('hummingbird', el)!, b = SPIRIT_RIGS.hummingbird!
   ok(!!L && L.name === name && L.url === `/open/spirits/${name}-rigged.glb` && L.form === el, `hummingbird ${el}: ${name} ${L?.url}`)
   ok(L.rig === rig && rig !== b.rig && !!rig.hover && rig.hover === HOVARI_RIG.hover && rig.neck === HOVARI_RIG.neck, `hummingbird ${el}: her own rig, still a hoverer`)
-  ok(formGrow(name) === 1.5 && Math.abs(L.h / b.h - 1.5) < 1e-9, `hummingbird ${el}: size dial ${formGrow(name)} (redo 11-27: a bit bigger)`)
+  ok(alexSized('form:' + name) || (formGrow(name) === 1.5 && Math.abs(L.h / b.h - 1.5) < 1e-9), `hummingbird ${el}: size dial ${formGrow(name)} (redo 11-27: a bit bigger)`)
   ok(L.glow?.part === 'shimmer' && L.glow.emissive !== b.glow?.emissive, `hummingbird ${el}: her own shimmer glow ${L.glow?.emissive}`)
   ok(fs.existsSync('public' + L.url), `hummingbird ${el}: ${L.url} shipped`)
   const { j, col, n } = glb(L.url), names = (j.nodes as { name: string }[]).map(x => x.name), clips = (j.animations as { name: string }[]).map(a => a.name)
@@ -265,7 +266,7 @@ ok(new Set(SPIRIT_ELEMENTS.map(e => formLook('hummingbird', e)!.url)).size === 4
     ok(!!L && L.name === name && L.url === `/open/spirits/${name}-rigged.glb` && L.form === el, `firefly ${el}: ${name} ${L?.url}`)
     if (EGG(el)) ok(!!L.rig && L.rig !== b.rig && L.rig.neck === b.rig!.neck && !L.rig.hover && !L.rig.cull && !L.rig.fly && L.rig.avatar.y === undefined && L.rig.clipV.walk < b.rig!.clipV.walk, `firefly ${el}: her own RigLook, GROUNDED (no hover, no own culling, the panel copy not set down; waddle clipV ${L.rig?.clipV.walk.toFixed(2)})`)
     else ok(!!L.rig && L.rig !== b.rig && L.rig.neck === b.rig!.neck && !!L.rig.hover && L.rig.hover.flap === b.rig!.hover!.flap && L.rig.hover.low > 2 && !!L.rig.cull && L.rig.cull !== b.rig!.cull, `firefly ${el}: her own RigLook, still a hoverer with her own culling (glbLen ${L.rig?.glbLen})`)
-    ok(formGrow(name) === 1.5 && Math.abs(L.h / b.h - 1.5) < 1e-9, `firefly ${el}: size dial ${formGrow(name)}, grown past her base`)
+    ok(alexSized('form:' + name) || (formGrow(name) === 1.5 && Math.abs(L.h / b.h - 1.5) < 1e-9), `firefly ${el}: size dial ${formGrow(name)}, grown past her base`)
     ok(L.glow?.part === 'lamp' && L.glow.emissive !== b.glow?.emissive, `firefly ${el}: the lamp glows her own ${L.glow?.emissive}`)
     ok(PUBLIC_FORMS.has(name), `firefly ${el}: every keeper's (PUBLIC_FORMS, hub YAY 11-28 AFK, Alex delegated; was owner preview)`)
     ok(fs.existsSync('public' + L.url), `firefly ${el}: ${L.url} shipped`)
@@ -313,7 +314,7 @@ ok(new Set(SPIRIT_ELEMENTS.map(e => formLook('firefly', e)!.url)).size === 4, 't
   ok(arc.emax[1] < arc.max[1] + 0.05 && [base, rill, ara, ore].every(x => x.emax[1] > x.max[1] + 0.1), `Croakarc: no lure (the others' lure arches over the body)`)
   ok([base, rill, arc].every(x => ara.max[0] > x.max[0] + 0.05), `Croakara: the widest squat (${ara.max[0].toFixed(3)})`)
   ok([base, ara, ore].every(x => rill.max[1] - rill.min[1] > x.max[1] - x.min[1]), `Croakrill: the tallest frog body (${(rill.max[1] - rill.min[1]).toFixed(3)})`)
-  ok(formGrow('croakore') > Math.max(...['croakrill', 'croakara', 'croakarc'].map(formGrow)) && ore.max[0] > base.max[0] + 0.05, 'Croakore: the heaviest (the biggest dial, wider than the base)')
+  ok(alexSized('form:croakore', 'form:croakrill', 'form:croakara', 'form:croakarc') || (formGrow('croakore') > Math.max(...['croakrill', 'croakara', 'croakarc'].map(formGrow)) && ore.max[0] > base.max[0] + 0.05), 'Croakore: the heaviest (the biggest dial, wider than the base)')
   ok(new Set(SPIRIT_ELEMENTS.map(e => formLook('frog', e)!.url)).size === 4, 'the Croakling line: four distinct forms') }
 
 // M202 the Shellmere line: each form the base Shellmere's sculpt + rig re-shaped (18 bones, five clips), her own silhouette

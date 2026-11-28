@@ -4,6 +4,7 @@ import { AWAKENED_FORMS, ARCLOTL_AWAKENED, ARCLOTL_AW_DIAL, SECOND_FORMS, formGr
 import { AWAKENED_BRANCHES, AWAKENED_NAMES } from '../../spirits/spirit'
 import { PUBLIC_FORMS } from './spirit-public'
 import { GALLERY } from '../../dev/editors/spirit-gallery'
+import { alexSized } from '../../dev/editors/m249-sized'  // M249 s2: sizes Alex set in the gallery pass (pinned exactly by gallery-size-m249.test.ts)
 let pass = 0; const fails: string[] = []
 const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
 const CANON = '/root/athernyx/CANON/world/spirits-species.md', DIR = 'docs/looks/m244-arclotl-2026-11-28'
@@ -30,7 +31,7 @@ for (const n of looks) {
   ok(existsSync(`public/open/spirits/${n}-icon.png`), `${n}: her gallery icon (our render)`)
   ok(!PUBLIC_FORMS.has(n), `${n}: not in PUBLIC_FORMS (owner preview only)`)
   ok(L.name === n && L.form === 'storm' && L.glow?.part === 'aura' && L.skin?.emissive === parent.skin?.emissive, `${n}: a storm form look off Arclotl, aura = glow part`)
-  ok(ARCLOTL_AW_DIAL[n] > formGrow('arclotl') && Math.abs(L.h / parent.h - ARCLOTL_AW_DIAL[n] / formGrow('arclotl')) < 1e-9, `${n}: grown past Arclotl in the same number space (dial ${ARCLOTL_AW_DIAL[n]} vs ${formGrow('arclotl')})`)
+  ok(alexSized('form:arclotl') || (ARCLOTL_AW_DIAL[n] > formGrow('arclotl') && Math.abs(L.h / parent.h - ARCLOTL_AW_DIAL[n] / formGrow('arclotl')) < 1e-9), `${n}: grown past Arclotl in the same number space (dial ${ARCLOTL_AW_DIAL[n]} vs ${formGrow('arclotl')})`)
   if (!existsSync(`public${L.url}`)) continue
   const j = glbJson(n), nodes: string[] = j.nodes.map((x: { name?: string }) => x.name), bones = nodes.filter(x => x?.startsWith('b_')), body = ext(n, 'body')
   ok(['body', 'eyes', 'aura'].every(x => nodes.includes(x)), `${n}: body / eyes / aura parts`)

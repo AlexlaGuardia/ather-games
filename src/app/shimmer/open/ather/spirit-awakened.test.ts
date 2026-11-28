@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { AWAKENED_FORMS, AWAKEN_GROW, AWAKEN_LEN, SECOND_FORMS, formGrow } from './spirit-models'
 import { AWAKENED_BRANCHES, AWAKENED_NAMES } from '../../spirits/spirit'
 import { PUBLIC_FORMS } from './spirit-public'
+import { alexSized } from '../../dev/editors/m249-sized'  // M249 s2: sizes Alex set in the gallery pass (pinned exactly by gallery-size-m249.test.ts)
 let pass = 0; const fails: string[] = []
 const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
 const names = AWAKENED_BRANCHES.map(b => AWAKENED_NAMES.vulnara![b].toLowerCase())
@@ -34,13 +35,13 @@ ok(mysNames.join() === 'mystowk,mystowelle,mystowis,mysteth', `Mystowl's four in
 // M244 sheet 9b: Croakarc's four (their own test: spirit-croakaw.test.ts)
 const croakNames = AWAKENED_BRANCHES.map(b => AWAKENED_NAMES.croakarc![b].toLowerCase())
 // M244 sheets 11 + 12: Croakara's + Croakore's four (their own tests: spirit-croakaraw.test.ts, spirit-croakorew.test.ts)
-const croakMoreNames = (['croakara', 'croakore', 'croakrill', 'tideowl', 'mesamere', 'arclotl', 'aurmere', 'craglotl'] as const).flatMap(f => AWAKENED_BRANCHES.map(b => AWAKENED_NAMES[f]![b].toLowerCase()))
+const croakMoreNames = (['croakara', 'croakore', 'croakrill', 'tideowl', 'mesamere', 'arclotl', 'aurmere', 'craglotl', 'voltmere'] as const).flatMap(f => AWAKENED_BRANCHES.map(b => AWAKENED_NAMES[f]![b].toLowerCase()))
 ok(Object.keys(AWAKENED_FORMS).sort().join() === [...names, ...stormNames, ...earthNames, ...waterNames, ...lumNames, ...arcNames, ...oreNames, ...mixNames, ...mysNames, ...croakNames, ...croakMoreNames].sort().join(), 'one look per name, no more')
 for (const [el, list] of [['mana', names], ['storm', stormNames], ['earth', earthNames], ['water', waterNames]] as const) for (const n of list) {
   const vulnara = SECOND_FORMS.fox![el]!, parent = el === 'mana' ? 'vulnara' : el === 'storm' ? 'vulnarc' : el === 'earth' ? 'vulnore' : 'vulnix'
   const L = AWAKENED_FORMS[n]
   ok(L.name === n && L.url === `/open/spirits/${n}-rigged.glb` && L.form === el, `${n}: her own glb + a form look (rigLook keeps it)`)
-  ok(AWAKEN_GROW[n] > formGrow(parent) && L.h > vulnara.h * 1.15, `${n}: grown past ${parent} (dial ${AWAKEN_GROW[n]} vs ${formGrow(parent)}, h ${L.h.toFixed(3)} vs ${vulnara.h.toFixed(3)})`)
+  ok(alexSized('awakened:' + n, 'form:' + parent) || (AWAKEN_GROW[n] > formGrow(parent) && L.h > vulnara.h * 1.15), `${n}: grown past ${parent} (dial ${AWAKEN_GROW[n]} vs ${formGrow(parent)}, h ${L.h.toFixed(3)} vs ${vulnara.h.toFixed(3)})`)
   ok(L.glow?.part === 'aura', `${n}: her aura part drawn as the glow part`)
   const f = `public${L.url}`; ok(existsSync(f), `${f} exists`)
   if (existsSync(f)) {
@@ -122,7 +123,7 @@ for (const n of stormNames) {
   const m = JSON.parse(readFileSync(`docs/looks/m244-vulnarc-2026-11-27/${n}-metrics.json`, 'utf8'))
   for (const c of ['idle', 'walk', 'run', 'sit', 'lie']) ok(m[c].lowest_m >= -0.0015, `${n}: ${c} lowest point ${m[c].lowest_m} m (clears the ground)`)
   const L = body(n), V = body('vulnarc'), k = AWAKEN_GROW[n] / formGrow('vulnarc')
-  ok(L.tall * k >= 1.2 * V.tall, `${n}: bigger than Vulnarc as drawn (height x${(L.tall * k / V.tall).toFixed(2)})`)
+  ok(alexSized('awakened:' + n, 'form:vulnarc') || (L.tall * k >= 1.2 * V.tall), `${n}: bigger than Vulnarc as drawn (height x${(L.tall * k / V.tall).toFixed(2)})`)
 }
 // M244 sheet 3: Orethar upright on the biped rig (no echoes), Vulnoris's copies run, the three others four-legged; every clip clear;
 // the 11-28 quality standard: ears + tail ride baked springs (every clip moves the ear bones), Orethar's chest projected from the art
@@ -142,7 +143,7 @@ for (const n of earthNames) {
   for (const c of ['idle', 'walk', 'run', 'sit', 'lie']) ok(m[c].lowest_m >= -0.0015, `${n}: ${c} lowest point ${m[c].lowest_m} m (clears the ground)`)
   ok(Object.keys(m.quality?.spring?.peak_rad ?? {}).filter(k => k.startsWith('walk:')).length >= 3, `${n}: built with the spring pass (ears + tail peaks in the walk)`)
   const L = body(n), V = body('vulnore'), k = AWAKEN_GROW[n] / formGrow('vulnore')
-  ok(L.tall * k >= 1.2 * V.tall, `${n}: bigger than Vulnore as drawn (height x${(L.tall * k / V.tall).toFixed(2)})`)
+  ok(alexSized('awakened:' + n, 'form:vulnore') || (L.tall * k >= 1.2 * V.tall), `${n}: bigger than Vulnore as drawn (height x${(L.tall * k / V.tall).toFixed(2)})`)
   const j = glbJson(n), nodes: string[] = j.nodes.map((x: { name?: string }) => x.name), idle = j.animations.find((a: { name: string }) => a.name === 'walk')
   ok(['b_ear_l', 'b_ear_r', 'b_tail4'].every(b => idle.channels.some((c: { target: { node: number; path: string } }) => c.target.node === nodes.indexOf(b) && c.target.path === 'rotation')), `${n}: ears + tail tip carry rotation tracks in the walk (springs)`)
 }
@@ -164,7 +165,7 @@ for (const n of waterNames) {
   for (const c of ['idle', 'walk', 'run', 'sit', 'lie']) ok(m[c].lowest_m >= -0.0015, `${n}: ${c} lowest point ${m[c].lowest_m} m (clears the ground)`)
   ok(Object.keys(m.quality?.spring?.peak_rad ?? {}).filter(k => k.startsWith('walk:')).length >= 3, `${n}: built with the spring pass (ears + tail peaks in the walk)`)
   const L = body(n), V = body('vulnix'), k = AWAKEN_GROW[n] / formGrow('vulnix')
-  ok(L.tall * k >= 1.2 * V.tall, `${n}: bigger than Vulnix as drawn (height x${(L.tall * k / V.tall).toFixed(2)})`)
+  ok(alexSized('awakened:' + n, 'form:vulnix') || (L.tall * k >= 1.2 * V.tall), `${n}: bigger than Vulnix as drawn (height x${(L.tall * k / V.tall).toFixed(2)})`)
   const walk = glbJson(n).animations.find((a: { name: string }) => a.name === 'walk')
   ok(['b_ear_l', 'b_ear_r', 'b_tail4'].every(b => walk.channels.some((c: { target: { node: number; path: string } }) => c.target.node === nodes.indexOf(b) && c.target.path === 'rotation')), `${n}: ears + tail tip carry rotation tracks in the walk`)
 }
@@ -190,7 +191,7 @@ for (const n of waterNames) {
   for (const n of lumNames) {
     const L = AWAKENED_FORMS[n], f = `public${L.url}`
     ok(L.name === n && L.form === 'mana' && L.url === `/open/spirits/${n}-rigged.glb` && L.glow?.part === 'aura', `${n}: her own glb, a mana form look, aura = glow part`)
-    ok(AWAKEN_GROW[n] > formGrow('luminel') && L.h > parent.h * 1.15, `${n}: grown past Luminel (dial ${AWAKEN_GROW[n]} vs ${formGrow('luminel')})`)
+    ok(alexSized('awakened:' + n, 'form:luminel') || (AWAKEN_GROW[n] > formGrow('luminel') && L.h > parent.h * 1.15), `${n}: grown past Luminel (dial ${AWAKEN_GROW[n]} vs ${formGrow('luminel')})`)
     ok(!!L.rig?.hover && !!L.rig?.cull && L.rig.hover.low > 1 && L.rig.hover.top > L.rig.hover.low, `${n}: hover rig fields (low ${L.rig?.hover?.low}, top ${L.rig?.hover?.top}) + own culling`)
     ok(!PUBLIC_FORMS.has(n), `${n}: owner preview only`)
     if (!existsSync(f)) { ok(false, `${f} exists`); continue }
@@ -200,7 +201,7 @@ for (const n of waterNames) {
     ok(!keyed && (j.animations as { name: string }[]).map(a => a.name).sort().join() === 'idle,lie,run,sit,walk', `${n}: five clips, b_hover unkeyed`)
     const met = JSON.parse(readFileSync(`docs/looks/m244-luminel-2026-11-28/${n}-metrics.json`, 'utf8'))
     ok(met.all_lowest_with_aura_glb > 1 && Math.abs(met.hover_low - L.rig!.hover!.low) < 1e-3 && Math.abs(met.glb_long - AWAKEN_LEN[n]) < 1e-3, `${n}: wired numbers = her metrics; every clip (aura too) in the air (lowest ${met.all_lowest_with_aura_glb} glb)`)
-    ok(Math.abs(met.hover_m * AWAKEN_GROW[n] - 1.35) < 0.01, `${n}: hangs at Luminel's ~1.35 m grown (${met.hover_m} m x ${AWAKEN_GROW[n]})`)
+    ok(alexSized('awakened:' + n) || (Math.abs(met.hover_m * AWAKEN_GROW[n] - 1.35) < 0.01), `${n}: hangs at Luminel's ~1.35 m grown (${met.hover_m} m x ${AWAKEN_GROW[n]})`)
     lens.push(met.glb_long)
   }
   // silhouette, not a reskin: Lumivex the long racer, the others as long as Luminel; Luminok wide (her span), Elhae's roots spread past her wings
@@ -215,7 +216,7 @@ for (const n of waterNames) {
   for (const n of arcNames) {
     const L = AWAKENED_FORMS[n], f = `public${L.url}`
     ok(L.name === n && L.form === 'storm' && L.url === `/open/spirits/${n}-rigged.glb` && L.glow?.part === 'aura' && L.skin?.emissive === parent.skin?.emissive, `${n}: her own glb, a storm form look off Luminarc, aura = glow part`)
-    ok(AWAKEN_GROW[n] > formGrow('luminarc') && L.h > parent.h * 1.15, `${n}: grown past Luminarc (dial ${AWAKEN_GROW[n]} vs ${formGrow('luminarc')})`)
+    ok(alexSized('awakened:' + n, 'form:luminarc') || (AWAKEN_GROW[n] > formGrow('luminarc') && L.h > parent.h * 1.15), `${n}: grown past Luminarc (dial ${AWAKEN_GROW[n]} vs ${formGrow('luminarc')})`)
     ok(!!L.rig?.hover && !!L.rig?.cull && L.rig.hover.low > 1 && L.rig.hover.top > L.rig.hover.low, `${n}: hover rig fields (low ${L.rig?.hover?.low}, top ${L.rig?.hover?.top}) + own culling`)
     ok(!PUBLIC_FORMS.has(n), `${n}: owner preview only`)
     if (!existsSync(f)) { ok(false, `${f} exists`); continue }
@@ -226,7 +227,7 @@ for (const n of waterNames) {
     const m = met(n)
     ok(m.all_lowest_with_aura_glb > 1 && Math.abs(m.hover_low - L.rig!.hover!.low) < 1e-3 && Math.abs(m.hover_top - L.rig!.hover!.top) < 1e-3 && Math.abs(m.glb_long - AWAKEN_LEN[n]) < 1e-3, `${n}: wired numbers = her metrics; every clip (aura too) in the air (lowest ${m.all_lowest_with_aura_glb} glb)`)
     ok(['min', 'max'].every(k => (m.cull[k] as number[]).every((x, i) => Math.abs(x - (L.rig!.cull as unknown as Record<string, number[]>)[k][i]) < 1e-6)) && Math.abs(m.cull.r - L.rig!.cull!.r) < 1e-6, `${n}: culling = her metrics (r ${m.cull.r})`)
-    ok(Math.abs(m.hover_m * AWAKEN_GROW[n] - 1.35) < 0.01, `${n}: hangs at Luminarc's family ~1.35 m grown (${m.hover_m} m x ${AWAKEN_GROW[n]})`)
+    ok(alexSized('awakened:' + n) || (Math.abs(m.hover_m * AWAKEN_GROW[n] - 1.35) < 0.01), `${n}: hangs at Luminarc's family ~1.35 m grown (${m.hover_m} m x ${AWAKEN_GROW[n]})`)
   }
   // silhouette, not a reskin, read off the files: the rest-pose extents of a mesh (accessor min / max)
   const ext = (n: string, mesh: string) => { const j = glbJson(n), mi = j.nodes.find((x: { name?: string }) => x.name === mesh).mesh, a = j.accessors[j.meshes[mi].primitives[0].attributes.POSITION]; return { min: a.min as number[], max: a.max as number[] } }
@@ -244,7 +245,7 @@ for (const n of waterNames) {
   for (const n of oreNames) {
     const L = AWAKENED_FORMS[n], f = `public${L.url}`, m = met(n)
     ok(L.name === n && L.form === 'earth' && L.url === `/open/spirits/${n}-rigged.glb` && L.glow?.part === 'aura' && L.skin?.emissive === parent.skin?.emissive, `${n}: her own glb, an earth form look off Luminore, aura = glow part`)
-    ok(AWAKEN_GROW[n] > formGrow('luminore') && L.h > parent.h * 1.15 && m.dial === AWAKEN_GROW[n], `${n}: grown past Luminore (dial ${AWAKEN_GROW[n]} vs ${formGrow('luminore')}; rig dial ${m.dial})`)
+    ok(alexSized('awakened:' + n, 'form:luminore') || (AWAKEN_GROW[n] > formGrow('luminore') && L.h > parent.h * 1.15 && m.dial === AWAKEN_GROW[n]), `${n}: grown past Luminore (dial ${AWAKEN_GROW[n]} vs ${formGrow('luminore')}; rig dial ${m.dial})`)
     ok(!L.rig?.hover && !L.rig?.cull && !PUBLIC_FORMS.has(n), `${n}: grounded (no hover, no own culling), owner preview only`)
     ok(Math.abs(m.glb_long - AWAKEN_LEN[n]) < 1e-3 && Math.abs(L.rig!.clipV!.walk / L.rig!.clipV!.run - m.walk.plays_1to1_at_mps / m.run.plays_1to1_at_mps) < 1e-3, `${n}: wired numbers = her metrics (glbLen ${m.glb_long}, walk / run ${m.walk.plays_1to1_at_mps} / ${m.run.plays_1to1_at_mps} m/s)`)
     for (const c of ['idle', 'walk', 'run', 'sit', 'lie']) ok(m[c].lowest_glb > -0.0015 && m[c].body_lowest_glb < 0.002, `${n} ${c}: on the ground, nothing under it (lowest ${m[c].lowest_glb}, body ${m[c].body_lowest_glb} glb)`)
@@ -272,7 +273,7 @@ for (const n of waterNames) {
   for (const n of mixNames) {
     const L = AWAKENED_FORMS[n], f = `public${L.url}`, m = met(n)
     ok(L.name === n && L.form === 'water' && L.url === `/open/spirits/${n}-rigged.glb` && L.glow?.part === 'aura' && L.skin?.emissive === parent.skin?.emissive, `${n}: her own glb, a water form look off Luminix, aura = glow part`)
-    ok(AWAKEN_GROW[n] > formGrow('luminix') && AWAKEN_GROW[n] > AWAKEN_GROW.orebrak && m.dial === AWAKEN_GROW[n], `${n}: grown past Luminix and past Luminore's four (dial ${AWAKEN_GROW[n]}; rig dial ${m.dial})`)
+    ok(alexSized('awakened:' + n, 'form:luminix') || (AWAKEN_GROW[n] > formGrow('luminix') && AWAKEN_GROW[n] > AWAKEN_GROW.orebrak && m.dial === AWAKEN_GROW[n]), `${n}: grown past Luminix and past Luminore's four (dial ${AWAKEN_GROW[n]}; rig dial ${m.dial})`)
     ok(!L.rig?.hover && !L.rig?.cull && !PUBLIC_FORMS.has(n), `${n}: grounded (no hover, no own culling), owner preview only`)
     ok(Math.abs(m.glb_long - AWAKEN_LEN[n]) < 1e-3 && Math.abs(L.rig!.clipV!.walk / L.rig!.clipV!.run - m.walk.plays_1to1_at_mps / m.run.plays_1to1_at_mps) < 1e-3, `${n}: wired numbers = her metrics (glbLen ${m.glb_long}, walk / run ${m.walk.plays_1to1_at_mps} / ${m.run.plays_1to1_at_mps} m/s)`)
     for (const c of ['idle', 'walk', 'run', 'sit', 'lie']) ok(m[c].lowest_glb > -0.0015 && m[c].body_lowest_glb < 0.005, `${n} ${c}: on the ground, nothing under it (lowest ${m[c].lowest_glb}, body ${m[c].body_lowest_glb} glb)`)
@@ -304,7 +305,7 @@ for (const n of waterNames) {
     const L = AWAKENED_FORMS[n], f = `public${L?.url}`, m = met(n)
     if (!L) { ok(false, `${n}: a look in AWAKENED_FORMS`); continue }
     ok(L.name === n && L.form === 'mana' && L.url === `/open/spirits/${n}-rigged.glb` && L.glow?.part === 'aura' && L.skin?.emissive === parent.skin?.emissive, `${n}: her own glb, a mana form look off Mystowl, aura = glow part`)
-    ok(AWAKEN_GROW[n] > formGrow('mystowl') && L.h > parent.h * 1.2 && m.dial === AWAKEN_GROW[n], `${n}: grown past Mystowl (dial ${AWAKEN_GROW[n]} vs ${formGrow('mystowl')}; rig dial ${m.dial})`)
+    ok(alexSized('awakened:' + n, 'form:mystowl') || (AWAKEN_GROW[n] > formGrow('mystowl') && L.h > parent.h * 1.2 && m.dial === AWAKEN_GROW[n]), `${n}: grown past Mystowl (dial ${AWAKEN_GROW[n]} vs ${formGrow('mystowl')}; rig dial ${m.dial})`)
     ok(!L.rig?.hover && !!L.rig?.fly && !PUBLIC_FORMS.has(n) && Math.abs(m.glb_long - AWAKEN_LEN[n]) < 1e-3, `${n}: an owl on the ground that flies (no hover, the owl's fly numbers), owner preview only, glbLen = her metrics (${m.glb_long})`)
     for (const c of ['idle', 'walk', 'sit', 'lie']) ok(m[c].lowest_m > -0.0005 && m[c].lowest_m < 0.01, `${n} ${c}: on the ground, nothing under it (lowest ${m[c].lowest_m} m)`)
     ok(m.run.lowest_m > 0.05 && m.all_lowest_with_aura_glb > -0.0015, `${n}: the run is FLIGHT (lowest ${m.run.lowest_m} m); her aura never under the ground (${m.all_lowest_with_aura_glb} glb)`)

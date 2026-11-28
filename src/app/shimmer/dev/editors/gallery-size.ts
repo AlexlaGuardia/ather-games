@@ -8,7 +8,7 @@
 //   awakened form -> spirit-models.ts AWAKEN_GROW.<name> (x the Vulnyx rig height)
 // ★ PURE: no three, no React. Run: npx tsx src/app/shimmer/dev/editors/gallery-size.test.ts
 import { GROWN } from '../../sprites/creature-size'
-import { AWAKEN_GROW, formGrow } from '../../open/ather/spirit-models'
+import { AWAKEN_GROW, formGrow, CROAK_AW_DIAL, CROAKARA_AW_DIAL, CROAKORE_AW_DIAL, CROAKRILL_AW_DIAL, MESAMERE_AW_DIAL, ARCLOTL_AW_DIAL, AURMERE_AW_DIAL, CRAGLOTL_AW_DIAL, TIDEOWL_AW_DIAL } from '../../open/ather/spirit-models'
 import type { Species } from '../../spirits/spirit'
 
 export const GALLERY_SIZE_KEY = 'open:gallery-size.v1'
@@ -27,9 +27,20 @@ export const cleanScale = (v: unknown): number => {
 const r2 = (n: number) => Math.round(n * 100) / 100
 const num = (n: number) => String(r2(n))
 
+// M249 s2 (sprites, 11-28): the awakened lines sized on their OWN dial (x her base rig's height, same shape as AWAKEN_GROW), which
+// tableValue / sizeLines could not see (Copy values printed nothing for them). A new line's dial joins this list.
+export const AWAKENED_DIALS: Readonly<Record<string, Readonly<Record<string, number>>>> = {
+  AWAKEN_GROW, CROAK_AW_DIAL, CROAKARA_AW_DIAL, CROAKORE_AW_DIAL, CROAKRILL_AW_DIAL, MESAMERE_AW_DIAL, ARCLOTL_AW_DIAL, AURMERE_AW_DIAL, CRAGLOTL_AW_DIAL, TIDEOWL_AW_DIAL,
+}
+/** which table sizes this awakened form, and its number there */
+export function awakenedSlot(name: string): { table: string; was: number } | null {
+  for (const [table, t] of Object.entries(AWAKENED_DIALS)) if (t[name] != null) return { table, was: t[name] }
+  return null
+}
+
 /** the number the game reads today for this form (before any tune) */
 export function tableValue(f: SizeForm): number | null {
-  if (f.kind === 'awakened') return AWAKEN_GROW[f.name] ?? null
+  if (f.kind === 'awakened') return awakenedSlot(f.name)?.was ?? null
   if (f.kind === 'form') return formGrow(f.name)
   return GROWN[f.sp]?.height ?? null
 }
@@ -38,8 +49,8 @@ export function tableValue(f: SizeForm): number | null {
 export function sizeLines(f: SizeForm, scale: number): string[] {
   const s = cleanScale(scale)
   if (f.kind === 'awakened') {
-    const was = AWAKEN_GROW[f.name]; if (was == null) return []
-    return [`// spirit-models.ts AWAKEN_GROW (was ${was})`, `${f.name}: ${num(was * s)},`]
+    const a = awakenedSlot(f.name); if (!a) return []
+    return [`// spirit-models.ts ${a.table} (was ${a.was})`, `${f.name}: ${num(a.was * s)},`]
   }
   if (f.kind === 'form') {
     const was = formGrow(f.name)

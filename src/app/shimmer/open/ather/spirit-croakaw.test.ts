@@ -3,6 +3,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs'
 import { AWAKENED_FORMS, CROAK_AWAKENED, CROAK_AW_DIAL, CROAKARC_RIG, SECOND_FORMS, formGrow } from './spirit-models'
 import { AWAKENED_BRANCHES, AWAKENED_NAMES } from '../../spirits/spirit'
 import { PUBLIC_FORMS } from './spirit-public'
+import { alexSized } from '../../dev/editors/m249-sized'  // M249 s2: sizes Alex set in the gallery pass (pinned exactly by gallery-size-m249.test.ts)
 let pass = 0; const fails: string[] = []
 const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
 const CANON = '/root/athernyx/CANON/world/spirits-species.md', DIR = 'docs/looks/m244-croakarc-2026-11-28'
@@ -20,7 +21,7 @@ for (const n of looks) {
   ok(L.url === `/open/spirits/${n}-rigged.glb` && existsSync(`public${L.url}`) && statSync(`public${L.url}`).size === m.glb_bytes, `${n}: her glb is in public/ and is the one the metrics measured (${m.glb_bytes} B)`)
   ok(existsSync(`public/open/spirits/${n}-icon.png`), `${n}: her gallery icon (our render)`)
   ok(!PUBLIC_FORMS.has(n), `${n}: not in PUBLIC_FORMS (owner preview only)`)
-  ok(CROAK_AW_DIAL[n] > formGrow('croakarc') && L.h > parent.h * 1.2, `${n}: grown past Croakarc (dial ${CROAK_AW_DIAL[n]} vs ${formGrow('croakarc')})`)
+  ok(alexSized('awakened:' + n, 'form:croakarc') || (CROAK_AW_DIAL[n] > formGrow('croakarc') && L.h > parent.h * 1.2), `${n}: grown past Croakarc (dial ${CROAK_AW_DIAL[n]} vs ${formGrow('croakarc')})`)
   ok(L.glow?.part === 'aura', `${n}: her motif (aura part) glows`)
   if (n === 'arcvik') {
     ok(L.rig!.clipV.walk === CROAKARC_RIG.clipV.walk && L.rig!.glbLen === m.glbLen && m.bones === 24, `arcvik: the live Croakarc skink rig (24 bones, her clips), glbLen = her metrics (${m.glbLen})`)

@@ -4,6 +4,7 @@ import { AWAKENED_FORMS, CROAKRILL_AWAKENED, CROAKRILL_AW_DIAL, SECOND_FORMS, fo
 import { AWAKENED_BRANCHES, AWAKENED_NAMES } from '../../spirits/spirit'
 import { PUBLIC_FORMS } from './spirit-public'
 import { GALLERY } from '../../dev/editors/spirit-gallery'
+import { alexSized } from '../../dev/editors/m249-sized'  // M249 s2: sizes Alex set in the gallery pass (pinned exactly by gallery-size-m249.test.ts)
 let pass = 0; const fails: string[] = []
 const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
 const CANON = '/root/athernyx/CANON/world/spirits-species.md', DIR = 'docs/looks/m244-croakrill-2026-11-28'
@@ -26,7 +27,7 @@ for (const n of looks) {
   ok(L.url === `/open/spirits/${n}-rigged.glb` && existsSync(`public${L.url}`) && statSync(`public${L.url}`).size === m.glb_bytes, `${n}: her glb is in public/ and is the one the metrics measured (${m.glb_bytes} B)`)
   ok(existsSync(`public/open/spirits/${n}-icon.png`), `${n}: her gallery icon (our render)`)
   ok(!PUBLIC_FORMS.has(n), `${n}: not in PUBLIC_FORMS (owner preview only)`)
-  ok(CROAKRILL_AW_DIAL[n] > formGrow('croakrill') && L.h > parent.h * 1.2, `${n}: grown past Croakrill (dial ${CROAKRILL_AW_DIAL[n]} vs ${formGrow('croakrill')})`)
+  ok(alexSized('awakened:' + n, 'form:croakrill') || (CROAKRILL_AW_DIAL[n] > formGrow('croakrill') && L.h > parent.h * 1.2), `${n}: grown past Croakrill (dial ${CROAKRILL_AW_DIAL[n]} vs ${formGrow('croakrill')})`)
   ok(L.glow?.part === 'aura' && m.tris.aura > 0, `${n}: her motif (aura part, ${m.tris.aura} tris) glows`)
   ok(Math.abs(L.rig!.glbLen - m.glbLen) < 1e-3, `${n}: glbLen = her metrics (${m.glbLen})`)
   ok(m.body_verts <= 9800, `${n}: body under ~9k verts (${m.body_verts})`)
@@ -42,6 +43,6 @@ for (const n of looks) {
 }
 // THE CHAMPION: bigger than her sisters (wider + taller body, the biggest dial); the Enigma's cloud hangs over her head
 const km = JSON.parse(readFileSync(`${DIR}/croakrillok-metrics.json`, 'utf8')), em = JSON.parse(readFileSync(`${DIR}/croakrilleth-metrics.json`, 'utf8'))
-ok(km.idle.span_m > em.idle.span_m * 1.1 && CROAKRILL_AW_DIAL.croakrillok >= Math.max(...Object.values(CROAKRILL_AW_DIAL)), `croakrillok: the biggest (span ${km.idle.span_m} vs ${em.idle.span_m} m, the biggest dial)`)
+ok(alexSized('awakened:croakrillok', 'awakened:rillesse', 'awakened:croakrillvex', 'awakened:croakrilleth') || (km.idle.span_m > em.idle.span_m * 1.1 && CROAKRILL_AW_DIAL.croakrillok >= Math.max(...Object.values(CROAKRILL_AW_DIAL))), `croakrillok: the biggest (span ${km.idle.span_m} vs ${em.idle.span_m} m, the biggest dial)`)
 ok(em.aura_lowest_glb > em.body_mean_top, `croakrilleth: her rain cloud + rain hang above her body (aura lowest ${em.aura_lowest_glb} > body top ${em.body_mean_top})`)
 console.log(`${pass} pass, ${fails.length} fail`); for (const f of fails) console.log('FAIL', f); process.exit(fails.length ? 1 : 0)

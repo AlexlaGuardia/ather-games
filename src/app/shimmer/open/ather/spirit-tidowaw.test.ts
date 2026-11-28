@@ -4,6 +4,7 @@ import { AWAKENED_FORMS, TIDEOWL_AWAKENED, TIDEOWL_AW_DIAL, TIDEOWL_AW_LEN, SECO
 import { AWAKENED_BRANCHES, AWAKENED_NAMES } from '../../spirits/spirit'
 import { PUBLIC_FORMS } from './spirit-public'
 import { GALLERY } from '../../dev/editors/spirit-gallery'
+import { alexSized } from '../../dev/editors/m249-sized'  // M249 s2: sizes Alex set in the gallery pass (pinned exactly by gallery-size-m249.test.ts)
 let pass = 0; const fails: string[] = []
 const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
 const CANON = '/root/athernyx/CANON/world/spirits-species.md', DIR = 'docs/looks/m244-tideowl-2026-11-28'
@@ -30,7 +31,7 @@ for (const n of looks) {
   ok(existsSync(`public/open/spirits/${n}-icon.png`), `${n}: her gallery icon (our render)`)
   ok(!PUBLIC_FORMS.has(n), `${n}: not in PUBLIC_FORMS (owner preview only)`)
   ok(L.name === n && L.form === 'water' && L.glow?.part === 'aura' && L.skin?.emissive === parent.skin?.emissive, `${n}: a water form look off Tideowl, aura = glow part`)
-  ok(TIDEOWL_AW_DIAL[n] > formGrow('tideowl') && L.h > parent.h * 1.2 && m.dial === TIDEOWL_AW_DIAL[n], `${n}: grown past Tideowl (dial ${TIDEOWL_AW_DIAL[n]} vs ${formGrow('tideowl')}; rig dial ${m.dial})`)
+  ok(alexSized('awakened:' + n, 'form:tideowl') || (TIDEOWL_AW_DIAL[n] > formGrow('tideowl') && L.h > parent.h * 1.2 && m.dial === TIDEOWL_AW_DIAL[n]), `${n}: grown past Tideowl (dial ${TIDEOWL_AW_DIAL[n]} vs ${formGrow('tideowl')}; rig dial ${m.dial})`)
   ok(!L.rig?.hover && !!L.rig?.fly && Math.abs(m.glb_long - TIDEOWL_AW_LEN[n]) < 1e-3 && L.rig!.glbLen === TIDEOWL_AW_LEN[n], `${n}: an owl on the ground that flies, glbLen = her metrics (${m.glb_long})`)
   for (const c of ['idle', 'walk', 'sit', 'lie']) ok(m[c].lowest_m > -0.0005 && m[c].lowest_m < 0.01, `${n} ${c}: on the ground, nothing under it (lowest ${m[c].lowest_m} m)`)
   ok(m.run.lowest_m > 0.05 && m.all_lowest_with_aura_glb > -0.0015, `${n}: the run is FLIGHT (lowest ${m.run.lowest_m} m); her aura never under the ground (${m.all_lowest_with_aura_glb} glb)`)

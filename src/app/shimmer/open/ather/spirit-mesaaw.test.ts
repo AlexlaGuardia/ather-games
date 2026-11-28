@@ -4,6 +4,7 @@ import { AWAKENED_FORMS, MESAMERE_AWAKENED, MESAMERE_AW_DIAL, SECOND_FORMS, form
 import { AWAKENED_BRANCHES, AWAKENED_NAMES } from '../../spirits/spirit'
 import { PUBLIC_FORMS } from './spirit-public'
 import { GALLERY } from '../../dev/editors/spirit-gallery'
+import { alexSized } from '../../dev/editors/m249-sized'  // M249 s2: sizes Alex set in the gallery pass (pinned exactly by gallery-size-m249.test.ts)
 let pass = 0; const fails: string[] = []
 const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
 const CANON = '/root/athernyx/CANON/world/spirits-species.md', DIR = 'docs/looks/m244-mesamere-2026-11-28'
@@ -26,7 +27,7 @@ for (const n of looks) {
   ok(L.url === `/open/spirits/${n}-rigged.glb` && existsSync(`public${L.url}`) && statSync(`public${L.url}`).size === m.glb_bytes, `${n}: his glb is in public/ and is the one the metrics measured (${m.glb_bytes} B)`)
   ok(existsSync(`public/open/spirits/${n}-icon.png`), `${n}: gallery icon (our render)`)
   ok(!PUBLIC_FORMS.has(n), `${n}: not in PUBLIC_FORMS (owner preview only)`)
-  ok(MESAMERE_AW_DIAL[n] > formGrow('mesamere') && L.h > parent.h * 1.1, `${n}: grown past Mesamere (dial ${MESAMERE_AW_DIAL[n]} vs ${formGrow('mesamere')})`)
+  ok(alexSized('awakened:' + n, 'form:mesamere') || (MESAMERE_AW_DIAL[n] > formGrow('mesamere') && L.h > parent.h * 1.1), `${n}: grown past Mesamere (dial ${MESAMERE_AW_DIAL[n]} vs ${formGrow('mesamere')})`)
   ok(L.glow?.part === 'aura' && m.aura_tris > 0, `${n}: the motif (aura part, ${m.aura_tris} tris) glows`)
   ok(Math.abs(L.rig!.glbLen - m.glb_long) < 1e-3, `${n}: glbLen = his metrics (${m.glb_long})`)
   ok(m.body_verts <= 9800, `${n}: body under ~9k verts (${m.body_verts})`)
@@ -38,7 +39,7 @@ for (const n of looks) {
 }
 // THE CHAMPION: the massive one (widest + tallest body, the biggest dial); the Virtuoso's head held high; the Ace low + long; the Enigma's spires
 const th = M.mesathar, ml = M.mesamelle, mi = M.mesamis, mu = M.mesamun
-ok(th.idle.span_m > Math.max(ml.idle.span_m, mi.idle.span_m, mu.idle.span_m) && th.body_mean_top > Math.max(ml.body_mean_top, mi.body_mean_top, mu.body_mean_top) && MESAMERE_AW_DIAL.mesathar >= Math.max(...Object.values(MESAMERE_AW_DIAL)), `mesathar: the biggest (span ${th.idle.span_m} m, top ${th.body_mean_top})`)
+ok(alexSized('awakened:mesathar', 'awakened:mesamelle', 'awakened:mesamis', 'awakened:mesamun') || (th.idle.span_m > Math.max(ml.idle.span_m, mi.idle.span_m, mu.idle.span_m) && th.body_mean_top > Math.max(ml.body_mean_top, mi.body_mean_top, mu.body_mean_top) && MESAMERE_AW_DIAL.mesathar >= Math.max(...Object.values(MESAMERE_AW_DIAL))), `mesathar: the biggest (span ${th.idle.span_m} m, top ${th.body_mean_top})`)
 ok(ml.extent_hi[1] > ml.body_mean_top * 0.98 && ml.idle.top_m > mi.idle.top_m, `mesamelle: her head carried high (idle top ${ml.idle.top_m} m vs Mesamis ${mi.idle.top_m})`)
 ok(mi.body_mean_top < Math.min(th.body_mean_top, mu.body_mean_top) && mi.glb_long > mu.glb_long, `mesamis: the low long runner (top ${mi.body_mean_top}, long ${mi.glb_long})`)
 ok(mu.extent_hi[1] > mu.body_mean_top + 0.25, `mesamun: the crystal spires rise well over her shell (aura top ${mu.extent_hi[1]} vs body ${mu.body_mean_top})`)

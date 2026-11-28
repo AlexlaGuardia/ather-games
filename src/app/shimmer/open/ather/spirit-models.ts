@@ -278,7 +278,7 @@ export const FORM_GROW = 1.2
 // sisters; her floor + hull are deeper than s1's so she keeps the art's teal (Vulnarc read paler than her art).
 // Marlotl (Manalotl's Water form, the first of the Manalotl line; her own body: webbed gill fins, a dorsal crest, a tall paddle
 // tail fin, a long slim trunk on sprawled legs; docs/looks/m202-marlotl-2026-11-26) 1.4 x the Manalotl's 0.90 m nose to tail.
-export const FORM_GROW_BY: Readonly<Record<string, number>> = { vulnore: 1.4, vulnara: 1.4, vulnarc: 1.4, vulnix: 1.4, marlotl: 1.4, cragbear: 1.4, aurlotl: 1.4, arclotl: 1.4, craglotl: 1.4, lumebear: 1.4, voltbear: 1.4, tidebear: 1.4, noctarc: 1.4, noctara: 1.4, noctore: 1.4, noctix: 1.4, mystowl: 1.4, voltowl: 1.4, cragowl: 1.4, tideowl: 1.4, croakrill: 1.4, croakara: 1.4, croakore: 1.5, croakarc: 1.4, mesamere: 1.5, aurmere: 1.4, voltmere: 1.4, tidemere: 1.4, lepaura: 1.4, leparc: 1.4, lepore: 1.5, lepnix: 1.4, voltari: 1.5, lumari: 1.5, obsidari: 1.5, tidari: 1.5, luminel: 1.5, luminarc: 1.5, luminore: 1.5, luminix: 1.5 }
+export const FORM_GROW_BY: Readonly<Record<string, number>> = { vulnore: 1.9, vulnara: 1.4, vulnarc: 1.69, vulnix: 1.82, marlotl: 1.4, cragbear: 2.25, aurlotl: 2.27, arclotl: 2.25, craglotl: 2.8, lumebear: 2.14, voltbear: 2.13, tidebear: 2.3, noctarc: 2.1, noctara: 1.78, noctore: 1.89, noctix: 1.9, mystowl: 1.68, voltowl: 1.88, cragowl: 1.88, tideowl: 1.89, croakrill: 2.27, croakara: 2.11, croakore: 2.49, croakarc: 2.81, mesamere: 1.97, aurmere: 1.95, voltmere: 1.95, tidemere: 2.1, lepaura: 1.99, leparc: 1.89, lepore: 2.25, lepnix: 2.24, voltari: 3.75, lumari: 3.75, obsidari: 3.75, tidari: 3.75, luminel: 2.7, luminarc: 2.81, luminore: 2.25, luminix: 2.25 }
 export const formGrow = (name: string): number => FORM_GROW_BY[name] ?? FORM_GROW
 const secondForm = (sp: Species, form: SpiritElement, name: string, emissive: string, hull: string): SpiritLook => {
   const b = SPIRIT_RIGS[sp]!, g = formGrow(name)
@@ -410,7 +410,7 @@ function croakarc(): SpiritLook { return { ...croakForm('storm', 'croakarc', '#a
 // baked tail springs); Arcvik stays a skink on the live Croakarc rig (rig_arcvik.py). 'aura' = her motif: Croakarkor's bulb lure (head) +
 // crackle (chest), Croakarielle's ring of orbs (chest), Arcvik's bolt striking the ground ahead of her (root), Croakarcun's free-floating
 // lure on one thread ('float', a root child that bobs). CROAK_AW_DIAL = her dial; clipV = the metrics' v_glb (glb units a second).
-export const CROAK_AW_DIAL: Readonly<Record<string, number>> = { croakarkor: 1.85, croakarielle: 1.75, arcvik: 1.8, croakarcun: 1.75 }
+export const CROAK_AW_DIAL: Readonly<Record<string, number>> = { croakarkor: 3.96, croakarielle: 3.33, arcvik: 3.74, croakarcun: 3.73 }
 const croakUpRig = (glbLen: number, walk: number, run: number): RigLook => ({
   glbLen, pivot: { x: 0, z: 0 }, clipV: { walk, run }, runAt: [0.9, 0.75], hull: 0.024, neck: 'b_neck', head: 'b_head', lie: true, cadence: 12, avatar: { z: 0, far: 2.0 },
 })
@@ -430,7 +430,7 @@ export const CROAK_AWAKENED: Readonly<Record<string, SpiritLook>> = {
 // bones + clips, rig_croakaraw.py: + baked lure springs); Croakalys stands UP on sheet 9's ground biped (rig_croakalys.py). 'aura' = her
 // motif: Croakgulp's gold belly swirl, Croakalys's streaks of song (chest), Croakavis's ghost copy behind her (root), Araeth's copper pot +
 // potion bottles hanging from her globe (lure tip). glbLen + the clip timing (hRig = rig metrics height_m) are her metrics'.
-export const CROAKARA_AW_DIAL: Readonly<Record<string, number>> = { croakgulp: 2.0, croakalys: 1.85, croakavis: 1.8, araeth: 1.75 }
+export const CROAKARA_AW_DIAL: Readonly<Record<string, number>> = { croakgulp: 3.6, croakalys: 2.83, croakavis: 3.29, araeth: 3.38 }
 const croakaraAw = (name: string, aura: string, glbLen: number, hRig: number, rig?: RigLook): SpiritLook => {
   const b = croakForm('mana', 'croakara', '#b49cff', '#e8dcff', glbLen, hRig), base = BASE_PREVIEW.frog!, h = base.h * CROAKARA_AW_DIAL[name]
   return { ...b, name, url: `/open/spirits/${name}-rigged.glb`, h, trot: grownTrot(base.trot, base.h, h), rig: rig ?? b.rig, glow: { part: 'aura', emissive: aura, lo: 0.35, hi: 0.7, hz: 0.35 } }
@@ -446,7 +446,7 @@ export const CROAKARA_AWAKENED: Readonly<Record<string, SpiritLook>> = {
 // clips, rig_croakorew.py: + baked lure springs + a 'ground' bone that undoes the root's lean + hop, so what lies on the ground stays flat on it).
 // 'aura' = her motif: Oregrak's glowing cracks in the ground (her stone shoulder plates + cuffs are in her body), Croakorelle's amber crystal
 // ball on her throat + ground crystals, Croakoris's burrow + earth spray, Croakormyr's amber crystal crust on her back. glbLen + hRig = her metrics'.
-export const CROAKORE_AW_DIAL: Readonly<Record<string, number>> = { oregrak: 2.1, croakorelle: 1.95, croakoris: 1.9, croakormyr: 1.85 }
+export const CROAKORE_AW_DIAL: Readonly<Record<string, number>> = { oregrak: 3.86, croakorelle: 3.37, croakoris: 3.52, croakormyr: 3.53 }
 const croakoreAw = (name: string, aura: string, glbLen: number, hRig: number): SpiritLook => {
   const b = croakForm('earth', 'croakore', '#ffae4a', '#ffe2b4', glbLen, hRig), base = BASE_PREVIEW.frog!, h = base.h * CROAKORE_AW_DIAL[name]
   return { ...b, name, url: `/open/spirits/${name}-rigged.glb`, h, trot: grownTrot(base.trot, base.h, h), glow: { part: 'aura', emissive: aura, lo: 0.35, hi: 0.7, hz: 0.35 } }
@@ -463,7 +463,7 @@ export const CROAKORE_AWAKENED: Readonly<Record<string, SpiritLook>> = {
 // rig_croakaraw.py with her sculpt: 19 bones + clips + baked lure springs); Rillesse stands UP on sheet 9's ground biped (rig_rillesse.py =
 // Croakalys's rig + clips). 'aura' = her motif: Croakrillok's jet of water from her open toothy mouth, Rillesse's lily pad + lilies (root) +
 // drops off her raised hands (chest), Croakrillvex's wake (hips), Croakrilleth's rain cloud (root). glbLen + hRig = her metrics'.
-export const CROAKRILL_AW_DIAL: Readonly<Record<string, number>> = { croakrillok: 2.0, rillesse: 1.85, croakrillvex: 1.8, croakrilleth: 1.75 }
+export const CROAKRILL_AW_DIAL: Readonly<Record<string, number>> = { croakrillok: 3.32, rillesse: 2.76, croakrillvex: 3.38, croakrilleth: 3.1 }
 const croakrillAw = (name: string, aura: string, glbLen: number, hRig: number, rig?: RigLook): SpiritLook => {
   const b = croakForm('water', 'croakrill', '#3fc4c0', '#b4f0ea', glbLen, hRig), base = BASE_PREVIEW.frog!, h = base.h * CROAKRILL_AW_DIAL[name]
   return { ...b, name, url: `/open/spirits/${name}-rigged.glb`, h, trot: grownTrot(base.trot, base.h, h), rig: rig ?? b.rig, glow: { part: 'aura', emissive: aura, lo: 0.35, hi: 0.7, hz: 0.35 } }
@@ -497,7 +497,7 @@ const shellForm = (el: SpiritElement, name: string, emissive: string, hull: stri
 // rig_shellmere.py with the line's swaps: 18 bones, five clips at the base's 0.464 m per glb unit + baked head / tail springs). h = the base
 // Shellmere's x his dial. 'aura' = the motif: Mesathar's amber chest + leg cracks, Mesamelle's opal scute panels, Mesamis's golden dust,
 // Mesamun's amber crystal spires + flowers. glbLen = his metrics' glb_long.
-export const MESAMERE_AW_DIAL: Readonly<Record<string, number>> = { mesathar: 2.1, mesamelle: 1.75, mesamis: 1.7, mesamun: 1.85 }
+export const MESAMERE_AW_DIAL: Readonly<Record<string, number>> = { mesathar: 4.16, mesamelle: 4.38, mesamis: 2.94, mesamun: 4.63 }
 const mesaAw = (name: string, aura: string, glbLen: number): SpiritLook => {
   const b = shellForm('earth', 'mesamere', '#ffc25a', '#f4e6c4', glbLen), base = BASE_PREVIEW.turtle!, h = base.h * MESAMERE_AW_DIAL[name]
   return { ...b, name, url: `/open/spirits/${name}-rigged.glb`, h, trot: grownTrot(base.trot, base.h, h), glow: { part: 'aura', emissive: aura, lo: 0.35, hi: 0.7, hz: 0.35 } }
@@ -680,7 +680,7 @@ export const SECOND_FORMS: Partial<Record<Species, Partial<Record<SpiritElement,
 // Vulnarkor on the biped rig, rig_biped.py), Vulnarc's own look as the base: Vulnarkor a crystal-shard mantle + bolts round her,
 // Vulnarcelle a big crackling mane, Arcvex a jagged crest + two ice-white copies that run, Vulnarceth her storm cloud + two discs.
 export const AWAKEN_LEN: Readonly<Record<string, number>> = { vulnarok: 1.463, vulnalys: 1.487, vulnavex: 1.87, vulnamyr: 1.283, vulnarkor: 1.393, vulnarcelle: 1.366, arcvex: 1.817, vulnarceth: 1.377, orethar: 1.239, vulnoraya: 1.726, vulnoris: 1.457, vulnorun: 1.581, vulnitar: 1.509, marelle: 1.42, vulnisk: 1.83, vulnixeth: 1.393, luminok: 0.7608, lumilys: 0.6819, lumivex: 1.2647, elhae: 0.714, luminthar: 0.758, lumicelle: 0.9167, arcet: 0.9748, lumiceth: 0.8779, orebrak: 0.7853, lumoraya: 0.7803, lumorvex: 0.785, lumorun: 0.7898, lumixok: 0.7538, marisse: 0.7761, lumixis: 1.1673, lumixeth: 0.7659, mystowk: 0.7049, mystowelle: 0.7487, mystowis: 0.9564, mysteth: 0.7899 }
-export const AWAKEN_GROW: Readonly<Record<string, number>> = { vulnarok: 1.8, vulnalys: 1.7, vulnavex: 1.65, vulnamyr: 1.75, vulnarkor: 1.8, vulnarcelle: 1.75, arcvex: 1.8, vulnarceth: 1.75, orethar: 1.8, vulnoraya: 1.75, vulnoris: 1.8, vulnorun: 1.75, vulnitar: 1.95, marelle: 1.8, vulnisk: 1.8, vulnixeth: 1.75, luminok: 2.0, lumilys: 1.9, lumivex: 1.8, elhae: 2.0, luminthar: 2.0, lumicelle: 1.9, arcet: 1.8, lumiceth: 2.0, orebrak: 1.8, lumoraya: 1.75, lumorvex: 1.75, lumorun: 1.75, lumixok: 2.1, marisse: 1.95, lumixis: 2.0, lumixeth: 1.95, mystowk: 1.85, mystowelle: 1.75, mystowis: 1.8, mysteth: 1.85 }
+export const AWAKEN_GROW: Readonly<Record<string, number>> = { vulnarok: 2.03, vulnalys: 1.99, vulnavex: 2.1, vulnamyr: 1.52, vulnarkor: 1.98, vulnarcelle: 2, arcvex: 2.84, vulnarceth: 1.75, orethar: 2.43, vulnoraya: 1.75, vulnoris: 2.7, vulnorun: 2.68, vulnitar: 1.66, marelle: 2.18, vulnisk: 2.84, vulnixeth: 2.89, luminok: 2.86, lumilys: 3.25, lumivex: 3.29, elhae: 3.18, luminthar: 3.14, lumicelle: 2.62, arcet: 3.58, lumiceth: 3.58, orebrak: 3.35, lumoraya: 3.15, lumorvex: 3.26, lumorun: 2.84, lumixok: 3.23, marisse: 3.02, lumixis: 3.56, lumixeth: 3.76, mystowk: 2.66, mystowelle: 2.77, mystowis: 2.7, mysteth: 2.76 }
 const awakened = (name: string, glbLen: number, aura: string, far: number, el: 'mana' | 'storm' | 'earth' | 'water' = 'mana'): SpiritLook => {
   const b = SECOND_FORMS.fox![el]!, h = VRIG_H * AWAKEN_GROW[name]
   return { ...b, name, url: `/open/spirits/${name}-rigged.glb`, h, trot: grownTrot(b.trot, b.h, h), rig: { ...b.rig!, glbLen, avatar: { z: b.rig!.avatar.z, far } },
@@ -723,7 +723,7 @@ const owlAwakened = (name: string, aura: string): SpiritLook => {
 // M244 sheet 13 (world, 11-28): TIDEOWL's four (Water), owl preview, the sheet-8 route off the live Tideowl (docs/looks/m244-tideowl-2026-11-28):
 // her sculpt re-shaped by name (sculpt_tidowaw.py) on the live owl rig (rig_owl.py via rig_tidowaw.py), each keeping her water gem. Her 'aura' =
 // her motif: Tidowrok's breaking waves off her wing tips, Tidelle's pool + wing drips + big crown gem, Tidowsk's spear of water, Tidowmyr's mist veils.
-export const TIDEOWL_AW_DIAL: Readonly<Record<string, number>> = { tidowrok: 1.85, tidelle: 1.75, tidowsk: 1.8, tidowmyr: 1.85 }
+export const TIDEOWL_AW_DIAL: Readonly<Record<string, number>> = { tidowrok: 2.89, tidelle: 2.55, tidowsk: 2.38, tidowmyr: 2.83 }
 export const TIDEOWL_AW_LEN: Readonly<Record<string, number>> = { tidowrok: 0.9261, tidelle: 0.9193, tidowsk: 0.9487, tidowmyr: 0.9108 }
 const tideowlAwakened = (name: string, aura: string): SpiritLook => {
   const b = SECOND_FORMS.owl!.water!, base = SPIRIT_RIGS.owl!, h = base.h * TIDEOWL_AW_DIAL[name]
