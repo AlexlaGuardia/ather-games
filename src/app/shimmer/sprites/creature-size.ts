@@ -180,12 +180,12 @@ export const GROWN: Readonly<Record<string, GrownSize>> = Object.freeze(
     axolotl: { height: 0.35, length: 0.90 },
     'water-bear': { height: 0.50 },
     owl: { height: 0.50 },
-    rabbit: { height: 0.48 },
+    rabbit: { height: 0.72 },   // M249: canon AMENDED 11-28 (Alex x1.5)
     turtle: { height: 0.45 },
-    bat: { height: 0.45 },
+    bat: { height: 0.675 },   // M249: canon AMENDED 11-28 (Alex x1.5)
     frog: { height: 0.40 },
-    hummingbird: { height: 0.12, length: 0.30 },
-    firefly: { height: 0.10, length: 0.30 },
+    hummingbird: { height: 0.12, length: 0.75 },   // M249: canon AMENDED 11-28 (Alex x2.5 long; the flier's height stays the build's)
+    firefly: { height: 0.10, length: 0.60 },   // M249: canon AMENDED 11-28 (Alex x2.0 long; the flier's height stays the build's)
   }),
 )
 

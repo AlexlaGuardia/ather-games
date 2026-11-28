@@ -2,7 +2,8 @@
 // docs/looks/m249-sizes-2026-11-28/alex-gallery-sizes.json) were MULTIPLIERS on the table value of the day (sizeLines prints
 // `was x scale`). tables-before.json = the table value each form had when he tuned (HEAD 7f35dc1c). Every form/awakened key must now
 // read exactly what 'Copy values' printed for his slider then. The four BASE keys are GROWN (creature-size.ts), which canon rules
-// (npm run canon grown-sizes): they wait on a Magii ruling and stay as canon has them; this test names them and fails if that set moves.
+// (npm run canon grown-sizes). RULED 11-28 (athernyx 878a2ba, CANON_GAPS 'Spirit SIZES re-set'): Lepara x1.5 -> 0.72, Noctyx x1.5 -> 0.675 (heights);
+// Luminara x2.0 -> 0.60 long, Hovari x2.5 -> 0.75 long (the two fliers' heights stay the build's reading, so their table height does not move).
 // Run: npx tsx src/app/shimmer/dev/editors/gallery-size-m249.test.ts
 import { readFileSync } from 'fs'
 import { join } from 'path'
@@ -29,14 +30,14 @@ let written = 0
 for (const [k, s] of Object.entries(sizes)) {
   const f = formOf(k), now = tableValue(f), was = before[k]
   if (now == null || was == null) { unmapped.push(k); continue }
-  if (f.kind === 'base') { pending.push(k); ok(now === was, `${k}: GROWN unchanged until canon rules (${now} vs ${was})`); continue }
+  if (f.kind === 'base') { pending.push(k); const flier = k === 'base:firefly' || k === 'base:hummingbird'; ok(Math.abs(now - (flier ? was : was * s)) < 1e-9, `${k}: GROWN height ${now} = ${flier ? 'the build\'s (flier: canon rules the LENGTH)' : `${was} x ${s}`}`); continue }
   ok(now === r2(was * s), `${k}: table ${now}, Copy values printed ${r2(was * s)} (${was} x ${s})`)
   written++
 }
 ok(unmapped.length === 0, `keys with no table slot: ${unmapped.join(', ')}`)
 ok(written === 96, `96 form/awakened values written (got ${written})`)
-ok(pending.sort().join() === [...PENDING_CANON].sort().join(), `canon-pending set is exactly the four bases (got ${pending.join(', ')})`)
-ok(GROWN.firefly.height === 0.1 && GROWN.bat.height === 0.45, 'GROWN still canon values')
+ok(pending.sort().join() === [...PENDING_CANON].sort().join(), `canon-ruled set is exactly the four bases (got ${pending.join(', ')})`)
+ok(GROWN.rabbit.height === 0.72 && GROWN.bat.height === 0.675 && GROWN.firefly.length === 0.6 && GROWN.hummingbird.length === 0.75 && GROWN.firefly.height === 0.1 && GROWN.hummingbird.height === 0.12, `GROWN = the 11-28 canon ruling (rabbit ${GROWN.rabbit.height}, bat ${GROWN.bat.height}, firefly long ${GROWN.firefly.length}, hummingbird long ${GROWN.hummingbird.length})`)
 // hub call 2 (11-28): the awakened lines Alex did NOT size keep their look against their 2nd form: each dial x that form's factor
 // (Arclotl x1.61, Aurmere x1.39, Craglotl x2.0). tables-before.json 'follow:<TABLE>:<name>' = the dial before.
 const FOLLOW_FORM: Record<string, string> = { ARCLOTL_AW_DIAL: 'arclotl', AURMERE_AW_DIAL: 'aurmere', CRAGLOTL_AW_DIAL: 'craglotl' }
@@ -53,4 +54,4 @@ ok(awakenedSlot('mesamun')?.table === 'MESAMERE_AW_DIAL' && awakenedSlot('croaka
 ok(awakenedSlot('vulnitar')?.table === 'AWAKEN_GROW', 'AWAKEN_GROW lookup')
 
 if (fails) { console.error(`${fails} failed`); process.exit(1) }
-console.log(`gallery-size-m249: PASS (96 sizes written, 4 base sizes canon-pending: ${PENDING_CANON.join(', ')})`)
+console.log(`gallery-size-m249: PASS (96 sizes written, 4 base sizes canon-ruled: ${PENDING_CANON.join(', ')})`)
