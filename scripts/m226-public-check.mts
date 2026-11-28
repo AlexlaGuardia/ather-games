@@ -7,7 +7,9 @@
 //    Voltmere / Tidemere; the Croakling line pass 2: Croakrill / Croakara / Croakore / Croakarc), not her base or an orb.
 //  D (M202, Alex YAY 11-28): rabbit beds with pot.element = each draws her FORM glb (the Lepara line: Lepaura / Leparc / Lepore / Lepnix),
 //    not her base Lepara or an orb; each stands on the ground.
-//  0 page errors. 390x844 (default) or --desktop 900x600.   npx tsx scripts/m226-public-check.mts [--desktop] [--only ABCD] [--shots dir] [--url ..]
+//  E (M202, hub YAY 11-28, Alex delegated): firefly beds with pot.element = each draws her FORM glb (the Luminara line: Luminel /
+//    Luminarc hover; Luminore / Luminix, the grounded egg forms, stand on the ground), not her base Luminara or an orb.
+//  0 page errors. 390x844 (default) or --desktop 900x600.   npx tsx scripts/m226-public-check.mts [--desktop] [--only ABCDE] [--shots dir] [--url ..]
 import puppeteer, { type Page } from 'puppeteer-core'
 import { mkdirSync } from 'fs'
 import { dismissStartCard } from './lib/start-card.mts'
@@ -15,7 +17,7 @@ import { BASE_PREVIEW } from '../src/app/shimmer/open/ather/spirit-base-preview'
 import { formLook, type SpiritElement } from '../src/app/shimmer/open/ather/spirit-models'
 import type { Species } from '../src/app/shimmer/spirits/spirit'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
-const url = flag('--url', 'https://ather.games'), shots = flag('--shots', ''), desk = process.argv.includes('--desktop'), tag = desk ? 'desktop' : '390', only = flag('--only', 'ABCD')
+const url = flag('--url', 'https://ather.games'), shots = flag('--shots', ''), desk = process.argv.includes('--desktop'), tag = desk ? 'desktop' : '390', only = flag('--only', 'ABCDE')
 if (shots) mkdirSync(shots, { recursive: true })
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms)); let fails = 0
 const ok = (c: boolean, m: string) => { console.log(`${c ? 'PASS' : 'FAIL'} ${m}`); if (!c) fails++ }
@@ -108,6 +110,19 @@ try {
     ok(!urls[L.url], `D ${tag}: no rabbit bed falls back to her base ${L.name} (${L.url.split('/').pop()} mounted ${urls[L.url] ?? 0})`)
     for (const o of await offs(p)) ok(o.off.every(a => a > -0.03 && a < 0.3), `D ${tag}: a Lepara form stands on the ground (lowest ${Math.min(...o.off).toFixed(3)} .. ${Math.max(...o.off).toFixed(3)} m)`)
     await shot(p, 'd-lepara-forms'); await p.close() }
+  // ── E: M202, the Luminara line public (every form glb mounted + 200, her form's height; Luminel/Luminarc hover, the egg forms stand)
+  if (only.includes('E')) { const E: Bed[] = (['mana', 'storm', 'earth', 'water'] as SpiritElement[]).map(el => ({ sp: 'firefly' as Species, el }))
+    const { p, got } = await open(E)
+    ok(await gl(p, E.length), `E ${tag}: ${E.length} rigged bodies (no gold orb)`); await sleep(6000)
+    const urls: Record<string, number> = await p.evaluate(() => ({ ...((window as any).__spiritModel?.urls ?? {}) }))
+    const R = await rigs(p)
+    for (const b of E) { const f = formLook(b.sp, b.el)!; const file = f.url.split('/').pop()!
+      ok(!!urls[f.url] && got.includes(`${file} 200`) && R.some(r => r.sp === 'firefly' && Math.abs(r.h - f.h) < 1e-6), `E ${tag}: firefly/${b.el} draws ${f.name} (${file} mounted ${urls[f.url] ?? 0}, h ${f.h.toFixed(4)})`) }
+    const L = BASE_PREVIEW.firefly!
+    ok(!urls[L.url], `E ${tag}: no firefly bed falls back to her base ${L.name} (${L.url.split('/').pop()} mounted ${urls[L.url] ?? 0})`)
+    const O = (await offs(p)).map(o => Math.min(...o.off)).sort((a, b) => a - b)
+    ok(O.length === 4 && O.slice(0, 2).every(a => a > -0.03 && a < 0.3) && O.slice(2).every(a => a > 0.6), `E ${tag}: two egg forms stand on the ground, two forms hover (lowest body points ${O.map(a => a.toFixed(2)).join(', ')} m)`)
+    await shot(p, 'e-luminara-forms'); await p.close() }
   ok(errs.length === 0, `${tag}: 0 page errors (${errs.slice(0, 3).join(' | ')})`)
 } catch (e) { ok(false, `threw: ${String(e).slice(0, 300)}`) }
 await br.close()

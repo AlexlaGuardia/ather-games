@@ -13,6 +13,7 @@ export const PUBLIC_FORMS: ReadonlySet<string> = new Set([
   'mesamere', 'aurmere', 'voltmere', 'tidemere',  // M202 the Shellmere line (Alex OK 11-27, build fe54f540)
   'croakrill', 'croakara', 'croakore', 'croakarc', // M202 the Croakling line pass 2 (Alex OK 11-27, build b1cf88ca)
   'lepaura', 'leparc', 'lepore', 'lepnix',         // M202 the Lepara line (Alex YAY 11-28, build 93368085)
+  'luminel', 'luminarc', 'luminore', 'luminix',   // M202 the Luminara line (hub YAY 11-28 AFK, Alex delegated)
 ])
 
 /** her second form's look for this keeper: every keeper sees a PUBLIC form, only the owner sees the rest; null = draw her base */
