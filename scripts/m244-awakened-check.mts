@@ -19,7 +19,7 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms)); let fails = 0
 const ok = (c: boolean, m: string) => { console.log(`${c ? 'PASS' : 'FAIL'} ${m}`); if (!c) fails++ }
 const ONLY = flag('--only', '').split(',').filter(Boolean).map(Number)
 const AW = GALLERY.filter(r => r.aw && (!ONLY.length || ONLY.includes(r.num)))
-ok(GALLERY.filter(r => r.aw).length === 24, `24 awakened rows in the roster (${GALLERY.filter(r => r.aw).map(r => `#${r.num} ${r.name}`).join(', ')})`)
+ok(GALLERY.filter(r => r.aw).length === 28, `28 awakened rows in the roster (${GALLERY.filter(r => r.aw).map(r => `#${r.num} ${r.name}`).join(', ')})`)
 const br = await puppeteer.launch({ protocolTimeout: 900000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--mute-audio', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] })
 try {
   const errs: string[] = []
@@ -55,14 +55,14 @@ try {
     // M244 s1b: the biped (Vulnarok), the running copies (Vulnavex), the sit clearance (Vulnamyr), read off the live rig in the page
     const sample = (clip: string, n: number, gap: number) => p.click(`[data-gallery-clip="${clip}"]`).then(() => sleep(1800)).then(() => p.evaluate(async (n: number, gap: number) => {
       const r = (window as any).__spiritModel?.rigs?.get('gallery')?.body; if (!r) return null
-      const names: string[] = r.bones.map((b: any) => b.name), out: { bones: Record<string, number[]>; low: number }[] = []
+      const names: string[] = r.bones.map((b: any) => b.name), out: { bones: Record<string, number[]>; low: number; blow: number }[] = []
       const T = (r.root.matrixWorld.clone ? r.root.matrixWorld.clone().invert() : null)
       for (let k = 0; k < n; k++) {
         await new Promise(res => setTimeout(res, gap)); r.root.updateMatrixWorld(true); const inv = r.root.matrixWorld.clone().invert(), bones: Record<string, number[]> = {}
         for (const b of r.bones) if (/^b_(leg_[lr]_paw|e0_head|head)$/.test(b.name)) { const v = b.getWorldPosition(new (b.position.constructor)()).applyMatrix4(inv); bones[b.name] = [v.x, v.y, v.z] }
-        let low = 9; const v = new (r.root.position.constructor)()
-        for (const part of ['body', 'aura']) { const m = r.meshes[part]; if (!m) continue; const c = m.geometry.getAttribute('position').count; for (let i = 0; i < c; i += 2) { r.at(part, i, v); v.applyMatrix4(inv); if (v.y < low) low = v.y } }
-        out.push({ bones, low })
+        let low = 9, blow = 9; const v = new (r.root.position.constructor)()
+        for (const part of ['body', 'aura']) { const m = r.meshes[part]; if (!m) continue; const c = m.geometry.getAttribute('position').count; for (let i = 0; i < c; i += 2) { r.at(part, i, v); v.applyMatrix4(inv); if (v.y < low) low = v.y; if (part === 'body' && v.y < blow) blow = v.y } }
+        out.push({ bones, low, blow })
       }
       void T; return { names, out }
     }, n, gap))
@@ -119,6 +119,16 @@ try {
       for (const c of ['idle', 'walk', 'run', 'sit', 'lie']) {
         const s2 = await sample(c, 6, 250), lo = Math.min(...(s2?.out ?? [{ low: -9 }]).map(o => o.low))
         ok(lo > 1.0, `#${row.num} ${c}: in the air, lowest body / aura vertex ${lo.toFixed(3)} glb (> 1.0)`)
+      }
+    }
+    if (['orebrak', 'lumoraya', 'lumorvex', 'lumorun'].includes(look)) {   // sheet 7: Luminore's four BROKE OUT of the egg: on the ground (no hover), on two legs with two arms
+      const s1 = await sample('walk', 14, 70), names = s1?.names ?? []
+      const BODY_UP: Record<string, number> = { idle: 0.02, walk: 0.03, run: 0.04, sit: 0.03, lie: 0.10 }   // the lie: a folded motif or a raised arm may hold her a little up
+      const limbs = ['b_leg_l', 'b_shin_l', 'b_leg_r', 'b_shin_r', 'b_arm_l', 'b_farm_l', 'b_arm_r', 'b_farm_r'].filter(x => names.includes(x))
+      ok(limbs.length === 8 && !names.includes('b_hover') && !names.some(x => /^b_(fw|hw)_/.test(x)), `#${row.num} the ground biped: legs + arms (${limbs.length} limb bones), no hover, no wings (${names.length} bones)`)
+      for (const c of ['idle', 'walk', 'run', 'sit', 'lie']) {
+        const s2 = await sample(c, 6, 250), o = s2?.out ?? [{ low: -9, blow: 9 }], lo = Math.min(...o.map(x => x.low)), bhi = Math.max(...o.map(x => x.blow))
+        ok(lo >= -0.0015 && bhi < BODY_UP[c], `#${row.num} ${c}: nothing under the ground (lowest body / aura ${(lo * 1000).toFixed(1)} mm glb) and her body on it (body lowest at most ${(bhi * 1000).toFixed(1)} mm)`)
       }
     }
     if (look === 'vulnarok') {

@@ -544,8 +544,8 @@ export const SECOND_FORMS: Partial<Record<Species, Partial<Record<SpiritElement,
 // M244 sheet 2 (sprites, 11-27): VULNARC's four (Storm), owner preview, same tools (sculpt_awaken.py kor / celle / arcvex / ceth;
 // Vulnarkor on the biped rig, rig_biped.py), Vulnarc's own look as the base: Vulnarkor a crystal-shard mantle + bolts round her,
 // Vulnarcelle a big crackling mane, Arcvex a jagged crest + two ice-white copies that run, Vulnarceth her storm cloud + two discs.
-export const AWAKEN_LEN: Readonly<Record<string, number>> = { vulnarok: 1.463, vulnalys: 1.487, vulnavex: 1.87, vulnamyr: 1.283, vulnarkor: 1.393, vulnarcelle: 1.366, arcvex: 1.817, vulnarceth: 1.377, orethar: 1.239, vulnoraya: 1.726, vulnoris: 1.457, vulnorun: 1.581, vulnitar: 1.509, marelle: 1.42, vulnisk: 1.83, vulnixeth: 1.393, luminok: 0.7608, lumilys: 0.6819, lumivex: 1.2647, elhae: 0.714, luminthar: 0.758, lumicelle: 0.9167, arcet: 0.9748, lumiceth: 0.8779 }
-export const AWAKEN_GROW: Readonly<Record<string, number>> = { vulnarok: 1.8, vulnalys: 1.7, vulnavex: 1.65, vulnamyr: 1.75, vulnarkor: 1.8, vulnarcelle: 1.75, arcvex: 1.8, vulnarceth: 1.75, orethar: 1.8, vulnoraya: 1.75, vulnoris: 1.8, vulnorun: 1.75, vulnitar: 1.95, marelle: 1.8, vulnisk: 1.8, vulnixeth: 1.75, luminok: 2.0, lumilys: 1.9, lumivex: 1.8, elhae: 2.0, luminthar: 2.0, lumicelle: 1.9, arcet: 1.8, lumiceth: 2.0 }
+export const AWAKEN_LEN: Readonly<Record<string, number>> = { vulnarok: 1.463, vulnalys: 1.487, vulnavex: 1.87, vulnamyr: 1.283, vulnarkor: 1.393, vulnarcelle: 1.366, arcvex: 1.817, vulnarceth: 1.377, orethar: 1.239, vulnoraya: 1.726, vulnoris: 1.457, vulnorun: 1.581, vulnitar: 1.509, marelle: 1.42, vulnisk: 1.83, vulnixeth: 1.393, luminok: 0.7608, lumilys: 0.6819, lumivex: 1.2647, elhae: 0.714, luminthar: 0.758, lumicelle: 0.9167, arcet: 0.9748, lumiceth: 0.8779, orebrak: 0.7853, lumoraya: 0.7803, lumorvex: 0.785, lumorun: 0.7898 }
+export const AWAKEN_GROW: Readonly<Record<string, number>> = { vulnarok: 1.8, vulnalys: 1.7, vulnavex: 1.65, vulnamyr: 1.75, vulnarkor: 1.8, vulnarcelle: 1.75, arcvex: 1.8, vulnarceth: 1.75, orethar: 1.8, vulnoraya: 1.75, vulnoris: 1.8, vulnorun: 1.75, vulnitar: 1.95, marelle: 1.8, vulnisk: 1.8, vulnixeth: 1.75, luminok: 2.0, lumilys: 1.9, lumivex: 1.8, elhae: 2.0, luminthar: 2.0, lumicelle: 1.9, arcet: 1.8, lumiceth: 2.0, orebrak: 1.8, lumoraya: 1.75, lumorvex: 1.75, lumorun: 1.75 }
 const awakened = (name: string, glbLen: number, aura: string, far: number, el: 'mana' | 'storm' | 'earth' | 'water' = 'mana'): SpiritLook => {
   const b = SECOND_FORMS.fox![el]!, h = VRIG_H * AWAKEN_GROW[name]
   return { ...b, name, url: `/open/spirits/${name}-rigged.glb`, h, trot: grownTrot(b.trot, b.h, h), rig: { ...b.rig!, glbLen, avatar: { z: b.rig!.avatar.z, far } },
@@ -606,6 +606,10 @@ export const AWAKENED_FORMS: Readonly<Record<string, SpiritLook>> = {
   lumicelle: lumAwakened('lumicelle', '#d4f0ff', 1.588, 3.356, { c: [0, 2.27, -0.04], r: 1.63, min: [-0.95, 1.06, -0.81], max: [0.95, 3.48, 0.72] }, 'storm'),
   arcet: lumAwakened('arcet', '#dcf2ff', 2.067, 3.471, { c: [-0.14, 2.64, -0.8], r: 1.94, min: [-1.06, 1.68, -2.32], max: [0.79, 3.59, 0.72] }, 'storm'),
   lumiceth: lumAwakened('lumiceth', '#c8ecff', 1.626, 3.253, { c: [0, 2.23, -0.11], r: 1.46, min: [-0.63, 1.09, -0.94], max: [0.63, 3.37, 0.72] }, 'storm'),
+  orebrak: lumBroke('orebrak', '#ffc040', 0.301, 0.7195),
+  lumoraya: lumBroke('lumoraya', '#ffe09a', 0.301, 0.7195),
+  lumorvex: lumBroke('lumorvex', '#fff0a0', 0.3225, 0.7709),
+  lumorun: lumBroke('lumorun', '#fff0c8', 0.301, 0.7195),
 }
 /** M202: her second form's look when she has evolved (`element` set) and her species has its forms modelled, else null */
 export const formLook = (s: Species | null | undefined, el: SpiritElement | null | undefined): SpiritLook | null =>

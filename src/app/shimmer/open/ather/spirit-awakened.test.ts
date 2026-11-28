@@ -22,7 +22,10 @@ ok(lumNames.join() === 'luminok,lumilys,lumivex,elhae', `Luminel's four in branc
 // M244 sheet 6: Luminarc's (Storm) four, canon-named (Alex 11-28), art LOCKED-AFK athernyx #021-024: hoverers, same tools off the live Luminarc
 const arcNames = AWAKENED_BRANCHES.map(b => AWAKENED_NAMES.luminarc![b].toLowerCase())
 ok(arcNames.join() === 'luminthar,lumicelle,arcet,lumiceth', `Luminarc's four in branch order (${arcNames})`)
-ok(Object.keys(AWAKENED_FORMS).sort().join() === [...names, ...stormNames, ...earthNames, ...waterNames, ...lumNames, ...arcNames].sort().join(), 'one look per name, no more')
+// M244 sheet 7: Luminore's (Earth) four, canon-named (spirits-species.md 'Named, the Luminara line'), art LOCKED athernyx #029-032: the egg's BREAK-OUT
+const oreNames = AWAKENED_BRANCHES.map(b => AWAKENED_NAMES.luminore![b].toLowerCase())
+ok(oreNames.join() === 'orebrak,lumoraya,lumorvex,lumorun', `Luminore's four in branch order (${oreNames})`)
+ok(Object.keys(AWAKENED_FORMS).sort().join() === [...names, ...stormNames, ...earthNames, ...waterNames, ...lumNames, ...arcNames, ...oreNames].sort().join(), 'one look per name, no more')
 for (const [el, list] of [['mana', names], ['storm', stormNames], ['earth', earthNames], ['water', waterNames]] as const) for (const n of list) {
   const vulnara = SECOND_FORMS.fox![el]!, parent = el === 'mana' ? 'vulnara' : el === 'storm' ? 'vulnarc' : el === 'earth' ? 'vulnore' : 'vulnix'
   const L = AWAKENED_FORMS[n]
@@ -222,6 +225,33 @@ for (const n of waterNames) {
   ok(ext('arcet', 'aura').min[2] < -2.0 && span('arcet', 'aura', 2) > 2.4 * span('arcet', 'body', 2), `arcet: two copies streaming behind (aura from z ${ext('arcet', 'aura').min[2].toFixed(2)}, ${(span('arcet', 'aura', 2) / span('arcet', 'body', 2)).toFixed(1)}x her length)`)
   ok(span('lumiceth', 'body', 1) > 1.1 * span('luminarc', 'body', 1) && ext('lumiceth', 'body').min[1] < ext('luminarc', 'body').min[1] - 0.15, `lumiceth: a cloak past her feet (body ${span('lumiceth', 'body', 1).toFixed(2)} tall vs Luminarc ${span('luminarc', 'body', 1).toFixed(2)})`)
   ok(met('arcet').cull.min[2] < -2 && met('luminthar').cull.max[0] > 1 && met('lumiceth').body_mean_top > met('luminthar').body_mean_top, 'culling holds the motifs (Arcet copies, Luminthar span); Lumiceth stands tallest in her cloak')
+}
+// M244 sheet 7: Luminore's four BROKE OUT of the egg: grounded like her (no hover), but up on legs with arms, taller, the shell at her feet
+{
+  const parent = SECOND_FORMS.firefly!.earth!, met = (n: string) => JSON.parse(readFileSync(`docs/looks/m244-luminore-2026-11-28/${n}-metrics.json`, 'utf8'))
+  const egg = JSON.parse(readFileSync('docs/looks/m202-luminara-line-2026-11-27/luminore-metrics.json', 'utf8'))
+  for (const n of oreNames) {
+    const L = AWAKENED_FORMS[n], f = `public${L.url}`, m = met(n)
+    ok(L.name === n && L.form === 'earth' && L.url === `/open/spirits/${n}-rigged.glb` && L.glow?.part === 'aura' && L.skin?.emissive === parent.skin?.emissive, `${n}: her own glb, an earth form look off Luminore, aura = glow part`)
+    ok(AWAKEN_GROW[n] > formGrow('luminore') && L.h > parent.h * 1.15 && m.dial === AWAKEN_GROW[n], `${n}: grown past Luminore (dial ${AWAKEN_GROW[n]} vs ${formGrow('luminore')}; rig dial ${m.dial})`)
+    ok(!L.rig?.hover && !L.rig?.cull && !PUBLIC_FORMS.has(n), `${n}: grounded (no hover, no own culling), owner preview only`)
+    ok(Math.abs(m.glb_long - AWAKEN_LEN[n]) < 1e-3 && Math.abs(L.rig!.clipV!.walk / L.rig!.clipV!.run - m.walk.plays_1to1_at_mps / m.run.plays_1to1_at_mps) < 1e-3, `${n}: wired numbers = her metrics (glbLen ${m.glb_long}, walk / run ${m.walk.plays_1to1_at_mps} / ${m.run.plays_1to1_at_mps} m/s)`)
+    for (const c of ['idle', 'walk', 'run', 'sit', 'lie']) ok(m[c].lowest_glb > -0.0015 && m[c].body_lowest_glb < 0.002, `${n} ${c}: on the ground, nothing under it (lowest ${m[c].lowest_glb}, body ${m[c].body_lowest_glb} glb)`)
+    ok(m.body_mean_top > 1.2 * egg.body_mean_top, `${n}: taller than the egg (${m.body_mean_top} vs ${egg.body_mean_top} glb)`)
+    if (!existsSync(f)) { ok(false, `${f} exists`); continue }
+    const j = glbJson(n), nodes: string[] = j.nodes.map((x: { name?: string }) => x.name)
+    const am = j.nodes.find((x: { name?: string }) => x.name === 'aura').mesh, amin = j.accessors[j.meshes[am].primitives[0].attributes.POSITION].min[1]
+    if (n !== 'lumorvex') ok(amin > 0 && amin < 0.01, `${n}: the broken shell rests ON the ground in the bind pose (aura lowest ${amin.toFixed(4)} glb)`)   // Lumorvex's shards fly
+    ok(['body', 'eyes', 'lamp', 'aura', 'b_root', 'b_hips', 'b_head', 'b_leg_l', 'b_shin_r', 'b_arm_l', 'b_farm_r'].every(x => nodes.includes(x)) && !nodes.includes('b_hover') && !nodes.some(x => /^b_(fw|hw)_/.test(x ?? '')), `${n}: the ground biped (legs + arms, no hover, no wings)`)
+    const root = nodes.indexOf('b_root'), anims = j.animations as { name: string; channels: { target: { node: number; path: string } }[] }[]
+    ok(anims.map(a => a.name).sort().join() === 'idle,lie,run,sit,walk' && !anims.some(a => a.channels.some(c => c.target.node === root && c.target.path === 'translation')), `${n}: five clips; the root never moves (her shell stays on the ground)`)
+  }
+  // a new silhouette vs the egg, read off the files: arms out past her body, legs under it
+  const ext = (n: string, mesh: string, _d: 'luminore' | 'mine') => { const j = glbJson(n), mi = j.nodes.find((x: { name?: string }) => x.name === mesh).mesh, a = j.accessors[j.meshes[mi].primitives[0].attributes.POSITION]; return { min: a.min as number[], max: a.max as number[] } }
+  const eggB = ext('luminore', 'body', 'luminore'), eggW = eggB.max[0] - eggB.min[0], eggH = eggB.max[1] - eggB.min[1]
+  for (const n of oreNames) { const b = ext(n, 'body', 'mine'); ok(b.max[0] - b.min[0] > 1.15 * eggW && b.max[1] - b.min[1] > 1.2 * eggH, `${n}: arms + legs (body ${(b.max[0] - b.min[0]).toFixed(2)} wide x ${(b.max[1] - b.min[1]).toFixed(2)} tall vs the egg ${eggW.toFixed(2)} x ${eggH.toFixed(2)})`) }
+  ok(ext('lumoraya', 'body', 'mine').max[0] > ext('lumorun', 'body', 'mine').max[0] + .15 && ext('orebrak', 'body', 'mine').max[0] > ext('lumorun', 'body', 'mine').max[0] + .08, 'lumoraya: her arms flung out; orebrak: the broad brute (both wider than hushed Lumorun, arms at her sides)')
+  ok(ext('lumoraya', 'aura', 'mine').max[1] - ext('lumoraya', 'aura', 'mine').min[1] > 1.4 && ext('lumorvex', 'aura', 'mine').max[2] > 1.0 && ext('orebrak', 'aura', 'mine').max[0] > 0.7, 'motifs: Lumoraya\'s rays tower behind her, Lumorvex\'s beam reaches ahead, Orebrak\'s prism fans out to her side')
 }
 console.log(`spirit-awakened: ${pass} pass, ${fails.length} fail`)
 if (fails.length) { for (const f of fails) console.log('  FAIL', f); process.exit(1) }
