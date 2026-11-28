@@ -1,0 +1,86 @@
+{
+ "form": "marisse",
+ "ground": true,
+ "biped": true,
+ "dial": 1.95,
+ "bones": 18,
+ "glb_bytes": 812944,
+ "tris": {
+  "body": 12812,
+  "eyes": 6146,
+  "lamp": 560,
+  "aura": 5360
+ },
+ "unit_m": 0.3438,
+ "glb_long": 0.7761,
+ "idle": {
+  "dur_s": 2.6,
+  "lowest_glb": -0.0,
+  "body_lowest_glb": 0.0,
+  "max_lowest_glb": 0.0,
+  "top_glb": 1.449,
+  "edge_stretch_p99": 1.26,
+  "edge_stretch_max": 2.13
+ },
+ "walk": {
+  "dur_s": 0.64,
+  "lowest_glb": 0.0013,
+  "body_lowest_glb": 0.0013,
+  "max_lowest_glb": 0.0022,
+  "top_glb": 1.417,
+  "edge_stretch_p99": 1.38,
+  "edge_stretch_max": 2.54,
+  "plays_1to1_at_mps": 0.2795,
+  "stride_glb": 0.52
+ },
+ "run": {
+  "dur_s": 0.44,
+  "lowest_glb": 0.0008,
+  "body_lowest_glb": 0.0008,
+  "max_lowest_glb": 0.0044,
+  "top_glb": 1.378,
+  "edge_stretch_p99": 1.77,
+  "edge_stretch_max": 4.03,
+  "plays_1to1_at_mps": 0.6681,
+  "stride_glb": 0.855
+ },
+ "sit": {
+  "dur_s": 3.0,
+  "lowest_glb": -0.0002,
+  "body_lowest_glb": -0.0002,
+  "max_lowest_glb": -0.0002,
+  "top_glb": 1.129,
+  "edge_stretch_p99": 2.2,
+  "edge_stretch_max": 6.65
+ },
+ "lie": {
+  "dur_s": 4.4,
+  "lowest_glb": -0.0,
+  "body_lowest_glb": -0.0,
+  "max_lowest_glb": 0.0,
+  "top_glb": 1.122,
+  "edge_stretch_p99": 1.55,
+  "edge_stretch_max": 3.13
+ },
+ "body_mean_top": 1.27,
+ "all_lowest_with_aura_glb": -0.0002,
+ "all_max_lowest_glb": 0.0044,
+ "cull": {
+  "c": [
+   0.13,
+   0.72,
+   0.08
+  ],
+  "r": 1.29,
+  "min": [
+   -0.78,
+   -0.12,
+   -0.51
+  ],
+  "max": [
+   1.04,
+   1.57,
+   0.66
+  ]
+ }
+}
