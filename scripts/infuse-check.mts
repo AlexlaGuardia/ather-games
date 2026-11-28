@@ -80,7 +80,7 @@ try {
 
   const note = await page.evaluate(() => {
     const d = Array.from(document.querySelectorAll('div')).map(x => (x.textContent ?? '').trim())
-      .find(t => /takes the storm infusion/.test(t) && t.length < 120)
+      .find(t => /takes the storm infusion|became .* was strongest in them/.test(t) && t.length < 120)
     return d ?? null
   })
   ok(!!note, `the panel says what happened — ${JSON.stringify(note)}`)
