@@ -63,6 +63,10 @@ try {
         const bob = g?.parent ? g.position.y * g.parent.getWorldScale(sc).y : 0
         for (const part of ['body', 'aura']) { const m = r.meshes[part]; if (!m) continue; const c = m.geometry.getAttribute('position').count; for (let i = 0; i < c; i += 2) { r.at(part, i, v); if (v.y - bob < low) low = v.y - bob } }
       }
+      // M244 sheet 11: a line that CARRIES ITS OWN WATER (spirit-water WATER_FORMS: Tidemere's) stands on her sheet, not on the floor: her
+      // plastron rides SHEET_CLEAR glb over it by design (the glide block below asserts that ride), so what meets the floor is the sheet
+      const w = (window as any).__spiritModel?.waters?.get('gallery')
+      if (w?.sheet) { const sv = new (r.root.position.constructor)(); w.sheet.updateMatrixWorld(true); w.sheet.getWorldPosition(sv); const bob = g?.parent ? g.position.y * g.parent.getWorldScale(sc).y : 0; if (sv.y - bob < low) low = sv.y - bob }
       return low
     }))
     ok(floorLow !== null && Math.abs(floorLow) <= 0.03, `#${row.num} idle: her lowest point on the gallery floor (${floorLow === null ? 'no rig' : `${(floorLow * 100).toFixed(1)} cm`}, within 3 cm)`)
