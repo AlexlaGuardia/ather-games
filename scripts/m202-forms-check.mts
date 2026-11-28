@@ -18,7 +18,8 @@
 // M202 Luminara line: --species firefly (owner ?form=mana|storm|earth|water = Luminel / Luminarc / Luminore / Luminix, sized by
 //   LUM_GLB_TALL = her body height, the hover not counted, read once she hangs still; player ?form=mana sees her base Luminara).
 // M202 Lepara line: --species rabbit (owner ?form=mana|storm|earth|water = Lepaura / Leparc / Lepore / Lepnix, sized by LEP_GLB_TALL =
-//   her body idle mean height, ears counted as the base's; player ?form=earth sees her base Lepara).
+//   her body idle mean height, ears counted as the base's; player ?form=earth sees her base Lepara). 11-28: Lepnix's own trot rig:
+//   her run clip sampled on her live bones = no leg past 1.3x, root rise < 0.05 glb units, hind hooves not in step (no hop).
 // M202 Hovari line: --species hummingbird (owner ?form=storm|mana|earth|water = Voltari / Lumari / Obsidari / Tidari, sized by
 //   HOV_GLB_TALL = her body height, the hover not counted; player ?form=mana sees her base Hovari).
 //   OWNER_KEY=... npx tsx scripts/m202-forms-check.mts [--species fox|axolotl|water-bear] [--shots dir] [--url https://ather.games]
@@ -87,6 +88,29 @@ for (const el of SPIRIT_ELEMENTS.filter(e => SECOND_FORMS[SP]?.[e] && (!only.len
   // M202 Marlotl: the Manalotl line is sized by LENGTH (0.90 m x her dial), so her standing height is her glb's (rig metrics) x look h
   const want = SP === 'fox' ? 0.70 * formGrow(L.name) : (SP === 'water-bear' ? BEAR_GLB_TALL[L.name] : SP === 'bat' ? NOCT_GLB_TALL[L.name] : SP === 'owl' ? OWL_GLB_TALL[L.name] : SP === 'hummingbird' ? HOV_GLB_TALL[L.name] : SP === 'frog' ? CROAK_GLB_TALL[L.name] : SP === 'turtle' ? SHELL_GLB_TALL[L.name] : SP === 'rabbit' ? LEP_GLB_TALL[L.name] : SP === 'firefly' ? LUM_GLB_TALL[L.name] : LOTL_GLB_TALL[L.name]) * L.h
   ok(!!m && m.h > want * 0.9 && m.h < want * 1.1, `1 ${el}: grown past her base to ~${want.toFixed(2)} m: ${m?.h.toFixed(3)} m standing (look h ${m?.look.toFixed(3)})`)
+  // M202 11-28 LEPNIX'S OWN GAIT: the foal trots on four two-bone legs. Her RUN clip is sampled on her live bones (24 keys, restored after):
+  // leg stretch = each leg's upper->lower joint distance over its bind length (the rabbit clips drew her hind leg out 2.7x); no hop =
+  // her root's rise over the clip stays small AND her hind hooves are not in step (a hop moves both together: correlation ~ +1)
+  if (L.name === 'lepnix') { const g = await p.evaluate(() => { const W = window as any, r = [...W.__spiritModel.rigs.values()][0], B = r.body, bones: any[] = B.bones
+      const act = B.mixer._actions.find((a: any) => a.getClip().name === 'run'); if (!act) return null
+      const by = (n: string) => bones.find(b => b.name === 'b_' + n), save = bones.map(b => [b.position.clone(), b.quaternion.clone(), b.scale.clone()])
+      const inv = B.root.matrixWorld.clone().invert()
+      const bind = (n: string) => { const i = bones.indexOf(by(n)); return B.skeleton.boneInverses[i].clone().invert() }
+      const wp = (n: string) => by(n).getWorldPosition(by(n).position.clone()).applyMatrix4(inv)
+      const pos = (m: any) => { const v = by('root').position.clone(); return v.setFromMatrixPosition(m) }
+      const LEG = [['arm_l', 'paw_l'], ['arm_r', 'paw_r'], ['thigh_l', 'foot_l'], ['thigh_r', 'foot_r']], rest = LEG.map(([a, b]) => pos(bind(a)).distanceTo(pos(bind(b))))
+      const clip = act.getClip(), its = clip.tracks.map((t: any) => { const [bn, prop] = t.name.split('.'); return { b: bones.find(x => x.name === bn), prop, it: t.createInterpolant() } })
+      let st = 0; const ry: number[] = [], fl: number[] = [], fr: number[] = []
+      for (let k = 0; k < 24; k++) { const t = clip.duration * k / 24
+        for (const { b, prop, it } of its) if (b) { const v = it.evaluate(t); if (prop === 'quaternion') b.quaternion.fromArray(v); else if (prop === 'position') b.position.fromArray(v); else if (prop === 'scale') b.scale.fromArray(v) }
+        B.root.updateMatrixWorld(true); inv.copy(B.root.matrixWorld).invert()
+        LEG.forEach(([a, b], i) => { st = Math.max(st, wp(a).distanceTo(wp(b)) / rest[i]) }); ry.push(wp('root').y); fl.push(wp('foot_l').y); fr.push(wp('foot_r').y) }
+      bones.forEach((b, i) => { b.position.copy(save[i][0]); b.quaternion.copy(save[i][1]); b.scale.copy(save[i][2]) }); B.root.updateMatrixWorld(true)
+      const mean = (a: number[]) => a.reduce((x, y) => x + y, 0) / a.length, ml = mean(fl), mr = mean(fr)
+      const cov = fl.reduce((s, x, i) => s + (x - ml) * (fr[i] - mr), 0), corr = cov / Math.sqrt(fl.reduce((s, x) => s + (x - ml) ** 2, 0) * fr.reduce((s, x) => s + (x - mr) ** 2, 0) || 1)
+      return { st, rise: Math.max(...ry) - Math.min(...ry), corr, n: its.filter((x: any) => x.b).length } })
+    ok(!!g && g.st < 1.3, `1 water: Lepnix's run stretches no leg past 1.3x its bind length (max ${g?.st.toFixed(2)}x, ${g?.n} tracks)`)
+    ok(!!g && g.rise < 0.05 && g.corr < 0.3, `1 water: Lepnix trots, no hop (root rise ${g?.rise.toFixed(3)} glb units < 0.05; hind hooves in step ${g?.corr.toFixed(2)} < 0.3)`) }
   if (shots && m) { await p.evaluate((x: number, z: number) => (window as any).__ather.tp(x + 1.4, z + 1.1, 0), m.x, m.z); await sleep(900)
     // after the tp she walks to the keeper: aim only once she has SETTLED (two reads 0.5 s apart within 2 cm; 12 s cap), else the still
     // frames the place she left (the Vulnara still showed only her brush)

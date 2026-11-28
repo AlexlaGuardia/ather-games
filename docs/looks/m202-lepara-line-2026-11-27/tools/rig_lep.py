@@ -24,6 +24,15 @@ if FORM == 'lepnix':
     for a, b in FOAL: assert a in src, a; src = src.replace(a, b)
     # her idle stamps a foreleg (the base's wave + thump): ground it like sit + lie, so no hoof sinks
     a_ = "foot(p, 'l'); foot(p, 'r', .01 * th, .045 * th, 0, rx(-.35 * th)); return p"; assert a_ in src; src = src.replace(a_, a_[:-8] + 'return ground(p, 0)')
+    # M202 11-28: HER OWN FOUR-LEGGED CLIPS (trot_lepnix.py: two-bone legs, no stretch; walk 4-beat, run a trot, a foal's sit + lie), spliced
+    # in after the base's pose helpers so her idle / walk / run / sit / lie replace the rabbit's hops + two-paw groom
+    for a_, b_ in (("clips, T, R = {}, {}, {}", open(os.path.join(HERE, 'trot_lepnix.py')).read() + "\nclips, T, R = {}, {}, {}"),
+                   # her water-mane runs down the neck: the part behind the head skins to the neck / chest (as body), not to the head
+                   ("(isp(HD) | isp(BL)) & ~isp(ER),", "(isp(HD) | isp(BL)) & ~isp(ER) & ~((V0[:, 2] < -.06) & (V0[:, 1] < .66)),"),
+                   ("('idle', idle, 48, 8.)", "('idle', idle, 96, 8.)"), ("('sit', sit, 44, 6.)", "('sit', sit, 60, 6.)"),
+                   # planted-hoof drift: each hind hoof is read over ITS OWN stance (the trot's feet are not in step)
+                   ("for k in np.linspace(.002, G['duty'] - .002, 24): t = k * T[c]", "for k in np.linspace(.002, G['duty'] - .002, 24) + G['start']['foot_' + fs]: t = (k % 1) * T[c]")):
+        assert src.count(a_) == 1, a_; src = src.replace(a_, b_)
 D = os.path.join(HERE, '..'); ns = dict(__name__='rig', __file__=os.path.join(C.BASE, 'rig_lepara.py'), S=S,
      GLB_IN=os.path.join(D, f'{FORM}.glb'), GLB_OUT=os.path.join(D, f'{FORM}-rigged.glb'), MET_OUT=os.path.join(D, f'{FORM}-metrics.json'))
 sys.modules['sculpt_lepara'] = S

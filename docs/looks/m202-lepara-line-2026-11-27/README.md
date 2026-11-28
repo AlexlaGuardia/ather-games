@@ -25,8 +25,12 @@ the base's five clips. In game: `spirit-models.ts` `lepForm` builds off `BASE_PR
 `tools/three-check.mts <form>`: lepaura 14/14, leparc 14/14, lepore 13/14 (idle>run blend sinks 3.7 mm), lepnix 13/14 (blends into lie sink 3.5 mm).
 
 ## Rough / for Alex
-1. Lepnix rides the RABBIT clips on foal joints: walk/run are hops (run leg reach 2.7x, stretch p99 3.8), sit raises both forelegs to
-   groom, lie keeps her standing low. She wants her own quadruped rig (a trot) next.
+1. ~~Lepnix rides the RABBIT clips~~ DONE 11-28: her own four-legged clips (`tools/trot_lepnix.py`, spliced by `rig_lep.py`): two-bone
+   legs with NO stretch (knee forward, hock back), walk = 4-beat, run = a trot (diagonal pairs, duty .32, a few mm of suspension, no hop),
+   idle paws with ONE foreleg, sit = rump down on folded hind legs (forelegs straight), lie = folded legs, head low. The back of her mane
+   now skins to the neck/chest. Metrics: leg reach 1.0 in every clip, edge stretch p99 idle 1.46 / walk 1.37 / run 1.58 / sit 1.92 /
+   lie 2.16 (was 1.57 / 2.10 / 3.78 / 2.07 / 2.13), planted-hoof drift 8-11 mm (the hoof rolls with the shin: no hoof bone).
+   three-check 13/14 (blend lie<>run sinks 2.7 mm; was 3.5).
 2. Leparc's lightning veins barely read (vertex-colour cut, pale on pale). Lepore's pauldrons read as green arm patches more than plates.
 3. Lepaura's diamond haunch marks in the art are left out on purpose (glyph-like; markings are pattern only). Stars/moon glow = effects.
 Player-facing text: none added.

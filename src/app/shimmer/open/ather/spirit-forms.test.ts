@@ -360,6 +360,28 @@ ok(new Set(SPIRIT_ELEMENTS.map(e => formLook('firefly', e)!.url)).size === 4, 't
   ok(wide(ore) > wide(base) + 0.05, `Lepore: wider than the base (${wide(ore).toFixed(3)})`)
   ok(long(nix) > long(base) + 0.15 && nix.max[1] < base.max[1] - 0.05, `Lepnix: a foal, long and level, ears lower than the base's (${long(nix).toFixed(3)} x ${nix.max[1].toFixed(3)} vs ${base.max[1].toFixed(3)})`)
   ok(new Set(SPIRIT_ELEMENTS.map(e => formLook('rabbit', e)!.url)).size === 4, 'the Lepara line: four distinct forms') }
+// M202 11-28 LEPNIX'S OWN GAIT (trot_lepnix.py): the foal walks + trots on four two-bone legs. The rabbit clips she rode drew her leg
+// joints out (run leg reach 2.7x) and hopped (root up 0.13, both hind legs in step). Read from her shipped glb's channels.
+{ const b = fs.readFileSync('public/open/spirits/lepnix-rigged.glb'), jl = b.readUInt32LE(12), j = JSON.parse(b.subarray(20, 20 + jl).toString()), bin = b.subarray(20 + jl + 8)
+  const f32 = (i: number) => { const a = j.accessors[i], v = j.bufferViews[a.bufferView], o = bin.byteOffset + (v.byteOffset ?? 0) + (a.byteOffset ?? 0), n = a.count * ({ SCALAR: 1, VEC3: 3, VEC4: 4 } as Record<string, number>)[a.type]
+    return new Float32Array(bin.buffer.slice(o, o + n * 4)) }
+  const node = (n: string) => (j.nodes as { name: string }[]).findIndex(x => x.name === n)
+  const track = (clip: string, n: string, path: string) => { const an = j.animations.find((a: { name: string }) => a.name === clip), ch = an?.channels.find((c: { target: { node: number; path: string } }) => c.target.node === node(n) && c.target.path === path)
+    return ch ? f32(an.samplers[ch.sampler].output) : null }
+  const comp = (t: Float32Array | null, k: number, w: number) => t ? Array.from({ length: t.length / w }, (_, i) => t[i * w + k]) : []
+  const corr = (x: number[], y: number[]) => { const mx = x.reduce((a, c) => a + c, 0) / x.length, my = y.reduce((a, c) => a + c, 0) / y.length
+    const c = x.reduce((a, v, i) => a + (v - mx) * (y[i] - my), 0); return c / (Math.sqrt(x.reduce((a, v) => a + (v - mx) ** 2, 0) * y.reduce((a, v) => a + (v - my) ** 2, 0)) || 1) }
+  for (const clip of ['idle', 'walk', 'run', 'sit', 'lie']) { let dev = 0
+    for (const n of ['b_paw_l', 'b_paw_r', 'b_foot_l', 'b_foot_r']) { const t = track(clip, n, 'translation'), r = j.nodes[node(n)].translation ?? [0, 0, 0]
+      if (t) for (let i = 0; i < t.length; i++) dev = Math.max(dev, Math.abs(t[i] - r[i % 3])) }
+    ok(dev < 1e-4, `Lepnix ${clip}: no leg joint is drawn out (knee + hock stay at their bind offset: ${dev.toFixed(4)})`) }
+  const ry = comp(track('run', 'b_root', 'translation'), 1, 3)
+  ok(ry.length > 10 && Math.max(...ry) - Math.min(...ry) < 0.05, `Lepnix run: no hop (root rise ${(Math.max(...ry) - Math.min(...ry)).toFixed(3)} glb units)`)
+  for (const clip of ['walk', 'run']) { const c = corr(comp(track(clip, 'b_thigh_l', 'rotation'), 0, 4), comp(track(clip, 'b_thigh_r', 'rotation'), 0, 4))
+    ok(c < 0.3, `Lepnix ${clip}: her hind legs are not in step (a hop moves both together): correlation ${c.toFixed(2)}`) }
+  const ft = (clip: string) => comp(track(clip, 'b_arm_l', 'rotation'), 0, 4), fr = (clip: string) => comp(track(clip, 'b_arm_r', 'rotation'), 0, 4)
+  for (const clip of ['idle', 'sit']) { const l = ft(clip), r = fr(clip), both = Math.max(...l.map((x, i) => Math.min(Math.abs(x), Math.abs(r[i] ?? 0))))
+    ok(l.length > 10 && both < 0.2, `Lepnix ${clip}: no two-foreleg groom (both forelegs never lift together: ${both.toFixed(2)})`) } }
 
 // ── picking ──
 ok(formLook('fox', null) === null && formLook('fox', undefined) === null, 'no element = no form (her base)')

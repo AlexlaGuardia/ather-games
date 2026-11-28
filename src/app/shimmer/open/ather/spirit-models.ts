@@ -425,7 +425,7 @@ const shellForm = (el: SpiritElement, name: string, emissive: string, hull: stri
 // rig_lep.py: the base's 20 bones + five clips at the base's 0.48 m per glb unit; Lepnix's joints moved onto her foal body).
 // LEP_GLB_TALL = each body's idle mean height (rig metrics body_mean_top, ears counted as the base's LEPARA_GLB_TALL). PUBLIC since
 // Alex's YAY 11-28 (spirit-public PUBLIC_FORMS).
-export const LEP_GLB_TALL: Readonly<Record<string, number>> = { lepaura: 1.042, leparc: 1.096, lepore: 0.976, lepnix: 0.895 }
+export const LEP_GLB_TALL: Readonly<Record<string, number>> = { lepaura: 1.042, leparc: 1.096, lepore: 0.976, lepnix: 0.885 }
 const lepForm = (el: SpiritElement, name: string, emissive: string, hull: string, glbLen: number): SpiritLook => {
   const b = BASE_PREVIEW.rabbit!, g = formGrow(name)
   return { ...b, name, form: el, url: `/open/spirits/${name}-rigged.glb`, h: b.h * g, skin: { emissive, emissiveI: 0.12 }, hull: { color: hull, opacity: 0.38 },
@@ -454,7 +454,7 @@ export const SECOND_FORMS: Partial<Record<Species, Partial<Record<SpiritElement,
     mana: lepForm('mana', 'lepaura', '#b49cff', '#e8dcff', 0.832),
     storm: lepForm('storm', 'leparc', '#a8d2ff', '#dcecff', 0.759),
     earth: lepForm('earth', 'lepore', '#ffae4a', '#ffe2b4', 0.762),
-    water: lepForm('water', 'lepnix', '#3fc4c0', '#b4f0ea', 0.947),
+    water: lepForm('water', 'lepnix', '#3fc4c0', '#b4f0ea', 0.95),   // 11-28 her own four-legged walk / trot / sit / lie (trot_lepnix.py)
   },
   turtle: {
     earth: shellForm('earth', 'mesamere', '#ffc25a', '#f4e6c4', 1.42),
