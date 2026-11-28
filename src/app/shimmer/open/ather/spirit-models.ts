@@ -404,6 +404,26 @@ export const CROAKARC_RIG: RigLook = {
   neck: 'b_neck', head: 'b_head', lie: true, cadence: 12, avatar: { z: -0.35, far: 1.8 },
 }
 function croakarc(): SpiritLook { return { ...croakForm('storm', 'croakarc', '#a8d2ff', '#dcecff', CROAKARC_RIG.glbLen, 0.5606), rig: CROAKARC_RIG } }
+// M244 sheet 9 (world, 11-28): CROAKARC's four AWAKENED forms (Storm), OWNER PREVIEW (docs/looks/m244-croakarc-2026-11-28): the live
+// Croakarc's sculpt re-shaped by name (sculpt_croakaw.py), in the croak unit space (h = the base Croakling's x her dial). Croakarkor,
+// Croakarielle and Croakarcun stand UP on a ground biped rig (rig_croakup.py: legs, arms, a four-bone tail, the pelvis carries her height,
+// baked tail springs); Arcvik stays a skink on the live Croakarc rig (rig_arcvik.py). 'aura' = her motif: Croakarkor's bulb lure (head) +
+// crackle (chest), Croakarielle's ring of orbs (chest), Arcvik's bolt striking the ground ahead of her (root), Croakarcun's free-floating
+// lure on one thread ('float', a root child that bobs). CROAK_AW_DIAL = her dial; clipV = the metrics' v_glb (glb units a second).
+export const CROAK_AW_DIAL: Readonly<Record<string, number>> = { croakarkor: 1.85, croakarielle: 1.75, arcvik: 1.8, croakarcun: 1.75 }
+const croakUpRig = (glbLen: number, walk: number, run: number): RigLook => ({
+  glbLen, pivot: { x: 0, z: 0 }, clipV: { walk, run }, runAt: [0.9, 0.75], hull: 0.024, neck: 'b_neck', head: 'b_head', lie: true, cadence: 12, avatar: { z: 0, far: 2.0 },
+})
+const croakAw = (name: string, aura: string, rig: RigLook): SpiritLook => {
+  const b = croakarc(), base = BASE_PREVIEW.frog!, h = base.h * CROAK_AW_DIAL[name]
+  return { ...b, name, url: `/open/spirits/${name}-rigged.glb`, h, trot: grownTrot(base.trot, base.h, h), rig, glow: { part: 'aura', emissive: aura, lo: 0.35, hi: 0.7, hz: 0.35 } }
+}
+export const CROAK_AWAKENED: Readonly<Record<string, SpiritLook>> = {
+  croakarkor: croakAw('croakarkor', '#dff4ff', croakUpRig(1.467, 0.5319, 1.2082)),
+  croakarielle: croakAw('croakarielle', '#fff0b4', croakUpRig(1.309, 0.6799, 1.5918)),
+  arcvik: croakAw('arcvik', '#f0faff', { ...CROAKARC_RIG, glbLen: 2.067 }),
+  croakarcun: croakAw('croakarcun', '#c8f4ff', croakUpRig(1.219, 0.1395, 0.3055)),
+}
 // M202 the Shellmere line (docs/looks/m202-shellmere-line-2026-11-27): Mesamere (Earth, his natural form: a great stone tortoise, a tall
 // dome of heavy plates, moss along the lip, an amber crown crystal, pillar legs; dial 1.5), Aurmere (Mana: a high round violet dome with
 // the canon rune-light rings grown over every scute, longer antennae), Voltmere (Storm: a wide low blocky pale-blue shell with lightning
@@ -587,6 +607,7 @@ const owlAwakened = (name: string, aura: string): SpiritLook => {
 }
 /** by look name (spirit.ts AWAKENED_NAMES, lower-cased) */
 export const AWAKENED_FORMS: Readonly<Record<string, SpiritLook>> = {
+  ...CROAK_AWAKENED,   // M244 sheet 9: Croakarc's four (above, by croakarc())
   vulnarok: awakened('vulnarok', AWAKEN_LEN.vulnarok, '#ffcf5a', 2.4),
   vulnalys: awakened('vulnalys', AWAKEN_LEN.vulnalys, '#b48cff', 1.7),
   vulnavex: awakened('vulnavex', AWAKEN_LEN.vulnavex, '#ffcf5a', 2.6),

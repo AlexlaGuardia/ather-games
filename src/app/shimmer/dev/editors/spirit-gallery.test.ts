@@ -14,7 +14,7 @@ const CANON = '/root/athernyx/CANON/world/spirits-species.md'
 ok(existsSync(LEDGER), `ledger present (${LEDGER})`)
 ok(existsSync(CANON), `canon base table present (${CANON})`)
 
-ok(GALLERY.length === 86, `86 rows: 10 base + 40 forms + 36 awakened (got ${GALLERY.length})`)
+ok(GALLERY.length === 90, `90 rows: 10 base + 40 forms + 40 awakened (got ${GALLERY.length})`)
 GALLERY.forEach((r, i) => ok(r.num === i + 1, `row ${i} numbered ${i + 1} (got ${r.num})`))
 ok(GALLERY.slice(0, 10).every(r => r.el === null) && GALLERY.slice(10).every(r => r.el !== null), 'base 10 first, then the 40 forms')
 ok(new Set(GALLERY.map(r => r.name)).size === GALLERY.length, 'every name unique')
@@ -87,11 +87,16 @@ ok(steepAdd(steepAdd(STEEP_NONE, 'mana', 8), 'storm', 5).storm === 2, 'add is he
   ok(lx.length === 4 && lx.every((r, i) => r.num === 79 + i), `Luminix's awakened rows #079-#082 (got ${lx.map(r => r.num)})`)
   ok(lx.map(r => r.name).join() === lxl.replace(/.*\*\*Luminix \(Water\):\*\*/, '').replace(/\*|\([^)]*\)/g, '').split('·').map(x => x.trim()).join(), `Luminix's four = the canon line (${lxl.slice(0, 90)})`)
   for (const r of lx) ok(locks.some(l => l.name === r.name && l.second_form === 'Luminix' && l.branch_name.toLowerCase() === r.aw!.branch), `${r.name}: a stage-3 lock off Luminix, ${r.aw!.branch}`)
-  // M244 sheet 8: Mystowl's four (owl) = the LAST four rows, after every firefly line; word for word off the canon line ('Mystowl (Mana):') + the ledger
+  // M244 sheet 8: Mystowl's four (owl) = the four rows after every firefly line (#083-#086; Croakarc's follow since sheet 9b); word for word off the canon line ('Mystowl (Mana):') + the ledger
   const my = GALLERY.filter(r => r.aw && r.sp === 'owl'), ml = readFileSync(CANON, 'utf8').split('\n').find(x => x.includes('**Mystowl (Mana):**')) ?? '', lastFly = Math.max(...GALLERY.filter(r => r.aw && r.sp === 'firefly').map(r => r.num))
-  ok(my.length === 4 && my.every((r, i) => r.el === 'mana' && r.num === lastFly + 1 + i && r.num === GALLERY.length - 3 + i), `Mystowl's awakened rows straight after the fireflies (#${lastFly + 1}-; got ${my.map(r => r.num)})`)
+  ok(my.length === 4 && my.every((r, i) => r.el === 'mana' && r.num === lastFly + 1 + i && r.num === 83 + i), `Mystowl's awakened rows straight after the fireflies (#${lastFly + 1}-; got ${my.map(r => r.num)})`)
   ok(my.map(r => r.name).join() === ml.replace(/.*\*\*Mystowl \(Mana\):\*\*/, '').replace(/\*|\([^)]*\)/g, '').split('·').map(x => x.trim()).join(), `Mystowl's four = the canon line (${ml.slice(0, 90)})`)
   for (const r of my) ok(locks.some(l => l.name === r.name && l.second_form === 'Mystowl' && l.branch_name.toLowerCase() === r.aw!.branch), `${r.name}: a stage-3 lock off Mystowl, ${r.aw!.branch}`)
+  // M244 sheet 9b: Croakarc's four (frog, Storm) = rows #087-#090, after the owls; word for word off the canon line ('Croakarc (Storm):') + the ledger
+  const ck = GALLERY.filter(r => r.aw && r.sp === 'frog'), ckl = readFileSync(CANON, 'utf8').split('\n').find(x => x.includes('**Croakarc (Storm):**')) ?? ''
+  ok(ck.length === 4 && ck.every((r, i) => r.el === 'storm' && r.num === 87 + i), `Croakarc's awakened rows #087-#090 (got ${ck.map(r => r.num)})`)
+  ok(ck.map(r => r.name).join() === ckl.replace(/.*\*\*Croakarc \(Storm\):\*\*/, '').replace(/\*|\([^)]*\)/g, '').split('·').map(x => x.trim()).join(), `Croakarc's four = the canon line (${ckl.slice(0, 90)})`)
+  for (const r of ck) ok(locks.some(l => l.name === r.name && l.second_form === 'Croakarc' && l.branch_name.toLowerCase() === r.aw!.branch), `${r.name}: a stage-3 lock off Croakarc, ${r.aw!.branch}`)
   ok(aw.every(r => r.icon.startsWith('/open/spirits/') && !r.icon.includes('stage3')), 'awakened icons are our renders, not the private art')
   // M244 sheet 2: Vulnarc's four (#055-#058, art pending lock) = the canon's 'Named — Vulnyx › Vulnarc (Storm)' line, word for word
   const st = GALLERY.filter(r => r.aw && r.el === 'storm' && r.sp === 'fox'), named = readFileSync(CANON, 'utf8').split('\n').find(x => x.includes('Named') && x.includes('Vulnarc (Storm)')) ?? ''

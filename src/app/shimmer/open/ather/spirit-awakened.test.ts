@@ -31,7 +31,9 @@ ok(mixNames.join() === 'lumixok,marisse,lumixis,lumixeth', `Luminix's four in br
 // M244 sheet 8: Mystowl's (Mana) four (art LOCKED-AFK athernyx #053-056)
 const mysNames = AWAKENED_BRANCHES.map(b => AWAKENED_NAMES.mystowl![b].toLowerCase())
 ok(mysNames.join() === 'mystowk,mystowelle,mystowis,mysteth', `Mystowl's four in branch order (${mysNames})`)
-ok(Object.keys(AWAKENED_FORMS).sort().join() === [...names, ...stormNames, ...earthNames, ...waterNames, ...lumNames, ...arcNames, ...oreNames, ...mixNames, ...mysNames].sort().join(), 'one look per name, no more')
+// M244 sheet 9b: Croakarc's four (their own test: spirit-croakaw.test.ts)
+const croakNames = AWAKENED_BRANCHES.map(b => AWAKENED_NAMES.croakarc![b].toLowerCase())
+ok(Object.keys(AWAKENED_FORMS).sort().join() === [...names, ...stormNames, ...earthNames, ...waterNames, ...lumNames, ...arcNames, ...oreNames, ...mixNames, ...mysNames, ...croakNames].sort().join(), 'one look per name, no more')
 for (const [el, list] of [['mana', names], ['storm', stormNames], ['earth', earthNames], ['water', waterNames]] as const) for (const n of list) {
   const vulnara = SECOND_FORMS.fox![el]!, parent = el === 'mana' ? 'vulnara' : el === 'storm' ? 'vulnarc' : el === 'earth' ? 'vulnore' : 'vulnix'
   const L = AWAKENED_FORMS[n]
