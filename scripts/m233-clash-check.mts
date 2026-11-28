@@ -133,10 +133,21 @@ try {
     // M233 v2d: an observer in the page records every ceremony beat as it renders (a 250 ms poll misses a 500 ms beat)
     await p.evaluate(() => {
       const w = window as any; w.__v2d?.mo?.disconnect()
-      const rec = w.__v2d = { begin: false, intro: 0, trees: [] as string[], mo: null as MutationObserver | null }
+      const rec = w.__v2d = { begin: false, intro: 0, trees: [] as string[], order: [] as string[], advanced: false, cheerUsed: false, mo: null as MutationObserver | null }
       const look = () => {
         rec.intro = Math.max(rec.intro, document.querySelectorAll('[data-clash-intro]').length)
         if (document.querySelector('[data-clash-begin]')) rec.begin = true
+        // M233 v2d (87c): bout order, tree advance and the Cheer press are read here too (a 250 ms poll at 390 on swiftshader missed whole bouts)
+        const bo = document.querySelector('[data-clash-bout]') as HTMLElement | null
+        if (bo) {
+          const tag = `${bo.dataset.clashBout}${bo.dataset.clashKeeperBout === '1' ? 'you' : ''}`
+          if (rec.order[rec.order.length - 1] !== tag) rec.order.push(tag)
+          if (bo.dataset.clashBout !== '0' && [...document.querySelectorAll('[data-bracket-bout]')].some(e => (e as HTMLElement).dataset.bracketBout === '0' && (e as HTMLElement).dataset.boutState === 'done')) rec.advanced = true
+          if (bo.dataset.clashKeeperBout === '1') {
+            const c = document.querySelector('[data-clash-cheer]') as HTMLButtonElement | null
+            if (c) { if (c.dataset.cheerUsed === '1') rec.cheerUsed = true; else if (!rec.cheerUsed) c.click() }
+          }
+        }
         if (document.querySelector('[data-clash-tree]')) {
           const t = [...document.querySelectorAll('[data-tree-bout]')].map(e => { const d = (e as HTMLElement).dataset; return `${d.treeBout}:x${d.treeCrossed}:m${d.treeMoved}:n${d.treeNext}` }).join(' ') + (document.querySelector('[data-tree-champion]') ? ' champ' : '')
           if (rec.trees[rec.trees.length - 1] !== t) rec.trees.push(t)
@@ -163,7 +174,6 @@ try {
         if (seen && !shot.has(k)) { shot.add(k); await p.screenshot({ path: `${out}/v2d-${k}.png` }) }
       if (st.old) oldScene = true
       if (!ringInfo && st.canvas && st.models.split(',').filter(Boolean).length >= 2) { ringInfo = st; await sleep(800); await p.screenshot({ path: `${out}/2b-ring-troupe-bout.png` }) }
-      if (st.kb === '1' && !cheer) { const c = await p.$('[data-clash-cheer]'); if (c) { await c.click().catch(() => {}); await sleep(400); cheer = await p.evaluate(() => (document.querySelector('[data-clash-cheer]') as HTMLElement | null)?.dataset.cheerUsed ?? 'gone') } }
       if (st.bout != null && order[order.length - 1] !== `${st.bout}${st.kb === '1' ? 'you' : ''}`) {
         order.push(`${st.bout}${st.kb === '1' ? 'you' : ''}`)
         if (st.tree.some(t => t.startsWith('0:done')) && st.bout !== '0') advanced = true
@@ -173,8 +183,8 @@ try {
       if (st.res) { result = st.res; break }
       await sleep(250)
     }
-    { const r = await p.evaluate(() => { const v = (window as any).__v2d; return v ? { begin: v.begin, intro: v.intro, trees: v.trees } : null })
-      if (r) { if (r.begin) shot.add('begin'); if (r.intro >= 2) shot.add('intro'); for (const t of r.trees) if (treeSeen[treeSeen.length - 1] !== t) treeSeen.push(t) } }
+    { const r = await p.evaluate(() => { const v = (window as any).__v2d; return v ? { begin: v.begin, intro: v.intro, trees: v.trees, order: v.order as string[], advanced: !!v.advanced, cheerUsed: !!v.cheerUsed } : null })
+      if (r) { if (r.order.length > order.length) order = r.order; if (r.advanced) advanced = true; if (r.cheerUsed) cheer = '1'; if (r.begin) shot.add('begin'); if (r.intro >= 2) shot.add('intro'); for (const t of r.trees) if (treeSeen[treeSeen.length - 1] !== t) treeSeen.push(t) } }
     if (tries === 1 || result === 'won') await p.screenshot({ path: `${out}/2d-ring-result-${result}.png` })
     const ex = await p.$('[data-clash-exit]'); if (ex) { await ex.click(); await sleep(800) }
     exited = !(await p.$('[data-clash-ring]')) && !!(await p.$('[data-panel="clash"] [data-clash-result]'))
