@@ -52,6 +52,20 @@ try {
       if (shots && (c === 'idle' || c === 'walk')) await p.screenshot({ path: `${shots}/${row.num}-${look}-${c}.png` })
       ok(on === 'true' && errs.length === 0, `#${row.num} ${c} plays (errors so far ${errs.length})`)
     }
+    // M244 feet fix (Alex 11-28 "the luminara line in the gallery look like they are in the ground"): in the idle her lowest point (body +
+    // aura) sits ON the stage floor (world y 0), in metres as drawn, the stage's idle bob taken out; lowest over 12 samples (a hoverer's dip)
+    const floorLow = await p.click('[data-gallery-clip="idle"]').then(() => sleep(1200)).then(() => p.evaluate(async () => {
+      const r = (window as any).__spiritModel?.rigs?.get('gallery')?.body; if (!r) return null
+      let g = r.root; while (g && !/^spirit-model-/.test(g.name ?? '')) g = g.parent
+      let low = 9; const v = new (r.root.position.constructor)(), sc = new (r.root.position.constructor)()
+      for (let k = 0; k < 12; k++) {
+        await new Promise(res => setTimeout(res, 250)); r.root.updateMatrixWorld(true)
+        const bob = g?.parent ? g.position.y * g.parent.getWorldScale(sc).y : 0
+        for (const part of ['body', 'aura']) { const m = r.meshes[part]; if (!m) continue; const c = m.geometry.getAttribute('position').count; for (let i = 0; i < c; i += 2) { r.at(part, i, v); if (v.y - bob < low) low = v.y - bob } }
+      }
+      return low
+    }))
+    ok(floorLow !== null && Math.abs(floorLow) <= 0.03, `#${row.num} idle: her lowest point on the gallery floor (${floorLow === null ? 'no rig' : `${(floorLow * 100).toFixed(1)} cm`}, within 3 cm)`)
     // M244 s1b: the biped (Vulnarok), the running copies (Vulnavex), the sit clearance (Vulnamyr), read off the live rig in the page
     const sample = (clip: string, n: number, gap: number) => p.click(`[data-gallery-clip="${clip}"]`).then(() => sleep(1800)).then(() => p.evaluate(async (n: number, gap: number) => {
       const r = (window as any).__spiritModel?.rigs?.get('gallery')?.body; if (!r) return null

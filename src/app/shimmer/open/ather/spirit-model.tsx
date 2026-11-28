@@ -328,8 +328,10 @@ function SpiritModel({ sp, look, nav, id, avatar, dev, meals, gallery, clip }: {
     const pz = avatar || gallery ? rig.avatar.z : rig.pivot.z
     return <group ref={g} name={`spirit-model-${look.name}`} userData={{ spiritModel: look.name, rigged: true }}>
       {/* M224: the gallery drops her by avatar.y too, as the panel does: a hover rig's glb hangs her body ~4 units up (Hovari line,
-          Luminara), so the gallery drew her above its camera's view and showed neither model nor art */}
-      {body && <group scale={H} position={[-rig.pivot.x * H, avatar || gallery ? -(rig.avatar.y ?? 0) * H : 0, -pz * H]}><primitive object={body.root} /></group>}
+          Luminara), so the gallery drew her above its camera's view and showed neither model nor art.
+          M244 feet fix: the gallery's floor takes a hoverer's own idle low (rig.hover.low, each form's metrics), not avatar.y: the
+          Luminara line's forms share the base's avatar.y 2.75 but hang lower (Luminel 2.44, Luminok 1.79), so they sank into the floor */}
+      {body && <group scale={H} position={[-rig.pivot.x * H, gallery ? -(rig.hover?.low ?? rig.avatar.y ?? 0) * H : avatar ? -(rig.avatar.y ?? 0) * H : 0, -pz * H]}><primitive object={body.root} /></group>}
     </group>
   }
   if (!parts) return null
