@@ -135,13 +135,14 @@ for (const el of SPIRIT_ELEMENTS.filter(e => SECOND_FORMS[SP]?.[e] && (!only.len
       const R = B.bones.find((x: any) => x.name === 'b_root'), V = R.position.clone(), G = R.position.clone()
       let finLow = 1e9, bodyLow = 1e9, wetMax = 0, laidAt = -1, dried = false, prev = { wet: 0, laid: 0 }, moved = 0, frames = 0, x0 = r.x, z0 = r.z
       const t0 = performance.now()
-      while (performance.now() - t0 < 45000) { await raf(); frames++; const s = w.stats(); R.getWorldPosition(G)
-        if (frames % 3 === 0) { for (const i of fin) { B.at('body', i, V); finLow = Math.min(finLow, V.y - G.y) } }
-        moved = Math.max(moved, Math.hypot(r.x - x0, r.z - z0)); wetMax = Math.max(wetMax, s.wet); if (s.laid > 0 && laidAt < 0) laidAt = performance.now()
+      while (performance.now() - t0 < 45000) { await raf(); frames++   // re-read the probe each frame: its rig entry is a fresh object each frame, a remount makes a fresh body + glide
+        const wn = [...W.__spiritModel.waters.values()][0] ?? w, s = wn.stats(), rn = [...W.__spiritModel.rigs.values()][0] ?? r, Bn = rn.body, Rn = Bn.bones.find((x: any) => x.name === 'b_root'); Rn.getWorldPosition(G)
+        if (frames % 3 === 0) { for (const i of fin) { Bn.at('body', i, V); finLow = Math.min(finLow, V.y - G.y) }
+          for (let i = 0; i < geo.getAttribute('position').count; i += 7) { Bn.at('body', i, V); bodyLow = Math.min(bodyLow, V.y - G.y) } }
+        moved = Math.max(moved, Math.hypot(rn.x - x0, rn.z - z0)); wetMax = Math.max(wetMax, s.wet); if (s.laid > 0 && laidAt < 0) laidAt = performance.now()
         if (s.laid > 0 && s.laid === prev.laid && s.wet < prev.wet) dried = true
         prev = { wet: s.wet, laid: s.laid }; if (dried && wetMax > 0 && performance.now() - t0 > 8000) break }
-      for (let i = 0; i < geo.getAttribute('position').count; i += 5) { B.at('body', i, V); bodyLow = Math.min(bodyLow, V.y - G.y) }
-      const s = w.stats(); return { finLow, bodyLow, wetMax, laid: s.laid, wet: s.wet, cap: s.cap, dried, moved, frames, fin: fin.length } })
+      const s = ([...W.__spiritModel.waters.values()][0] ?? w).stats(); return { finLow, bodyLow, wetMax, laid: s.laid, wet: s.wet, cap: s.cap, dried, moved, frames, fin: fin.length } })
     if (!tr) ok(false, '1 water: no water glide on her (no trail, no sheet)')
     else { ok(tr.moved > 1 && tr.laid > 0 && tr.wetMax > 0 && tr.wetMax <= tr.cap, `1 water: she moved ${tr.moved.toFixed(2)} m and laid a wet trail (${tr.laid} laid, up to ${tr.wetMax} wet at once, cap ${tr.cap})`)
     ok(tr.dried, `1 water: her trail dries (a patch went dry with none laid; ${tr.wet} wet at the end, ${tr.frames} frames)`)
