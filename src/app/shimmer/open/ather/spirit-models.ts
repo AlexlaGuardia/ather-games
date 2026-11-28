@@ -424,6 +424,23 @@ export const CROAK_AWAKENED: Readonly<Record<string, SpiritLook>> = {
   arcvik: croakAw('arcvik', '#f0faff', { ...CROAKARC_RIG, glbLen: 2.067 }),
   croakarcun: croakAw('croakarcun', '#c8f4ff', croakUpRig(1.219, 0.1395, 0.3055)),
 }
+// M244 sheet 11 (world, 11-28): CROAKARA's four AWAKENED forms (Mana), OWNER PREVIEW (docs/looks/m244-croakara-2026-11-28): the live
+// Croakara's sculpt re-shaped by name (sculpt_croakaraw.py / sculpt_croakalys.py), in the croak unit space (h = the base Croakling's x her
+// dial). Croakgulp (the heavy 99-meals form), Croakavis and Araeth stay sitting frogs on the live Croakara rig (the base Croakling's 19
+// bones + clips, rig_croakaraw.py: + baked lure springs); Croakalys stands UP on sheet 9's ground biped (rig_croakalys.py). 'aura' = her
+// motif: Croakgulp's gold belly swirl, Croakalys's streaks of song (chest), Croakavis's ghost copy behind her (root), Araeth's copper pot +
+// potion bottles hanging from her globe (lure tip). glbLen + the clip timing (hRig = rig metrics height_m) are her metrics'.
+export const CROAKARA_AW_DIAL: Readonly<Record<string, number>> = { croakgulp: 2.0, croakalys: 1.85, croakavis: 1.8, araeth: 1.75 }
+const croakaraAw = (name: string, aura: string, glbLen: number, hRig: number, rig?: RigLook): SpiritLook => {
+  const b = croakForm('mana', 'croakara', '#b49cff', '#e8dcff', glbLen, hRig), base = BASE_PREVIEW.frog!, h = base.h * CROAKARA_AW_DIAL[name]
+  return { ...b, name, url: `/open/spirits/${name}-rigged.glb`, h, trot: grownTrot(base.trot, base.h, h), rig: rig ?? b.rig, glow: { part: 'aura', emissive: aura, lo: 0.35, hi: 0.7, hz: 0.35 } }
+}
+export const CROAKARA_AWAKENED: Readonly<Record<string, SpiritLook>> = {
+  croakgulp: croakaraAw('croakgulp', '#ffd060', 0.954, 0.3653),
+  croakalys: croakaraAw('croakalys', '#fff0b4', 1.09, 0.3864, croakUpRig(1.09, 0.7813, 1.8294)),
+  croakavis: croakaraAw('croakavis', '#e8dcff', 0.868, 0.3864),
+  araeth: croakaraAw('araeth', '#ffb070', 0.778, 0.3864),
+}
 // M202 the Shellmere line (docs/looks/m202-shellmere-line-2026-11-27): Mesamere (Earth, his natural form: a great stone tortoise, a tall
 // dome of heavy plates, moss along the lip, an amber crown crystal, pillar legs; dial 1.5), Aurmere (Mana: a high round violet dome with
 // the canon rune-light rings grown over every scute, longer antennae), Voltmere (Storm: a wide low blocky pale-blue shell with lightning
@@ -608,6 +625,7 @@ const owlAwakened = (name: string, aura: string): SpiritLook => {
 /** by look name (spirit.ts AWAKENED_NAMES, lower-cased) */
 export const AWAKENED_FORMS: Readonly<Record<string, SpiritLook>> = {
   ...CROAK_AWAKENED,   // M244 sheet 9: Croakarc's four (above, by croakarc())
+  ...CROAKARA_AWAKENED,   // M244 sheet 11: Croakara's four (above)
   vulnarok: awakened('vulnarok', AWAKEN_LEN.vulnarok, '#ffcf5a', 2.4),
   vulnalys: awakened('vulnalys', AWAKEN_LEN.vulnalys, '#b48cff', 1.7),
   vulnavex: awakened('vulnavex', AWAKEN_LEN.vulnavex, '#ffcf5a', 2.6),

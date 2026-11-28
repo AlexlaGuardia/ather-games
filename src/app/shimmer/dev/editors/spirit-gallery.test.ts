@@ -14,7 +14,7 @@ const CANON = '/root/athernyx/CANON/world/spirits-species.md'
 ok(existsSync(LEDGER), `ledger present (${LEDGER})`)
 ok(existsSync(CANON), `canon base table present (${CANON})`)
 
-ok(GALLERY.length === 90, `90 rows: 10 base + 40 forms + 40 awakened (got ${GALLERY.length})`)
+ok(GALLERY.length === 94, `94 rows: 10 base + 40 forms + 44 awakened (got ${GALLERY.length})`)
 GALLERY.forEach((r, i) => ok(r.num === i + 1, `row ${i} numbered ${i + 1} (got ${r.num})`))
 ok(GALLERY.slice(0, 10).every(r => r.el === null) && GALLERY.slice(10).every(r => r.el !== null), 'base 10 first, then the 40 forms')
 ok(new Set(GALLERY.map(r => r.name)).size === GALLERY.length, 'every name unique')
@@ -93,7 +93,8 @@ ok(steepAdd(steepAdd(STEEP_NONE, 'mana', 8), 'storm', 5).storm === 2, 'add is he
   ok(my.map(r => r.name).join() === ml.replace(/.*\*\*Mystowl \(Mana\):\*\*/, '').replace(/\*|\([^)]*\)/g, '').split('·').map(x => x.trim()).join(), `Mystowl's four = the canon line (${ml.slice(0, 90)})`)
   for (const r of my) ok(locks.some(l => l.name === r.name && l.second_form === 'Mystowl' && l.branch_name.toLowerCase() === r.aw!.branch), `${r.name}: a stage-3 lock off Mystowl, ${r.aw!.branch}`)
   // M244 sheet 9b: Croakarc's four (frog, Storm) = rows #087-#090, after the owls; word for word off the canon line ('Croakarc (Storm):') + the ledger
-  const ck = GALLERY.filter(r => r.aw && r.sp === 'frog'), ckl = readFileSync(CANON, 'utf8').split('\n').find(x => x.includes('**Croakarc (Storm):**')) ?? ''
+  const ck = GALLERY.filter(r => r.aw && r.sp === 'frog' && r.el === 'storm'),   // sheet 11: Croakara's (frog, Mana) follow
+    ckl = readFileSync(CANON, 'utf8').split('\n').find(x => x.includes('**Croakarc (Storm):**')) ?? ''
   ok(ck.length === 4 && ck.every((r, i) => r.el === 'storm' && r.num === 87 + i), `Croakarc's awakened rows #087-#090 (got ${ck.map(r => r.num)})`)
   ok(ck.map(r => r.name).join() === ckl.replace(/.*\*\*Croakarc \(Storm\):\*\*/, '').replace(/\*|\([^)]*\)/g, '').split('·').map(x => x.trim()).join(), `Croakarc's four = the canon line (${ckl.slice(0, 90)})`)
   for (const r of ck) ok(locks.some(l => l.name === r.name && l.second_form === 'Croakarc' && l.branch_name.toLowerCase() === r.aw!.branch), `${r.name}: a stage-3 lock off Croakarc, ${r.aw!.branch}`)

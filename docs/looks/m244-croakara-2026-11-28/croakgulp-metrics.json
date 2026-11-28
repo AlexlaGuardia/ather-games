@@ -1,0 +1,129 @@
+{
+ "bones": 19,
+ "glb_bytes": 842524,
+ "tris": {
+  "body": 23570,
+  "eyes": 2408,
+  "aura": 282
+ },
+ "height_m": 0.3652580237023868,
+ "idle": {
+  "dur_s": 8.0,
+  "lowest_m": -0.0,
+  "edge_stretch_p99": 1.86,
+  "edge_stretch_max": 5.3,
+  "worst_edge_at": [
+   "hips",
+   -0.3799999952316284,
+   0.5799999833106995,
+   -0.029999999329447746
+  ],
+  "leg_reach_ratio_max": 1.01,
+  "mean_top": 1.099,
+  "span_m": 0.553,
+  "length_m": 0.348,
+  "top_m": 0.43
+ },
+ "walk": {
+  "dur_s": 0.236,
+  "lowest_m": -0.0001,
+  "edge_stretch_p99": 2.3,
+  "edge_stretch_max": 8.49,
+  "worst_edge_at": [
+   "paw_l",
+   0.4699999988079071,
+   0.029999999329447746,
+   0.38999998569488525
+  ],
+  "leg_reach_ratio_max": 1.28,
+  "mean_top": 1.155,
+  "planted_foot_drift_max_m": 0.0026,
+  "stride_m": 0.13,
+  "plays_1to1_at_mps": 0.55,
+  "cadence_at_mps": {
+   "0.55": 4.24,
+   "1.15": 8.86,
+   "1.92": 14.78,
+   "2.8": 21.56,
+   "4.2": 32.34,
+   "6.5": 50.05,
+   "9": 69.3
+  },
+  "span_m": 0.556,
+  "length_m": 0.409,
+  "top_m": 0.47
+ },
+ "run": {
+  "dur_s": 0.19,
+  "lowest_m": -0.0003,
+  "edge_stretch_p99": 3.86,
+  "edge_stretch_max": 14.11,
+  "worst_edge_at": [
+   "paw_l",
+   0.4699999988079071,
+   0.029999999329447746,
+   0.38999998569488525
+  ],
+  "leg_reach_ratio_max": 1.5,
+  "mean_top": 1.243,
+  "planted_foot_drift_max_m": 0.0026,
+  "stride_m": 0.457,
+  "plays_1to1_at_mps": 2.4,
+  "cadence_at_mps": {
+   "0.55": 1.2,
+   "1.15": 2.52,
+   "1.92": 4.21,
+   "2.8": 6.13,
+   "4.2": 9.2,
+   "6.5": 14.24,
+   "9": 19.71
+  },
+  "span_m": 0.557,
+  "length_m": 0.443,
+  "top_m": 0.516
+ },
+ "sit": {
+  "dur_s": 6.0,
+  "lowest_m": -0.0,
+  "edge_stretch_p99": 1.72,
+  "edge_stretch_max": 4.35,
+  "worst_edge_at": [
+   "hips",
+   -0.38999998569488525,
+   0.5699999928474426,
+   -0.019999999552965164
+  ],
+  "leg_reach_ratio_max": 1.01,
+  "mean_top": 1.072,
+  "span_m": 0.568,
+  "length_m": 0.35,
+  "top_m": 0.424
+ },
+ "lie": {
+  "dur_s": 4.4,
+  "lowest_m": -0.0,
+  "edge_stretch_p99": 1.59,
+  "edge_stretch_max": 3.63,
+  "worst_edge_at": [
+   "hips",
+   0.3499999940395355,
+   0.25999999046325684,
+   0.2800000011920929
+  ],
+  "leg_reach_ratio_max": 1.09,
+  "mean_top": 0.869,
+  "span_m": 0.59,
+  "length_m": 0.367,
+  "top_m": 0.318
+ },
+ "body_mean_top": 0.894,
+ "jiggle_peak_rad": {
+  "idle": 0.003,
+  "walk": 0.16,
+  "run": 0.26,
+  "sit": 0.012,
+  "lie": 0.0
+ },
+ "aura_lowest_glb": 0.0475,
+ "glbLen": 0.954
+}

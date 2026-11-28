@@ -19,7 +19,7 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms)); let fails = 0
 const ok = (c: boolean, m: string) => { console.log(`${c ? 'PASS' : 'FAIL'} ${m}`); if (!c) fails++ }
 const ONLY = flag('--only', '').split(',').filter(Boolean).map(Number)
 const AW = GALLERY.filter(r => r.aw && (!ONLY.length || ONLY.includes(r.num)))
-ok(GALLERY.filter(r => r.aw).length === 40, `40 awakened rows in the roster (${GALLERY.filter(r => r.aw).map(r => `#${r.num} ${r.name}`).join(', ')})`)
+ok(GALLERY.filter(r => r.aw).length === 44, `44 awakened rows in the roster (${GALLERY.filter(r => r.aw).map(r => `#${r.num} ${r.name}`).join(', ')})`)
 const br = await puppeteer.launch({ protocolTimeout: 900000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--mute-audio', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] })
 try {
   const errs: string[] = []
@@ -149,7 +149,15 @@ try {
       const e = (s1?.out ?? []).map(o => o.bones.b_e0_head ?? [0, 0, 0]), ex = Math.max(...e.map(q => Math.hypot(q[0] - e[0][0], q[1] - e[0][1], q[2] - e[0][2])))
       ok(ex > 0.005, `#${row.num} her echoes move with her (echo 0 head travels ${ex.toFixed(3)} glb in the walk)`)
     }
-    if (['croakarkor', 'croakarielle', 'arcvik', 'croakarcun'].includes(look)) {   // sheet 9b: Croakarc's four: three stand UP on the ground biped (legs + arms + a tail), Arcvik stays the skink; all on the ground, her motif drawn
+    if (['croakgulp', 'croakavis', 'araeth'].includes(look)) {   // sheet 11: Croakara's three sitting frogs on the live Croakara rig (hops lift her): nothing under the ground in any clip, her body on it at rest
+      const s1 = await sample('idle', 2, 100), names = s1?.names ?? []
+      ok(['b_thigh_l', 'b_foot_r', 'b_paw_l', 'b_lure3', 'b_throat'].every(x => names.includes(x)) && !names.includes('b_tail4'), `#${row.num} on the live Croakara frog rig (${names.length} bones: thighs, paws, throat, the lure chain)`)
+      for (const c of ['idle', 'walk', 'run', 'sit', 'lie']) {
+        const s2 = await sample(c, 6, 250), o = s2?.out ?? [{ low: -9, blow: 9 }], lo = Math.min(...o.map(x => x.low)), bhi = Math.max(...o.map(x => x.blow))
+        ok(lo >= -0.003 && (['walk', 'run'].includes(c) || bhi < 0.04), `#${row.num} ${c}: nothing under the ground (lowest body / aura ${(lo * 1000).toFixed(1)} mm glb)${['walk', 'run'].includes(c) ? '' : ` and her body on it (${(bhi * 1000).toFixed(1)} mm)`}`)
+      }
+    }
+    if (['croakarkor', 'croakarielle', 'arcvik', 'croakarcun', 'croakalys'].includes(look)) {   // + sheet 11: Croakalys stands up on the same biped   // sheet 9b: Croakarc's four: three stand UP on the ground biped (legs + arms + a tail), Arcvik stays the skink; all on the ground, her motif drawn
       const s1 = await sample('walk', 14, 70), names = s1?.names ?? [], up = look !== 'arcvik'
       const limbs = (up ? ['b_leg_l', 'b_shin_l', 'b_leg_r', 'b_shin_r', 'b_arm_l', 'b_farm_l', 'b_arm_r', 'b_farm_r'] : ['b_fl_up', 'b_fr_up', 'b_hl_up', 'b_hr_up']).filter(x => names.includes(x))
       ok(limbs.length === (up ? 8 : 4) && names.includes('b_tail4') && !names.includes('b_hover'), `#${row.num} ${up ? 'the upright biped: legs + arms' : 'the skink: four legs'} + a tail, no hover (${names.length} bones)`)
