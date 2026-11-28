@@ -11,6 +11,16 @@ import numpy as np, rigcore as K
 sys.path.insert(0, HERE); import sculpt_awaken as SV, echoes as E
 from plans import biped as B
 IN, OUT, MET = [os.path.abspath(x) for x in sys.argv[2:5]]
+def upper_bolts(part, y0):
+    """M244 s2 (prod check: Vulnarkor's sit -41 mm, Vulnarcelle's lie -70 mm): keep only the bolts (aura pieces) whose rest centre is
+    above y0, so none of them swings into the ground when her chest / head drops in the sit or the lie"""
+    from scipy.sparse import coo_matrix; from scipy.sparse.csgraph import connected_components
+    V, F = part['POSITION'], part['F']; E = np.r_[F[:, [0, 1]], F[:, [1, 2]]]
+    _, cc = connected_components(coo_matrix((np.ones(len(E)), (E[:, 0], E[:, 1])), shape=(len(V),) * 2))
+    keep = np.array([V[cc == c, 1].mean() > y0 for c in range(cc.max() + 1)])[cc]; idx = np.cumsum(keep) - 1
+    fk = keep[F].all(1); out = {k: (v[keep] if hasattr(v, '__len__') and len(v) == len(V) else v) for k, v in part.items() if k != 'F'}
+    out['F'] = idx[F[fk]]; print('bolts kept', int((np.bincount(cc[keep]) > 0).sum()), 'of', cc.max() + 1); return out
+
 G = SV.G; HO = np.array(G['HO']); A, Lg = G['arm'], G['leg']; H = .70
 TP = [tuple(SV.L['tail'][i]) for i in (0, 2, 4, 6, 8)]
 SK = B.skeleton(dict(pelvis=G['pelvis'], spine=(0, .78, -.045), chest=(0, .93, -.01), neck=(0, 1.0, .02), head=tuple(np.array((0, .53, .22)) + HO),
@@ -50,7 +60,7 @@ SPECS = [dict(off=(-.50, 0, -.46), s=.80, delay=.10), dict(off=(.50, 0, -.46), s
 if BF == 'rok':
     SK2, aura = E.build(SK, V0, m['F'], W, nb, SPECS); C2 = E.clips(SK, SK2, C, SPECS)
 else:   # Vulnarkor: her crackling bolts ride her chest
-    SK2, C2 = SK, C; aura = dict(live['aura'], W=np.zeros((len(live['aura']['POSITION']), len(nb)))); aura['W'][:, nb.index('chest')] = 1
+    SK2, C2 = SK, C; aura = dict(live['aura'], W=np.zeros((len(live['aura']['POSITION']), len(nb)))); aura['W'][:, nb.index('chest')] = 1; aura = upper_bolts(aura, .86)
 parts = {'body': dict(m, W=E.pad(W, nb, SK2))}
 e = np.zeros((len(live['eyes']['POSITION']), len(SK2))); e[:, nb.index('head')] = 1; parts['eyes'] = dict(live['eyes'], W=e); parts['aura'] = aura
 K.write(OUT, parts, SK2, C2, {c: (len(v) - 1) / T[c] for c, v in C2.items()})

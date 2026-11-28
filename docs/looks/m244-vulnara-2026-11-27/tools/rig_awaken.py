@@ -30,6 +30,15 @@ TJ = (0, 8, 16)                                                    # joints at t
 if FORM == 'myr':
     for k, c in enumerate(SV.TCK):
         for i, j in enumerate(TJ): SK['tail_%d_%d' % (k, i + 1)] = ('tail_%d_%d' % (k, i) if i else 'pelvis', tuple(float(x) for x in c[j, :3]))
+def upper_bolts(part, y0):
+    """M244 s2 (prod check: Vulnarkor's sit -41 mm, Vulnarcelle's lie -70 mm): keep only the bolts (aura pieces) whose rest centre is
+    above y0, so none of them swings into the ground when her chest / head drops in the sit or the lie"""
+    from scipy.sparse import coo_matrix; from scipy.sparse.csgraph import connected_components
+    V, F = part['POSITION'], part['F']; E = np.r_[F[:, [0, 1]], F[:, [1, 2]]]
+    _, cc = connected_components(coo_matrix((np.ones(len(E)), (E[:, 0], E[:, 1])), shape=(len(V),) * 2))
+    keep = np.array([V[cc == c, 1].mean() > y0 for c in range(cc.max() + 1)])[cc]; idx = np.cumsum(keep) - 1
+    fk = keep[F].all(1); out = {k: (v[keep] if hasattr(v, '__len__') and len(v) == len(V) else v) for k, v in part.items() if k != 'F'}
+    out['F'] = idx[F[fk]]; print('bolts kept', int((np.bincount(cc[keep]) > 0).sum()), 'of', cc.max() + 1); return out
 def TAILV(V): return (SV.tail(V) < .010) & (np.abs(SV.field(V)) > .002)   # myr: a vertex of one of the lofted tail pieces (not the body's)
 J = lambda b: SK[b][1]; tailgeo = lambda V: (V[:, 2] < TZ - .6 * np.clip(T0[1] - .15 - V[:, 1], 0, .5)) & shellfree(V) & ((np.abs(V[:, 0]) < .075) | (V[:, 1] > T0[1] - .09) | (V[:, 2] < TZ - .085)); body = lambda V: ~tail(V) & ((V[:, 1] < CH[1] + .14) | ~shellfree(V)); hd = lambda V: (V[:, 1] > G['neck'][0][1] - .03) & (V[:, 2] > .10 + HO[2] * .5) & shellfree(V)
 jp = lambda b: np.array(J(b))
@@ -46,9 +55,12 @@ nb = list(SK); nm = [b[0] for b in B]
 RIG = [(nm.index(a + s + '_paw'), (lambda V, x=x, a=a: (V[:, 1] < .06) & (V[:, 0] * x > 0) & ((V[:, 2] > FZ) == (a == 'f')))) for a in 'fh' for s, x in (('l', 1), ('r', -1))]
 TAU = 2 * np.pi; sm = K.smooth
 D = dict(pitch=0, neck=.5, tail=['tail1', 'tail2', 'tail3', 'tail4'], idletail=[0, 0, 0, 0], idlelift=[0, 0, 0, 0], drop={}, stance={p + s: (x * w, z) for s, x in (('l', 1), ('r', -1)) for p, w, z in (('f', f_[2][0], f_[2][2]), ('h', h_[3][0], h_[3][2] + .012))})
-WALK = dict(v=.55, duty=.625, reach=.14, lift=.05, toe=.5, phase=dict(hl=0, fl=.75, hr=.5, fr=.25), beats=2, bob0=.4, bob=.007, dy=-.034, n=24, over=.25)
+LIFT0 = .006 if FORM == 'arcvex' else 0.   # sheet 2: Arcvex + her scaled copies grazed the ground 1.5-4 mm in the walk / run
+WALK = dict(v=.55, duty=.625, reach=.14, lift=.05, toe=.5, phase=dict(hl=0, fl=.75, hr=.5, fr=.25), beats=2, bob0=.4, bob=.007, dy=-.034 + LIFT0, n=24, over=.25)
+if FORM == 'arcvex': WALK['plant'] = .004   # sheet 2: her stance soles sat 1.7 mm under in the walk
 # the gallop: a low chest and a spine that opens and closes buy the reach, short contacts buy the air. Stride 1.21 m
-RUN = dict(plant=.002, v=2.8, duty=.2, reach=.173, lift=.085, toe=.8, phase=dict(hl=0, hr=.925, fl=.5, fr=.425), beats=1, n=40, over=.06)
+RUN = dict(plant=.006 if FORM == 'arcvex' else .002,   # sheet 2: Arcvex's copies grazed 1.5 mm in the run (prod check)
+            v=2.8, duty=.2, reach=.173, lift=.085, toe=.8, phase=dict(hl=0, hr=.925, fl=.5, fr=.425), beats=1, n=40, over=.06)
 live = K.Glb(IN).meshes(); parts = {}; m = live['body']; V0 = m['POSITION'].astype(float)
 w = K.skin_weights(V0, m['F'], B, 7, RIG); W = np.zeros((len(V0), len(nb)))
 for i, n in enumerate(nm): W[:, nb.index(n)] += w[:, i]
@@ -70,6 +82,7 @@ if FORM == 'myr':   # each tail vertex rides its own tail's chain by how far alo
 W = K.four(W); parts['body'] = dict(m, W=W); e = np.zeros((len(live['eyes']['POSITION']), len(nb))); e[:, nb.index('head')] = 1; parts['eyes'] = dict(live['eyes'], W=e)
 if FORM == 'ceth': SK['cloud'] = ('root', (0, 0, 0)); nb = list(SK); W = np.c_[W, np.zeros(len(W))]; parts['body'] = dict(m, W=W); parts['eyes'] = dict(live['eyes'], W=np.c_[e, np.zeros(len(e))])
 if 'aura' in live and FORM not in ('vex', 'arcvex'): a = np.zeros((len(live['aura']['POSITION']), len(nb))); a[:, nb.index('head' if FORM in ('lys', 'myr', 'celle') else 'cloud' if FORM == 'ceth' else 'root')] = 1; parts['aura'] = dict(live['aura'], W=a)
+if FORM == 'celle': parts['aura'] = upper_bolts(parts['aura'], SV.MC[1] - .02)
 LEGS = ('fl', 'fr', 'hl', 'hr'); SOLE = {f: V0[(W[:, nb.index(f + '_paw')] > .5) & (V0[:, 1] < .10)] - np.array(SK[f + '_paw'][1]) for f in LEGS}
 LEN = {f: sum(np.linalg.norm(np.array(SK[f + a][1]) - np.array(SK[f + b][1])) for a, b in (('_up', '_lo'), ('_lo', '_paw'))) for f in LEGS}
 def clear(f, R):
@@ -106,7 +119,7 @@ def run(g):
     for i in range(g['n'] + 1):
         ph = (i % g['n']) / g['n']; cl = np.cos(TAU * (ph - .955)); rock = np.sin(TAU * (ph - .14)); air = np.cos(TAU * 2 * (ph - .39))
         p = Pose(SK); hindlow = .5 - .5 * np.cos(TAU * (ph - .62)); frontlow = 1 - hindlow
-        p.T['root'] = np.array([0, -.059 + .012 * air, .012 * -cl])   # 3 mm higher than rig_v2: drawn 1.4x, her paws grazed the ground; p.R['pelvis'] = rx(.02 + .07 * rock + .09 * cl)
+        p.T['root'] = np.array([0, -.059 + LIFT0 + .012 * air, .012 * -cl])   # 3 mm higher than rig_v2: drawn 1.4x, her paws grazed the ground; p.R['pelvis'] = rx(.02 + .07 * rock + .09 * cl)
         p.rot('spine', rx(-.09 * cl)); p.rot('chest', rx(-.08 * cl)); p.rot('neck', rx(.10 - .04 * rock)); p.rot('head', rx(-.08 - .03 * rock + .06 * cl)); p.rot('pelvis', K.rz(.02 * np.sin(TAU * ph)))
         Q.ears(p, -.28 + .10 * np.sin(TAU * ph - .8), .03 * np.sin(TAU * ph)); tail(p, [.02 + .08 * rock, -.22 + .08 * np.sin(TAU * ph - 1.6), -.32 + .09 * np.sin(TAU * ph - 2.4), -.26 + .10 * np.sin(TAU * ph - 3.2)], .05, ph)
         st.append(feet(p, ph, g)); out.append(p)
@@ -195,6 +208,7 @@ if FORM in ('vex', 'arcvex'):   # M244 s1b (Alex 11-27): her two gold copies RUN
             q = (u + k * .5) % 1; return -.20 - (RUN['v'] / H) * T['run'] * q, sm(0, .08, q) * (1 - q) ** .8
         return mv
     SPECS = [dict(off=(-.16, 0, 0), s=.92, delay=.12, move=trail(0)), dict(off=(-.30, 0, 0), s=.84, delay=.30, move=trail(1))]
+    if FORM == 'arcvex': SPECS = [dict(sp, off=(sp['off'][0], .008, 0)) for sp in SPECS]   # sheet 2: her copies 8 mm up (grazed 1.5-4 mm in the run)
     SK2, aura = E.build(SK, V0, m['F'], W, nb, SPECS, **(dict(color=(205, 238, 255)) if FORM == 'arcvex' else {}))
     for k in ('body', 'eyes'): parts[k] = dict(parts[k], W=E.pad(parts[k]['W'], nb, SK2))
     parts['aura'] = aura; clips = E.clips(SK, SK2, clips, SPECS); SK = SK2
