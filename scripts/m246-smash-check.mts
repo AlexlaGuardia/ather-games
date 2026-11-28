@@ -51,8 +51,8 @@ const RECORDER = () => {
   const watch = () => {
     const v = document.querySelector('[data-smash-bell-view]'); if (!v || v === obsOn) return
     obsOn = v
-    const read = () => { const d = (v as HTMLElement).dataset, r = w.__bell; if (d.bellBeat === 'walk') r.backWalk.push(d.bellBack ?? ''); if (d.bellBeat === 'strike') r.backStrike.push(d.bellBack ?? '') }
-    new MutationObserver(read).observe(v, { attributes: true, attributeFilter: ['data-bell-beat', 'data-bell-back'] }); read()
+    const read = () => { const d = (v as HTMLElement).dataset, r = w.__bell; if (d.bellFb === 'walk') r.backWalk.push(d.bellBack ?? ''); if (d.bellFb === 'strike') r.backStrike.push(d.bellBack ?? '') }
+    new MutationObserver(read).observe(v, { attributes: true, attributeFilter: ['data-bell-fb', 'data-bell-back'] }); read()
   }
   setInterval(watch, 100)
   setInterval(() => {

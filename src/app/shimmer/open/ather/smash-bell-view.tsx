@@ -257,8 +257,9 @@ function Striker({ c, live }: { c: BellContestant; live: { current: Now } }) {
     // the check's window: is her back to the camera? (her facing vs the way to the camera)
     fwd.set(Math.sin(g.current.rotation.y), 0, Math.cos(g.current.rotation.y))
     to.set(camera.position.x - g.current.position.x, 0, camera.position.z - g.current.position.z)
-    const back = fwd.dot(to) < 0 ? '1' : '0'
-    if (back !== lastBack.current) { lastBack.current = back; gl.domElement.closest('[data-smash-bell-view]')?.setAttribute('data-bell-back', back) }
+    const back = fwd.dot(to) < 0 ? '1' : '0', stamp = `${back}${s.beat}`
+    // stamped by the frame, with the beat THIS frame drew (data-bell-fb): a slow frame loop lags the clock, so the clock's beat can name a pose not drawn yet
+    if (stamp !== lastBack.current) { lastBack.current = stamp; const v = gl.domElement.closest('[data-smash-bell-view]'); v?.setAttribute('data-bell-back', back); v?.setAttribute('data-bell-fb', s.beat) }
   })
   const col = c.element === 'storm' ? '#9fd0ff' : c.element === 'earth' ? '#d6a35a' : c.element === 'water' ? '#6fd6ff' : c.element === 'mana' ? '#d39bff' : '#fff1a8'
   return (
