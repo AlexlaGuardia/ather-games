@@ -1,0 +1,175 @@
+diff --git a/scripts/m244-awakened-check.mts b/scripts/m244-awakened-check.mts
+index 07bec681..09b8d3f4 100644
+--- a/scripts/m244-awakened-check.mts
++++ b/scripts/m244-awakened-check.mts
+@@ -19,7 +19,7 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms)); let fails = 0
+ const ok = (c: boolean, m: string) => { console.log(`${c ? 'PASS' : 'FAIL'} ${m}`); if (!c) fails++ }
+ const ONLY = flag('--only', '').split(',').filter(Boolean).map(Number)
+ const AW = GALLERY.filter(r => r.aw && (!ONLY.length || ONLY.includes(r.num)))
+-ok(GALLERY.filter(r => r.aw).length === 44, `44 awakened rows in the roster (${GALLERY.filter(r => r.aw).map(r => `#${r.num} ${r.name}`).join(', ')})`)
++ok(GALLERY.filter(r => r.aw).length === 48, `48 awakened rows in the roster (${GALLERY.filter(r => r.aw).map(r => `#${r.num} ${r.name}`).join(', ')})`)
+ const br = await puppeteer.launch({ protocolTimeout: 900000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--mute-audio', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] })
+ try {
+   const errs: string[] = []
+@@ -131,7 +131,7 @@ try {
+         ok(lo >= -0.0015 && bhi < BODY_UP[c], `#${row.num} ${c}: nothing under the ground (lowest body / aura ${(lo * 1000).toFixed(1)} mm glb) and her body on it (body lowest at most ${(bhi * 1000).toFixed(1)} mm)`)
+       }
+     }
+-    if (['mystowk', 'mystowelle', 'mystowis', 'mysteth'].includes(look)) {   // sheet 8: Mystowl's four are OWLS on the live owl rig: on the ground in idle / walk / sit, the run is flight
++    if (['mystowk', 'mystowelle', 'mystowis', 'mysteth', 'voltowrak', 'voltowaya', 'voltwis', 'voltoweth'].includes(look)) {   // + sheet 10: Voltowl's four, the same owl rig   // sheet 8: Mystowl's four are OWLS on the live owl rig: on the ground in idle / walk / sit, the run is flight
+       const s1 = await sample('idle', 2, 100), names = s1?.names ?? []
+       ok(['b_tuft_l', 'b_wing4_r', 'b_foot_l', 'b_tail2', 'b_lids'].every(x => names.includes(x)) && !names.includes('b_hover'), `#${row.num} on the owl rig (${names.length} bones: tufts, four-joint wings, feet, no hover)`)
+       for (const c of ['idle', 'walk', 'sit', 'lie']) {   // the walk is a two-footed HOP (up in the air between landings), so only idle / sit / lie must sit ON the ground
+diff --git a/src/app/shimmer/dev/editors/spirit-gallery.test.ts b/src/app/shimmer/dev/editors/spirit-gallery.test.ts
+index a74dcaf1..fb50eac1 100644
+--- a/src/app/shimmer/dev/editors/spirit-gallery.test.ts
++++ b/src/app/shimmer/dev/editors/spirit-gallery.test.ts
+@@ -14,7 +14,7 @@ const CANON = '/root/athernyx/CANON/world/spirits-species.md'
+ ok(existsSync(LEDGER), `ledger present (${LEDGER})`)
+ ok(existsSync(CANON), `canon base table present (${CANON})`)
+ 
+-ok(GALLERY.length === 94, `94 rows: 10 base + 40 forms + 44 awakened (got ${GALLERY.length})`)
++ok(GALLERY.length === 98, `98 rows: 10 base + 40 forms + 48 awakened (got ${GALLERY.length})`)
+ GALLERY.forEach((r, i) => ok(r.num === i + 1, `row ${i} numbered ${i + 1} (got ${r.num})`))
+ ok(GALLERY.slice(0, 10).every(r => r.el === null) && GALLERY.slice(10).every(r => r.el !== null), 'base 10 first, then the 40 forms')
+ ok(new Set(GALLERY.map(r => r.name)).size === GALLERY.length, 'every name unique')
+@@ -88,7 +88,7 @@ ok(steepAdd(steepAdd(STEEP_NONE, 'mana', 8), 'storm', 5).storm === 2, 'add is he
+   ok(lx.map(r => r.name).join() === lxl.replace(/.*\*\*Luminix \(Water\):\*\*/, '').replace(/\*|\([^)]*\)/g, '').split('·').map(x => x.trim()).join(), `Luminix's four = the canon line (${lxl.slice(0, 90)})`)
+   for (const r of lx) ok(locks.some(l => l.name === r.name && l.second_form === 'Luminix' && l.branch_name.toLowerCase() === r.aw!.branch), `${r.name}: a stage-3 lock off Luminix, ${r.aw!.branch}`)
+   // M244 sheet 8: Mystowl's four (owl) = the four rows after every firefly line (#083-#086; Croakarc's follow since sheet 9b); word for word off the canon line ('Mystowl (Mana):') + the ledger
+-  const my = GALLERY.filter(r => r.aw && r.sp === 'owl'), ml = readFileSync(CANON, 'utf8').split('\n').find(x => x.includes('**Mystowl (Mana):**')) ?? '', lastFly = Math.max(...GALLERY.filter(r => r.aw && r.sp === 'firefly').map(r => r.num))
++  const my = GALLERY.filter(r => r.aw && r.sp === 'owl' && r.el === 'mana'), ml = readFileSync(CANON, 'utf8').split('\n').find(x => x.includes('**Mystowl (Mana):**')) ?? '', lastFly = Math.max(...GALLERY.filter(r => r.aw && r.sp === 'firefly').map(r => r.num))
+   ok(my.length === 4 && my.every((r, i) => r.el === 'mana' && r.num === lastFly + 1 + i && r.num === 83 + i), `Mystowl's awakened rows straight after the fireflies (#${lastFly + 1}-; got ${my.map(r => r.num)})`)
+   ok(my.map(r => r.name).join() === ml.replace(/.*\*\*Mystowl \(Mana\):\*\*/, '').replace(/\*|\([^)]*\)/g, '').split('·').map(x => x.trim()).join(), `Mystowl's four = the canon line (${ml.slice(0, 90)})`)
+   for (const r of my) ok(locks.some(l => l.name === r.name && l.second_form === 'Mystowl' && l.branch_name.toLowerCase() === r.aw!.branch), `${r.name}: a stage-3 lock off Mystowl, ${r.aw!.branch}`)
+@@ -98,6 +98,11 @@ ok(steepAdd(steepAdd(STEEP_NONE, 'mana', 8), 'storm', 5).storm === 2, 'add is he
+   ok(ck.length === 4 && ck.every((r, i) => r.el === 'storm' && r.num === 87 + i), `Croakarc's awakened rows #087-#090 (got ${ck.map(r => r.num)})`)
+   ok(ck.map(r => r.name).join() === ckl.replace(/.*\*\*Croakarc \(Storm\):\*\*/, '').replace(/\*|\([^)]*\)/g, '').split('·').map(x => x.trim()).join(), `Croakarc's four = the canon line (${ckl.slice(0, 90)})`)
+   for (const r of ck) ok(locks.some(l => l.name === r.name && l.second_form === 'Croakarc' && l.branch_name.toLowerCase() === r.aw!.branch), `${r.name}: a stage-3 lock off Croakarc, ${r.aw!.branch}`)
++  // M244 sheet 10: Voltowl's four (owl, Storm) = rows #091-#094, after Croakarc's; word for word off the canon line ('Voltowl (Storm):') + the ledger
++  const vo = GALLERY.filter(r => r.aw && r.sp === 'owl' && r.el === 'storm'), vol = readFileSync(CANON, 'utf8').split('\n').find(x => x.includes('**Voltowl (Storm):**')) ?? ''
++  ok(vo.length === 4 && vo.every((r, i) => r.num === 91 + i), `Voltowl's awakened rows #091-#094 (got ${vo.map(r => r.num)})`)
++  ok(vo.map(r => r.name).join() === vol.replace(/.*\*\*Voltowl \(Storm\):\*\*/, '').replace(/\*|\([^)]*\)/g, '').split('·').map(x => x.trim()).join(), `Voltowl's four = the canon line (${vol.slice(0, 90)})`)
++  for (const r of vo) ok(locks.some(l => l.name === r.name && l.second_form === 'Voltowl' && l.branch_name.toLowerCase() === r.aw!.branch), `${r.name}: a stage-3 lock off Voltowl, ${r.aw!.branch}`)
+   ok(aw.every(r => r.icon.startsWith('/open/spirits/') && !r.icon.includes('stage3')), 'awakened icons are our renders, not the private art')
+   // M244 sheet 2: Vulnarc's four (#055-#058, art pending lock) = the canon's 'Named — Vulnyx › Vulnarc (Storm)' line, word for word
+   const st = GALLERY.filter(r => r.aw && r.el === 'storm' && r.sp === 'fox'), named = readFileSync(CANON, 'utf8').split('\n').find(x => x.includes('Named') && x.includes('Vulnarc (Storm)')) ?? ''
+diff --git a/src/app/shimmer/dev/editors/spirit-gallery.ts b/src/app/shimmer/dev/editors/spirit-gallery.ts
+index 075d44cb..1552fe12 100644
+--- a/src/app/shimmer/dev/editors/spirit-gallery.ts
++++ b/src/app/shimmer/dev/editors/spirit-gallery.ts
+@@ -23,7 +23,7 @@ export const DISCOVERY: readonly (readonly [Species, GalleryElement])[] = [
+ ]
+ 
+ /** M244: the awakened forms built so far, stage-3 ledger order (n = index + 1) */
+-export const AWAKENED: readonly (readonly [Species, GalleryElement, AwakenedBranch])[] = (['mana', 'storm', 'earth', 'water'] as const).flatMap(el => AWAKENED_BRANCHES.map((b): readonly [Species, GalleryElement, AwakenedBranch] => ['fox', el, b])).concat((['mana', 'storm', 'earth', 'water'] as const).flatMap(el => AWAKENED_BRANCHES.map((b): readonly [Species, GalleryElement, AwakenedBranch] => ['firefly', el, b]))).concat(AWAKENED_BRANCHES.map((b): readonly [Species, GalleryElement, AwakenedBranch] => ['owl', 'mana', b])).concat(AWAKENED_BRANCHES.map((b): readonly [Species, GalleryElement, AwakenedBranch] => ['frog', 'storm', b])).concat(AWAKENED_BRANCHES.map((b): readonly [Species, GalleryElement, AwakenedBranch] => ['frog', 'mana', b]))   // sheet 2: Vulnarc's four (#055-#058); sheet 3: Vulnore's (#059-#062); sheet 4: Vulnix's (#063-#066); sheet 5: Luminel's (#067-#070); sheet 6: Luminarc's (#071-#074); sheet 7: Luminore's (#075-#078); sheet 9: Luminix's (#079-#082); sheet 8: Mystowl's (#083-#086, owl, after every firefly line); sheet 9b: Croakarc's (#087-#090, frog); sheet 11: Croakara's (#091-#094, frog)
++export const AWAKENED: readonly (readonly [Species, GalleryElement, AwakenedBranch])[] = (['mana', 'storm', 'earth', 'water'] as const).flatMap(el => AWAKENED_BRANCHES.map((b): readonly [Species, GalleryElement, AwakenedBranch] => ['fox', el, b])).concat((['mana', 'storm', 'earth', 'water'] as const).flatMap(el => AWAKENED_BRANCHES.map((b): readonly [Species, GalleryElement, AwakenedBranch] => ['firefly', el, b]))).concat(AWAKENED_BRANCHES.map((b): readonly [Species, GalleryElement, AwakenedBranch] => ['owl', 'mana', b])).concat(AWAKENED_BRANCHES.map((b): readonly [Species, GalleryElement, AwakenedBranch] => ['frog', 'storm', b])).concat(AWAKENED_BRANCHES.map((b): readonly [Species, GalleryElement, AwakenedBranch] => ['frog', 'mana', b])).concat(AWAKENED_BRANCHES.map((b): readonly [Species, GalleryElement, AwakenedBranch] => ['owl', 'storm', b]))   // sheet 2: Vulnarc's four (#055-#058); sheet 3: Vulnore's (#059-#062); sheet 4: Vulnix's (#063-#066); sheet 5: Luminel's (#067-#070); sheet 6: Luminarc's (#071-#074); sheet 7: Luminore's (#075-#078); sheet 9: Luminix's (#079-#082); sheet 8: Mystowl's (#083-#086, owl, after every firefly line); sheet 9b: Croakarc's (#087-#090, frog); sheet 11: Croakara's (#091-#094, frog); sheet 10: Voltowl's (#091-#094, owl)
+ 
+ export type GalleryRow = {
+   /** grimoire # (1-50) */ num: number
+diff --git a/src/app/shimmer/open/ather/spirit-awakened.test.ts b/src/app/shimmer/open/ather/spirit-awakened.test.ts
+index 3a25cc53..83c87c6b 100644
+--- a/src/app/shimmer/open/ather/spirit-awakened.test.ts
++++ b/src/app/shimmer/open/ather/spirit-awakened.test.ts
+@@ -33,7 +33,10 @@ const mysNames = AWAKENED_BRANCHES.map(b => AWAKENED_NAMES.mystowl![b].toLowerCa
+ ok(mysNames.join() === 'mystowk,mystowelle,mystowis,mysteth', `Mystowl's four in branch order (${mysNames})`)
+ // M244 sheet 9b: Croakarc's four (their own test: spirit-croakaw.test.ts)
+ const croakNames = AWAKENED_BRANCHES.map(b => AWAKENED_NAMES.croakarc![b].toLowerCase())
+-ok(Object.keys(AWAKENED_FORMS).sort().join() === [...names, ...stormNames, ...earthNames, ...waterNames, ...lumNames, ...arcNames, ...oreNames, ...mixNames, ...mysNames, ...croakNames].sort().join(), 'one look per name, no more')
++// M244 sheet 10: Voltowl's (Storm) four (art LOCKED athernyx #065-068)
++const voltNames = AWAKENED_BRANCHES.map(b => AWAKENED_NAMES.voltowl![b].toLowerCase())
++ok(voltNames.join() === 'voltowrak,voltowaya,voltwis,voltoweth', `Voltowl's four in branch order (${voltNames})`)
++ok(Object.keys(AWAKENED_FORMS).sort().join() === [...names, ...stormNames, ...earthNames, ...waterNames, ...lumNames, ...arcNames, ...oreNames, ...mixNames, ...mysNames, ...croakNames, ...voltNames].sort().join(), 'one look per name, no more')
+ for (const [el, list] of [['mana', names], ['storm', stormNames], ['earth', earthNames], ['water', waterNames]] as const) for (const n of list) {
+   const vulnara = SECOND_FORMS.fox![el]!, parent = el === 'mana' ? 'vulnara' : el === 'storm' ? 'vulnarc' : el === 'earth' ? 'vulnore' : 'vulnix'
+   const L = AWAKENED_FORMS[n]
+@@ -322,5 +325,37 @@ for (const n of waterNames) {
+   ok(ext('mystowis', 'aura').min[2] > -0.03 && ext('mystowis', 'aura').min[1] > 0.45 && ext('mystowis', 'aura').max[1] < 0.95, `mystowis: the gold mask on her face (aura y ${ext('mystowis', 'aura').min[1].toFixed(2)}-${ext('mystowis', 'aura').max[1].toFixed(2)}, z from ${ext('mystowis', 'aura').min[2].toFixed(2)})`)
+   ok(span('mysteth', 'aura', 0) > 1.4 && ext('mysteth', 'aura').max[1] > 1.35, `mysteth: eyes down both wings (${span('mysteth', 'aura', 0).toFixed(2)} wide) + rays over her head (top ${ext('mysteth', 'aura').max[1].toFixed(2)})`)
+ }
++// M244 sheet 10: Voltowl's (Storm) four, canon-named (spirits-species.md 'Named, the Athowl line'), art LOCKED athernyx #065-068: owls on the
++// live owl rig like sheet 8, each the live Voltowl's sculpt re-shaped by name + her motif on an aura part
++{
++  const parent = SECOND_FORMS.owl!.storm!, met = (n: string) => JSON.parse(readFileSync(`docs/looks/m244-voltowl-2026-11-28/${n}-metrics.json`, 'utf8'))
++  const pbones = (glbJson('voltowl').nodes as { name?: string }[]).filter(x => x.name?.startsWith('b_')).map(x => x.name).sort().join()
++  for (const n of voltNames) {
++    const L = AWAKENED_FORMS[n], f = `public${L?.url}`, m = met(n)
++    if (!L) { ok(false, `${n}: a look in AWAKENED_FORMS`); continue }
++    ok(L.name === n && L.form === 'storm' && L.url === `/open/spirits/${n}-rigged.glb` && L.glow?.part === 'aura' && L.skin?.emissive === parent.skin?.emissive, `${n}: her own glb, a storm form look off Voltowl, aura = glow part`)
++    ok(AWAKEN_GROW[n] > formGrow('voltowl') && L.h > parent.h * 1.2 && m.dial === AWAKEN_GROW[n], `${n}: grown past Voltowl (dial ${AWAKEN_GROW[n]} vs ${formGrow('voltowl')}; rig dial ${m.dial})`)
++    ok(!L.rig?.hover && !!L.rig?.fly && !PUBLIC_FORMS.has(n) && Math.abs(m.glb_long - AWAKEN_LEN[n]) < 1e-3, `${n}: an owl on the ground that flies, owner preview only, glbLen = her metrics (${m.glb_long})`)
++    for (const c of ['idle', 'walk', 'sit', 'lie']) ok(m[c].lowest_m > -0.0005 && m[c].lowest_m < 0.01, `${n} ${c}: on the ground, nothing under it (lowest ${m[c].lowest_m} m)`)
++    ok(m.run.lowest_m > 0.05 && m.all_lowest_with_aura_glb > -0.0015, `${n}: the run is FLIGHT (lowest ${m.run.lowest_m} m); her aura never under the ground (${m.all_lowest_with_aura_glb} glb)`)
++    ok(m.quality.springs.peak['walk:earl'] > 0.05 && m.quality.springs.peak['run:wingl'] > 0.05, `${n}: baked springs on the tufts + wing tips`)
++    ok(m.tris.body < 13000 && m.quality.wing_off_head > 0, `${n}: a light body (${m.tris.body} tris) and the spread wing re-skinned off the head (${m.quality.wing_off_head} verts)`)
++    if (!existsSync(f)) { ok(false, `${f} exists`); continue }
++    const j = glbJson(n), nodes: string[] = j.nodes.map((x: { name?: string }) => x.name)
++    ok(['body', 'eyes', 'aura'].every(x => nodes.includes(x)) && nodes.filter(x => x?.startsWith('b_')).sort().join() === pbones, `${n}: body / eyes / aura on Voltowl's own ${pbones.split(',').length} bones`)
++    ok((j.animations as { name: string }[]).map(a => a.name).sort().join() === 'glide,idle,lie,run,sit,walk', `${n}: the owl's six clips`)
++    const bi = j.nodes.find((x: { name?: string }) => x.name === 'body').mesh, bv = j.accessors[j.meshes[bi].primitives[0].attributes.POSITION].count
++    ok(bv < 9000, `${n}: body under 9k verts (${bv})`)
++  }
++  const ext = (n: string, mesh: string) => { const j = glbJson(n), mi = j.nodes.find((x: { name?: string }) => x.name === mesh).mesh, a = j.accessors[j.meshes[mi].primitives[0].attributes.POSITION]; return { min: a.min as number[], max: a.max as number[] } }
++  const span = (n: string, mesh: string, k: number) => { const e = ext(n, mesh); return e.max[k] - e.min[k] }, base = span('voltowl', 'body', 0)
++  ok(span('voltowrak', 'body', 0) > 1.3 * base && span('voltoweth', 'body', 0) > 1.3 * base, `spread wings: Voltowrak ${span('voltowrak', 'body', 0).toFixed(2)}, Voltoweth ${span('voltoweth', 'body', 0).toFixed(2)} wide vs Voltowl ${base.toFixed(2)}`)
++  ok(ext('voltowaya', 'body').max[1] > 1.15 * ext('voltowl', 'body').max[1], `voltowaya: wings raised high, the conductor (top ${ext('voltowaya', 'body').max[1].toFixed(2)} vs ${ext('voltowl', 'body').max[1].toFixed(2)})`)
++  ok(ext('voltwis', 'body').min[2] < ext('voltowl', 'body').min[2] - 0.2, `voltwis: wings swept back, the dive (back z ${ext('voltwis', 'body').min[2].toFixed(2)} vs ${ext('voltowl', 'body').min[2].toFixed(2)})`)
++  ok(span('voltowrak', 'aura', 0) > 0.8 && ext('voltowrak', 'aura').max[1] > 1.0, `voltowrak: lightning under her + a crest over her (${span('voltowrak', 'aura', 0).toFixed(2)} wide, top ${ext('voltowrak', 'aura').max[1].toFixed(2)})`)
++  ok(span('voltowaya', 'aura', 0) > 1.4, `voltowaya: the figure-eight round her (${span('voltowaya', 'aura', 0).toFixed(2)} wide)`)
++  ok(span('voltwis', 'aura', 1) > 1.2 && ext('voltwis', 'aura').min[2] < -0.3, `voltwis: the spear slants up behind her (${span('voltwis', 'aura', 1).toFixed(2)} tall)`)
++  ok(span('voltoweth', 'aura', 0) > 2.0 && span('voltoweth', 'aura', 1) > 0.9 && ext('voltoweth', 'aura').max[2] < -0.15, `voltoweth: the cyclone eye behind her (${span('voltoweth', 'aura', 0).toFixed(2)} x ${span('voltoweth', 'aura', 1).toFixed(2)}, front z ${ext('voltoweth', 'aura').max[2].toFixed(2)})`)
++}
+ console.log(`spirit-awakened: ${pass} pass, ${fails.length} fail`)
+ if (fails.length) { for (const f of fails) console.log('  FAIL', f); process.exit(1) }
+diff --git a/src/app/shimmer/open/ather/spirit-models.ts b/src/app/shimmer/open/ather/spirit-models.ts
+index 639bc32e..2fbf4818 100644
+--- a/src/app/shimmer/open/ather/spirit-models.ts
++++ b/src/app/shimmer/open/ather/spirit-models.ts
+@@ -581,8 +581,8 @@ export const SECOND_FORMS: Partial<Record<Species, Partial<Record<SpiritElement,
+ // M244 sheet 2 (sprites, 11-27): VULNARC's four (Storm), owner preview, same tools (sculpt_awaken.py kor / celle / arcvex / ceth;
+ // Vulnarkor on the biped rig, rig_biped.py), Vulnarc's own look as the base: Vulnarkor a crystal-shard mantle + bolts round her,
+ // Vulnarcelle a big crackling mane, Arcvex a jagged crest + two ice-white copies that run, Vulnarceth her storm cloud + two discs.
+-export const AWAKEN_LEN: Readonly<Record<string, number>> = { vulnarok: 1.463, vulnalys: 1.487, vulnavex: 1.87, vulnamyr: 1.283, vulnarkor: 1.393, vulnarcelle: 1.366, arcvex: 1.817, vulnarceth: 1.377, orethar: 1.239, vulnoraya: 1.726, vulnoris: 1.457, vulnorun: 1.581, vulnitar: 1.509, marelle: 1.42, vulnisk: 1.83, vulnixeth: 1.393, luminok: 0.7608, lumilys: 0.6819, lumivex: 1.2647, elhae: 0.714, luminthar: 0.758, lumicelle: 0.9167, arcet: 0.9748, lumiceth: 0.8779, orebrak: 0.7853, lumoraya: 0.7803, lumorvex: 0.785, lumorun: 0.7898, lumixok: 0.7538, marisse: 0.7761, lumixis: 1.1673, lumixeth: 0.7659, mystowk: 0.7049, mystowelle: 0.7487, mystowis: 0.9564, mysteth: 0.7899 }
+-export const AWAKEN_GROW: Readonly<Record<string, number>> = { vulnarok: 1.8, vulnalys: 1.7, vulnavex: 1.65, vulnamyr: 1.75, vulnarkor: 1.8, vulnarcelle: 1.75, arcvex: 1.8, vulnarceth: 1.75, orethar: 1.8, vulnoraya: 1.75, vulnoris: 1.8, vulnorun: 1.75, vulnitar: 1.95, marelle: 1.8, vulnisk: 1.8, vulnixeth: 1.75, luminok: 2.0, lumilys: 1.9, lumivex: 1.8, elhae: 2.0, luminthar: 2.0, lumicelle: 1.9, arcet: 1.8, lumiceth: 2.0, orebrak: 1.8, lumoraya: 1.75, lumorvex: 1.75, lumorun: 1.75, lumixok: 2.1, marisse: 1.95, lumixis: 2.0, lumixeth: 1.95, mystowk: 1.85, mystowelle: 1.75, mystowis: 1.8, mysteth: 1.85 }
++export const AWAKEN_LEN: Readonly<Record<string, number>> = { vulnarok: 1.463, vulnalys: 1.487, vulnavex: 1.87, vulnamyr: 1.283, vulnarkor: 1.393, vulnarcelle: 1.366, arcvex: 1.817, vulnarceth: 1.377, orethar: 1.239, vulnoraya: 1.726, vulnoris: 1.457, vulnorun: 1.581, vulnitar: 1.509, marelle: 1.42, vulnisk: 1.83, vulnixeth: 1.393, luminok: 0.7608, lumilys: 0.6819, lumivex: 1.2647, elhae: 0.714, luminthar: 0.758, lumicelle: 0.9167, arcet: 0.9748, lumiceth: 0.8779, orebrak: 0.7853, lumoraya: 0.7803, lumorvex: 0.785, lumorun: 0.7898, lumixok: 0.7538, marisse: 0.7761, lumixis: 1.1673, lumixeth: 0.7659, mystowk: 0.7049, mystowelle: 0.7487, mystowis: 0.9564, mysteth: 0.7899, voltowrak: 0.5677, voltowaya: 0.5369, voltwis: 0.9532, voltoweth: 0.5492 }
++export const AWAKEN_GROW: Readonly<Record<string, number>> = { vulnarok: 1.8, vulnalys: 1.7, vulnavex: 1.65, vulnamyr: 1.75, vulnarkor: 1.8, vulnarcelle: 1.75, arcvex: 1.8, vulnarceth: 1.75, orethar: 1.8, vulnoraya: 1.75, vulnoris: 1.8, vulnorun: 1.75, vulnitar: 1.95, marelle: 1.8, vulnisk: 1.8, vulnixeth: 1.75, luminok: 2.0, lumilys: 1.9, lumivex: 1.8, elhae: 2.0, luminthar: 2.0, lumicelle: 1.9, arcet: 1.8, lumiceth: 2.0, orebrak: 1.8, lumoraya: 1.75, lumorvex: 1.75, lumorun: 1.75, lumixok: 2.1, marisse: 1.95, lumixis: 2.0, lumixeth: 1.95, mystowk: 1.85, mystowelle: 1.75, mystowis: 1.8, mysteth: 1.85, voltowrak: 1.85, voltowaya: 1.75, voltwis: 1.8, voltoweth: 1.85 }
+ const awakened = (name: string, glbLen: number, aura: string, far: number, el: 'mana' | 'storm' | 'earth' | 'water' = 'mana'): SpiritLook => {
+   const b = SECOND_FORMS.fox![el]!, h = VRIG_H * AWAKEN_GROW[name]
+   return { ...b, name, url: `/open/spirits/${name}-rigged.glb`, h, trot: grownTrot(b.trot, b.h, h), rig: { ...b.rig!, glbLen, avatar: { z: b.rig!.avatar.z, far } },
+@@ -617,8 +617,10 @@ const lumBroke = (name: string, aura: string, walk: number, run: number, el: 'ea
+ // sculpt re-shaped by name (sculpt_mystaw.py) on the live owl rig (rig_owl.py via rig_mystaw.py: 25 bones, six clips, the run is flight), in her
+ // number space, so each draws the base Athowl's glb scale x her dial. Her 'aura' = her motif: Mystowk's halo of gold rings, Mystowelle's ring of
+ // blank scrolls, Mystowis's gold mask, Mysteth's wing eyes + third eye + rays.
+-const owlAwakened = (name: string, aura: string): SpiritLook => {
+-  const b = SECOND_FORMS.owl!.mana!, base = SPIRIT_RIGS.owl!, h = base.h * AWAKEN_GROW[name]
++// Sheet 10 (assets, 11-28): VOLTOWL's four (Storm), the same route off the live Voltowl (docs/looks/m244-voltowl-2026-11-28): Voltowrak's crest +
++// shoulder crystals + lightning under her, Voltowaya's figure-eight ribbon + bright wing edges, Voltwis's spear of lightning, Voltoweth's cyclone.
++const owlAwakened = (name: string, aura: string, el: 'mana' | 'storm' = 'mana'): SpiritLook => {
++  const b = SECOND_FORMS.owl![el]!, base = SPIRIT_RIGS.owl!, h = base.h * AWAKEN_GROW[name]
+   return { ...b, name, url: `/open/spirits/${name}-rigged.glb`, h, trot: grownTrot(base.trot, base.h, h), rig: { ...b.rig!, glbLen: AWAKEN_LEN[name] },
+     glow: { part: 'aura', emissive: aura, lo: 0.35, hi: 0.7, hz: 0.35 } }
+ }
+@@ -668,6 +670,10 @@ export const AWAKENED_FORMS: Readonly<Record<string, SpiritLook>> = {
+   mystowelle: owlAwakened('mystowelle', '#f6e2a8'),
+   mystowis: owlAwakened('mystowis', '#ffcc50'),
+   mysteth: owlAwakened('mysteth', '#ffe08a'),
++  voltowrak: owlAwakened('voltowrak', '#d6f4ff', 'storm'),
++  voltowaya: owlAwakened('voltowaya', '#dcf6ff', 'storm'),
++  voltwis: owlAwakened('voltwis', '#e8faff', 'storm'),
++  voltoweth: owlAwakened('voltoweth', '#cfe4ff', 'storm'),
+ }
+ /** M202: her second form's look when she has evolved (`element` set) and her species has its forms modelled, else null */
+ export const formLook = (s: Species | null | undefined, el: SpiritElement | null | undefined): SpiritLook | null =>
+diff --git a/src/app/shimmer/spirits/spirit.ts b/src/app/shimmer/spirits/spirit.ts
+index 235ba654..0ac3a3c4 100644
+--- a/src/app/shimmer/spirits/spirit.ts
++++ b/src/app/shimmer/spirits/spirit.ts
+@@ -157,6 +157,8 @@ export const AWAKENED_NAMES: Readonly<Partial<Record<string, Readonly<Record<Awa
+   croakarc: { champion: 'Croakarkor', virtuoso: 'Croakarielle', ace: 'Arcvik', enigma: 'Croakarcun' },
+   // M244 sheet 11: Croakara (Mana), canon spirits-species.md 'Croakara (Mana)' (art LOCKED athernyx #033-036; hub yay 11-28)
+   croakara: { champion: 'Croakgulp', virtuoso: 'Croakalys', ace: 'Croakavis', enigma: 'Araeth' },
++  // M244 sheet 10: Voltowl (Storm), canon spirits-species.md 'Named, the Athowl line' (art LOCKED athernyx #065-068)
++  voltowl: { champion: 'Voltowrak', virtuoso: 'Voltowaya', ace: 'Voltwis', enigma: 'Voltoweth' },
+ }
+ 
+ /** Get second form name, or null if base element */
