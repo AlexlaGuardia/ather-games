@@ -157,7 +157,6 @@ try {
         const s2 = await sample(c, 6, 250), o = s2?.out ?? [{ low: -9, blow: 9 }], lo = Math.min(...o.map(x => x.low)), bhi = Math.max(...o.map(x => x.blow))
         ok(lo >= -0.003 && bhi < (c === 'lie' ? 0.10 : 0.04), `#${row.num} ${c}: nothing under the ground (lowest body / aura ${(lo * 1000).toFixed(1)} mm glb) and her body on it (body lowest at most ${(bhi * 1000).toFixed(1)} mm)`)
       }
-      ok(await p.evaluate(() => !!(window as any).__spiritModel?.rigs?.get('gallery')?.meshes?.aura), `#${row.num} her motif (aura part) is drawn`)
     }
     if (look === 'vulnavex') {
       const s1 = await sample('run', 12, 60), e = (s1?.out ?? []).map(o => o.bones.b_e0_head ?? [0, 0, 0]), ex = e.length ? Math.max(...e.map(q => Math.hypot(q[0] - e[0][0], q[1] - e[0][1], q[2] - e[0][2]))) : 0

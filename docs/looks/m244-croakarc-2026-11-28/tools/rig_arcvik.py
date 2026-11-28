@@ -56,7 +56,7 @@ W = K.four(W); parts['body'] = dict(m, W=W); eP = live['eyes']['POSITION'].astyp
 vein = np.abs(eC - np.array(SM.lin(SM.VEIN)[:3])).max(1) <= 1; e = np.zeros((len(eP), len(nb))); e[:, nb.index('head')] = 1
 from scipy.spatial import cKDTree
 _, nn = cKDTree(V0).query(eP[vein]); e[vein] = W[nn]; parts['eyes'] = dict(live['eyes'], W=K.four(e)); print('vein verts', vein.sum(), 'of', len(eP))
-ax = np.zeros((len(live['aura']['POSITION']), len(nb))); ax[:, nb.index('root')] = 1; parts['aura'] = dict(live['aura'], W=ax)   # M244: the strike on the ground (root)
+ax = np.zeros((len(live['aura']['POSITION']), len(nb))); ax[:, nb.index('root')] = 1; parts['aura'] = dict(live['aura'], POSITION=(live['aura']['POSITION'] + np.array([0, .005, 0], np.float32)), W=ax)   # lifted 5 mm: the starburst's tubes sat 4 mm under   # M244: the strike on the ground (root)
 LEGS = ('fl', 'fr', 'hl', 'hr'); SOLE = {f: V0[(W[:, nb.index(f + '_paw')] > .5) & (V0[:, 1] < .10)] - np.array(SK[f + '_paw'][1]) for f in LEGS}
 LEN = {f: sum(np.linalg.norm(np.array(SK[f + a][1]) - np.array(SK[f + b][1])) for a, b in (('_up', '_lo'), ('_lo', '_paw'))) for f in LEGS}
 def clear(f, R):
@@ -142,6 +142,8 @@ def idle(n):
 clips, T, st = {}, {}, {}
 for n, g, fn in (('walk', WALK, walk), ('run', RUN, walk)): T[n] = 2 * g['reach'] * H / g['duty'] / g['v']; clips[n], st[n] = fn(g)
 clips['idle'] = idle(48); T['idle'] = 4.8; clips['sit'], st['sit'] = rest('sit', 48, sitpose); T['sit'] = 5.; clips['lie'], st['lie'] = rest('lie', 48, liepose); T['lie'] = 5.6
+for _c in clips.values():   # M244: the live lie drops the ROOT (LIEY); carry that on the pelvis so the root (her ground strike) stays at y = 0
+    for _p in _c: _p.T['pelvis'] = _p.T['pelvis'] + _p.T['root']; _p.T['root'] = np.zeros(3)
 exec(open(os.path.join(HERE, 'springs.py')).read())   # M244: baked tail springs (m244-quality pass c)
 path = OUT; K.write(path, parts, SK, clips, {c: (len(v) - 1) / T[c] for c, v in clips.items()})
 P = K.Player(path); pos = P.m['body']['POSITION']; F = P.m['body']['F']; ww, JJ = P.m['body']['WEIGHTS_0'] / 255., P.m['body']['JOINTS_0']; bw = lambda b: (ww * (JJ == P.names.index(b))).sum(1); M = dict(bones=len(nb), glb_bytes=os.path.getsize(path), weights_bad=int((~np.isfinite(ww)).sum()))
