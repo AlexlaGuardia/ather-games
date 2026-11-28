@@ -173,6 +173,10 @@ export const AWAKENED_NAMES: Readonly<Partial<Record<string, Readonly<Record<Awa
   craglotl: { champion: 'Cragkor', virtuoso: 'Craglaya', ace: 'Craglix', enigma: 'Craglomyr' },
   // M244 sheet 17: Voltmere (Storm), canon spirits-species.md 'Voltmere (Storm)' (art LOCKED athernyx #077-080)
   voltmere: { champion: 'Voltmerkor', virtuoso: 'Voltmeraya', ace: 'Voltvis', enigma: 'Voltmeth' },
+  // M244 sheet 10: Voltowl (Storm), canon spirits-species.md 'Named, the Athowl line' (art LOCKED athernyx #065-068)
+  voltowl: { champion: 'Voltowrak', virtuoso: 'Voltowaya', ace: 'Voltwis', enigma: 'Voltoweth' },
+  // M244 sheet 11: Tidemere (Water), canon spirits-species.md 'Tidemere (Water)' (art LOCKED athernyx #061-064; hub yay 11-28)
+  tidemere: { champion: 'Tidemok', virtuoso: 'Tidessa', ace: 'Tidemerk', enigma: 'Tidemyr' },
 }
 
 /** Get second form name, or null if base element */

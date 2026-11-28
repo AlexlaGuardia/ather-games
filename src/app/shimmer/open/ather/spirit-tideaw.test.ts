@@ -6,6 +6,7 @@ import { AWAKENED_FORMS, TIDE_AWAKENED, TIDE_AW_DIAL, SECOND_FORMS, formGrow } f
 import { AWAKENED_BRANCHES, AWAKENED_NAMES } from '../../spirits/spirit'
 import { PUBLIC_FORMS } from './spirit-public'
 import { isWaterForm } from './spirit-water'
+import { GALLERY } from '../../dev/editors/spirit-gallery'
 let pass = 0; const fails: string[] = []
 const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
 const CANON = '/root/athernyx/CANON/world/spirits-species.md', DIR = 'docs/looks/m244-tidemere-2026-11-28'
@@ -18,6 +19,12 @@ ok(/Tidessa\*\* \(Virtuoso, pure\)/.test(line), 'canon: Tidessa is the Virtuoso 
 ok(/The Tidemere line carries its own water/.test(text) && /four awakenings keep their flippers/.test(text), 'canon: the line carries its own water, the four keep their flippers')
 const looks = named.map(n => n.toLowerCase())
 ok(looks.every(n => AWAKENED_FORMS[n] === TIDE_AWAKENED[n]) && Object.keys(TIDE_AWAKENED).sort().join() === [...looks].sort().join(), `each wired once into AWAKENED_FORMS (${Object.keys(TIDE_AWAKENED)})`)
+// gallery: four rows, consecutive, turtle + water, right after Voltowl's (#127-#130)
+const rows = GALLERY.filter(r => r.aw && r.sp === 'turtle' && r.el === 'water'), prevLast = Math.max(...GALLERY.filter(r => r.aw && r.sp === 'owl' && r.el === 'storm').map(r => r.num))
+ok(rows.length === 4 && rows.every((r, i) => r.num === prevLast + 1 + i && r.num === 131 + i && r.name === named[i] && r.aw!.look === looks[i]), `Tidemere's rows consecutive from #131, after Voltowl's (#${rows.map(r => r.num)}: ${rows.map(r => r.name)})`)
+const L3 = '/root/athernyx/assets/stage3/grimoire-ledger-stage3.json'
+if (existsSync(L3)) { const locks = JSON.parse(readFileSync(L3, 'utf8')).locks as { name: string; branch_name: string; second_form: string }[]
+  for (const r of rows) ok(locks.some(l => l.name === r.name && l.second_form === 'Tidemere' && l.branch_name.toLowerCase() === r.aw!.branch), `${r.name}: a stage-3 lock off Tidemere, ${r.aw!.branch}`) }
 const parent = SECOND_FORMS.turtle!.water!
 /** the bone names written into a glb (its JSON chunk) */
 const glbBones = (p: string): string[] => {
@@ -30,7 +37,7 @@ for (const n of looks) {
   ok(L.url === `/open/spirits/${n}-rigged.glb` && existsSync(g) && statSync(g).size === m.glb_bytes, `${n}: her glb is in public/ and is the one the metrics measured (${m.glb_bytes} B)`)
   ok(existsSync(`public/open/spirits/${n}-icon.png`), `${n}: her gallery icon (our render)`)
   ok(!PUBLIC_FORMS.has(n), `${n}: not in PUBLIC_FORMS (owner preview only)`)
-  ok(TIDE_AW_DIAL[n] > formGrow('tidemere') && L.h > parent.h * 1.2, `${n}: grown past Tidemere (dial ${TIDE_AW_DIAL[n]} vs ${formGrow('tidemere')})`)
+  ok(TIDE_AW_DIAL[n] > formGrow('tidemere') && L.h > parent.h * 1.2 && Math.abs(m.dial * 2.1 / 1.4 - TIDE_AW_DIAL[n]) < 0.006, `${n}: grown past Tidemere (dial ${TIDE_AW_DIAL[n]} vs ${formGrow('tidemere')}; = rig dial ${m.dial} x 2.1 / 1.4, M249 grew Tidemere)`)
   ok(L.glow?.part === 'aura' && existsSync(g) && meshNames(g).includes('aura'), `${n}: her motif (aura part) is in the glb and glows`)
   ok(Math.abs(L.rig!.glbLen - m.glb_long) < 1e-3 && L.rig!.clipV.walk === parent.rig!.clipV.walk && L.rig!.clipV.run === parent.rig!.clipV.run, `${n}: glbLen = her metrics (${m.glb_long}), Tidemere's clip speeds`)
   // the glide rig: Tidemere's 14 bones, flipper + blade bones, NO legs (read out of the glb itself)

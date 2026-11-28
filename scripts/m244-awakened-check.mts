@@ -19,7 +19,7 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms)); let fails = 0
 const ok = (c: boolean, m: string) => { console.log(`${c ? 'PASS' : 'FAIL'} ${m}`); if (!c) fails++ }
 const ONLY = flag('--only', '').split(',').filter(Boolean).map(Number)
 const AW = GALLERY.filter(r => r.aw && (!ONLY.length || ONLY.includes(r.num)))
-ok(GALLERY.filter(r => r.aw).length === 76, `76 awakened rows in the roster (${GALLERY.filter(r => r.aw).map(r => `#${r.num} ${r.name}`).join(', ')})`)
+ok(GALLERY.filter(r => r.aw).length === 84, `84 awakened rows in the roster (${GALLERY.filter(r => r.aw).map(r => `#${r.num} ${r.name}`).join(', ')})`)
 const br = await puppeteer.launch({ protocolTimeout: 900000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--mute-audio', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] })
 try {
   const errs: string[] = []
@@ -145,7 +145,7 @@ try {
         ok(lo >= -0.0015 && bhi < BODY_UP[c], `#${row.num} ${c}: nothing under the ground (lowest body / aura ${(lo * 1000).toFixed(1)} mm glb) and her body on it (body lowest at most ${(bhi * 1000).toFixed(1)} mm)`)
       }
     }
-    if (['mystowk', 'mystowelle', 'mystowis', 'mysteth', 'tidowrok', 'tidelle', 'tidowsk', 'tidowmyr'].includes(look)) {   // + sheet 13: Tideowl's four, the same owl rig   // sheet 8: Mystowl's four are OWLS on the live owl rig: on the ground in idle / walk / sit, the run is flight
+    if (['mystowk', 'mystowelle', 'mystowis', 'mysteth', 'tidowrok', 'tidelle', 'tidowsk', 'tidowmyr', 'voltowrak', 'voltowaya', 'voltwis', 'voltoweth'].includes(look)) {   // + sheet 13: Tideowl's four, the same owl rig; + sheet 10: Voltowl's four   // sheet 8: Mystowl's four are OWLS on the live owl rig: on the ground in idle / walk / sit, the run is flight
       const s1 = await sample('idle', 2, 100), names = s1?.names ?? []
       ok(['b_tuft_l', 'b_wing4_r', 'b_foot_l', 'b_tail2', 'b_lids'].every(x => names.includes(x)) && !names.includes('b_hover'), `#${row.num} on the owl rig (${names.length} bones: tufts, four-joint wings, feet, no hover)`)
       for (const c of ['idle', 'walk', 'sit', 'lie']) {   // the walk is a two-footed HOP (up in the air between landings), so only idle / sit / lie must sit ON the ground
@@ -154,6 +154,16 @@ try {
       }
       const s3 = await sample('run', 6, 250), lr = Math.min(...(s3?.out ?? [{ low: -9 }]).map(o => o.low))
       ok(lr > 0.08, `#${row.num} run: she FLIES (lowest ${lr.toFixed(3)} glb up)`)
+    }
+    if (['tidemok', 'tidessa', 'tidemerk', 'tidemyr'].includes(look)) {   // sheet 11: Tidemere's four CARRY THEIR OWN WATER: her legless glide rig, her water sheet under her, the plastron riding it in every clip
+      const s1 = await sample('idle', 2, 100), names = s1?.names ?? []
+      ok(['b_shell', 'b_flip0_l', 'b_blade0_l', 'b_flip1_r', 'b_blade1_r', 'b_lids'].every(x => names.includes(x)) && !names.some(x => /leg|foot|paw/.test(x)), `#${row.num} on Tidemere's glide rig (${names.length} bones: flippers + blades, no legs)`)
+      const w = await p.evaluate(() => { const W = (window as any).__spiritModel?.waters?.get('gallery'); return W ? W.stats() : null })
+      ok(!!w?.sheet, `#${row.num} her water sheet is drawn under her (${JSON.stringify(w)?.slice(0, 120)})`)
+      for (const c of ['idle', 'walk', 'run', 'sit', 'lie']) {
+        const s2 = await sample(c, 6, 250), o = s2?.out ?? [{ low: -9, blow: 9 }], lo = Math.min(...o.map(x => x.low)), b0 = Math.min(...o.map(x => x.blow)), b1 = Math.max(...o.map(x => x.blow))
+        ok(lo >= -0.0015 && b0 > 0.008 && b1 < 0.06, `#${row.num} ${c}: nothing under the ground (lowest ${(lo * 1000).toFixed(1)} mm glb) and she rides her sheet (body ${(b0 * 1000).toFixed(1)}..${(b1 * 1000).toFixed(1)} mm up)`)
+      }
     }
     if (look === 'vulnarok') {
       const s1 = await sample('walk', 14, 70)

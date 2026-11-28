@@ -753,6 +753,41 @@ export const TIDEOWL_AWAKENED: Readonly<Record<string, SpiritLook>> = {
   tidowsk: tideowlAwakened('tidowsk', '#bff4ff'),
   tidowmyr: tideowlAwakened('tidowmyr', '#e6fbff'),
 }
+// M244 sheet 10 (landed by world 11-28): VOLTOWL's four (Storm), owl preview, the sheet-8 route off the live Voltowl (docs/looks/m244-voltowl-2026-11-28):
+// her sculpt re-shaped by name (sculpt_voltaw.py) on the live owl rig (rig_owl.py via rig_voltaw.py). Her 'aura' = her motif: Voltowrak's crest of
+// bolts + shoulder shards + lightning under her, Voltowaya's figure-eight ribbon + bright wing edges, Voltwis's spear of lightning, Voltoweth's
+// cyclone. Dials = the sheet's (1.85 / 1.75 / 1.8 / 1.85) x 1.88 / 1.4, as M249 grew Voltowl 1.4 -> 1.88 (not in Alex's size pass).
+export const VOLTOWL_AW_DIAL: Readonly<Record<string, number>> = { voltowrak: 2.48, voltowaya: 2.35, voltwis: 2.42, voltoweth: 2.48 }
+export const VOLTOWL_AW_LEN: Readonly<Record<string, number>> = { voltowrak: 0.5677, voltowaya: 0.5369, voltwis: 0.9532, voltoweth: 0.5492 }
+const voltowlAwakened = (name: string, aura: string): SpiritLook => {
+  const b = SECOND_FORMS.owl!.storm!, base = SPIRIT_RIGS.owl!, h = base.h * VOLTOWL_AW_DIAL[name]
+  return { ...b, name, url: `/open/spirits/${name}-rigged.glb`, h, trot: grownTrot(base.trot, base.h, h), rig: { ...b.rig!, glbLen: VOLTOWL_AW_LEN[name] },
+    glow: { part: 'aura', emissive: aura, lo: 0.35, hi: 0.7, hz: 0.35 } }
+}
+export const VOLTOWL_AWAKENED: Readonly<Record<string, SpiritLook>> = {
+  voltowrak: voltowlAwakened('voltowrak', '#d6f4ff'),
+  voltowaya: voltowlAwakened('voltowaya', '#dcf6ff'),
+  voltwis: voltowlAwakened('voltwis', '#e8faff'),
+  voltoweth: voltowlAwakened('voltoweth', '#cfe4ff'),
+}
+// M244 sheet 11 (landed by world 11-28): TIDEMERE's four (Water), owner preview (docs/looks/m244-tidemere-2026-11-28). Canon: the Tidemere line
+// CARRIES ITS OWN WATER, so each is the live Tidemere's sculpt re-shaped by name (sculpt_tideaw.py) on HER legless glide rig (rig_tidemere.py via
+// rig_tideaw.py: 14 bones, flippers, the plastron riding 0.03 glb over her ground) and draws her water sheet + wet trail (spirit-water.ts
+// WATER_FORMS). Her clips at Tidemere's speeds; h = the base Shellmere's x her dial. 'aura' = her motif: Tidemok's crystal spikes, Tidessa's
+// coral crown + pearls, Tidemerk's peeling spray, Tidemyr's reef + waterfall. glbLen = her idle nose to tail (rig metrics glb_long).
+// Dials = the sheet's (1.9 / 1.75 / 1.8 / 1.85) x 2.1 / 1.4, as M249 grew Tidemere 1.4 -> 2.1 (not in Alex's size pass).
+export const TIDE_AW_DIAL: Readonly<Record<string, number>> = { tidemok: 2.85, tidessa: 2.63, tidemerk: 2.7, tidemyr: 2.78 }
+const tideAw = (name: string, aura: string, glbLen: number): SpiritLook => {
+  const b = SECOND_FORMS.turtle!.water!, base = BASE_PREVIEW.turtle!, h = base.h * TIDE_AW_DIAL[name]
+  return { ...b, name, url: `/open/spirits/${name}-rigged.glb`, h, trot: grownTrot(base.trot, base.h, h), rig: { ...b.rig!, glbLen },
+    glow: { part: 'aura', emissive: aura, lo: 0.35, hi: 0.7, hz: 0.35 } }
+}
+export const TIDE_AWAKENED: Readonly<Record<string, SpiritLook>> = {
+  tidemok: tideAw('tidemok', '#c4fbf6', 1.668),
+  tidessa: tideAw('tidessa', '#fff4e0', 1.523),
+  tidemerk: tideAw('tidemerk', '#dcf8fc', 1.814),
+  tidemyr: tideAw('tidemyr', '#d4f2fa', 1.624),
+}
 /** by look name (spirit.ts AWAKENED_NAMES, lower-cased) */
 export const AWAKENED_FORMS: Readonly<Record<string, SpiritLook>> = {
   ...CROAK_AWAKENED,   // M244 sheet 9: Croakarc's four (above, by croakarc())
@@ -765,6 +800,8 @@ export const AWAKENED_FORMS: Readonly<Record<string, SpiritLook>> = {
   ...AURMERE_AWAKENED,   // M244 sheet 15b: Aurmere's four (above)
   ...CRAGLOTL_AWAKENED,   // M244 sheet 16: Craglotl's four (above)
   ...VOLTMERE_AWAKENED,   // M244 sheet 17: Voltmere's four (above)
+  ...VOLTOWL_AWAKENED,   // M244 sheet 10: Voltowl's four (above)
+  ...TIDE_AWAKENED,   // M244 sheet 11: Tidemere's four (above, on her glide rig)
   vulnarok: awakened('vulnarok', AWAKEN_LEN.vulnarok, '#ffcf5a', 2.4),
   vulnalys: awakened('vulnalys', AWAKEN_LEN.vulnalys, '#b48cff', 1.7),
   vulnavex: awakened('vulnavex', AWAKEN_LEN.vulnavex, '#ffcf5a', 2.6),

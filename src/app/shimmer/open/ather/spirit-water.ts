@@ -11,7 +11,7 @@
 import * as THREE from 'three'
 
 /** the forms that glide on their own water (by look name) */
-export const WATER_FORMS = ['tidemere'] as const
+export const WATER_FORMS = ['tidemere', 'tidemok', 'tidessa', 'tidemerk', 'tidemyr'] as const   // M244 sheet 11: her four awakenings ride theirs too (canon: the line carries its own water)
 export type WaterForm = typeof WATER_FORMS[number]
 export const isWaterForm = (n: string): n is WaterForm => (WATER_FORMS as readonly string[]).includes(n)
 /** wet patches alive at most at once, and how long one takes to dry (s) */
