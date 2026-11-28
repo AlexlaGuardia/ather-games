@@ -48,7 +48,7 @@ def ground_fix(parts, sk, clips):
             for p in clips['run']: p.R[b] = p.R[b] @ K.rx(a)
     if FORM == 'marelle':
         sel = W[:, [nb.index('ear_l'), nb.index('ear_r')]].sum(1) > .3
-        for c in ('lie', 'sit', 'idle'):
+        for c in ('lie', 'sit', 'idle', 'run', 'walk'):   # v2: her longer ears reach the ground in the run too (34 mm)
             for sgn in (1, -1):   # whichever way lifts both ears clear
                 solve(c, ['ear_l', 'ear_r'], lambda a, sgn=sgn: [K.rz(sgn * a) @ K.rx(-a * .5), K.rz(-sgn * a) @ K.rx(-a * .5)], sel)
                 if STATS['ground'][c].get('after', STATS['ground'][c]['start']) >= -.0015: break
@@ -58,7 +58,7 @@ def lift_clip(parts, sk, clips, c):
     if c not in clips: return
     lo = min(low(parts, sk, p) for p in clips[c])
     if lo >= -.0003: return
-    d = -lo + .0004
+    d = -lo + (.0008 if c in ('walk', 'run') else .0004)
     for p in clips[c]:
         p.T['root'] = np.asarray(p.T['root'], float) + (0, d, 0)
         if 'cloud' in p.T: p.T['cloud'] = np.asarray(p.T['cloud'], float) - (0, d, 0)
@@ -66,11 +66,18 @@ def lift_clip(parts, sk, clips, c):
 def write(path, parts, sk, clips, fps):
     Q['jiggle'](sk, clips, fps)
     ground_fix(parts, sk, clips)
-    for c in ('lie', 'sit'): lift_clip(parts, sk, clips, c)
+    for c in ('lie', 'sit', 'walk', 'run'): lift_clip(parts, sk, clips, c)   # v2: walk + run too (prod reads between keys: a -1.2 mm key read -1.7 mm live)
     if 'aura' in parts and FORM in ('nitar', 'nixeth'):   # the ring / pool rides the cloud bone at rest height: its lowest point 1 mm over the ground
         A = parts['aura']; P_ = A['POSITION'].astype(float); d = max(0., .001 - P_[:, 1].min()); P_[:, 1] += d; parts['aura'] = dict(A, POSITION=P_.astype(A['POSITION'].dtype))
         STATS.setdefault('ground', {})['aura_lift'] = round(float(d), 4)
     print('QUALITY', STATS); return _write(path, parts, sk, clips, fps)
 K.write = write
 sys.argv = [os.path.join(LIVE, 'rig_awaken.py'), FORM, IN, OUT, MET]; runpy.run_path(sys.argv[0], run_name='__main__')
-m = json.load(open(MET)); m['quality'] = dict(standard='m244-quality-2026-11-28 (a) palette (no blaze in the art), (c) springs', ear_target=Q['EAR_T'], ground=STATS.get('ground'), spring=STATS.get('jiggle')); json.dump(m, open(MET, 'w'), indent=1)
+m = json.load(open(MET)); m['quality'] = dict(standard='m244-quality-2026-11-28 (a) palette (no blaze in the art), (c) springs', ear_target=Q['EAR_T'], ground=STATS.get('ground'), spring=STATS.get('jiggle'))
+# Vulnix v2 silhouette receipt (as the Vulnore rig_q): the PROP / MOTIF spec she was built with + shape ratios off the rest mesh in the file
+SVm = sys.modules.get('sculpt_awaken'); Pq = K.Player(OUT); bv, ev = Pq.m['body']['POSITION'], Pq.m['eyes']['POSITION']
+band = (bv[:, 1] > ev[:, 1].min() - .45) & (bv[:, 1] < ev[:, 1].min() - .05)
+m['silhouette'] = dict(prop=SVm.PROP.get(FORM, {}), motif=SVm.MOTIF.get(FORM, {}), shoulder_over_eyes=round(float(np.abs(bv[band, 0]).max() / np.abs(ev[:, 0]).max()), 3),
+                       top_over_eyes=round(float(bv[:, 1].max() / ev[:, 1].mean()), 3), eyes_y=round(float(ev[:, 1].mean()), 3), low_y=round(float(bv[:, 1].min()), 3),
+                       aura_r=round(float(np.hypot(Pq.m['aura']['POSITION'][:, 0], Pq.m['aura']['POSITION'][:, 2]).max()), 3) if 'aura' in Pq.m else 0)
+json.dump(m, open(MET, 'w'), indent=1)

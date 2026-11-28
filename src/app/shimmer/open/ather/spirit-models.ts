@@ -544,8 +544,8 @@ export const SECOND_FORMS: Partial<Record<Species, Partial<Record<SpiritElement,
 // M244 sheet 2 (sprites, 11-27): VULNARC's four (Storm), owner preview, same tools (sculpt_awaken.py kor / celle / arcvex / ceth;
 // Vulnarkor on the biped rig, rig_biped.py), Vulnarc's own look as the base: Vulnarkor a crystal-shard mantle + bolts round her,
 // Vulnarcelle a big crackling mane, Arcvex a jagged crest + two ice-white copies that run, Vulnarceth her storm cloud + two discs.
-export const AWAKEN_LEN: Readonly<Record<string, number>> = { vulnarok: 1.463, vulnalys: 1.487, vulnavex: 1.87, vulnamyr: 1.283, vulnarkor: 1.393, vulnarcelle: 1.366, arcvex: 1.817, vulnarceth: 1.377, orethar: 1.239, vulnoraya: 1.726, vulnoris: 1.457, vulnorun: 1.581, vulnitar: 1.489, marelle: 1.394, vulnisk: 1.841, vulnixeth: 1.377, luminok: 0.7608, lumilys: 0.6819, lumivex: 1.2647, elhae: 0.714, luminthar: 0.758, lumicelle: 0.9167, arcet: 0.9748, lumiceth: 0.8779 }
-export const AWAKEN_GROW: Readonly<Record<string, number>> = { vulnarok: 1.8, vulnalys: 1.7, vulnavex: 1.65, vulnamyr: 1.75, vulnarkor: 1.8, vulnarcelle: 1.75, arcvex: 1.8, vulnarceth: 1.75, orethar: 1.8, vulnoraya: 1.75, vulnoris: 1.8, vulnorun: 1.75, vulnitar: 1.8, marelle: 1.8, vulnisk: 1.8, vulnixeth: 1.75, luminok: 2.0, lumilys: 1.9, lumivex: 1.8, elhae: 2.0, luminthar: 2.0, lumicelle: 1.9, arcet: 1.8, lumiceth: 2.0 }
+export const AWAKEN_LEN: Readonly<Record<string, number>> = { vulnarok: 1.463, vulnalys: 1.487, vulnavex: 1.87, vulnamyr: 1.283, vulnarkor: 1.393, vulnarcelle: 1.366, arcvex: 1.817, vulnarceth: 1.377, orethar: 1.239, vulnoraya: 1.726, vulnoris: 1.457, vulnorun: 1.581, vulnitar: 1.509, marelle: 1.42, vulnisk: 1.83, vulnixeth: 1.393, luminok: 0.7608, lumilys: 0.6819, lumivex: 1.2647, elhae: 0.714, luminthar: 0.758, lumicelle: 0.9167, arcet: 0.9748, lumiceth: 0.8779 }
+export const AWAKEN_GROW: Readonly<Record<string, number>> = { vulnarok: 1.8, vulnalys: 1.7, vulnavex: 1.65, vulnamyr: 1.75, vulnarkor: 1.8, vulnarcelle: 1.75, arcvex: 1.8, vulnarceth: 1.75, orethar: 1.8, vulnoraya: 1.75, vulnoris: 1.8, vulnorun: 1.75, vulnitar: 1.95, marelle: 1.8, vulnisk: 1.8, vulnixeth: 1.75, luminok: 2.0, lumilys: 1.9, lumivex: 1.8, elhae: 2.0, luminthar: 2.0, lumicelle: 1.9, arcet: 1.8, lumiceth: 2.0 }
 const awakened = (name: string, glbLen: number, aura: string, far: number, el: 'mana' | 'storm' | 'earth' | 'water' = 'mana'): SpiritLook => {
   const b = SECOND_FORMS.fox![el]!, h = VRIG_H * AWAKEN_GROW[name]
   return { ...b, name, url: `/open/spirits/${name}-rigged.glb`, h, trot: grownTrot(b.trot, b.h, h), rig: { ...b.rig!, glbLen, avatar: { z: b.rig!.avatar.z, far } },
@@ -562,6 +562,16 @@ const awakened = (name: string, glbLen: number, aura: string, far: number, el: '
 const lumAwakened = (name: string, aura: string, low: number, top: number, cull: Cull, el: 'mana' | 'storm' = 'mana'): SpiritLook => {
   const b = SECOND_FORMS.firefly![el]!, base = BASE_PREVIEW.firefly!, h = base.h * AWAKEN_GROW[name]
   return { ...b, name, url: `/open/spirits/${name}-rigged.glb`, h, trot: grownTrot(base.trot, base.h, h), rig: { ...b.rig!, glbLen: AWAKEN_LEN[name], hover: { ...b.rig!.hover!, low, top }, cull },
+    glow: { part: 'aura', emissive: aura, lo: 0.35, hi: 0.7, hz: 0.35 } }
+}
+// M244 sheet 7 (sprites, 11-28): LUMINORE's four (Earth). Canon: the egg waits to BREAK OUT at the awakening, so each is what broke out:
+// grounded like the egg (no hover, no culling of her own), but up on two legs with two arms (docs/looks/m244-luminore-2026-11-28: the
+// live egg's sculpt re-shaped by name, sculpt_lumore.py, on the ground biped rig rig_lumore.py: 21 bones in the base unit, legs + arms, the
+// hips carry her height, the root stays on the ground). Her 'aura' = her lamp + the broken shell lying at her feet (root) + her motif
+// (Orebrak's shards + prism light, Lumoraya's rays, Lumorvex's mouth beam + flying shards, Lumorun's chest crack). clipV = metrics mps.
+const lumBroke = (name: string, aura: string, walk: number, run: number): SpiritLook => {
+  const b = SECOND_FORMS.firefly!.earth!, base = BASE_PREVIEW.firefly!, h = base.h * AWAKEN_GROW[name]
+  return { ...b, name, url: `/open/spirits/${name}-rigged.glb`, h, trot: grownTrot(base.trot, base.h, h), rig: { ...b.rig!, glbLen: AWAKEN_LEN[name], clipV: { walk: walk / LUMINARA_UNIT, run: run / LUMINARA_UNIT } },
     glow: { part: 'aura', emissive: aura, lo: 0.35, hi: 0.7, hz: 0.35 } }
 }
 /** by look name (spirit.ts AWAKENED_NAMES, lower-cased) */

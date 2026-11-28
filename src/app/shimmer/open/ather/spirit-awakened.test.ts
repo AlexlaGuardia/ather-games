@@ -154,6 +154,15 @@ for (const n of waterNames) {
   const walk = glbJson(n).animations.find((a: { name: string }) => a.name === 'walk')
   ok(['b_ear_l', 'b_ear_r', 'b_tail4'].every(b => walk.channels.some((c: { target: { node: number; path: string } }) => c.target.node === nodes.indexOf(b) && c.target.path === 'rotation')), `${n}: ears + tail tip carry rotation tracks in the walk`)
 }
+// M244 Vulnix v2 (hub 11-28 on the v1 sheet): each built with a PROP + MOTIF spec, receipts read off her rest mesh (rig_q.py silhouette)
+{
+  const sil = (n: string) => JSON.parse(readFileSync(`docs/looks/m244-vulnix-2026-11-28/${n}-metrics.json`, 'utf8')).silhouette
+  for (const n of waterNames) ok(!!sil(n) && Object.keys(sil(n).prop).length > 0 && Object.keys(sil(n).motif).length > 0, `${n}: built with a v2 PROP + MOTIF spec`)
+  ok(sil('vulnitar')?.prop?.chest > 1.15 && sil('vulnitar')?.prop?.fore > 1.2 && sil('vulnitar')?.motif?.splash > 1 && sil('vulnitar')?.aura_r >= 0.7, `vulnitar: heavier build + a splash crown out to ${sil('vulnitar')?.aura_r} glb (v1 ring 0.663)`)
+  ok(sil('marelle')?.motif?.ear >= 1.3, `marelle: her jester ears lengthened x${sil('marelle')?.motif?.ear}`)
+  ok(sil('vulnisk')?.prop?.lean < 0.9, `vulnisk: the lean wave-rider (trunk x${sil('vulnisk')?.prop?.lean})`)
+  ok(sil('vulnixeth')?.prop?.tall > 1.2 && sil('vulnixeth')?.eyes_y >= 0.74 && sil('vulnixeth')?.aura_r >= 1.0, `vulnixeth: taller (eyes at ${sil('vulnixeth')?.eyes_y} glb, v1 0.655) + a wider pool (${sil('vulnixeth')?.aura_r} glb, v1 0.751)`)
+}
 { // Marelle's hanging jester ears are the springs' showcase: a bigger swing than the upright-eared forms, and they hang (tip below the root)
   const m = JSON.parse(readFileSync('docs/looks/m244-vulnix-2026-11-28/marelle-metrics.json', 'utf8')), o = JSON.parse(readFileSync('docs/looks/m244-vulnix-2026-11-28/vulnitar-metrics.json', 'utf8'))
   ok(m.quality.spring.peak_rad['walk:ear_l'] >= 1.5 * o.quality.spring.peak_rad['walk:ear_l'], `marelle: her ears swing wider in the walk (${m.quality.spring.peak_rad['walk:ear_l']} vs Vulnitar ${o.quality.spring.peak_rad['walk:ear_l']} rad)`)

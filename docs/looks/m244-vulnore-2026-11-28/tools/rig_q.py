@@ -39,6 +39,13 @@ _write = K.write
 def write(path, parts, sk, clips, fps):
     if FORM in ART: parts = dict(parts, body=project(parts['body']))
     Q['jiggle'](sk, clips, fps)
+    if FORM == 'norun':   # prod desk 11-28: her walk read -1.7 mm between keys (-1.2 at them); lift walk + run by the deficit + 0.8 mm of headroom
+        V, W = parts['body']['POSITION'].astype(float), parts['body']['W']
+        for c in ('walk', 'run'):
+            lo = min(K.skin(V, W, sk, p)[:, 1].min() for p in clips.get(c, []))
+            if lo < .0008:
+                for p in clips[c]: p.T['root'] = np.asarray(p.T['root'], float) + (0, .0008 - lo, 0)
+                STATS.setdefault('ground', {})[c + '_lift'] = round(float(.0008 - lo), 4)
     print('QUALITY', STATS); return _write(path, parts, sk, clips, fps)
 K.write = write
 if FORM == 'oreth':

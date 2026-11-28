@@ -140,17 +140,32 @@ WATER = FORM in ('nitar', 'marelle', 'nisk', 'nixeth')
 #   lean      quad trunk girth only (< 1 = racer)                         tail    brush girth              paw    paw size
 #   stance    feet set out wider (x of every leg landmark)                thigh   hind / biped leg girth   fore   quad foreleg girth
 #   biped:    shoulder (shoulder + pauldron mass), span (arms set wider), arm (upper-arm girth), forearm (forearm + gauntlet + hand + claws)
+#   quad:     tall (legs longer: the body, head + tail rise by (tall - 1) x shoulder height, the legs stretch under it), muscle (shoulder + haunch mass)
 # MOTIF scales the form's own pieces: shard (crystal / leaf length + width), crown (Vulnoraya's flowers: size + how far they stand up), tree (Vulnorun's tree height +
-# crown), trunk (its girth), bloom (Vulnorun's blooms), rock (Vulnoris's stones). Vulnix v2 = one PROP + one MOTIF line per form.
+# crown), trunk (its girth), bloom (Vulnorun's blooms), rock (Vulnoris's stones). Vulnix v2 = one PROP + one MOTIF line per form:
+# ear (ear length from its root), splash (Vulnitar's splash crown: height + spread), mist (Marelle's tail mist), pool (Vulnixeth's pool radius), drip (her streams).
 PROP = dict(oreth=dict(head=.78, chest=1.22, neck=1.35, shoulder=1.45, span=1.32, arm=1.4, forearm=1.5, thigh=1.35, stance=1.3, paw=1.3, tail=.85),
-            raya=dict(head=.94), noris=dict(lean=.82, fore=.9, thigh=.92, head=.94, tail=.9), norun=dict(chest=1.15, fore=1.1, thigh=1.1, head=.94))
-MOTIF = dict(oreth=dict(shard=1.4), raya=dict(shard=1.35, crown=2.4), noris=dict(rock=1.2, shard=1.4), norun=dict(tree=1.35, trunk=2.0, bloom=1.8))
+            raya=dict(head=.94), noris=dict(lean=.82, fore=.9, thigh=.92, head=.94, tail=.9), norun=dict(chest=1.15, fore=1.1, thigh=1.1, head=.94),
+            # Vulnix v2 (hub 11-28 on the v1 sheet): Vulnitar bigger + muscular, Marelle slender, Vulnisk the lean wave-rider, Vulnixeth taller + regal
+            nitar=dict(chest=1.22, neck=1.25, fore=1.3, thigh=1.3, stance=1.15, paw=1.3, tail=1.1, muscle=1.0),
+            marelle=dict(lean=.9, fore=.92, tail=1.12), nisk=dict(lean=.84, fore=.9, thigh=.92, head=.95, tail=1.08), nixeth=dict(tall=1.24, neck=1.15, tail=1.08))
+MOTIF = dict(oreth=dict(shard=1.4), raya=dict(shard=1.35, crown=2.4), noris=dict(rock=1.2, shard=1.4), norun=dict(tree=1.35, trunk=2.0, bloom=1.8),
+             nitar=dict(splash=1.5), marelle=dict(ear=1.35, mist=1.7), nisk=dict(ear=1.12), nixeth=dict(pool=1.5, drip=2.2))
 PQ = lambda k: PROP.get(FORM, {}).get(k, 1.)
 MQ = lambda k: MOTIF.get(FORM, {}).get(k, 1.)
 def proportion(g, p):
     if not p: return g
     g = dict(g); q = lambda k: p.get(k, 1.); X = lambda pts, s: [(x * s, y, z) for x, y, z in pts]
     if 'head' in p: g['hk'] = g.get('hk', 1.) * q('head')
+    if 'tall' in p and not g.get('biped'):   # Vulnix v2: longer legs, everything above them lifted (head space rides HO, so eyes / ears / gem follow)
+        dy = (q('tall') - 1) * g['f'][0][1]; up = lambda c: (c[0], c[1] + dy, c[2])
+        g['HO'], g['chest'], g['pelvis'] = up(g['HO']), up(g['chest']), up(g['pelvis'])
+        a, b, ra, rb = g['trunk']; g['trunk'] = (up(a), up(b), ra, rb); g['chestE'] = (up(g['chestE'][0]), g['chestE'][1]); g['tuck'] = (up(g['tuck'][0]), g['tuck'][1])
+        n0, n1, nr = g['neck']; g['neck'] = (up(n0), up(n1), nr); g['tail'] = [up(c) for c in g['tail']]
+        st = lambda pts: [(x, y + dy * (y - pts[-1][1]) / (pts[0][1] - pts[-1][1]), z) for x, y, z in pts]   # the foot stays on the ground
+        g['f'], g['h'] = st(g['f']), st(g['h'])
+    if MOTIF.get(FORM, {}).get('ear'):   # Vulnix v2: the ear's tip pushed out along the ear (root fixed)
+        (a, t) = g['ear']; k = MOTIF[FORM]['ear']; g['ear'] = (a, tuple(a_ + (t_ - a_) * k for a_, t_ in zip(a, t)))
     a, b, ra, rb = g['trunk']; c = q('chest') * q('lean'); g['trunk'] = (a, b, ra * c, rb * c)
     ce, cr = g['chestE']; g['chestE'] = (ce, tuple(r * c for r in cr)); n0, n1, nr = g['neck']; g['neck'] = (n0, n1, nr * q('neck'))
     g['paw'] = g['paw'] * q('paw'); g['tailr'] = [r * q('tail') for r in g['tailr']]
@@ -161,7 +176,7 @@ def proportion(g, p):
         g['f'] = X(g['f'], q('stance')); g['h'] = X(g['h'], q('stance'))
         g['fr'] = tuple(r * q('fore') for r in g['fr']); g['hr'] = tuple(r * q('thigh') for r in g['hr'])
     return g
-G = proportion(FORMS[FORM], PROP.get(FORM)); HO = V3(*G['HO'])
+G = proportion(FORMS[FORM], PROP.get(FORM)); HO = V3(*G['HO']); DY = G['HO'][1] - FORMS[FORM]['HO'][1]   # Vulnix v2: how far 'tall' lifted her
 S.EAR_A, S.EAR_T = V3(*G['ear'][0]), V3(*G['ear'][1])
 L = dict(head=tuple(V3(0, .565, .255) + HO), chest=G['chest'], pelvis=G['pelvis'], f=G['f'], h=G['h'], tail=G['tail'], tailr=G['tailr'], HO=G['HO'])
 TC = S.catmull([(*a, r) for a, r in zip(L['tail'], L['tailr'])], 5); S.TC = TC
@@ -396,16 +411,26 @@ def body(P):
     if FORM == 'myr':   # a ruff of pale fur over the chest, above the gem
         for x, y, z, tx, ty, tz, r in ((0, .52, .23, 0, .44, .30, .055), (.06, .53, .21, .085, .44, .27, .05), (.10, .52, .17, .135, .43, .22, .045)):
             bd = su(bd, cone(M, (x, y, z), (tx, ty, tz), r, .004), .03)
-    if FORM == 'marelle':  # sheet 4: the jester ears widen into long hanging lobes below the jaw (the art's long swinging ears)
+    if FORM == 'nitar':    # Vulnix v2: the muscular dire-wolf: heavy shoulders over the forelegs, big haunches (the deep chest is PROP chest; her lie rests on it, lifted 37 mm by rig_q)
+        mq, f0, h0 = PQ('muscle'), G['f'][0], G['h'][0]
+        bd = su(bd, ell(M, (f0[0] + .015, f0[1] + .01, f0[2] - .01), V3(.085, .105, .110) * mq), .05)
+        bd = su(bd, ell(M, (h0[0] + .01, h0[1] - .02, h0[2] - .02), V3(.090, .125, .125) * mq), .05)
+    if FORM == 'marelle':  # sheet 4 (v2: real volume): each jester ear a long hanging lock, thick at the root, swelling into a lobe, tapering to a soft point
         for sx in (1, -1):
-            A_, T_ = fwd(V3(sx * .150, .665, .205) + HO), fwd(V3(sx * .310, .235, .190) + HO)
-            bd = su(bd, ell(P, A_ + (T_ - A_) * .66, (.030 * HK, .125 * HK, .075 * HK)), .03)
-    if FORM == 'nixeth':   # sheet 4: water pouring off her: short drips under the belly + down the backs of the legs
-        for x, y, z, ln in ((.05, .37, .08, .07), (-.04, .37, -.02, .08), (.03, .37, -.10, .06), (.11, .23, .14, .05), (.11, .20, -.21, .05), (.10, .30, -.04, .05)):
-            bd = su(bd, cone(P, (x, y, z), (x, y - ln, z - .004), .014, .003), .015)
+            A_, T_ = fwd(S.EAR_A * V3(sx, 1, 1) + HO), fwd(S.EAR_T * V3(sx, 1, 1) + HO); ab = T_ - A_; sl = np.linalg.norm(ab) / 9
+            for t in np.linspace(.18, .98, 9):
+                w = (.032 + .036 * np.sin(np.pi * min(t / .78, 1) * .5) * (1 - max(0, t - .78) / .22 * .8)) * HK; th = (.050 - .020 * t) * HK * (1 - max(0, t - .78) / .22 * .6)
+                bd = su(bd, ell(P, A_ + ab * t + V3(sx * .010 * np.sin(np.pi * t), 0, 0), (th, sl * 1.05, w)), .025)
+    if FORM == 'nixeth':   # sheet 4 (v2: water POURING off her): streams under the chin, ruff, belly + down the legs, each ending in a drop
+        dq = MQ('drip')
+        for x, y, z, ln in ((0, .44, .26, .06), (.06, .41, .24, .05), (.05, .37, .08, .07), (-.04, .37, -.02, .08), (.03, .37, -.10, .06), (-.06, .36, .14, .05),
+                            (.11, .23, .14, .05), (.11, .20, -.21, .05), (.10, .30, -.04, .05), (-.10, .28, -.15, .045)):
+            y = y + DY * (1 if y > .3 else .55); ln = min(ln * dq, y - .05); top, bot = V3(x, y, z), V3(x, y - ln, z - .004)
+            bd = su(bd, cone(P, top, bot, .020 * dq ** .5, .009 * dq ** .5), .018); bd = su(bd, ell(P, bot + V3(0, -.006, 0), V3(.013, .018, .013) * dq ** .5), .01)
     if FORM in ('ceth', 'nixeth'):  # a full pale ruff of fur points over her chest
+        dy_ = DY if FORM == 'nixeth' else 0.
         for x, y, z, tx, ty, tz, r in ((0, .53, .23, 0, .40, .31, .06), (.06, .54, .21, .10, .41, .28, .055), (.11, .53, .17, .16, .41, .22, .05), (.13, .56, .12, .20, .47, .12, .045)):
-            bd = su(bd, cone(M, (x, y, z), (tx, ty, tz), r, .004), .03)
+            bd = su(bd, cone(M, (x, y + dy_, z), (tx, ty + dy_, tz), r, .004), .03)
     f, h = legs(P); bd = su(bd, f, .02 if G.get('biped') else .045); bd = su(bd, h, .05)
     if FORM != 'myr': bd = su(bd, tail(P), .035)    # Vulnamyr's tails are their own pieces (TAILS), joined after meshing
     return su(su(su(bd, head(P), .03), ruff(P), .02), storm(P) if STORM_ON[0] else np.full(P.shape[:-1], 9.), .012)
@@ -618,26 +643,41 @@ def aura(Vb, Fb):
         for d, r in ((V3(0, .10, 0), .15), (V3(.15, .10, .02), .11), (V3(-.14, .12, -.03), .11), (V3(.02, .13, -.13), .10), (V3(.06, .19, .06), .10), (V3(-.05, .21, -.02), .09)):
             d, r = d * MQ('tree') ** .8, r * MQ('tree') ** .8; s_ = trimesh.creation.icosphere(1, r); q = np.asarray(s_.vertices) * V3(1, .72, 1) + top + d; parts.append((q, np.asarray(s_.faces)))
         col = '#7fcf5a'
-    elif FORM == 'nitar':          # sheet 4: the SPLASH RING: a wave ring round her feet + splash plumes curling up and out of it
-        th = np.linspace(0, 2 * np.pi, 73); R0 = .50
-        parts.append(tube(np.c_[R0 * np.sin(th), .035 + .015 * np.sin(5 * th), R0 * .82 * np.cos(th) - .02], .028))
-        parts.append(tube(np.c_[(R0 + .07) * np.sin(th), .02 + .01 * np.cos(7 * th), (R0 + .07) * .82 * np.cos(th) - .02], .016))
-        for k, a in enumerate(np.linspace(0, 2 * np.pi, 9)[:-1] + .2):   # each plume rises and curls OVER outward, like a breaking wave
-            h = .22 + .10 * np.sin(3 * a + 1); o = V3(np.sin(a) * R0, .03, np.cos(a) * R0 * .82 - .02); out_ = V3(np.sin(a), 0, np.cos(a) * .82)
-            pts = np.array([o + out_ * (.16 * u ** 2.2) + V3(0, h * np.sin(u * np.pi * .75) / np.sin(np.pi * .75) * (1 if u < .75 else 1), 0) for u in np.linspace(0, 1, 9)])
-            parts.append(tube(pts, lambda u: .046 * (1 - u) ** .8 + .005))
+    elif FORM == 'nitar':          # sheet 4 (v2, hub: 'a crown of splash, not reeds'): a SPLASH CROWN round her feet: one thin flaring wall of
+        import trimesh                 # water whose rim breaks into points, a drop thrown off each point, a low wave ring at its foot
+        sq = MQ('splash'); R0, NT, NV, wt = .50, 120, 9, .012; KP = 11
+        th = np.linspace(0, 2 * np.pi, NT, endpoint=False); spike = np.maximum(0, np.cos(KP * th + .4)) ** 2.5
+        Hc = (.11 + .16 * spike + .03 * np.sin(3 * th + 1)) * sq             # wall height round the ring: low between the points, tall at them
+        def ring(v, off):   # one row of the wall at height fraction v (off = inner shell inset)
+            r = R0 + (.10 * sq) * v ** 1.7 - off; return np.c_[r * np.sin(th), .012 + Hc * v, r * .82 * np.cos(th) - .02]
+        rows = [ring(v, 0) for v in np.linspace(0, 1, NV)] + [ring(v, wt * (1 - .6 * v)) for v in np.linspace(1, 0, NV)]
+        Vw = np.vstack(rows); Fw = []; R = len(rows)
+        for i in range(R):   # rows run outer bottom -> outer top -> inner top -> inner bottom, then back to the start: a closed band
+            j = (i + 1) % R
+            for k in range(NT):
+                a, b, c, d = i * NT + k, i * NT + (k + 1) % NT, j * NT + (k + 1) % NT, j * NT + k; Fw += [(a, b, c), (a, c, d)]
+        parts.append((Vw, np.array(Fw)))
+        parts.append(tube(np.c_[(R0 + .05) * np.sin(th), .022 + .010 * np.sin(5 * th), (R0 + .05) * .82 * np.cos(th) - .02], .020))
+        for k in range(KP):   # the drop each point throws up + out
+            a = (2 * np.pi * k - .4) / KP; tip = V3((R0 + .10 * sq) * np.sin(a), .012 + (.30 + .03 * np.sin(3 * a + 1)) * sq, (R0 + .10 * sq) * .82 * np.cos(a) - .02)
+            out_ = V3(np.sin(a), 0, np.cos(a) * .82); out_ /= np.linalg.norm(out_)
+            for u, r in ((.07, .026), (.15, .016)):
+                s_ = trimesh.creation.icosphere(1, r * sq ** .5); q = np.asarray(s_.vertices) * V3(1, 1.3, 1) + tip + out_ * u * .5 + V3(0, u * sq, 0); parts.append((q, np.asarray(s_.faces)))
         col = '#9fe8ec'
     elif FORM == 'marelle':        # sheet 4: her tail trailing into MIST: soft puffs over + past the brush's tip
         import trimesh
         tip = TC[-1, :3]; d = TC[-1, :3] - TC[-6, :3]; d /= np.linalg.norm(d)
-        for k, (u, ox, oy, r) in enumerate(((0, 0, .02, .085), (.10, .05, .06, .07), (.18, -.05, .09, .065), (.26, .02, .14, .055), (.34, -.03, .19, .045), (.06, -.06, -.02, .06))):
-            s_ = trimesh.creation.icosphere(1, r); q = np.asarray(s_.vertices) * V3(1, .8, 1.15) + tip + d * u + V3(ox, oy, 0); parts.append((q, np.asarray(s_.faces)))
+        mq = MQ('mist'); rng = np.random.default_rng(64)   # v2: a longer trail of mist, puffs thinning as they drift up + back off the tip
+        for k in range(int(6 * mq)):
+            u = k / (6 * mq - 1); r = (.085 - .055 * u) * (.9 + .2 * rng.random()); o = d * (.10 * u) + V3(.06 * np.sin(k * 2.1), .04 + .08 * mq * u, -.30 * mq * u ** .9)   # trails BACK off the tip (a straight-up stack read as bubbles)
+            s_ = trimesh.creation.icosphere(1, r); q = np.asarray(s_.vertices) * V3(1.1, .75, 1.2) + tip + o; parts.append((q, np.asarray(s_.faces)))
         col = '#c8f2f2'
     elif FORM == 'nixeth':         # sheet 4: the STILL POOL she stands in (a flat disc + two ripple rings), on the ground
         th = np.linspace(0, 2 * np.pi, 49); n = len(th) - 1; c = V3(0, .006, -.02)
-        rim = np.c_[.52 * np.sin(th[:-1]), np.full(n, .006), .66 * np.cos(th[:-1]) - .02]; V = np.vstack([rim, c[None], c[None] - V3(0, .004, 0)])
+        pq = MQ('pool')   # v2: the pool wider round her (and a third ripple)
+        rim = np.c_[.52 * pq * np.sin(th[:-1]), np.full(n, .006), .66 * pq * np.cos(th[:-1]) - .02]; V = np.vstack([rim, c[None], c[None] - V3(0, .004, 0)])
         parts.append((V, np.array([(j, (j + 1) % n, n) for j in range(n)] + [((j + 1) % n, j, n + 1) for j in range(n)])))
-        for R1 in (.36, .58): parts.append(tube(np.c_[R1 * np.sin(th), np.full(len(th), .010), R1 * 1.25 * np.cos(th) - .02], .006))
+        for R1 in [.52 * pq * f_ for f_ in ((.62, .88, 1.12) if pq > 1 else (.69, 1.115))]: parts.append(tube(np.c_[R1 * np.sin(th), np.full(len(th), .010), R1 * 1.25 * np.cos(th) - .02], .006))
         col = '#bff0f4'
     elif FORM in ('rok', 'vex', 'arcvex', 'noris', 'nisk'):
         import fast_simplification as fs
@@ -726,7 +766,7 @@ if __name__ == '__main__':
     S.field = lambda P: field(fwd(P + HO)) / HK         # SF.eyes lays the eyes on the face at Vulnara's place: shifted back by HO (+ the head's growth)
     SF.F = dict(SF.FORMS['earth'], form='earth', lo=PAL[0], hi=PAL[1]) if EARTH else dict(SF.FORMS['water'], form='water', lo=PAL[0], hi=PAL[1]) if WATER else dict(SF.FORMS['mana'], form='mana', lo=PAL[0], hi=PAL[1])   # sheet 3: amber eyes + the gold brow gem
     xr = .52 if FORM != 'oreth' else .66   # v2: Orethar's span + gauntlets reach past .52
-    lo = V3(-xr, -.033, min(-1.36, TC[:, 2].min() - .25)); hi = V3(xr, 1.80 if FORM in ('rok', 'kor', 'oreth') else 1.48 if FORM in ('celle', 'ceth', 'nitar', 'marelle', 'nixeth') else 1.30 if FORM in ('lys', 'myr') else 1.20, .80 if FORM in ('lys', 'celle', 'nitar', 'marelle') else .66)
+    lo = V3(-xr, -.033, min(-1.36, TC[:, 2].min() - .25)); hi = V3(xr, 1.80 if FORM in ('rok', 'kor', 'oreth') else 1.48 + DY if FORM in ('celle', 'ceth', 'nitar', 'marelle', 'nixeth') else 1.30 if FORM in ('lys', 'myr') else 1.20, .80 if FORM in ('lys', 'celle', 'nitar', 'marelle') else .66)
     def piece(fld, lo, hi, h, n):
         Vr, Fr = surface(fld, lo, hi, h); m = trimesh.Trimesh(Vr, Fr, process=False); print('raw', len(Fr), 'closed', m.is_watertight, 'parts', m.body_count)
         k = max(m.split(only_watertight=False), key=lambda c: len(c.faces)); t = decimate(k.vertices, k.faces, n)
