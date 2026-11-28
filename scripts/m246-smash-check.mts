@@ -189,7 +189,7 @@ try {
     const endA = view ? await playOut(pa, SHOTS ? `world-${tag}` : null, 240000) : false
     const ra = await rec(pa), ba = beatsIn(ra?.log ?? '', 0)
     ok(!!view && endA && ba.join() === 'intro,walk,strike,gauge,score', `2b. Enter -> the bell show in the ring: ${ba.join(' > ')}`)
-    ok(/keeper/i.test(ra?.shout ?? '') && ra?.backStrike.length > 0 && ra.backStrike.every((x: string) => x === '1'), `2c. the shout-out to her keeper ("${ra?.shout}"); she strikes with her back to the camera`)
+    ok(/keeper/i.test(ra?.shout ?? '') && ra?.backStrike.length > 0 && ra.backStrike.every((x: string) => x === '1'), `2c. the shout-out to her keeper ("${ra?.shout}"); she strikes with her back to the camera (walk ${ra?.backWalk.slice(-3).join("")}, strike ${[...new Set(ra?.backStrike)].join("")})`)
     ok(Number(ra?.score) >= 100 && Number(ra?.score) < 2000 && !ra?.cracked, `2d. her score: ${ra?.score}`)
     await pa.screenshot({ path: `${out}/world-${tag}-end.png` })
     await clickIn(pa, '[data-smash-exit]'); await sleep(1500)

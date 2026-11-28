@@ -46,7 +46,10 @@ export function SmashBellView({ contestants, over = true, speed, title, onExit, 
   useEffect(() => { if (active) { setReady(false); return }; const t = setTimeout(() => setReady(true), 500); return () => clearTimeout(t) }, [active])
   useEffect(() => { const t = setTimeout(() => setCapped(true), 25000); return () => clearTimeout(t) }, [])
   const loaded = ready || capped
-  if (startAt.current === null || !loaded) startAt.current = performance.now()   // her show starts at the first render (never 0: a 0 start reads as long over)
+  const lastNow = useRef(0)
+  if (startAt.current === null || !loaded) startAt.current = performance.now()
+  // a stalled main thread (a model parsing, a shader compiling: seconds on a heavy page) must not skip her beats: the show's clock never runs more than 150 ms per render
+  { const now = performance.now(); if (lastNow.current && now - lastNow.current > 150 && startAt.current !== null) startAt.current += now - lastNow.current - 150; lastNow.current = now }   // her show starts at the first render (never 0: a 0 start reads as long over)
   const log = useRef<string[]>([]), lastBeat = useRef('')
   const noSwing = useRef<Set<number>>(new Set())
   useEffect(() => { const t = setInterval(() => setTick(n => n + 1), 50); return () => clearInterval(t) }, [])
