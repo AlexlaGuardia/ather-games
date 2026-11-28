@@ -19,7 +19,7 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms)); let fails = 0
 const ok = (c: boolean, m: string) => { console.log(`${c ? 'PASS' : 'FAIL'} ${m}`); if (!c) fails++ }
 const ONLY = flag('--only', '').split(',').filter(Boolean).map(Number)
 const AW = GALLERY.filter(r => r.aw && (!ONLY.length || ONLY.includes(r.num)))
-ok(GALLERY.filter(r => r.aw).length === 68, `68 awakened rows in the roster (${GALLERY.filter(r => r.aw).map(r => `#${r.num} ${r.name}`).join(', ')})`)
+ok(GALLERY.filter(r => r.aw).length === 72, `72 awakened rows in the roster (${GALLERY.filter(r => r.aw).map(r => `#${r.num} ${r.name}`).join(', ')})`)
 const br = await puppeteer.launch({ protocolTimeout: 900000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--mute-audio', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] })
 try {
   const errs: string[] = []
@@ -171,7 +171,7 @@ try {
         ok(lo >= -0.003 && (['walk', 'run'].includes(c) || bhi < 0.04), `#${row.num} ${c}: nothing under the ground (lowest body / aura ${(lo * 1000).toFixed(1)} mm glb)${['walk', 'run'].includes(c) ? '' : ` and her body on it (${(bhi * 1000).toFixed(1)} mm)`}`)
       }
     }
-    if (['croakarkor', 'croakarielle', 'arcvik', 'croakarcun', 'croakalys', 'rillesse', 'arclotar', 'arclelle', 'arcis'].includes(look)) {   // + sheet 15: Arclotar / Arclelle / Arcis stand up on the same biped   // + sheet 11: Croakalys stands up on the same biped   // sheet 9b: Croakarc's four: three stand UP on the ground biped (legs + arms + a tail), Arcvik stays the skink; all on the ground, her motif drawn
+    if (['croakarkor', 'croakarielle', 'arcvik', 'croakarcun', 'croakalys', 'rillesse', 'arclotar', 'arclelle', 'arcis', 'cragkor'].includes(look)) {   // + sheet 16: Cragkor stands up on the same biped   // + sheet 15: Arclotar / Arclelle / Arcis stand up on the same biped   // + sheet 11: Croakalys stands up on the same biped   // sheet 9b: Croakarc's four: three stand UP on the ground biped (legs + arms + a tail), Arcvik stays the skink; all on the ground, her motif drawn
       const s1 = await sample('walk', 14, 70), names = s1?.names ?? [], up = look !== 'arcvik'
       const limbs = (up ? ['b_leg_l', 'b_shin_l', 'b_leg_r', 'b_shin_r', 'b_arm_l', 'b_farm_l', 'b_arm_r', 'b_farm_r'] : ['b_fl_up', 'b_fr_up', 'b_hl_up', 'b_hr_up']).filter(x => names.includes(x))
       ok(limbs.length === (up ? 8 : 4) && names.includes('b_tail4') && !names.includes('b_hover'), `#${row.num} ${up ? 'the upright biped: legs + arms' : 'the skink: four legs'} + a tail, no hover (${names.length} bones)`)
@@ -180,7 +180,7 @@ try {
         ok(lo >= -0.003 && bhi < (c === 'lie' ? 0.10 : 0.04), `#${row.num} ${c}: nothing under the ground (lowest body / aura ${(lo * 1000).toFixed(1)} mm glb) and her body on it (body lowest at most ${(bhi * 1000).toFixed(1)} mm)`)
       }
     }
-    if (look === 'arclun') {   // sheet 15: Arclun stays on four legs (the live Arclotl's rig_lotl skeleton) + a halo bone for her sound rings: on the ground in every clip
+    if (['arclun', 'craglaya', 'craglix', 'craglomyr'].includes(look)) {   // + sheet 16: Craglotl's three on four legs (her rig_lotl skeleton + the halo bone; Craglomyr's crystals ride her head)   // sheet 15: Arclun stays on four legs (the live Arclotl's rig_lotl skeleton) + a halo bone for her sound rings: on the ground in every clip
       const s1 = await sample('idle', 2, 100), names = s1?.names ?? []
       ok(['b_fl_up', 'b_hr_paw', 'b_ear_l', 'b_tail4', 'b_halo'].every(x => names.includes(x)) && !names.includes('b_hover') && !names.includes('b_arm_l'), `#${row.num} on the lotl quadruped rig + halo (${names.length} bones)`)
       for (const c of ['idle', 'walk', 'run', 'sit', 'lie']) {

@@ -541,6 +541,22 @@ export const AURMERE_AWAKENED: Readonly<Record<string, SpiritLook>> = {
   aurmevex: aurAw('aurmevex', '#ffc848', 1.595),
   aurhael: aurAw('aurhael', '#ffd060', 1.522),
 }
+// M244 sheet 16 (world, 11-28): CRAGLOTL's four AWAKENED forms (Earth), OWNER PREVIEW (docs/looks/m244-craglotl-2026-11-28): the live
+// Craglotl's sculpt re-shaped by name (sculpt_cragaw.py), in the lotl number space (as Arclotl's). Cragkor STANDS UP on sheet 9's ground
+// biped (rig_cragaw.py = rig_arcaw.py); Craglaya, Craglix and Craglomyr stay on four legs (rig_cragq.py = rig_arclun.py: the live rig_lotl.py
+// + a 'halo' bone). 'aura' = her motif: Cragkor's crystal spires (root), Craglaya's pebble ring + Craglix's ripple rings (halo), Craglomyr's
+// brow crystals (head). glbLen = her rest nose-to-tail, glb units.
+export const CRAGLOTL_AW_DIAL: Readonly<Record<string, number>> = { cragkor: 1.85, craglaya: 1.8, craglix: 1.75, craglomyr: 1.85 }
+const cragAw = (name: string, aura: string, rig: RigLook): SpiritLook => {
+  const b = lotlForm('earth', 'craglotl', '#ffae4a', '#ffe2b4', CRAGLOTL_RIG), h = LOTL_UNIT * CRAGLOTL_AW_DIAL[name] / formGrow('marlotl')
+  return { ...b, name, url: `/open/spirits/${name}-rigged.glb`, h, trot: grownTrot(b.trot, b.h, h), rig, glow: { part: 'aura', emissive: aura, lo: 0.35, hi: 0.7, hz: 0.35 } }
+}
+export const CRAGLOTL_AWAKENED: Readonly<Record<string, SpiritLook>> = {
+  cragkor: cragAw('cragkor', '#ffe8c4', croakUpRig(1.083, 0.5488, 1.2465)),
+  craglaya: cragAw('craglaya', '#ffc46e', lotlRig(1.5064, -0.2)),
+  craglix: cragAw('craglix', '#ffe2aa', lotlRig(1.8815, -0.2)),
+  craglomyr: cragAw('craglomyr', '#96f0dc', lotlRig(1.4846, -0.2)),
+}
 // M202 the Lepara line (docs/looks/m202-lepara-line-2026-11-27): Lepaura (Mana, the ledger's MOON-HARE: taller, a plume tail, a gold
 // crescent on her brow, a gold necklace + diamond, gold infusion ribbons = pattern only), Leparc (Storm: silver-blue, cheek + ear-tip tufts,
 // a violet brow crystal, pale lightning veins, a puff tail), Lepore (Earth, her natural form, the heaviest: barrel belly, leaf-stone
@@ -730,6 +746,7 @@ export const AWAKENED_FORMS: Readonly<Record<string, SpiritLook>> = {
   ...MESAMERE_AWAKENED,   // M244 sheet 14: Mesamere's four (above)
   ...ARCLOTL_AWAKENED,   // M244 sheet 15: Arclotl's four (above)
   ...AURMERE_AWAKENED,   // M244 sheet 15b: Aurmere's four (above)
+  ...CRAGLOTL_AWAKENED,   // M244 sheet 16: Craglotl's four (above)
   vulnarok: awakened('vulnarok', AWAKEN_LEN.vulnarok, '#ffcf5a', 2.4),
   vulnalys: awakened('vulnalys', AWAKEN_LEN.vulnalys, '#b48cff', 1.7),
   vulnavex: awakened('vulnavex', AWAKEN_LEN.vulnavex, '#ffcf5a', 2.6),
