@@ -37,7 +37,7 @@ ok(!keyMet(pot(fox, 'mana', steep({ mana: 3, earth: 4 })), 'fox', 'champion', 's
 ok(!keyMet(pot(fox, 'mana', steep({ mana: 4, earth: 2, storm: 4 })), 'fox', 'champion', 'steep'), 'Vulnara 4 Mana + 2 Earth -> Champion NOT open')
 ok(!keyMet(pot(fox, 'mana', steep({ mana: 4, earth: 3 })), 'fox', 'ace', 'steep'), '4 Mana + 3 Earth does not open Ace')
 // Cragowl (owl, Earth): pure Champion asks the full 10; 9 is not enough. A mixed branch keeps the 4+3.
-ok(!keyMet(pot('mana_seed_owl', 'earth', steep({ earth: 9, mana: 1 })), 'owl', 'champion', 'steep') && keyMet(pot('mana_seed_owl', 'earth', steep({ earth: 10 })), 'owl', 'champion', 'steep'), 'Cragowl pure Champion: 9 no, 10 yes')
+ok(!!keyMet(pot('mana_seed_owl', 'earth', steep({ earth: 10 })), 'owl', 'champion', 'steep') && !keyMet(pot('mana_seed_owl', 'earth', steep({ earth: 9, mana: 1 })), 'owl', 'champion', 'steep'), 'Cragowl pure Champion: 9 no, 10 yes')
 ok(!!keyMet(pot('mana_seed_owl', 'earth', steep({ earth: 4, water: 3 })), 'owl', 'virtuoso', 'steep'), 'Cragowl Virtuoso = 4 Earth + 3 Water')
 
 // ── (2) the SAME stat gate as her first evolution: formBar on her own element (Vulnara: Mana -> VIG, SECOND_FORM_BAR)

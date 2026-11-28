@@ -118,4 +118,5 @@ export const AWAKEN_DEV_UI = {
   force: (name: string) => `Force: ${name}`,
   unnamed: 'not named yet',
   done: (name: string) => `Awakened: ${name}`,
+  reset: 'Undo awakening',
 }

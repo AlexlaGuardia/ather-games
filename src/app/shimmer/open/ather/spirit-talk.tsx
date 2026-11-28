@@ -40,6 +40,7 @@ import { canAsk, knownList, pickFavourite, BOND_MOVE_UI } from './spirit-bond-mo
 import { LESSON_UI } from './clash-lessons'   // M233 v2c: her Clash lessons
 import { followRefuseLine, talkLine } from './party-spirit-lines'   // M109: the SIGNED lines (canon script, word for word)
 import { PARTY_FULL_LINE } from './spirit-roster'
+import { AwakenDev } from './spirit-awaken-dev'   // M244 RULE s1: the owner's awakening readout + force
 
 
 export type SpiritTalkState = { id: string; screen: 'talk' | 'panel' | 'bond' }
@@ -234,6 +235,7 @@ export function SpiritPanel({ sp, id, phone, onClose }: { sp: Parameters<typeof 
             </div>
           )}
         </div>
+        {id && <AwakenDev sp={sp} id={id} statsV={statsV} />}
         <div className="mt-3 mb-1.5 text-[13px] font-bold" style={{ color: H.inkSoft }}>Moves</div>
         {sheet.moves.length ? (
           <div data-spirit-moves style={{ display: 'grid', gap: 4 }}>
