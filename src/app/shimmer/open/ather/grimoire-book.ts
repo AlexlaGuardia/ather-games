@@ -82,7 +82,11 @@ export function parseBook(v: unknown): Book {
     // M233 v2c: her Clash lessons (clash-lessons.ts); unknown / repeated ids drop
     const ls = p.bloomed ? parseLessons(p.lessons) : undefined
     const bm = { ...(mv ? { moves: mv } : {}), ...(fv ? { fav: fv } : {}), ...(ls ? { lessons: ls } : {}) }
-    pots[id] = p.bloomed ? { seed: p.seed, at: p.at, ...day, bloomed: true, ...el, ...meals, ...bd, ...bm } : { seed: p.seed, at: p.at, ...day }
+    // M244 RULE s1: her lifetime meals eaten (the 99-meals feat; it was dropped here on every load) + her awakened branch
+    // (only on a second form: no element = no awakening)
+    const me = p.bloomed && int(p.mealsEaten) ? { mealsEaten: int(p.mealsEaten) } : {}
+    const aw = p.bloomed && el.element && ['champion', 'virtuoso', 'ace', 'enigma'].includes(p.awakened as string) ? { awakened: p.awakened } : {}
+    pots[id] = p.bloomed ? { seed: p.seed, at: p.at, ...day, bloomed: true, ...el, ...meals, ...bd, ...bm, ...me, ...aw } : { seed: p.seed, at: p.at, ...day }
   }
   const met = Array.isArray(o.met) ? o.met.filter((k): k is number => Number.isInteger(k)) : []
   const since = Number.isInteger(o.since) ? o.since : undefined
