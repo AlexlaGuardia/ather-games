@@ -374,8 +374,11 @@ export function SpiritAvatar({ sp, look, size, meals }: { sp: Species; look: Spi
  *  M213 fix: ONE canvas (one WebGL context) for the whole gallery: a new spirit swaps the model inside it and re-frames the camera.
  *  A canvas per spirit lost each old context only 500 ms after unmount, so quick switches stacked contexts up (Alex's tab died).
  *  `look` null = an unbuilt form: the canvas stays, empty, under the gallery's locked art. */
-export function SpiritStage({ sp, look, clip, meals }: { sp: Species; look: SpiritLook | null; clip: RigClip; meals?: readonly unknown[] }) {
-  const on = useSpiritRig(), L = look ? rigLook(sp, look, on) : null, h = L?.h ?? 0.5, far = L?.rig?.avatar.far ?? 1
+/** M249: `scale` sizes her about her feet (the gallery's size slider), `frame` = the height the camera frames (else her own), and
+ *  `children` stand on the same stage (the gallery's keeper + ruler). */
+export function SpiritStage({ sp, look, clip, meals, scale = 1, frame, children }: { sp: Species; look: SpiritLook | null; clip: RigClip; meals?: readonly unknown[]
+  scale?: number; frame?: number; children?: ReactNode }) {
+  const on = useSpiritRig(), L = look ? rigLook(sp, look, on) : null, h = frame ?? (L?.h ?? 0.5) * scale, far = L?.rig?.avatar.far ?? 1
   return (
     <Canvas data-spirit-stage={L?.name ?? ''} dpr={[1, 2]} frameloop="always" gl={{ antialias: true, alpha: true }}
       camera={{ position: [h * 1.3 * far, h * 0.9 * far, h * 2.4 * far], fov: 32, near: 0.01, far: 100 }}>
@@ -383,7 +386,8 @@ export function SpiritStage({ sp, look, clip, meals }: { sp: Species; look: Spir
       <ambientLight intensity={0.9} />
       <directionalLight position={[1.5, 3, 2.5]} intensity={1.3} />
       {L && <mesh rotation-x={-Math.PI / 2} position-y={-0.002}><circleGeometry args={[h * 1.6 * far, 48]} /><meshBasicMaterial color="#3a2a1c" transparent opacity={0.55} /></mesh>}
-      {L && <Suspense fallback={null}><SpiritModel key={L.url} sp={sp} look={L} gallery clip={clip} id="gallery" meals={meals} /></Suspense>}
+      {L && <group scale={scale} name="gallery-spirit"><Suspense fallback={null}><SpiritModel key={L.url} sp={sp} look={L} gallery clip={clip} id="gallery" meals={meals} /></Suspense></group>}
+      {children}
       <OrbitControls makeDefault target={[0, h * 0.45, 0]} enablePan={false} minDistance={h * 0.6} maxDistance={h * 10 * far} />
     </Canvas>
   )

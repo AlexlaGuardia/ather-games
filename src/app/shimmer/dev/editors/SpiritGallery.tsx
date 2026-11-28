@@ -14,12 +14,19 @@ import { AWAKENED_FORMS, formLook, spiritModelFor, type SpiritLook } from '../..
 import { basePreviewFor } from '../../open/ather/spirit-base-preview'
 import { RIG_CLIPS, type RigClip } from '../../open/ather/spirit-rig'
 import { ELEMENT_COLORS } from '../../spirits/spirit'
+import { loadSizes, saveSize, sizeLines, sizeSlot, SIZE_MAX, SIZE_MIN, SIZE_STEP, type SizeForm } from './gallery-size'
+import { StageKeeper } from './gallery-size-view'
 
 const ROW = 52, SHOWN = 11, half = Math.floor(SHOWN / 2)
 const GAME = 'var(--font-game), system-ui, sans-serif'
 
 // M174: a base form built but not yet OK'd by Alex shows here (this page is owner-only) via basePreviewFor
 const lookOf = (r: GalleryRow): SpiritLook | null => (r.aw ? AWAKENED_FORMS[r.aw.look] ?? null : r.el ? formLook(r.sp, r.el) : spiritModelFor(r.sp) ?? basePreviewFor(r.sp))
+
+// M249: what the size slider sizes (one slot per form: base by species, a form by its look name)
+const sizeFormOf = (r: GalleryRow, look: SpiritLook | null): SizeForm | null =>
+  !look ? null : r.aw ? { kind: 'awakened', name: r.aw.look } : r.el ? { kind: 'form', name: look.name } : { kind: 'base', sp: r.sp }
+const KEEPER_FRAME = 1.8   // the stage frames at least a keeper's height (he stands beside her)
 
 const initialIndex = () => {
   if (typeof window === 'undefined') return 0
@@ -34,6 +41,16 @@ export default function SpiritGallery() {
   // M213 s2: the glow is a STEEP MIX preview (her 10-slot bar, set by element), default none; it stays as you turn the dial
   const [mix, setMix] = useState<SteepMix>(STEEP_NONE)
   const go = useCallback((by: number) => setI(v => dialStep(v, by)), [])
+  // M249: the size slider, per form, this browser's (loaded after mount: no localStorage on the server)
+  const [sizes, setSizes] = useState<Record<string, number>>({})
+  const [copied, setCopied] = useState('')
+  useEffect(() => { setSizes(loadSizes()) }, [])
+  const sf = sizeFormOf(row, look), slot = sf ? sizeSlot(sf) : '', scale = (slot && sizes[slot]) || 1
+  const lines = sf ? sizeLines(sf, scale) : []
+  const sizeEl = useRef<HTMLDivElement>(null)
+  const setScale = (v: number | null) => { if (slot) setSizes(saveSize(slot, v)) }
+  const copy = () => { const txt = lines.join('\n'); setCopied(txt); navigator.clipboard?.writeText(txt).catch(() => {}) }
+  useEffect(() => { setCopied('') }, [slot])
 
   // the clip goes back to idle on a new spirit
   useEffect(() => { setClip('idle')
@@ -114,7 +131,9 @@ export default function SpiritGallery() {
         </div>
         <div data-gallery-state={look ? 'model' : 'art'} style={{ position: 'relative', height: 520, borderRadius: 12, overflow: 'hidden',
           background: 'radial-gradient(circle at 50% 40%, rgba(255,236,190,.30), rgba(36,24,14,.92) 75%)', border: '1px solid rgba(245,197,66,.18)' }}>
-          <SpiritStage sp={row.sp} look={look} clip={clip} meals={meals} />
+          <SpiritStage sp={row.sp} look={look} clip={clip} meals={meals} scale={scale} frame={look ? Math.max(look.h * scale, KEEPER_FRAME) : undefined}>
+            {look && <StageKeeper out={sizeEl} ruler={Math.max(2, Math.ceil(look.h * scale * 1.1))} />}
+          </SpiritStage>
           {!look && (
             <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14 }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -123,6 +142,16 @@ export default function SpiritGallery() {
             </div>
           )}
         </div>
+        {look && sf && <div ref={sizeEl} data-gallery-size={slot} data-gallery-scale={scale.toFixed(2)} data-gallery-design-h={(look.h * scale).toFixed(3)}
+          style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+          <span style={{ fontFamily: GAME, fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', opacity: 0.5, width: 44 }}>Size</span>
+          <input type="range" data-gallery-size-slider min={SIZE_MIN} max={SIZE_MAX} step={SIZE_STEP} value={scale} aria-label="Size"
+            onChange={e => setScale(Number(e.target.value))} style={{ width: 220, accentColor: '#f5c542' }} />
+          <span data-gallery-size-n style={{ fontFamily: GAME, fontSize: 11, fontVariantNumeric: 'tabular-nums', minWidth: 230 }}>x{scale.toFixed(2)} · <span data-gallery-size-h /></span>
+          <Btn on={false} attr={{ 'data-gallery-size-copy': '' }} onClick={copy}>Copy values</Btn>
+          <Btn on={false} attr={{ 'data-gallery-size-reset': '' }} onClick={() => setScale(null)}>Reset</Btn>
+          {copied && <pre data-gallery-size-line style={{ flexBasis: '100%', margin: 0, fontSize: 11, padding: '6px 8px', borderRadius: 6, background: 'rgba(0,0,0,.4)', whiteSpace: 'pre-wrap' }}>{copied}</pre>}
+        </div>}
         {look && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
           <span style={{ fontFamily: GAME, fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', opacity: 0.5, width: 44 }}>Clip</span>
           {RIG_CLIPS.map(c => <Btn key={c} on={clip === c} attr={{ 'data-gallery-clip': c }} onClick={() => setClip(c)}>{c}</Btn>)}

@@ -137,6 +137,7 @@ const DEVICE_KEYS = [
   'builder.stamps',               // M85 s3: the World Builder's saved stamps (owner tool, owner-gated page, this device), beside the hotbar.
                                   // A builder's tool layout, owner-gated dev page, one author per
                                   // box — a device convenience, not progress anyone earned.
+  'open:gallery-size.v1',         // M249 dev/editors/gallery-size.ts GALLERY_SIZE_KEY: the owner gallery's size slider per form, a dev tool on this machine
   'ather:device',                 // M12.5: this browser's id for the cloud-save write lease (open/cloud-sync.tsx)
   'ather:open:',                  // M12.5: this browser's sync record + its ONE conflict backup (lib/open-cloud-core.ts)
   'open.settings.v1',              // open-world settings: DEVICE
