@@ -19,7 +19,7 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms)); let fails = 0
 const ok = (c: boolean, m: string) => { console.log(`${c ? 'PASS' : 'FAIL'} ${m}`); if (!c) fails++ }
 const ONLY = flag('--only', '').split(',').filter(Boolean).map(Number)
 const AW = GALLERY.filter(r => r.aw && (!ONLY.length || ONLY.includes(r.num)))
-ok(GALLERY.filter(r => r.aw).length === 52, `52 awakened rows in the roster (${GALLERY.filter(r => r.aw).map(r => `#${r.num} ${r.name}`).join(', ')})`)
+ok(GALLERY.filter(r => r.aw).length === 56, `56 awakened rows in the roster (${GALLERY.filter(r => r.aw).map(r => `#${r.num} ${r.name}`).join(', ')})`)
 const br = await puppeteer.launch({ protocolTimeout: 900000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--mute-audio', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] })
 try {
   const errs: string[] = []
@@ -131,7 +131,7 @@ try {
         ok(lo >= -0.0015 && bhi < BODY_UP[c], `#${row.num} ${c}: nothing under the ground (lowest body / aura ${(lo * 1000).toFixed(1)} mm glb) and her body on it (body lowest at most ${(bhi * 1000).toFixed(1)} mm)`)
       }
     }
-    if (['mystowk', 'mystowelle', 'mystowis', 'mysteth'].includes(look)) {   // sheet 8: Mystowl's four are OWLS on the live owl rig: on the ground in idle / walk / sit, the run is flight
+    if (['mystowk', 'mystowelle', 'mystowis', 'mysteth', 'tidowrok', 'tidelle', 'tidowsk', 'tidowmyr'].includes(look)) {   // + sheet 13: Tideowl's four, the same owl rig   // sheet 8: Mystowl's four are OWLS on the live owl rig: on the ground in idle / walk / sit, the run is flight
       const s1 = await sample('idle', 2, 100), names = s1?.names ?? []
       ok(['b_tuft_l', 'b_wing4_r', 'b_foot_l', 'b_tail2', 'b_lids'].every(x => names.includes(x)) && !names.includes('b_hover'), `#${row.num} on the owl rig (${names.length} bones: tufts, four-joint wings, feet, no hover)`)
       for (const c of ['idle', 'walk', 'sit', 'lie']) {   // the walk is a two-footed HOP (up in the air between landings), so only idle / sit / lie must sit ON the ground

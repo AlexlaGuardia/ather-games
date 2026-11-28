@@ -655,12 +655,29 @@ const owlAwakened = (name: string, aura: string): SpiritLook => {
   return { ...b, name, url: `/open/spirits/${name}-rigged.glb`, h, trot: grownTrot(base.trot, base.h, h), rig: { ...b.rig!, glbLen: AWAKEN_LEN[name] },
     glow: { part: 'aura', emissive: aura, lo: 0.35, hi: 0.7, hz: 0.35 } }
 }
+// M244 sheet 13 (world, 11-28): TIDEOWL's four (Water), owl preview, the sheet-8 route off the live Tideowl (docs/looks/m244-tideowl-2026-11-28):
+// her sculpt re-shaped by name (sculpt_tidowaw.py) on the live owl rig (rig_owl.py via rig_tidowaw.py), each keeping her water gem. Her 'aura' =
+// her motif: Tidowrok's breaking waves off her wing tips, Tidelle's pool + wing drips + big crown gem, Tidowsk's spear of water, Tidowmyr's mist veils.
+export const TIDEOWL_AW_DIAL: Readonly<Record<string, number>> = { tidowrok: 1.85, tidelle: 1.75, tidowsk: 1.8, tidowmyr: 1.85 }
+export const TIDEOWL_AW_LEN: Readonly<Record<string, number>> = { tidowrok: 0.9261, tidelle: 0.9193, tidowsk: 0.9487, tidowmyr: 0.9108 }
+const tideowlAwakened = (name: string, aura: string): SpiritLook => {
+  const b = SECOND_FORMS.owl!.water!, base = SPIRIT_RIGS.owl!, h = base.h * TIDEOWL_AW_DIAL[name]
+  return { ...b, name, url: `/open/spirits/${name}-rigged.glb`, h, trot: grownTrot(base.trot, base.h, h), rig: { ...b.rig!, glbLen: TIDEOWL_AW_LEN[name] },
+    glow: { part: 'aura', emissive: aura, lo: 0.35, hi: 0.7, hz: 0.35 } }
+}
+export const TIDEOWL_AWAKENED: Readonly<Record<string, SpiritLook>> = {
+  tidowrok: tideowlAwakened('tidowrok', '#c8f6ff'),
+  tidelle: tideowlAwakened('tidelle', '#a8eef8'),
+  tidowsk: tideowlAwakened('tidowsk', '#bff4ff'),
+  tidowmyr: tideowlAwakened('tidowmyr', '#e6fbff'),
+}
 /** by look name (spirit.ts AWAKENED_NAMES, lower-cased) */
 export const AWAKENED_FORMS: Readonly<Record<string, SpiritLook>> = {
   ...CROAK_AWAKENED,   // M244 sheet 9: Croakarc's four (above, by croakarc())
   ...CROAKARA_AWAKENED,   // M244 sheet 11: Croakara's four (above)
   ...CROAKORE_AWAKENED,   // M244 sheet 12: Croakore's four (above)
   ...CROAKRILL_AWAKENED,   // M244 sheet 12b: Croakrill's four (above)
+  ...TIDEOWL_AWAKENED,   // M244 sheet 13: Tideowl's four (above)
   vulnarok: awakened('vulnarok', AWAKEN_LEN.vulnarok, '#ffcf5a', 2.4),
   vulnalys: awakened('vulnalys', AWAKEN_LEN.vulnalys, '#b48cff', 1.7),
   vulnavex: awakened('vulnavex', AWAKEN_LEN.vulnavex, '#ffcf5a', 2.6),
