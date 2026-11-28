@@ -559,7 +559,7 @@ def aura(Vb, Fb):
             parts.append(tube(np.array([c + n * .02, c + n * .06, c + n * .09]), lambda u: .03 * (1 - u) + .003))   # the charge humming at its core
         col = '#a8e4ff'
     elif FORM == 'oreth':          # sheet 3: the gold heart-gem glowing on her chest (a faceted heart: two lobes + a point)
-        c = _surf(lambda Q: body(Q), (0, .86, .6), (0, 0, -1)) + V3(0, 0, .012)
+        c = _surf(lambda Q: body(Q), (0, .86, .6), (0, 0, 1)) + V3(0, 0, .012)   # dirn = the OUTWARD side (with -z it ran 1.5 out in front)
         def octa(cc, r):
             V = np.array([cc + V3(r[0], 0, 0), cc - V3(r[0], 0, 0), cc + V3(0, r[1], 0), cc - V3(0, r[1], 0), cc + V3(0, 0, r[2]), cc - V3(0, 0, r[2])])
             F = np.array([(0, 2, 4), (2, 1, 4), (1, 3, 4), (3, 0, 4), (2, 0, 5), (1, 2, 5), (3, 1, 5), (0, 3, 5)]); return V, F
