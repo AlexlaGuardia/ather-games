@@ -35,6 +35,8 @@ const [KA, KB, KC, KD] = ['dummy_m233_a', 'dummy_m233_b', 'dummy_m233_c', 'dummy
 const ids = [KA, KB, KC, KD].map(k => k.id)
 const wipe = () => { for (const t of ['fair_dash', 'fair_dash_tries']) accountsDb().prepare(`DELETE FROM ${t} WHERE user_id IN (?, ?, ?, ?)`).run(...ids) }
 wipe()
+// the test keepers' CLOUD saves win over the seeded localStorage (an old run's party/pots came back empty): start each run from no save
+accountsDb().prepare('DELETE FROM saves WHERE user_id IN (?, ?, ?, ?)').run(...ids)
 // the ghost pool: three test keepers' entries (base stats of their species)
 const { SPECIES_BASE } = await import('../src/app/shimmer/open/ather/spirit-growth')
 const ghost = (k: { id: string }, sp: 'owl' | 'turtle' | 'axolotl', name: string, ms: number) => { const b = SPECIES_BASE[sp]
