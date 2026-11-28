@@ -983,7 +983,7 @@ function AtherSliceGame() {
   const { party } = useParty()
   const plotMp = zone.kind === 'plot' && party ? plotZone(visitNow ? visitNow.host : selfPlayerId()) : null
   // M248: the REAL feet height + a state code (mpBody, set in onTick); before the first tick, the ground as before
-  const mpBody = useRef<{ y: number; s: number } | null>(null), mpLand = useRef({ air: false, at: -1e9 })
+  const mpBody = useRef<{ y: number; s: number } | null>(null), mpLand = useRef({ air: false, at: -1e9, punch: -1e9 })
   const mp = useOpenMultiplayer(zone.kind === 'wilds' ? OPEN_WILDS : plotMp, () => { const p = poseRef.current, b = mpBody.current, y = b && Number.isFinite(b.y) ? b.y : ground(p.x, p.z); return { x: p.x, y: Number.isFinite(y) ? y : 0, z: p.z, yaw: p.yaw, ...(b ? { s: b.s } : {}) } },
     () => (stanceRef.current.kind === 'weapon' ? heldRef.current : null))   // M27 slice 4: the party sees my gun
   const heightRef = useRef(ground); heightRef.current = ground
@@ -1063,8 +1063,9 @@ function AtherSliceGame() {
     { const now = performance.now(), L = mpLand.current   // M248: what the others see (real feet height + a state code)
       if (L.air && !lc.airborne) L.at = now
       L.air = lc.airborne
+      const pa = Math.max(lastSwingAt(), lastPunchAt()), fresh = pa > L.punch; L.punch = pa   // a punch since the last tick counts as now (a slow frame never drops it)
       mpBody.current = { y: lc.py, s: encodeState(pickState({ airborne: lc.airborne, vy: lc.vy, landAgoMs: now - L.at, climbing: lc.climbing, sliding: lc.sliding, crouching: lc.crouching,
-        punchAgoMs: now - Math.max(lastSwingAt(), lastPunchAt()), aiming: sightRef.current.aiming, speed: Math.hypot(lc.hvx, lc.hvz), runAt: THIRD.RUN_AT })) } }
+        punchAgoMs: fresh ? 0 : now - pa, aiming: sightRef.current.aiming, speed: Math.hypot(lc.hvx, lc.hvz), runAt: THIRD.RUN_AT })) } }
     setKeeperAt(lc.px, lc.pz, yaw, lc.py, !lc.airborne)   // M109: a following spirit trails this (M126: feet + standing, for their trail)
     let n: Near = null
     // BETA M60 (Alex 11-21): E acts only on what the CROSSHAIR is on, within 3 m of the keeper (shared/aim-pick.ts); each kind keeps
