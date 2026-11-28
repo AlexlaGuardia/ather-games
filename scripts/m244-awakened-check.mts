@@ -19,7 +19,7 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms)); let fails = 0
 const ok = (c: boolean, m: string) => { console.log(`${c ? 'PASS' : 'FAIL'} ${m}`); if (!c) fails++ }
 const ONLY = flag('--only', '').split(',').filter(Boolean).map(Number)
 const AW = GALLERY.filter(r => r.aw && (!ONLY.length || ONLY.includes(r.num)))
-ok(GALLERY.filter(r => r.aw).length === 72, `72 awakened rows in the roster (${GALLERY.filter(r => r.aw).map(r => `#${r.num} ${r.name}`).join(', ')})`)
+ok(GALLERY.filter(r => r.aw).length === 76, `76 awakened rows in the roster (${GALLERY.filter(r => r.aw).map(r => `#${r.num} ${r.name}`).join(', ')})`)
 const br = await puppeteer.launch({ protocolTimeout: 900000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--mute-audio', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] })
 try {
   const errs: string[] = []
@@ -188,7 +188,16 @@ try {
         ok(lo >= -0.003 && bhi < 0.04, `#${row.num} ${c}: nothing under the ground (lowest body / aura ${(lo * 1000).toFixed(1)} mm glb) and her body on it (body lowest at most ${(bhi * 1000).toFixed(1)} mm)`)
       }
     }
-    if (['mesathar', 'mesamelle', 'mesamis', 'mesamun', 'aurmerok', 'aurmelys', 'aurmevex', 'aurhael'].includes(look)) {   // + sheet 15b: Aurmere's four on the same legged rig
+    if (['voltmerkor', 'voltmeraya', 'voltvis', 'voltmeth'].includes(look)) {   // BETA M250 on sheet 17: her lightning / storm is ENERGY (see-through, additive, no outline hull) and it crackles
+      const ops: number[] = []; let mat: { tr: boolean; bl: number; dw: boolean; hull: boolean } | null = null
+      for (let i = 0; i < 12; i++) {
+        const e = await p.evaluate(() => { const b = (window as any).__spiritModel?.rigs?.get('gallery')?.body, m = b?.meshes?.aura?.material; return m ? { tr: !!m.transparent, bl: m.blending, dw: !!m.depthWrite, hull: !!b.meshes.auraHull, op: m.opacity as number } : null })
+        if (e) { mat = e; ops.push(e.op) }; await sleep(130)
+      }
+      ok(!!mat && mat.tr && mat.bl === 2 && !mat.dw && !mat.hull, `#${row.num} M250: her motif is energy, not a solid prop (transparent ${mat?.tr}, additive ${mat?.bl === 2}, depthWrite ${mat?.dw}, outline hull ${mat?.hull})`)
+      ok(ops.length >= 10 && Math.max(...ops) < 0.9 && new Set(ops.map(o => o.toFixed(2))).size >= 3, `#${row.num} M250: it crackles (opacity ${ops.map(o => o.toFixed(2)).join(' ')})`)
+    }
+    if (['mesathar', 'mesamelle', 'mesamis', 'mesamun', 'aurmerok', 'aurmelys', 'aurmevex', 'aurhael', 'voltmerkor', 'voltmeraya', 'voltvis', 'voltmeth'].includes(look)) {   // + sheet 15b: Aurmere's four on the same legged rig; + sheet 17: Voltmere's four
       // sheet 14: Mesamere's four WALK on the Shellmere line's own legged rig (four legs + feet, no flippers): on the ground in every clip
       const s1 = await sample('idle', 2, 100), names = s1?.names ?? []
       ok(['b_shell', 'b_neck', 'b_head', 'b_leg0_l', 'b_foot1_r', 'b_tail'].every(x => names.includes(x)) && !names.some(x => /^b_(flip|blade)/.test(x)), `#${row.num} on the Shellmere legged rig (${names.length} bones: shell, four legs + feet, no flippers)`)

@@ -23,7 +23,7 @@ import { isTrainStat, trainPlay } from './spirit-stats'   // M110 s1: a finished
 import { SPIRIT_ELEMENTS, SPIRIT_MODELS, groundLift, lowPoints, rigLook, type SpiritElement, type SpiritLook } from './spirit-models'
 import { groundMoved, rigClip, type RigClip } from './spirit-rig'   // M132 s2
 import { GROUNDED, flyClip, flyStep, travels, type FlyState } from './spirit-fly'   // M173
-import { hullPush, makeRigBody, rigCount, type RigBody } from './spirit-rig-body'
+import { energize, glowAt, hullPush, makeRigBody, rigCount, type RigBody } from './spirit-rig-body'   // M250: energize / glowAt
 import type { Species } from '../../spirits/spirit'
 import { slotOf } from './spirit-seeds'   // M122: a spirit's slot in her planter
 import { fightSlot } from '../shared/spirit-fight'   // M127 s1
@@ -179,7 +179,8 @@ function SpiritModel({ sp, look, nav, id, avatar, dev, meals, gallery, clip }: {
     const halo = new THREE.MeshBasicMaterial({ color: look.hull.color, transparent: true, opacity: look.hull.opacity, side: THREE.BackSide, depthWrite: false, toneMapped: false })
     const eye = new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false })
     rim(skin); if (glow) rim(glow); hullPush(halo, rig.hull)
-    const b = makeRigBody(gltf, rig, { skin, glow, halo, eye }, look.glow?.part)
+    if (glow && look.glow?.energy) energize(glow)   // M250: her element is energy: see-through, additive, no outline
+    const b = makeRigBody(gltf, rig, { skin, glow, halo, eye, glowHalo: look.glow?.energy ? null : halo }, look.glow?.part)
     bodyRef.current = b; glowRef.current = glow; haloRef.current = halo; setBody(b)
     return () => { bodyRef.current = null; glowRef.current = null; haloRef.current = null; b.dispose(); for (const m of [skin, glow, halo, eye]) m?.dispose()
       // M213 fix: the gallery's one canvas outlives each spirit shown in it: free her GPU buffers as she goes (the geometry stays
@@ -245,7 +246,7 @@ function SpiritModel({ sp, look, nav, id, avatar, dev, meals, gallery, clip }: {
     if (fx.current) fx.current.update(t, Math.min(1, step.v / Math.max(0.1, look.h * 1.5)), gl.domElement.height)
     if (water.current && g.current) water.current.w.update(t, g.current, water.current.shell)
     if (parts?.glow && look.glow) { const G = look.glow; parts.glow.emissiveIntensity = G.lo + (G.hi - G.lo) * (0.5 + 0.5 * Math.sin(t * Math.PI * 2 * G.hz)) }
-    if (glowRef.current && look.glow) { const G = look.glow; glowRef.current.emissiveIntensity = G.lo + (G.hi - G.lo) * (0.5 + 0.5 * Math.sin(t * Math.PI * 2 * G.hz)) }
+    if (glowRef.current && look.glow) { const G = glowAt(look.glow, t); glowRef.current.emissiveIntensity = G.i; if (look.glow.energy) glowRef.current.opacity = G.o }   // M250: energy crackles
     if (!g.current) return
     if (!trot && rig && gallery) {   // M213: the gallery plays the clip it is told, walk / run on the spot at the clip's own pace
       const c = clip ?? 'idle', bd = bodyRef.current, gait = c === 'walk' || c === 'run' ? c : null

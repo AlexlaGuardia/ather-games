@@ -5,7 +5,20 @@ import { clone } from 'three/examples/jsm/utils/SkeletonUtils.js'
 import { flapCycles } from './spirit-fly'   // M173
 import { RIG_CLIPS, STAND, fadeWeights, gaitCycles, strideLen, type RigClip, type RigLook } from './spirit-rig'
 
-export type RigMats = { skin: THREE.Material; glow: THREE.Material | null; halo: THREE.Material; eye: THREE.Material }
+export type RigMats = { skin: THREE.Material; glow: THREE.Material | null; halo: THREE.Material; eye: THREE.Material; /** M250: the glow part's outline (null = none: energy has no solid edge); default halo */ glowHalo?: THREE.Material | null }
+/** BETA M250 (Alex 11-28): an element motif reads as ENERGY, not a solid prop. A glow look with `energy` draws its part see-through and
+ *  additive (no depth write, no outline hull) and CRACKLES: a strike every few twelfths of a second over a low flicker, opacity with it.
+ *  Without `energy` the part keeps the slow sine pulse every glow had. */
+export type GlowSpec = { lo: number; hi: number; hz: number; energy?: boolean }
+const hash = (x: number) => { const v = Math.sin(x * 127.1 + 311.7) * 43758.5453; return v - Math.floor(v) }
+export function glowAt(G: GlowSpec, t: number): { i: number; o: number } {
+  const s = 0.5 + 0.5 * Math.sin(t * Math.PI * 2 * G.hz)
+  if (!G.energy) return { i: G.lo + (G.hi - G.lo) * s, o: 1 }
+  const k = Math.floor(t * 12), f = hash(k) > 0.78 ? 1 : 0.3 + 0.4 * hash(k + 0.5)
+  return { i: G.lo + (G.hi - G.lo) * Math.max(0.6 * s, f), o: 0.4 + 0.45 * f }
+}
+export const ENERGY_OPACITY = 0.6
+export function energize(m: THREE.Material) { m.transparent = true; m.opacity = ENERGY_OPACITY; m.depthWrite = false; m.blending = THREE.AdditiveBlending; return m }
 export type RigGltf = { scene: THREE.Object3D; animations: THREE.AnimationClip[] }
 /** everything the game must be able to count to 0 again */
 export const rigCount = { live: 0, made: 0, disposed: 0 }
@@ -72,7 +85,7 @@ export function makeRigBody(gltf: RigGltf, rig: RigLook, mats: RigMats, glowPart
     root.add(m); meshes[name] = m
   }
   add('body', 'body', mats.skin); add('bodyHull', 'body', mats.halo)
-  if (glowPart) { add(glowPart, glowPart, mats.glow); add(`${glowPart}Hull`, glowPart, mats.halo) }
+  if (glowPart) { add(glowPart, glowPart, mats.glow); add(`${glowPart}Hull`, glowPart, mats.glowHalo === undefined ? mats.halo : mats.glowHalo) }
   add('eyes', 'eyes', mats.eye)
   const mixer = new THREE.AnimationMixer(root), act = {} as Record<RigClip, THREE.AnimationAction>
   const has = RIG_CLIPS.filter(c => gltf.animations.some(x => x.name === c))

@@ -18,7 +18,8 @@ import sculpt_voltmere as F
 import shell_common as C
 from shell_common import cone, ell, su, ss, V3
 from sculpt_v2 import normals
-S = F.S; S.TRIS = 4800; rng = np.random.default_rng({'voltmerkor': 77, 'voltmeraya': 78, 'voltvis': 79, 'voltmeth': 80}[FORM])
+S = F.S; S.TRIS = 4600 if FORM == 'voltmeraya' else 4800   # Voltmeraya's long neck: 4800 gave 9081 body verts (> 9k)
+rng = np.random.default_rng({'voltmerkor': 77, 'voltmeraya': 78, 'voltvis': 79, 'voltmeth': 80}[FORM])
 AURA = []                                             # (P, F, col, bone)
 TIDE = os.path.join(HERE, '../../m244-tidemere-2026-11-28/tools/sculpt_tideaw.py'); _src = open(TIDE).read()
 a_, b_ = _src.index('# ── free pieces for the aura ──'), _src.index('# ── her shape, by name ──'); exec(compile(_src[a_:b_], 'sculpt_tideaw(helpers)', 'exec'), globals())

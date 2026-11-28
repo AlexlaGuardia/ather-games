@@ -1,9 +1,10 @@
-// BETA M244 sheet 17: Voltmere's four AWAKENED forms (owner preview). Run: npx tsx src/app/shimmer/open/ather/spirit-voltaw.test.ts
+// BETA M244 sheet 17 (+ M250 energy): Voltmere's four AWAKENED forms (owner preview). Run: npx tsx src/app/shimmer/open/ather/spirit-voltaw.test.ts
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import { AWAKENED_FORMS, VOLTMERE_AWAKENED, VOLTMERE_AW_DIAL, SECOND_FORMS, formGrow } from './spirit-models'
 import { AWAKENED_BRANCHES, AWAKENED_NAMES } from '../../spirits/spirit'
 import { PUBLIC_FORMS } from './spirit-public'
 import { GALLERY } from '../../dev/editors/spirit-gallery'
+import { glowAt, ENERGY_OPACITY } from './spirit-rig-body'
 let pass = 0; const fails: string[] = []
 const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
 const CANON = '/root/athernyx/CANON/world/spirits-species.md', DIR = 'docs/looks/m244-voltmere-2026-11-28'
@@ -16,7 +17,7 @@ const looks = named.map(n => n.toLowerCase())
 ok(looks.every(n => AWAKENED_FORMS[n] === VOLTMERE_AWAKENED[n]) && Object.keys(VOLTMERE_AWAKENED).sort().join() === [...looks].sort().join(), `each wired once into AWAKENED_FORMS (${Object.keys(VOLTMERE_AWAKENED)})`)
 // gallery: four rows, consecutive, turtle + storm
 const rows = GALLERY.filter(r => r.aw && r.sp === 'turtle' && r.el === 'storm')
-ok(rows.length === 4 && rows.every((r, i) => r.num === rows[0].num + i && r.name === named[i] && r.aw!.look === looks[i]), `Voltmere's four rows in branch order (#${rows.map(r => r.num)}: ${rows.map(r => r.name)})`)
+ok(rows.length === 4 && rows[0].num === 123 && rows.every((r, i) => r.num === rows[0].num + i && r.name === named[i] && r.aw!.look === looks[i]), `Voltmere's four rows in branch order, consecutive from #123 (#${rows.map(r => r.num)}: ${rows.map(r => r.name)})`)
 const L3 = '/root/athernyx/assets/stage3/grimoire-ledger-stage3.json'
 if (existsSync(L3)) { const locks = JSON.parse(readFileSync(L3, 'utf8')).locks as { name: string; branch_name: string; second_form: string }[]
   for (const r of rows) ok(locks.some(l => l.name === r.name && l.second_form === 'Voltmere' && l.branch_name.toLowerCase() === r.aw!.branch), `${r.name}: a stage-3 lock off Voltmere, ${r.aw!.branch}`) }
@@ -28,6 +29,7 @@ for (const n of looks) {
   ok(!PUBLIC_FORMS.has(n), `${n}: not in PUBLIC_FORMS (owner preview only)`)
   ok(VOLTMERE_AW_DIAL[n] > formGrow('voltmere') && L.h > parent.h * 1.1, `${n}: grown past Voltmere (dial ${VOLTMERE_AW_DIAL[n]} vs ${formGrow('voltmere')})`)
   ok(L.glow?.part === 'aura' && m.aura_tris > 0, `${n}: the motif (aura part, ${m.aura_tris} tris) glows`)
+  ok(L.glow?.energy === true, `${n}: M250 her lightning / storm is ENERGY (see-through, additive, crackling), not a solid prop`)
   ok(Math.abs(L.rig!.glbLen - m.glb_long) < 1e-3, `${n}: glbLen = his metrics (${m.glb_long})`)
   ok(m.body_verts <= 9800, `${n}: body under ~9k verts (${m.body_verts})`)
   // she WALKS: the Shellmere line's own legged rig (18 bones, four legs + feet), NOT Tidemere's glide rig; clips timed at the base's 0.464 m
@@ -44,4 +46,11 @@ ok(ly.idle.top_m > vx.idle.top_m && ly.extent_hi[2] > vx.extent_hi[2] - 0.05, `v
 ok(vx.body_mean_top < Math.min(rk.body_mean_top, me.body_mean_top) && vx.extent_lo[2] < -1.2, `voltvis: the low one, her lightning jet streaming far behind (top ${vx.body_mean_top}, back ${vx.extent_lo[2]})`)
 ok(me.extent_hi[1] > me.body_mean_top + 0.45, `voltmeth: her own storm cloud rides well over her shell (aura top ${me.extent_hi[1]} vs body ${me.body_mean_top})`)
 ok(Object.keys(VOLTMERE_AWAKENED).length === 4, 'four forms')
+// M250: energy CRACKLES (strikes over a low flicker, opacity with it); a plain glow keeps its slow opaque sine
+const E = { lo: 0.4, hi: 1.2, hz: 0.5, energy: true }, P = { lo: 0.4, hi: 1.2, hz: 0.5 }
+const es = Array.from({ length: 240 }, (_, i) => glowAt(E, i / 60)), ps = Array.from({ length: 240 }, (_, i) => glowAt(P, i / 60))
+const jumps = es.slice(1).filter((x, i) => Math.abs(x.i - es[i].i) > 0.2).length, pj = ps.slice(1).filter((x, i) => Math.abs(x.i - ps[i].i) > 0.2).length
+ok(jumps >= 6 && pj === 0, `energy flickers in jumps (${jumps} jumps > 0.2 in 4 s; a plain glow ${pj})`)
+ok(es.every(x => x.o > 0.3 && x.o < 0.9) && new Set(es.map(x => x.o.toFixed(2))).size > 4 && ps.every(x => x.o === 1), `energy is see-through and its opacity flickers (${Math.min(...es.map(x => x.o)).toFixed(2)}-${Math.max(...es.map(x => x.o)).toFixed(2)}); a plain glow stays opaque`)
+ok(es.every(x => x.i >= E.lo - 1e-9 && x.i <= E.hi + 1e-9) && ENERGY_OPACITY < 1, `energy stays inside her lo..hi`)
 console.log(`${pass} pass, ${fails.length} fail`); for (const f of fails) console.log('FAIL', f); process.exit(fails.length ? 1 : 0)

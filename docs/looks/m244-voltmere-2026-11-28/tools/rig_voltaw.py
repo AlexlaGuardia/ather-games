@@ -17,7 +17,7 @@ import sculpt_voltaw as SA
 import shell_common as C
 S = SA.S
 Q = {'__file__': QT, '__name__': 'rig_quality_lib'}; exec(compile(open(QT).read().split('_write = K.write')[0], QT, 'exec'), Q)
-DIAL = dict(voltmerkor=2.1, voltmeraya=1.75, voltvis=1.7, voltmeth=1.85)[FORM]
+DIAL = dict(voltmerkor=2.93, voltmeraya=2.44, voltvis=2.37, voltmeth=2.58)[FORM]   # sheet 15b dials x 1.95 / 1.4 (M249: Voltmere grew 1.4 -> 1.95)
 STATS = {}
 
 _write = K.write
