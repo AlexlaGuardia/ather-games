@@ -41,5 +41,6 @@ python3 sheet.py <frames>      (line sheet + icons into public/open/spirits + th
   roster 48): AWAKENED_NAMES.tidemere, the gallery AWAKENED concat ['turtle','water',b] + test block, TIDE_AW_DIAL / tideAw / TIDE_AWAKENED in
   spirit-models.ts, WATER_FORMS += the four (their sheet + trail), the awakened test name list, the m244-awakened-check glide-rig block (glide
   bones, no legs, water sheet drawn, plastron 8-60 mm up in every clip). If Voltowl does not land first, renumber to #091-#094 / 94 / 44.
-- `spirit-tideaw.test.ts` -> `src/app/shimmer/open/ather/` (canon line word for word, glide rig read out of the glb, plastron rides the sheet,
+- `spirit-tideaw.test.ts.staged` -> `src/app/shimmer/open/ather/spirit-tideaw.test.ts` (RENAME it back to .test.ts when you move it into src/;
+  it is .staged here because, outside src/, its ./spirit-water import breaks `coord tsc` for every lane) (canon line word for word, glide rig read out of the glb, plastron rides the sheet,
   flippers over the fin floor, springs, silhouette asserts). Ran green on everything except the four public/ files it needs.
