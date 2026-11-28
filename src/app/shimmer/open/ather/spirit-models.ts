@@ -508,6 +508,23 @@ export const MESAMERE_AWAKENED: Readonly<Record<string, SpiritLook>> = {
   mesamis: mesaAw('mesamis', '#ffd070', 1.595),
   mesamun: mesaAw('mesamun', '#ffbc48', 1.534),
 }
+// M244 sheet 15 (world, 11-28): ARCLOTL's four AWAKENED forms (Storm), OWNER PREVIEW (docs/looks/m244-arclotl-2026-11-28): the live
+// Arclotl's sculpt re-shaped by name (sculpt_arcaw.py), in the lotl number space (h = LOTL_UNIT x her dial / Marlotl's, so the line reads at
+// true relative size). Arclotar, Arclelle and Arcis STAND UP on sheet 9's ground biped (rig_arcaw.py = rig_croakalys.py with her sculpt:
+// legs, arms, a four-bone tail; clipV = the metrics' v_glb); Arclun stays on four legs (rig_arclun.py = the live rig_lotl.py + a 'halo'
+// bone for her rings). 'aura' = her motif: Arclotar's bolts (chest), Arclelle's ribbons of current (chest), Arcis's lightning orb (root),
+// Arclun's sound rings (halo). glbLen = her rest nose-to-tail, glb units.
+export const ARCLOTL_AW_DIAL: Readonly<Record<string, number>> = { arclotar: 1.85, arclelle: 1.75, arcis: 1.8, arclun: 1.85 }
+const arcAw = (name: string, aura: string, rig: RigLook): SpiritLook => {
+  const b = lotlForm('storm', 'arclotl', '#a8d2ff', '#dcecff', ARCLOTL_RIG), h = LOTL_UNIT * ARCLOTL_AW_DIAL[name] / formGrow('marlotl')
+  return { ...b, name, url: `/open/spirits/${name}-rigged.glb`, h, trot: grownTrot(b.trot, b.h, h), rig, glow: { part: 'aura', emissive: aura, lo: 0.35, hi: 0.7, hz: 0.35 } }
+}
+export const ARCLOTL_AWAKENED: Readonly<Record<string, SpiritLook>> = {
+  arclotar: arcAw('arclotar', '#dff4ff', croakUpRig(1.3343, 0.5488, 1.2465)),
+  arclelle: arcAw('arclelle', '#aee6ff', croakUpRig(1.412, 0.9449, 2.2182)),
+  arcis: arcAw('arcis', '#c4e2ff', croakUpRig(1.0987, 0.4518, 1.1195)),
+  arclun: arcAw('arclun', '#d2ecff', lotlRig(1.7744, -0.2)),
+}
 // M202 the Lepara line (docs/looks/m202-lepara-line-2026-11-27): Lepaura (Mana, the ledger's MOON-HARE: taller, a plume tail, a gold
 // crescent on her brow, a gold necklace + diamond, gold infusion ribbons = pattern only), Leparc (Storm: silver-blue, cheek + ear-tip tufts,
 // a violet brow crystal, pale lightning veins, a puff tail), Lepore (Earth, her natural form, the heaviest: barrel belly, leaf-stone
@@ -695,6 +712,7 @@ export const AWAKENED_FORMS: Readonly<Record<string, SpiritLook>> = {
   ...CROAKRILL_AWAKENED,   // M244 sheet 12b: Croakrill's four (above)
   ...TIDEOWL_AWAKENED,   // M244 sheet 13: Tideowl's four (above)
   ...MESAMERE_AWAKENED,   // M244 sheet 14: Mesamere's four (above)
+  ...ARCLOTL_AWAKENED,   // M244 sheet 15: Arclotl's four (above)
   vulnarok: awakened('vulnarok', AWAKEN_LEN.vulnarok, '#ffcf5a', 2.4),
   vulnalys: awakened('vulnalys', AWAKEN_LEN.vulnalys, '#b48cff', 1.7),
   vulnavex: awakened('vulnavex', AWAKEN_LEN.vulnavex, '#ffcf5a', 2.6),
