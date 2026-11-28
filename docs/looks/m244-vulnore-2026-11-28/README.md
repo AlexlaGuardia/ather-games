@@ -29,3 +29,10 @@ uv run --no-project --with numpy,scipy,trimesh,networkx,fast_simplification,pill
 npx tsx docs/looks/m202-vulnara-v2-2026-11-26/tools/three-check.mts <rigged glb> <dial>
 ```
 Player-facing text: none (gallery rows show canon names only).
+
+## Proof (prod, desk 1440)
+Receipts 1156df4d BUILD_ID baurnMYOVcmCQwd-iq0GY, then 621302fb (Orethar's heart-gem fix: the first build had it 1.5 glb in front of her, lie -1260 mm).
+m244-awakened-check --only 59-62 ALL PASS (Orethar lie -0.9 mm glb, Vulnoris copies travel 0.977 glb, 0 errors, non-owner 403); m224-gallery-check --from 59 ALL PASS.
+## Known (for Alex)
+Vulnoraya's crown + leaf mantle read small; Vulnorun's blooms barely show and her trunk hides behind the ears at three-quarter; Orethar is heavier than
+Vulnarkor but her arms are still slimmer than the art's.
