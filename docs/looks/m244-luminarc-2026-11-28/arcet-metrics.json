@@ -1,0 +1,99 @@
+{
+ "bones": 19,
+ "glb_bytes": 915648,
+ "tris": {
+  "body": 12622,
+  "eyes": 4192,
+  "lamp": 560
+ },
+ "unit_m": 0.3438,
+ "glb_long": 0.9748,
+ "hover_m": 0.75,
+ "idle": {
+  "dur_s": 2.4,
+  "lowest_m": 0.711,
+  "top_m": 1.194,
+  "mean_low": 2.136,
+  "mean_top": 3.425,
+  "edge_stretch_p99": 1.56,
+  "edge_stretch_max": 2.9,
+  "span_m": 0.409,
+  "length_m": 0.363
+ },
+ "walk": {
+  "dur_s": 0.72,
+  "lowest_m": 0.734,
+  "top_m": 1.17,
+  "mean_low": 2.185,
+  "mean_top": 3.383,
+  "edge_stretch_p99": 1.3,
+  "edge_stretch_max": 2.19,
+  "span_m": 0.426,
+  "length_m": 0.386,
+  "stride_m": 0.576,
+  "plays_1to1_at_mps": 0.8,
+  "wing_hz_at_1to1": 8.3
+ },
+ "run": {
+  "dur_s": 0.48,
+  "lowest_m": 0.772,
+  "top_m": 1.115,
+  "mean_low": 2.266,
+  "mean_top": 3.228,
+  "edge_stretch_p99": 1.92,
+  "edge_stretch_max": 4.67,
+  "span_m": 0.448,
+  "length_m": 0.415,
+  "stride_m": 1.92,
+  "plays_1to1_at_mps": 4.0,
+  "wing_hz_at_1to1": 10.4
+ },
+ "sit": {
+  "dur_s": 3.0,
+  "lowest_m": 0.626,
+  "top_m": 1.079,
+  "mean_low": 1.864,
+  "mean_top": 3.116,
+  "edge_stretch_p99": 1.95,
+  "edge_stretch_max": 4.66,
+  "span_m": 0.4,
+  "length_m": 0.362
+ },
+ "lie": {
+  "dur_s": 4.4,
+  "lowest_m": 0.62,
+  "top_m": 0.985,
+  "mean_low": 1.84,
+  "mean_top": 2.851,
+  "edge_stretch_p99": 2.83,
+  "edge_stretch_max": 6.96,
+  "span_m": 0.458,
+  "length_m": 0.438
+ },
+ "all_lowest_glb": 1.803,
+ "all_top_glb": 3.473,
+ "dial": 1.8,
+ "body_mean_top": 1.007,
+ "hover_low": 2.067,
+ "hover_top": 3.471,
+ "all_lowest_with_aura_glb": 1.804,
+ "aura_tris": 10168,
+ "cull": {
+  "c": [
+   -0.14,
+   2.64,
+   -0.8
+  ],
+  "r": 1.94,
+  "min": [
+   -1.06,
+   1.68,
+   -2.32
+  ],
+  "max": [
+   0.79,
+   3.59,
+   0.72
+  ]
+ }
+}
