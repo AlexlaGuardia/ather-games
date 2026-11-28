@@ -5,7 +5,9 @@
 //    axolotl mana (Aurlotl, glyph panels) = each draws her FORM glb; plus fox mana (Vulnara, not OK'd) = she keeps her base (vulnyx-rigged).
 //  C (M202, Alex OK 11-27): turtle + frog beds with pot.element = each draws her FORM glb (the Shellmere line: Mesamere / Aurmere /
 //    Voltmere / Tidemere; the Croakling line pass 2: Croakrill / Croakara / Croakore / Croakarc), not her base or an orb.
-//  0 page errors. 390x844 (default) or --desktop 900x600.   npx tsx scripts/m226-public-check.mts [--desktop] [--only ABC] [--shots dir] [--url ..]
+//  D (M202, Alex YAY 11-28): rabbit beds with pot.element = each draws her FORM glb (the Lepara line: Lepaura / Leparc / Lepore / Lepnix),
+//    not her base Lepara or an orb; each stands on the ground.
+//  0 page errors. 390x844 (default) or --desktop 900x600.   npx tsx scripts/m226-public-check.mts [--desktop] [--only ABCD] [--shots dir] [--url ..]
 import puppeteer, { type Page } from 'puppeteer-core'
 import { mkdirSync } from 'fs'
 import { dismissStartCard } from './lib/start-card.mts'
@@ -13,7 +15,7 @@ import { BASE_PREVIEW } from '../src/app/shimmer/open/ather/spirit-base-preview'
 import { formLook, type SpiritElement } from '../src/app/shimmer/open/ather/spirit-models'
 import type { Species } from '../src/app/shimmer/spirits/spirit'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
-const url = flag('--url', 'https://ather.games'), shots = flag('--shots', ''), desk = process.argv.includes('--desktop'), tag = desk ? 'desktop' : '390', only = flag('--only', 'ABC')
+const url = flag('--url', 'https://ather.games'), shots = flag('--shots', ''), desk = process.argv.includes('--desktop'), tag = desk ? 'desktop' : '390', only = flag('--only', 'ABCD')
 if (shots) mkdirSync(shots, { recursive: true })
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms)); let fails = 0
 const ok = (c: boolean, m: string) => { console.log(`${c ? 'PASS' : 'FAIL'} ${m}`); if (!c) fails++ }
@@ -94,6 +96,18 @@ try {
     for (const sp of ['turtle', 'frog'] as Species[]) { const L = BASE_PREVIEW[sp]!
       ok(!urls[L.url], `C ${tag}: no ${sp} bed falls back to her base ${L.name} (${L.url.split('/').pop()} mounted ${urls[L.url] ?? 0})`) }
     await shot(p, 'c-m202-forms'); await p.close() }
+  // ── D: M202, the Lepara line public (every form glb mounted + 200, her form's height, on the ground; no base glb, no orb)
+  if (only.includes('D')) { const D: Bed[] = (['mana', 'storm', 'earth', 'water'] as SpiritElement[]).map(el => ({ sp: 'rabbit' as Species, el }))
+    const { p, got } = await open(D)
+    ok(await gl(p, D.length), `D ${tag}: ${D.length} rigged bodies (no gold orb)`); await sleep(6000)
+    const urls: Record<string, number> = await p.evaluate(() => ({ ...((window as any).__spiritModel?.urls ?? {}) }))
+    const R = await rigs(p)
+    for (const b of D) { const f = formLook(b.sp, b.el)!; const file = f.url.split('/').pop()!
+      ok(!!urls[f.url] && got.includes(`${file} 200`) && R.filter(r => r.sp === 'rabbit' && Math.abs(r.h - f.h) < 1e-6).length === 1, `D ${tag}: rabbit/${b.el} draws ${f.name} (${file} mounted ${urls[f.url] ?? 0}, h ${f.h.toFixed(4)})`) }
+    const L = BASE_PREVIEW.rabbit!
+    ok(!urls[L.url], `D ${tag}: no rabbit bed falls back to her base ${L.name} (${L.url.split('/').pop()} mounted ${urls[L.url] ?? 0})`)
+    for (const o of await offs(p)) ok(o.off.every(a => a > -0.03 && a < 0.3), `D ${tag}: a Lepara form stands on the ground (lowest ${Math.min(...o.off).toFixed(3)} .. ${Math.max(...o.off).toFixed(3)} m)`)
+    await shot(p, 'd-lepara-forms'); await p.close() }
   ok(errs.length === 0, `${tag}: 0 page errors (${errs.slice(0, 3).join(' | ')})`)
 } catch (e) { ok(false, `threw: ${String(e).slice(0, 300)}`) }
 await br.close()

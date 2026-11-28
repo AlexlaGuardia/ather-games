@@ -423,8 +423,8 @@ const shellForm = (el: SpiritElement, name: string, emissive: string, hull: stri
 // pauldrons + bracers, amber brow + chest crystals; dial 1.5), Lepnix (Water, the ledger's UNICORN divergence: an aqua foal standing on four
 // legs, a horn, a water-mane, a plume tail; the base head kept). Each is the BASE Lepara's sculpt + rig re-shaped by name (tools/lep_common.py,
 // rig_lep.py: the base's 20 bones + five clips at the base's 0.48 m per glb unit; Lepnix's joints moved onto her foal body).
-// LEP_GLB_TALL = each body's idle mean height (rig metrics body_mean_top, ears counted as the base's LEPARA_GLB_TALL). OWNER PREVIEW (not in
-// spirit-public PUBLIC_FORMS) until Alex OKs the line.
+// LEP_GLB_TALL = each body's idle mean height (rig metrics body_mean_top, ears counted as the base's LEPARA_GLB_TALL). PUBLIC since
+// Alex's YAY 11-28 (spirit-public PUBLIC_FORMS).
 export const LEP_GLB_TALL: Readonly<Record<string, number>> = { lepaura: 1.042, leparc: 1.096, lepore: 0.976, lepnix: 0.895 }
 const lepForm = (el: SpiritElement, name: string, emissive: string, hull: string, glbLen: number): SpiritLook => {
   const b = BASE_PREVIEW.rabbit!, g = formGrow(name)

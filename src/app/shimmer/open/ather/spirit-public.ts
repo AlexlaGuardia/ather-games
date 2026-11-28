@@ -12,6 +12,7 @@ export const PUBLIC_FORMS: ReadonlySet<string> = new Set([
   'aurlotl',                                      // Manalotl's Mana form (glyph panels dbac3642)
   'mesamere', 'aurmere', 'voltmere', 'tidemere',  // M202 the Shellmere line (Alex OK 11-27, build fe54f540)
   'croakrill', 'croakara', 'croakore', 'croakarc', // M202 the Croakling line pass 2 (Alex OK 11-27, build b1cf88ca)
+  'lepaura', 'leparc', 'lepore', 'lepnix',         // M202 the Lepara line (Alex YAY 11-28, build 93368085)
 ])
 
 /** her second form's look for this keeper: every keeper sees a PUBLIC form, only the owner sees the rest; null = draw her base */
