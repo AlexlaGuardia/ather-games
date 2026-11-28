@@ -5,14 +5,14 @@
 // M244 sheet 2: + Vulnarc's four, rows #055-#058 (Vulnarkor / Vulnarcelle / Arcvex / Vulnarceth): the same, plus Vulnarkor upright on the
 // biped rig, Arcvex's copies running, and every one of the four clear of the ground (body + aura) in idle / walk / run / sit / lie.
 //   --only 55,56   checks just those rows
-//   OWNER_KEY=... npx tsx scripts/m244-awakened-check.mts [--url https://ather.games] [--shots dir] [--w 390 --h 844]
+//   OWNER_KEY=... npx tsx scripts/m244-awakened-check.mts [--url https://ather.games] [--shots dir] [--w 1440 --h 900]
 import puppeteer, { type Page } from 'puppeteer-core'
 import { mkdirSync } from 'fs'
 import { GALLERY } from '../src/app/shimmer/dev/editors/spirit-gallery'
 import { AWAKEN_GROW, formGrow } from '../src/app/shimmer/open/ather/spirit-models'
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), shots = flag('--shots', ''), KEY = process.env.OWNER_KEY
-const W = Number(flag('--w', '390')), H = Number(flag('--h', '844'))
+const W = Number(flag('--w', '1440')), H = Number(flag('--h', '900'))   // desk default: the owner gallery is desktop-first (at 390 the model never mounts, every row reads 0 verts)
 if (shots) mkdirSync(shots, { recursive: true })
 if (!KEY) { console.error('no OWNER_KEY'); process.exit(2) }
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms)); let fails = 0
