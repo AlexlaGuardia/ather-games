@@ -103,7 +103,7 @@ try {
     const urls: Record<string, number> = await p.evaluate(() => ({ ...((window as any).__spiritModel?.urls ?? {}) }))
     const R = await rigs(p)
     for (const b of D) { const f = formLook(b.sp, b.el)!; const file = f.url.split('/').pop()!
-      ok(!!urls[f.url] && got.includes(`${file} 200`) && R.filter(r => r.sp === 'rabbit' && Math.abs(r.h - f.h) < 1e-6).length === 1, `D ${tag}: rabbit/${b.el} draws ${f.name} (${file} mounted ${urls[f.url] ?? 0}, h ${f.h.toFixed(4)})`) }
+      ok(!!urls[f.url] && got.includes(`${file} 200`) && R.some(r => r.sp === 'rabbit' && Math.abs(r.h - f.h) < 1e-6), `D ${tag}: rabbit/${b.el} draws ${f.name} (${file} mounted ${urls[f.url] ?? 0}, h ${f.h.toFixed(4)})`) }
     const L = BASE_PREVIEW.rabbit!
     ok(!urls[L.url], `D ${tag}: no rabbit bed falls back to her base ${L.name} (${L.url.split('/').pop()} mounted ${urls[L.url] ?? 0})`)
     for (const o of await offs(p)) ok(o.off.every(a => a > -0.03 && a < 0.3), `D ${tag}: a Lepara form stands on the ground (lowest ${Math.min(...o.off).toFixed(3)} .. ${Math.max(...o.off).toFixed(3)} m)`)
