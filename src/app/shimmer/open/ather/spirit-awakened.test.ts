@@ -19,7 +19,10 @@ ok(waterNames.join() === 'vulnitar,marelle,vulnisk,vulnixeth', `Vulnix's four in
 // M244 sheet 5: Luminel's (Mana) four, canon-named (Alex 11-28), art LOCKED-AFK athernyx #017-020: HOVERERS on the base Luminara's hover rig
 const lumNames = AWAKENED_BRANCHES.map(b => AWAKENED_NAMES.luminel![b].toLowerCase())
 ok(lumNames.join() === 'luminok,lumilys,lumivex,elhae', `Luminel's four in branch order (${lumNames})`)
-ok(Object.keys(AWAKENED_FORMS).sort().join() === [...names, ...stormNames, ...earthNames, ...waterNames, ...lumNames].sort().join(), 'one look per name, no more')
+// M244 sheet 6: Luminarc's (Storm) four, canon-named (Alex 11-28), art LOCKED-AFK athernyx #021-024: hoverers, same tools off the live Luminarc
+const arcNames = AWAKENED_BRANCHES.map(b => AWAKENED_NAMES.luminarc![b].toLowerCase())
+ok(arcNames.join() === 'luminthar,lumicelle,arcet,lumiceth', `Luminarc's four in branch order (${arcNames})`)
+ok(Object.keys(AWAKENED_FORMS).sort().join() === [...names, ...stormNames, ...earthNames, ...waterNames, ...lumNames, ...arcNames].sort().join(), 'one look per name, no more')
 for (const [el, list] of [['mana', names], ['storm', stormNames], ['earth', earthNames], ['water', waterNames]] as const) for (const n of list) {
   const vulnara = SECOND_FORMS.fox![el]!, parent = el === 'mana' ? 'vulnara' : el === 'storm' ? 'vulnarc' : el === 'earth' ? 'vulnore' : 'vulnix'
   const L = AWAKENED_FORMS[n]
@@ -181,6 +184,35 @@ for (const n of waterNames) {
   const met = (n: string) => JSON.parse(readFileSync(`docs/looks/m244-luminel-2026-11-28/${n}-metrics.json`, 'utf8'))
   ok(met('lumivex').glb_long > 1.6 * met('lumilys').glb_long, `lumivex: a long low racer (glb_long ${met('lumivex').glb_long} vs lumilys ${met('lumilys').glb_long})`)
   ok(met('lumilys').body_mean_top > met('luminok').body_mean_top && met('lumivex').body_mean_top < 0.75 * met('luminok').body_mean_top, `tall slender Lumilys (${met('lumilys').body_mean_top}) vs low Lumivex (${met('lumivex').body_mean_top})`)
+}
+// M244 sheet 6: Luminarc's four hover like her (same contract as sheet 5), each her own silhouette + motif
+{
+  const parent = SECOND_FORMS.firefly!.storm!, pb = (glbJson('luminarc').nodes as { name?: string }[]).filter(x => x.name?.startsWith('b_')).length
+  const met = (n: string) => JSON.parse(readFileSync(`docs/looks/m244-luminarc-2026-11-28/${n}-metrics.json`, 'utf8'))
+  for (const n of arcNames) {
+    const L = AWAKENED_FORMS[n], f = `public${L.url}`
+    ok(L.name === n && L.form === 'storm' && L.url === `/open/spirits/${n}-rigged.glb` && L.glow?.part === 'aura' && L.skin?.emissive === parent.skin?.emissive, `${n}: her own glb, a storm form look off Luminarc, aura = glow part`)
+    ok(AWAKEN_GROW[n] > formGrow('luminarc') && L.h > parent.h * 1.15, `${n}: grown past Luminarc (dial ${AWAKEN_GROW[n]} vs ${formGrow('luminarc')})`)
+    ok(!!L.rig?.hover && !!L.rig?.cull && L.rig.hover.low > 1 && L.rig.hover.top > L.rig.hover.low, `${n}: hover rig fields (low ${L.rig?.hover?.low}, top ${L.rig?.hover?.top}) + own culling`)
+    ok(!PUBLIC_FORMS.has(n), `${n}: owner preview only`)
+    if (!existsSync(f)) { ok(false, `${f} exists`); continue }
+    const j = glbJson(n), nodes: string[] = j.nodes.map((x: { name?: string }) => x.name), bones = nodes.filter(x => x?.startsWith('b_'))
+    ok(['body', 'eyes', 'aura', 'b_hover', 'b_head', 'b_fw_l', 'b_hw_r'].every(x => nodes.includes(x)) && bones.length === pb, `${n}: body / eyes / aura + the hover rig's ${pb} bones (${bones.length})`)
+    const hov = nodes.indexOf('b_hover'), keyed = (j.animations as { channels: { target: { node: number } }[] }[]).some(a => a.channels.some(c => c.target.node === hov))
+    ok(!keyed && (j.animations as { name: string }[]).map(a => a.name).sort().join() === 'idle,lie,run,sit,walk', `${n}: five clips, b_hover unkeyed`)
+    const m = met(n)
+    ok(m.all_lowest_with_aura_glb > 1 && Math.abs(m.hover_low - L.rig!.hover!.low) < 1e-3 && Math.abs(m.hover_top - L.rig!.hover!.top) < 1e-3 && Math.abs(m.glb_long - AWAKEN_LEN[n]) < 1e-3, `${n}: wired numbers = her metrics; every clip (aura too) in the air (lowest ${m.all_lowest_with_aura_glb} glb)`)
+    ok(['min', 'max'].every(k => (m.cull[k] as number[]).every((x, i) => Math.abs(x - (L.rig!.cull as unknown as Record<string, number[]>)[k][i]) < 1e-6)) && Math.abs(m.cull.r - L.rig!.cull!.r) < 1e-6, `${n}: culling = her metrics (r ${m.cull.r})`)
+    ok(Math.abs(m.hover_m * AWAKEN_GROW[n] - 1.35) < 0.01, `${n}: hangs at Luminarc's family ~1.35 m grown (${m.hover_m} m x ${AWAKEN_GROW[n]})`)
+  }
+  // silhouette, not a reskin, read off the files: the rest-pose extents of a mesh (accessor min / max)
+  const ext = (n: string, mesh: string) => { const j = glbJson(n), mi = j.nodes.find((x: { name?: string }) => x.name === mesh).mesh, a = j.accessors[j.meshes[mi].primitives[0].attributes.POSITION]; return { min: a.min as number[], max: a.max as number[] } }
+  const span = (n: string, mesh: string, k: number) => { const e = ext(n, mesh); return e.max[k] - e.min[k] }
+  ok(span('luminthar', 'eyes', 0) > 1.3 * span('luminarc', 'eyes', 0), `luminthar: big wings (eyes-part span ${span('luminthar', 'eyes', 0).toFixed(2)} vs Luminarc ${span('luminarc', 'eyes', 0).toFixed(2)})`)
+  ok(span('lumicelle', 'aura', 0) > 1.4 && span('lumicelle', 'aura', 1) > 1.4, `lumicelle: her ring of orbs round her (aura ${span('lumicelle', 'aura', 0).toFixed(2)} x ${span('lumicelle', 'aura', 1).toFixed(2)} glb)`)
+  ok(ext('arcet', 'aura').min[2] < -2.0 && span('arcet', 'aura', 2) > 2.4 * span('arcet', 'body', 2), `arcet: two copies streaming behind (aura from z ${ext('arcet', 'aura').min[2].toFixed(2)}, ${(span('arcet', 'aura', 2) / span('arcet', 'body', 2)).toFixed(1)}x her length)`)
+  ok(span('lumiceth', 'body', 1) > 1.1 * span('luminarc', 'body', 1) && ext('lumiceth', 'body').min[1] < ext('luminarc', 'body').min[1] - 0.15, `lumiceth: a cloak past her feet (body ${span('lumiceth', 'body', 1).toFixed(2)} tall vs Luminarc ${span('luminarc', 'body', 1).toFixed(2)})`)
+  ok(met('arcet').cull.min[2] < -2 && met('luminthar').cull.max[0] > 1 && met('lumiceth').body_mean_top > met('luminthar').body_mean_top, 'culling holds the motifs (Arcet copies, Luminthar span); Lumiceth stands tallest in her cloak')
 }
 console.log(`spirit-awakened: ${pass} pass, ${fails.length} fail`)
 if (fails.length) { for (const f of fails) console.log('  FAIL', f); process.exit(1) }

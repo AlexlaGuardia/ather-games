@@ -23,7 +23,7 @@ export const DISCOVERY: readonly (readonly [Species, GalleryElement])[] = [
 ]
 
 /** M244: the awakened forms built so far, stage-3 ledger order (n = index + 1) */
-export const AWAKENED: readonly (readonly [Species, GalleryElement, AwakenedBranch])[] = (['mana', 'storm', 'earth', 'water'] as const).flatMap(el => AWAKENED_BRANCHES.map((b): readonly [Species, GalleryElement, AwakenedBranch] => ['fox', el, b])).concat(AWAKENED_BRANCHES.map((b): readonly [Species, GalleryElement, AwakenedBranch] => ['firefly', 'mana', b]))   // sheet 2: Vulnarc's four (#055-#058); sheet 3: Vulnore's (#059-#062); sheet 4: Vulnix's (#063-#066); sheet 5: Luminel's (#067-#070)
+export const AWAKENED: readonly (readonly [Species, GalleryElement, AwakenedBranch])[] = (['mana', 'storm', 'earth', 'water'] as const).flatMap(el => AWAKENED_BRANCHES.map((b): readonly [Species, GalleryElement, AwakenedBranch] => ['fox', el, b])).concat((['mana', 'storm'] as const).flatMap(el => AWAKENED_BRANCHES.map((b): readonly [Species, GalleryElement, AwakenedBranch] => ['firefly', el, b])))   // sheet 2: Vulnarc's four (#055-#058); sheet 3: Vulnore's (#059-#062); sheet 4: Vulnix's (#063-#066); sheet 5: Luminel's (#067-#070); sheet 6: Luminarc's (#071-#074)
 
 export type GalleryRow = {
   /** grimoire # (1-50) */ num: number

@@ -14,7 +14,7 @@ const CANON = '/root/athernyx/CANON/world/spirits-species.md'
 ok(existsSync(LEDGER), `ledger present (${LEDGER})`)
 ok(existsSync(CANON), `canon base table present (${CANON})`)
 
-ok(GALLERY.length === 70, `70 rows: 10 base + 40 forms + 20 awakened (got ${GALLERY.length})`)
+ok(GALLERY.length === 74, `74 rows: 10 base + 40 forms + 24 awakened (got ${GALLERY.length})`)
 GALLERY.forEach((r, i) => ok(r.num === i + 1, `row ${i} numbered ${i + 1} (got ${r.num})`))
 ok(GALLERY.slice(0, 10).every(r => r.el === null) && GALLERY.slice(10).every(r => r.el !== null), 'base 10 first, then the 40 forms')
 ok(new Set(GALLERY.map(r => r.name)).size === GALLERY.length, 'every name unique')
@@ -68,13 +68,18 @@ ok(steepAdd(steepAdd(STEEP_NONE, 'mana', 8), 'storm', 5).storm === 2, 'add is he
   const line = readFileSync(CANON, 'utf8').split('\n').find(x => x.includes('Locked so far') && x.includes('Vulnara')) ?? ''
   for (const r of aw) ok(line.includes(`**${r.name}** (${r.aw!.branch[0].toUpperCase()}${r.aw!.branch.slice(1)})`), `canon line names ${r.name} (${r.aw!.branch})`)
   // M244 sheet 5: Luminel's four = rows #067-#070, named word for word off the canon line ('Luminel (Mana):') and the stage-3 ledger
-  const lw = GALLERY.filter(r => r.aw && r.sp === 'firefly'), ll = readFileSync(CANON, 'utf8').split('\n').find(x => x.includes('**Luminel (Mana):**')) ?? ''
+  const lw = GALLERY.filter(r => r.aw && r.sp === 'firefly' && r.el === 'mana'), ll = readFileSync(CANON, 'utf8').split('\n').find(x => x.includes('**Luminel (Mana):**')) ?? ''
   ok(lw.length === 4 && lw.every((r, i) => r.num === 67 + i && r.el === 'mana'), `Luminel's awakened rows #067-#070 (got ${lw.map(r => r.num)})`)
   ok(lw.map(r => r.name).join() === ll.replace(/.*\*\*Luminel \(Mana\):\*\*/, '').replace(/\*|\([^)]*\)/g, '').split('·').map(x => x.trim()).join(), `Luminel's four = the canon line (${ll.slice(0, 90)})`)
   for (const r of lw) ok(locks.some(l => l.name === r.name && l.second_form === 'Luminel' && l.branch_name.toLowerCase() === r.aw!.branch), `${r.name}: a stage-3 lock off Luminel, ${r.aw!.branch}`)
+  // M244 sheet 6: Luminarc's four = rows #071-#074, word for word off the canon line ('Luminarc (Storm):') and the stage-3 ledger
+  const lr = GALLERY.filter(r => r.aw && r.sp === 'firefly' && r.el === 'storm'), lc = readFileSync(CANON, 'utf8').split('\n').find(x => x.includes('**Luminarc (Storm):**')) ?? ''
+  ok(lr.length === 4 && lr.every((r, i) => r.num === 71 + i), `Luminarc's awakened rows #071-#074 (got ${lr.map(r => r.num)})`)
+  ok(lr.map(r => r.name).join() === lc.replace(/.*\*\*Luminarc \(Storm\):\*\*/, '').replace(/\*|\([^)]*\)/g, '').split('·').map(x => x.trim()).join(), `Luminarc's four = the canon line (${lc.slice(0, 90)})`)
+  for (const r of lr) ok(locks.some(l => l.name === r.name && l.second_form === 'Luminarc' && l.branch_name.toLowerCase() === r.aw!.branch), `${r.name}: a stage-3 lock off Luminarc, ${r.aw!.branch}`)
   ok(aw.every(r => r.icon.startsWith('/open/spirits/') && !r.icon.includes('stage3')), 'awakened icons are our renders, not the private art')
   // M244 sheet 2: Vulnarc's four (#055-#058, art pending lock) = the canon's 'Named — Vulnyx › Vulnarc (Storm)' line, word for word
-  const st = GALLERY.filter(r => r.aw && r.el === 'storm'), named = readFileSync(CANON, 'utf8').split('\n').find(x => x.includes('Named') && x.includes('Vulnarc (Storm)')) ?? ''
+  const st = GALLERY.filter(r => r.aw && r.el === 'storm' && r.sp === 'fox'), named = readFileSync(CANON, 'utf8').split('\n').find(x => x.includes('Named') && x.includes('Vulnarc (Storm)')) ?? ''
   ok(st.length === 4 && st.every((r, i) => r.num === 55 + i), `Vulnarc's awakened rows #055-#058 (got ${st.map(r => r.num)})`)
   for (const r of st) ok(named.includes(`**${r.name}** (${r.aw!.branch[0].toUpperCase()}${r.aw!.branch.slice(1)}`), `canon names ${r.name} (${r.aw!.branch})`)
   ok(st.every(r => r.icon.startsWith('/open/spirits/') && !r.icon.includes('stage3')), 'Vulnarc awakened icons are our renders')

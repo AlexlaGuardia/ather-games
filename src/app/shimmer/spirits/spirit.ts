@@ -145,6 +145,8 @@ export const AWAKENED_NAMES: Readonly<Partial<Record<string, Readonly<Record<Awa
   vulnix: { champion: 'Vulnitar', virtuoso: 'Marelle', ace: 'Vulnisk', enigma: 'Vulnixeth' },
   // M244 sheet 5: Luminel (Mana), canon spirits-species.md 'Named, the Luminara line' (Alex 11-28; art LOCKED-AFK athernyx #017-020)
   luminel: { champion: 'Luminok', virtuoso: 'Lumilys', ace: 'Lumivex', enigma: 'Elhae' },
+  // M244 sheet 6: Luminarc (Storm), canon spirits-species.md 'Named, the Luminara line' (Alex 11-28; art LOCKED-AFK athernyx #021-024)
+  luminarc: { champion: 'Luminthar', virtuoso: 'Lumicelle', ace: 'Arcet', enigma: 'Lumiceth' },
 }
 
 /** Get second form name, or null if base element */
