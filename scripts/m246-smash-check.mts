@@ -23,6 +23,7 @@ const { mintSession } = await import('../src/lib/accounts/session')
 const flag = (n: string, d: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d }
 const url = flag('--url', 'https://ather.games'), PHONE = process.argv.includes('--phone'), PART = flag('--part', 'all'), X = Number(flag('--x', '2'))
 /** --shots: a slow shot pass (?bellx=0.3: every beat several seconds, past the WebGL screenshot's lag) */
+/** the world page also draws the whole world behind the show (a few frames a second on swiftshader): its show runs slower so a frame lands in every beat */
 const SHOTS = process.argv.includes('--shots'), BX = SHOTS ? '&bellx=0.3' : ''
 const out = flag('--out', '/tmp/m246') + (PHONE ? '-390' : '-desk'), KEY = process.env.OWNER_KEY
 mkdirSync(out, { recursive: true })
@@ -153,7 +154,7 @@ try {
           localStorage.setItem(`${pre}ather.spiritStats.v1`, JSON.stringify({ [s.pot]: { form: 'base', g: { pwr: 10 }, plays: 0, xp: 0, grown: 12 } }))
         }
       }, { TUT, id: k.id, pot, chord: CHORD, seed, sp: seed.replace('mana_seed_', '') } as any)
-      await p.goto(`${url}/shimmer/open/ather?hour=14&clashx=${X}${BX}`, { waitUntil: 'load', timeout: 240000 })
+      await p.goto(`${url}/shimmer/open/ather?hour=14&clashx=${X}${BX || '&bellx=0.7'}`, { waitUntil: 'load', timeout: 240000 })
       await p.waitForFunction(() => !!(window as any).__ather?.travel, { timeout: 180000, polling: 1000 })
       await sleep(3000)
       try { await dismissStartCard(p) } catch { for (let i = 0; i < 3; i++) { await p.keyboard.press('Escape'); await sleep(600) }; await dismissStartCard(p).catch(() => {}) }
