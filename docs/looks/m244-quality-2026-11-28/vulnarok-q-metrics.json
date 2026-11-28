@@ -1,0 +1,158 @@
+{
+ "bones": 26,
+ "bones_with_echoes": 130,
+ "glb_bytes": 1190384,
+ "solved": {
+  "sit": {
+   "drop": -0.4233381986618043,
+   "tail": 0.9257083654403686
+  },
+  "lie": {
+   "drop": -0.33757867813110354,
+   "tail": 0.19922845363616948
+  }
+ },
+ "legs": [
+  "leg_l_up",
+  "leg_l_lo",
+  "leg_l_mt",
+  "leg_l_paw",
+  "leg_r_up",
+  "leg_r_lo",
+  "leg_r_mt",
+  "leg_r_paw"
+ ],
+ "arms": [
+  "arm_l_up",
+  "arm_l_lo",
+  "hand_l",
+  "arm_r_up",
+  "arm_r_lo",
+  "hand_r"
+ ],
+ "walk": {
+  "dur_s": 0.636,
+  "lowest_m": -0.0001,
+  "height_m": 1.116,
+  "length_m": 1.053,
+  "lead_l_minus_r_z": [
+   0.25,
+   0.2,
+   -0.056,
+   -0.25,
+   -0.2,
+   0.056
+  ],
+  "feet_alternate": true,
+  "echo0_head_travel": 0.018,
+  "leg_reach_ratio_max": 0.85
+ },
+ "run": {
+  "dur_s": 0.45,
+  "lowest_m": 0.0006,
+  "height_m": 1.045,
+  "length_m": 1.05,
+  "lead_l_minus_r_z": [
+   0.466,
+   -0.053,
+   -0.509,
+   -0.466,
+   0.053,
+   0.509
+  ],
+  "feet_alternate": true,
+  "echo0_head_travel": 0.03,
+  "leg_reach_ratio_max": 0.89
+ },
+ "idle": {
+  "dur_s": 4.8,
+  "lowest_m": -0.0,
+  "height_m": 1.129,
+  "length_m": 1.024,
+  "lead_l_minus_r_z": [
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0
+  ],
+  "feet_alternate": false,
+  "echo0_head_travel": 0.011
+ },
+ "sit": {
+  "dur_s": 5.0,
+  "lowest_m": -0.0,
+  "height_m": 0.835,
+  "length_m": 1.002,
+  "lead_l_minus_r_z": [
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0
+  ],
+  "feet_alternate": false,
+  "echo0_head_travel": 0.002,
+  "leg_reach_ratio_max": 0.63
+ },
+ "lie": {
+  "dur_s": 5.6,
+  "lowest_m": -0.0002,
+  "height_m": 0.593,
+  "length_m": 1.285,
+  "lead_l_minus_r_z": [
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0
+  ],
+  "feet_alternate": false,
+  "echo0_head_travel": 0.001,
+  "leg_reach_ratio_max": 1.0
+ },
+ "quality": {
+  "on": {
+   "paint": true,
+   "jiggle": true
+  },
+  "dense": {
+   "passes": 1,
+   "verts_before": 6208,
+   "verts_after": 7306
+  },
+  "paint": {
+   "coat": 4260,
+   "brush": 1230,
+   "chest_roi": 1620,
+   "blaze": 351,
+   "ear": 172
+  },
+  "jiggle": {
+   "gain": {
+    "ear": 49.48763,
+    "tail": 3.86635
+   },
+   "peak_rad": {
+    "walk:ear_l": 0.16,
+    "walk:ear_r": 0.16,
+    "walk:tail1": 0.11,
+    "run:ear_l": 0.256,
+    "run:ear_r": 0.256,
+    "run:tail1": 0.176,
+    "idle:ear_l": 0.048,
+    "idle:ear_r": 0.045,
+    "idle:tail1": 0.0,
+    "sit:ear_l": 0.024,
+    "sit:ear_r": 0.022,
+    "sit:tail1": 0.0,
+    "lie:ear_l": 0.019,
+    "lie:ear_r": 0.017,
+    "lie:tail1": 0.0
+   }
+  }
+ }
+}
