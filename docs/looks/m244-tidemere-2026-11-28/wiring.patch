@@ -1,0 +1,130 @@
+--- a/src/app/shimmer/open/ather/spirit-models.ts
++++ b/src/app/shimmer/open/ather/spirit-models.ts
+@@ -607,9 +607,27 @@
+   return { ...b, name, url: `/open/spirits/${name}-rigged.glb`, h, trot: grownTrot(base.trot, base.h, h), rig: { ...b.rig!, glbLen: AWAKEN_LEN[name] },
+     glow: { part: 'aura', emissive: aura, lo: 0.35, hi: 0.7, hz: 0.35 } }
+ }
++// M244 sheet 11 (sprites, 11-28): TIDEMERE's four (Water), owner preview (docs/looks/m244-tidemere-2026-11-28). Canon: the Tidemere line CARRIES
++// ITS OWN WATER, so each is the live Tidemere's sculpt re-shaped by name (sculpt_tideaw.py) on HER legless glide rig (rig_tidemere.py via
++// rig_tideaw.py: 14 bones, flippers, the plastron riding 0.03 glb over her ground) and draws her water sheet + wet trail (spirit-water.ts
++// WATER_FORMS). Her clips at Tidemere's speeds; h = the base Shellmere's x her dial. 'aura' = her motif: Tidemok's crystal spikes, Tidessa's
++// coral crown + pearls, Tidemerk's peeling spray, Tidemyr's reef + waterfall. glbLen = her idle nose to tail (rig metrics glb_long).
++export const TIDE_AW_DIAL: Readonly<Record<string, number>> = { tidemok: 1.9, tidessa: 1.75, tidemerk: 1.8, tidemyr: 1.85 }
++const tideAw = (name: string, aura: string, glbLen: number): SpiritLook => {
++  const b = SECOND_FORMS.turtle!.water!, base = BASE_PREVIEW.turtle!, h = base.h * TIDE_AW_DIAL[name]
++  return { ...b, name, url: `/open/spirits/${name}-rigged.glb`, h, trot: grownTrot(base.trot, base.h, h), rig: { ...b.rig!, glbLen },
++    glow: { part: 'aura', emissive: aura, lo: 0.35, hi: 0.7, hz: 0.35 } }
++}
++export const TIDE_AWAKENED: Readonly<Record<string, SpiritLook>> = {
++  tidemok: tideAw('tidemok', '#c4fbf6', 1.668),
++  tidessa: tideAw('tidessa', '#fff4e0', 1.523),
++  tidemerk: tideAw('tidemerk', '#dcf8fc', 1.814),
++  tidemyr: tideAw('tidemyr', '#d4f2fa', 1.624),
++}
+ /** by look name (spirit.ts AWAKENED_NAMES, lower-cased) */
+ export const AWAKENED_FORMS: Readonly<Record<string, SpiritLook>> = {
+   ...CROAK_AWAKENED,   // M244 sheet 9: Croakarc's four (above, by croakarc())
++  ...TIDE_AWAKENED,   // M244 sheet 11: Tidemere's four (above, on her glide rig)
+   vulnarok: awakened('vulnarok', AWAKEN_LEN.vulnarok, '#ffcf5a', 2.4),
+   vulnalys: awakened('vulnalys', AWAKEN_LEN.vulnalys, '#b48cff', 1.7),
+   vulnavex: awakened('vulnavex', AWAKEN_LEN.vulnavex, '#ffcf5a', 2.6),
+--- a/src/app/shimmer/spirits/spirit.ts
++++ b/src/app/shimmer/spirits/spirit.ts
+@@ -157,6 +157,8 @@
+   croakarc: { champion: 'Croakarkor', virtuoso: 'Croakarielle', ace: 'Arcvik', enigma: 'Croakarcun' },
+   // M244 sheet 10: Voltowl (Storm), canon spirits-species.md 'Named, the Athowl line' (art LOCKED athernyx #065-068)
+   voltowl: { champion: 'Voltowrak', virtuoso: 'Voltowaya', ace: 'Voltwis', enigma: 'Voltoweth' },
++  // M244 sheet 11: Tidemere (Water), canon spirits-species.md 'Tidemere (Water)' (art LOCKED athernyx #061-064; hub yay 11-28)
++  tidemere: { champion: 'Tidemok', virtuoso: 'Tidessa', ace: 'Tidemerk', enigma: 'Tidemyr' },
+ }
+ 
+ /** Get second form name, or null if base element */
+--- a/src/app/shimmer/dev/editors/spirit-gallery.ts
++++ b/src/app/shimmer/dev/editors/spirit-gallery.ts
+@@ -23,7 +23,7 @@
+ ]
+ 
+ /** M244: the awakened forms built so far, stage-3 ledger order (n = index + 1) */
+-export const AWAKENED: readonly (readonly [Species, GalleryElement, AwakenedBranch])[] = (['mana', 'storm', 'earth', 'water'] as const).flatMap(el => AWAKENED_BRANCHES.map((b): readonly [Species, GalleryElement, AwakenedBranch] => ['fox', el, b])).concat((['mana', 'storm', 'earth', 'water'] as const).flatMap(el => AWAKENED_BRANCHES.map((b): readonly [Species, GalleryElement, AwakenedBranch] => ['firefly', el, b]))).concat(AWAKENED_BRANCHES.map((b): readonly [Species, GalleryElement, AwakenedBranch] => ['owl', 'mana', b])).concat(AWAKENED_BRANCHES.map((b): readonly [Species, GalleryElement, AwakenedBranch] => ['frog', 'storm', b])).concat(AWAKENED_BRANCHES.map((b): readonly [Species, GalleryElement, AwakenedBranch] => ['owl', 'storm', b]))   // sheet 2: Vulnarc's four (#055-#058); sheet 3: Vulnore's (#059-#062); sheet 4: Vulnix's (#063-#066); sheet 5: Luminel's (#067-#070); sheet 6: Luminarc's (#071-#074); sheet 7: Luminore's (#075-#078); sheet 9: Luminix's (#079-#082); sheet 8: Mystowl's (#083-#086, owl, after every firefly line); sheet 9b: Croakarc's (#087-#090, frog); sheet 10: Voltowl's (#091-#094, owl)
++export const AWAKENED: readonly (readonly [Species, GalleryElement, AwakenedBranch])[] = (['mana', 'storm', 'earth', 'water'] as const).flatMap(el => AWAKENED_BRANCHES.map((b): readonly [Species, GalleryElement, AwakenedBranch] => ['fox', el, b])).concat((['mana', 'storm', 'earth', 'water'] as const).flatMap(el => AWAKENED_BRANCHES.map((b): readonly [Species, GalleryElement, AwakenedBranch] => ['firefly', el, b]))).concat(AWAKENED_BRANCHES.map((b): readonly [Species, GalleryElement, AwakenedBranch] => ['owl', 'mana', b])).concat(AWAKENED_BRANCHES.map((b): readonly [Species, GalleryElement, AwakenedBranch] => ['frog', 'storm', b])).concat(AWAKENED_BRANCHES.map((b): readonly [Species, GalleryElement, AwakenedBranch] => ['owl', 'storm', b])).concat(AWAKENED_BRANCHES.map((b): readonly [Species, GalleryElement, AwakenedBranch] => ['turtle', 'water', b]))   // sheet 11: Tidemere's (#095-#098, turtle, after Voltowl's); sheet 2: Vulnarc's four (#055-#058); sheet 3: Vulnore's (#059-#062); sheet 4: Vulnix's (#063-#066); sheet 5: Luminel's (#067-#070); sheet 6: Luminarc's (#071-#074); sheet 7: Luminore's (#075-#078); sheet 9: Luminix's (#079-#082); sheet 8: Mystowl's (#083-#086, owl, after every firefly line); sheet 9b: Croakarc's (#087-#090, frog); sheet 10: Voltowl's (#091-#094, owl)
+ 
+ export type GalleryRow = {
+   /** grimoire # (1-50) */ num: number
+--- a/src/app/shimmer/dev/editors/spirit-gallery.test.ts
++++ b/src/app/shimmer/dev/editors/spirit-gallery.test.ts
+@@ -14,7 +14,7 @@
+ ok(existsSync(LEDGER), `ledger present (${LEDGER})`)
+ ok(existsSync(CANON), `canon base table present (${CANON})`)
+ 
+-ok(GALLERY.length === 94, `94 rows: 10 base + 40 forms + 44 awakened (got ${GALLERY.length})`)
++ok(GALLERY.length === 98, `98 rows: 10 base + 40 forms + 48 awakened (got ${GALLERY.length})`)
+ GALLERY.forEach((r, i) => ok(r.num === i + 1, `row ${i} numbered ${i + 1} (got ${r.num})`))
+ ok(GALLERY.slice(0, 10).every(r => r.el === null) && GALLERY.slice(10).every(r => r.el !== null), 'base 10 first, then the 40 forms')
+ ok(new Set(GALLERY.map(r => r.name)).size === GALLERY.length, 'every name unique')
+@@ -102,6 +102,11 @@
+   ok(vo.length === 4 && vo.every((r, i) => r.num === 91 + i), `Voltowl's awakened rows #091-#094 (got ${vo.map(r => r.num)})`)
+   ok(vo.map(r => r.name).join() === vol.replace(/.*\*\*Voltowl \(Storm\):\*\*/, '').replace(/\*|\([^)]*\)/g, '').split('·').map(x => x.trim()).join(), `Voltowl's four = the canon line (${vol.slice(0, 90)})`)
+   for (const r of vo) ok(locks.some(l => l.name === r.name && l.second_form === 'Voltowl' && l.branch_name.toLowerCase() === r.aw!.branch), `${r.name}: a stage-3 lock off Voltowl, ${r.aw!.branch}`)
++  // M244 sheet 11: Tidemere's four (turtle, Water) = rows #095-#098, after Voltowl's; word for word off the canon line ('Tidemere (Water):') + the ledger
++  const td = GALLERY.filter(r => r.aw && r.sp === 'turtle'), tdl = readFileSync(CANON, 'utf8').split('\n').find(x => x.includes('**Tidemere (Water):**')) ?? ''
++  ok(td.length === 4 && td.every((r, i) => r.el === 'water' && r.num === 95 + i), `Tidemere's awakened rows #095-#098 (got ${td.map(r => r.num)})`)
++  ok(td.map(r => r.name).join() === tdl.replace(/.*\*\*Tidemere \(Water\):\*\*/, '').replace(/\*|\([^)]*\)/g, '').split('·').map(x => x.trim()).join(), `Tidemere's four = the canon line (${tdl.slice(0, 90)})`)
++  for (const r of td) ok(locks.some(l => l.name === r.name && l.second_form === 'Tidemere' && l.branch_name.toLowerCase() === r.aw!.branch), `${r.name}: a stage-3 lock off Tidemere, ${r.aw!.branch}`)
+   ok(aw.every(r => r.icon.startsWith('/open/spirits/') && !r.icon.includes('stage3')), 'awakened icons are our renders, not the private art')
+   // M244 sheet 2: Vulnarc's four (#055-#058, art pending lock) = the canon's 'Named — Vulnyx › Vulnarc (Storm)' line, word for word
+   const st = GALLERY.filter(r => r.aw && r.el === 'storm' && r.sp === 'fox'), named = readFileSync(CANON, 'utf8').split('\n').find(x => x.includes('Named') && x.includes('Vulnarc (Storm)')) ?? ''
+--- a/src/app/shimmer/open/ather/spirit-awakened.test.ts
++++ b/src/app/shimmer/open/ather/spirit-awakened.test.ts
+@@ -33,10 +33,12 @@
+ ok(mysNames.join() === 'mystowk,mystowelle,mystowis,mysteth', `Mystowl's four in branch order (${mysNames})`)
+ // M244 sheet 9b: Croakarc's four (their own test: spirit-croakaw.test.ts)
+ const croakNames = AWAKENED_BRANCHES.map(b => AWAKENED_NAMES.croakarc![b].toLowerCase())
++// M244 sheet 11: Tidemere's four (their own test: spirit-tideaw.test.ts)
++const tideNames = AWAKENED_BRANCHES.map(b => AWAKENED_NAMES.tidemere![b].toLowerCase())
+ // M244 sheet 10: Voltowl's (Storm) four (art LOCKED athernyx #065-068)
+ const voltNames = AWAKENED_BRANCHES.map(b => AWAKENED_NAMES.voltowl![b].toLowerCase())
+ ok(voltNames.join() === 'voltowrak,voltowaya,voltwis,voltoweth', `Voltowl's four in branch order (${voltNames})`)
+-ok(Object.keys(AWAKENED_FORMS).sort().join() === [...names, ...stormNames, ...earthNames, ...waterNames, ...lumNames, ...arcNames, ...oreNames, ...mixNames, ...mysNames, ...croakNames, ...voltNames].sort().join(), 'one look per name, no more')
++ok(Object.keys(AWAKENED_FORMS).sort().join() === [...names, ...stormNames, ...earthNames, ...waterNames, ...lumNames, ...arcNames, ...oreNames, ...mixNames, ...mysNames, ...croakNames, ...voltNames, ...tideNames].sort().join(), 'one look per name, no more')
+ for (const [el, list] of [['mana', names], ['storm', stormNames], ['earth', earthNames], ['water', waterNames]] as const) for (const n of list) {
+   const vulnara = SECOND_FORMS.fox![el]!, parent = el === 'mana' ? 'vulnara' : el === 'storm' ? 'vulnarc' : el === 'earth' ? 'vulnore' : 'vulnix'
+   const L = AWAKENED_FORMS[n]
+--- a/scripts/m244-awakened-check.mts
++++ b/scripts/m244-awakened-check.mts
+@@ -19,7 +19,7 @@
+ const ok = (c: boolean, m: string) => { console.log(`${c ? 'PASS' : 'FAIL'} ${m}`); if (!c) fails++ }
+ const ONLY = flag('--only', '').split(',').filter(Boolean).map(Number)
+ const AW = GALLERY.filter(r => r.aw && (!ONLY.length || ONLY.includes(r.num)))
+-ok(GALLERY.filter(r => r.aw).length === 44, `44 awakened rows in the roster (${GALLERY.filter(r => r.aw).map(r => `#${r.num} ${r.name}`).join(', ')})`)
++ok(GALLERY.filter(r => r.aw).length === 48, `48 awakened rows in the roster (${GALLERY.filter(r => r.aw).map(r => `#${r.num} ${r.name}`).join(', ')})`)
+ const br = await puppeteer.launch({ protocolTimeout: 900000, executablePath: process.env.CHROME ?? '/usr/bin/chromium-browser', args: ['--no-sandbox', '--disable-dev-shm-usage', '--mute-audio', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] })
+ try {
+   const errs: string[] = []
+@@ -141,6 +141,16 @@
+       const s3 = await sample('run', 6, 250), lr = Math.min(...(s3?.out ?? [{ low: -9 }]).map(o => o.low))
+       ok(lr > 0.08, `#${row.num} run: she FLIES (lowest ${lr.toFixed(3)} glb up)`)
+     }
++    if (['tidemok', 'tidessa', 'tidemerk', 'tidemyr'].includes(look)) {   // sheet 11: Tidemere's four CARRY THEIR OWN WATER: her legless glide rig, her water sheet under her, the plastron riding it in every clip
++      const s1 = await sample('idle', 2, 100), names = s1?.names ?? []
++      ok(['b_shell', 'b_flip0_l', 'b_blade0_l', 'b_flip1_r', 'b_blade1_r', 'b_lids'].every(x => names.includes(x)) && !names.some(x => /leg|foot|paw/.test(x)), `#${row.num} on Tidemere's glide rig (${names.length} bones: flippers + blades, no legs)`)
++      const w = await p.evaluate(() => { const W = (window as any).__spiritModel?.waters?.get('gallery'); return W ? W.stats() : null })
++      ok(!!w?.sheet, `#${row.num} her water sheet is drawn under her (${JSON.stringify(w)?.slice(0, 120)})`)
++      for (const c of ['idle', 'walk', 'run', 'sit', 'lie']) {
++        const s2 = await sample(c, 6, 250), o = s2?.out ?? [{ low: -9, blow: 9 }], lo = Math.min(...o.map(x => x.low)), b0 = Math.min(...o.map(x => x.blow)), b1 = Math.max(...o.map(x => x.blow))
++        ok(lo >= -0.0015 && b0 > 0.008 && b1 < 0.06, `#${row.num} ${c}: nothing under the ground (lowest ${(lo * 1000).toFixed(1)} mm glb) and she rides her sheet (body ${(b0 * 1000).toFixed(1)}..${(b1 * 1000).toFixed(1)} mm up)`)
++      }
++    }
+     if (look === 'vulnarok') {
+       const s1 = await sample('walk', 14, 70)
+       const legs = (s1?.names ?? []).filter(x => /^b_leg_[lr]_(up|lo|mt|paw)$/.test(x)), d = (s1?.out ?? []).map(o => (o.bones.b_leg_l_paw?.[2] ?? 0) - (o.bones.b_leg_r_paw?.[2] ?? 0))
+--- a/src/app/shimmer/open/ather/spirit-water.ts
++++ b/src/app/shimmer/open/ather/spirit-water.ts
+@@ -11,7 +11,7 @@
+ import * as THREE from 'three'
+ 
+ /** the forms that glide on their own water (by look name) */
+-export const WATER_FORMS = ['tidemere'] as const
++export const WATER_FORMS = ['tidemere', 'tidemok', 'tidessa', 'tidemerk', 'tidemyr'] as const   // M244 sheet 11: her four awakenings ride theirs too (canon: the line carries its own water)
+ export type WaterForm = typeof WATER_FORMS[number]
+ export const isWaterForm = (n: string): n is WaterForm => (WATER_FORMS as readonly string[]).includes(n)
+ /** wet patches alive at most at once, and how long one takes to dry (s) */

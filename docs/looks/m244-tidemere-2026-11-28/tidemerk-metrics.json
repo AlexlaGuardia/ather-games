@@ -1,0 +1,153 @@
+{
+ "bones": 14,
+ "bone_names": [
+  "root",
+  "shell",
+  "neck",
+  "head",
+  "lids",
+  "tail",
+  "flip0_l",
+  "blade0_l",
+  "flip1_l",
+  "blade1_l",
+  "flip0_r",
+  "blade0_r",
+  "flip1_r",
+  "blade1_r"
+ ],
+ "glb_bytes": 489116,
+ "tris": {
+  "body": 12744,
+  "eyes": 1352
+ },
+ "height_m": 0.464,
+ "clear": 0.03,
+ "clear_sit": 0.016,
+ "fin_floor": 0.04,
+ "idle": {
+  "dur_s": 9.0,
+  "lowest_m": 0.0139,
+  "body_low_min": 0.03,
+  "body_low_max": 0.036,
+  "fin_low_min": 0.0408,
+  "edge_stretch_p99": 1.33,
+  "edge_stretch_max": 2.95,
+  "mean_top": 0.507,
+  "span_m": 0.824,
+  "length_m": 0.846
+ },
+ "walk": {
+  "dur_s": 0.6,
+  "lowest_m": 0.0139,
+  "body_low_min": 0.03,
+  "body_low_max": 0.034,
+  "fin_low_min": 0.0361,
+  "edge_stretch_p99": 1.4,
+  "edge_stretch_max": 3.69,
+  "mean_top": 0.511,
+  "stroke_m_at_base": 0.33,
+  "span_m": 0.865,
+  "length_m": 0.846
+ },
+ "run": {
+  "dur_s": 0.3,
+  "lowest_m": 0.014,
+  "body_low_min": 0.0301,
+  "body_low_max": 0.0339,
+  "fin_low_min": 0.0358,
+  "edge_stretch_p99": 1.49,
+  "edge_stretch_max": 4.32,
+  "mean_top": 0.511,
+  "stroke_m_at_base": 0.57,
+  "span_m": 0.867,
+  "length_m": 0.846
+ },
+ "sit": {
+  "dur_s": 7.0,
+  "lowest_m": 0.0074,
+  "body_low_min": 0.016,
+  "body_low_max": 0.018,
+  "fin_low_min": 0.0343,
+  "edge_stretch_p99": 1.42,
+  "edge_stretch_max": 4.35,
+  "mean_top": 0.567,
+  "span_m": 0.823,
+  "length_m": 0.842
+ },
+ "lie": {
+  "dur_s": 5.0,
+  "lowest_m": 0.0074,
+  "body_low_min": 0.0186,
+  "body_low_max": 0.0207,
+  "fin_low_min": 0.086,
+  "edge_stretch_p99": 1.83,
+  "edge_stretch_max": 6.56,
+  "mean_top": 0.419,
+  "span_m": 0.536,
+  "length_m": 0.784
+ },
+ "body_mean_top": 0.474,
+ "glb_long": 1.814,
+ "form": "tidemerk",
+ "dial": 1.8,
+ "all_lowest_with_aura_glb": 0.016,
+ "extent_lo": [
+  -0.935,
+  0.016,
+  -0.961
+ ],
+ "extent_hi": [
+  0.934,
+  0.57,
+  0.886
+ ],
+ "span_rest_glb": 1.635,
+ "body_verts": 8242,
+ "aura_tris": 648,
+ "quality": {
+  "standard": "m244-quality-2026-11-28 (springs: blades, head; aura on bones)",
+  "aura": {
+   "shell": 336
+  },
+  "spring_gain": {
+   "head": 10.0018,
+   "blade": 5.1785
+  },
+  "spring_halved": 302,
+  "springs": {
+   "idle:head": 0.004,
+   "idle:blade0l": 0.001,
+   "idle:blade0r": 0.001,
+   "idle:blade1l": 0.001,
+   "idle:blade1r": 0.001,
+   "walk:head": 0.05,
+   "walk:blade0l": 0.076,
+   "walk:blade0r": 0.076,
+   "walk:blade1l": 0.034,
+   "walk:blade1r": 0.043,
+   "run:head": 0.08,
+   "run:blade0l": 0.12,
+   "run:blade0r": 0.12,
+   "run:blade1l": 0.058,
+   "run:blade1r": 0.082,
+   "sit:head": 0.0,
+   "sit:blade0l": 0.0,
+   "sit:blade0r": 0.0,
+   "sit:blade1l": 0.0,
+   "sit:blade1r": 0.0,
+   "lie:head": 0.0,
+   "lie:blade0l": 0.0,
+   "lie:blade0r": 0.0,
+   "lie:blade1l": 0.0,
+   "lie:blade1r": 0.0
+  },
+  "key_low": {
+   "idle": 0.03,
+   "walk": 0.03,
+   "run": 0.0301,
+   "sit": 0.016,
+   "lie": 0.016
+  }
+ }
+}
