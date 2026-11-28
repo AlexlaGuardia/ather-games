@@ -4,6 +4,7 @@
 //  1. shows the four keys for Champion: form met, steep met (4+3), stat UNMET, bond met; the branch is named Vulnarok
 //  2. Enigma (pure): steep UNMET (4 of 8 Mana)
 //  3. Force Vulnarok: the pot saves awakened=champion, and the garden draws her Vulnarok model (vulnarok-rigged.glb mounted)
+//  1b. (RULE s2) the readout line: 'Points at: Vulnarok (champion) / Missing: Stat gate'
 //  4. a reload keeps it (the save parser keeps `awakened`)
 //  0 page errors. FAIL before = prod has no [data-awaken-dev] block.
 //   npx tsx scripts/m244-awaken-rule-check.mts [--phone] [--url http://localhost:3203] [--out docs/looks/m244-rule-2026-11-28]
@@ -83,6 +84,8 @@ try {
   ok(!!d1, '1 the owner awakening block is in her panel [data-awaken-dev]')
   ok(d1?.branch === 'champion' && d1.name === 'Vulnarok', `1 Champion = Vulnarok (${d1?.branch} ${d1?.name})`)
   ok(d1?.keys.form === '1' && d1.keys.steep === '1' && d1.keys.stat === '0' && d1.keys.bond === '1' && d1.met === '0', `1 Champion keys: form met, Steep 4+3 met, stat UNMET, bond met, not open (${JSON.stringify(d1?.keys)} met=${d1?.met})`)
+  const lean = await p.evaluate(() => { const e = document.querySelector('[data-awaken-lean]'); return e ? { b: e.getAttribute('data-awaken-lean'), n: e.getAttribute('data-awaken-lean-name'), m: e.getAttribute('data-awaken-lean-missing'), t: e.textContent ?? '' } : null })
+  ok(lean?.b === 'champion' && lean.n === 'Vulnarok' && lean.m === 'stat' && /Points at: Vulnarok/.test(lean.t) && /Missing: Stat gate/.test(lean.t), `1b Steep readout: points at Champion = Vulnarok, missing only the stat gate (${JSON.stringify(lean)})`)
   await shot('1-champion-keys')
   await click('[data-awaken-branch="enigma"]'); await sleep(600)
   const d2 = await readDev()

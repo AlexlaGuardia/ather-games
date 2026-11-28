@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { H } from '../../ui/hearth'
 import { AWAKENED_BRANCHES, ELEMENT_COLORS, type AwakenedBranch, type Species } from '../../spirits/spirit'
-import { awaken, awakenCheck, awakenedName, AWAKEN_DEV_UI } from './spirit-awaken'
+import { awaken, awakenCheck, awakenedName, awakeningLean, awakenMissing, AWAKEN_DEV_UI } from './spirit-awaken'
 import { useBook, getPots, setPots } from './spirit-panels'
 import { recStatOf } from './second-form-view'
 import { loadStats } from './spirit-stats'
@@ -23,6 +23,7 @@ export function AwakenDev({ sp, id, statsV }: { sp: Species; id: string; statsV:
   const owner = useOwner(), pot = useBook().pots[id]
   const [branch, setBranch] = useState<AwakenedBranch>('champion')
   const ck = useMemo(() => awakenCheck(pot, sp, branch, recStatOf(sp, loadStats()[id])), [pot, sp, branch, id, statsV])   // eslint-disable-line react-hooks/exhaustive-deps
+  const lean = useMemo(() => awakeningLean(pot, sp, recStatOf(sp, loadStats()[id])), [pot, sp, id, statsV])   // eslint-disable-line react-hooks/exhaustive-deps
   if (!owner || !pot?.bloomed) return null
   const name = awakenedName(sp, pot, branch)
   const force = () => {
@@ -35,6 +36,9 @@ export function AwakenDev({ sp, id, statsV }: { sp: Species; id: string; statsV:
     <div data-awaken-dev={branch} data-awaken-met={ck.met ? '1' : '0'} data-awaken-name={name ?? ''} data-awakened={pot.awakened ?? ''}
       className="mt-3 rounded-[8px] px-2.5 py-2" style={{ boxShadow: `inset 0 0 0 1px ${H.ember}`, background: 'rgba(255,250,240,.5)' }}>
       <div className="mb-1.5 text-[13px] font-bold" style={{ color: H.ember }}>{AWAKEN_DEV_UI.header}{done ? ` · ${AWAKEN_DEV_UI.done(done)}` : ''}</div>
+      {lean && <div data-awaken-lean={lean.branch} data-awaken-lean-name={lean.name ?? ''} data-awaken-lean-missing={awakenMissing(lean).map(k => k.key).join(',')} className="mb-1.5 text-[12px]" style={{ color: H.ink }}>
+        <b>{AWAKEN_DEV_UI.points}:</b> {lean.name ?? lean.branch} ({lean.branch}) · <b>{AWAKEN_DEV_UI.missing}:</b> {awakenMissing(lean).map(k => `${AWAKEN_DEV_UI.key[k.key]} ${k.detail && k.key === 'steep' ? k.detail : `${k.have}/${k.need}`}`).join(', ') || AWAKEN_DEV_UI.allMet}
+      </div>}
       <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
         {AWAKENED_BRANCHES.map(b => (
           <button key={b} data-awaken-branch={b} onClick={() => setBranch(b)} className="rounded-[6px] px-2 py-1 text-[12px] font-bold"

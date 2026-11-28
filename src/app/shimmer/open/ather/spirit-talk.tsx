@@ -40,6 +40,7 @@ import { canAsk, knownList, pickFavourite, BOND_MOVE_UI } from './spirit-bond-mo
 import { LESSON_UI } from './clash-lessons'   // M233 v2c: her Clash lessons
 import { followRefuseLine, talkLine } from './party-spirit-lines'   // M109: the SIGNED lines (canon script, word for word)
 import { PARTY_FULL_LINE } from './spirit-roster'
+import { autoAwaken } from './spirit-awaken'   // M244 RULE s2: the flag-gated auto-awaken hook
 import { AwakenDev } from './spirit-awaken-dev'   // M244 RULE s1: the owner's awakening readout + force
 
 
@@ -108,7 +109,7 @@ export function feedSpirit(id: string, sp: Parameters<typeof feedDish>[1], mid: 
   if (!r.ok) { hudSay(r.why === 'full' ? DISH_UI.full : MEAL_UI.locked, 'info', 4); return r }
   const bag = take(getInv(), mid, 1)
   if (!bag) return null
-  setInv(bag); setPots({ ...getPots(), [id]: r.pot }); saveFed(withFed(loadFed(), id, mid, Date.now())); spiritCheer.add(id)
+  setInv(bag); setPots({ ...getPots(), [id]: autoAwaken(r.pot, sp, recStatOf(sp, loadStats()[id])) ?? r.pot }); saveFed(withFed(loadFed(), id, mid, Date.now())); spiritCheer.add(id)
   const steep = r.steep.length ? `${r.steep.map(el => ELEMENT_LABEL[el]).join(' + ')} · ${MEAL_UI.steep(mealsOf(r.pot).length)}` : ''
   hudSay(r.evolved && r.formName ? MEAL_UI.evolved(r.formName) : r.snack ? `${DISH_UI.fed(itemDef(mid).name, r.bond, '')} · ${DISH_UI.snack}` : DISH_UI.fed(itemDef(mid).name, r.bond, steep), 'item', 5)
   return r
@@ -135,7 +136,9 @@ export function SpiritPanel({ sp, id, phone, onClose }: { sp: Parameters<typeof 
   useEffect(() => {
     if (!id || !pot) return
     const r = settleForm(pot, sp, recStatOf(sp, loadStats()[id]))
-    if (r) { setPots({ ...getPots(), [id]: r.pot }); hudSay(MEAL_UI.evolved(r.formName), 'item', 5) }
+    if (r) { setPots({ ...getPots(), [id]: r.pot }); hudSay(MEAL_UI.evolved(r.formName), 'item', 5); return }
+    const aw = autoAwaken(pot, sp, recStatOf(sp, loadStats()[id]))   // M244 RULE s2: a prereq changed (dish / training / Steep); flag-gated, all off
+    if (aw) setPots({ ...getPots(), [id]: aw })
   }, [id, pot, sp, statsV])
   // M204 -> M234 s2: every spirit dish in the bag (the grill, the element meals, the roasts), one row each
   const mealRows = useMemo(() => SPIRIT_DISH_IDS.map(did => ({ id: did, d: dishOf(did)!, n: countOf(inv, did) })).filter(r => r.n > 0), [inv])

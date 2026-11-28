@@ -91,6 +91,28 @@ export function awakeningDue(p: Pot | undefined, sp: Species, statOf: StatOf): A
   return open.slice().sort((a, b) => (c[b.element] - c[a.element]) || (Number(b.pure) - Number(a.pure)) || (AWAKENED_BRANCHES.indexOf(a.branch) - AWAKENED_BRANCHES.indexOf(b.branch)))[0].branch
 }
 
+/** Which branch her Steep points at NOW (the owner readout): the branch awakeningDue takes when one is open; else the named branch
+ *  whose Steep key is nearest done (met first, then share filled), with awakeningDue's own tie-break (most branch element, pure, canon order). */
+export function awakeningLean(p: Pot | undefined, sp: Species, statOf: StatOf): AwakenCheck | null {
+  if (!p?.bloomed || !p.element || p.awakened) return null
+  const due = awakeningDue(p, sp, statOf), all = awakenChecks(p, sp, statOf)
+  if (due) return all.find(c => c.branch === due)!
+  const c = mealCounts(mealsOf(p)), frac = (k: AwakenCheck) => { const s = k.keys.find(x => x.key === 'steep'); return !s ? 0 : s.met ? 2 : s.have / s.need }
+  const named = all.filter(k => k.name)
+  return named.slice().sort((a, b) => (frac(b) - frac(a)) || (c[b.element] - c[a.element]) || (Number(b.pure) - Number(a.pure)) || (AWAKENED_BRANCHES.indexOf(a.branch) - AWAKENED_BRANCHES.indexOf(b.branch)))[0] ?? null
+}
+/** what is still missing for a check: every unmet key (not `form`) with its numbers */
+export const awakenMissing = (ck: AwakenCheck): AwakenKey[] => ck.keys.filter(k => !k.met && k.key !== 'form')
+
+/** THE HOOK (M244 RULE s2): she awakens by herself when awakeningDue names a branch AND her line's flag is ON (`lines`, default
+ *  AWAKEN_PUBLIC_LINES). Returns the new pot, or null (nothing changes). Called after a dish, after training, after a Steep change. */
+export function autoAwaken(p: Pot | undefined, sp: Species, statOf: StatOf, lines: ReadonlySet<string> = AWAKEN_PUBLIC_LINES): Pot | null {
+  const line = lineOf(sp, p)
+  if (!p?.bloomed || p.awakened || !line || !lines.has(line)) return null
+  const b = awakeningDue(p, sp, statOf)
+  return b ? awaken(p, sp, b, statOf) : null
+}
+
 /** She awakens: `awakened` set for good. Null = she may not (a key unmet). `force` = the OWNER DEV trigger: skips the keys but
  *  still needs a bloomed second form whose branch is named (a model to draw). */
 export function awaken(p: Pot | undefined, sp: Species, b: AwakenedBranch, statOf: StatOf, force = false): Pot | null {
@@ -119,4 +141,7 @@ export const AWAKEN_DEV_UI = {
   unnamed: 'not named yet',
   done: (name: string) => `Awakened: ${name}`,
   reset: 'Undo awakening',
+  points: 'Points at',
+  missing: 'Missing',
+  allMet: 'all keys met',
 }

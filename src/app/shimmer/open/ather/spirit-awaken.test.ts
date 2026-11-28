@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs'
 import {
   BRANCH_ELEMENT, PURE_NEED_DEFAULT, PURE_NEED, MIX_OWN, MIX_BRANCH, AWAKEN_FEATS, AWAKEN_PUBLIC_LINES,
-  awakenCheck, awakenChecks, awakeningDue, awaken, keeperAwakenedLook, steepNeed, awakenedName, lineOf,
+  awakenCheck, awakenChecks, awakeningDue, awaken, awakeningLean, awakenMissing, autoAwaken, keeperAwakenedLook, steepNeed, awakenedName, lineOf,
 } from './spirit-awaken'
 import { BOND_MAX } from './spirit-dishes'
 import { SECOND_FORM_BAR, type StatOf } from '../../spirits/second-form-gate'
@@ -91,6 +91,24 @@ const bk = parseBook({ v: 1, pages: [], met: [], pots: { a: { ...aw, mealsEaten:
 ok(bk.pots.a.awakened === 'champion' && bk.pots.a.mealsEaten === 42, `a save keeps awakened + mealsEaten (${JSON.stringify(bk.pots.a)})`)
 ok(bk.pots.b.awakened === undefined && bk.pots.b.mealsEaten === 3, 'a base spirit cannot carry awakened')
 ok(bk.pots.c.awakened === undefined, 'a junk branch drops')
+
+
+// ── M244 RULE s2: the readout's lean + the flag-gated auto-awaken hook
+const FLAG_ON = new Set(['vulnara']), FLAG_OFF = new Set<string>()
+ok(awakeningLean(pot(fox, 'mana', steep({ mana: 4, earth: 3 })), 'fox', WEAK)?.branch === 'champion', 'lean: 4 Mana + 3 Earth points at Champion even with a weak stat')
+ok(awakenMissing(awakeningLean(pot(fox, 'mana', steep({ mana: 4, earth: 3 })), 'fox', WEAK)!).map(k => k.key).join() === 'stat', 'lean missing: only the stat gate')
+ok(awakeningLean(pot(fox, 'mana', steep({ mana: 4, earth: 3, storm: 3 })), 'fox', STRONG)?.branch === awakeningDue(pot(fox, 'mana', steep({ mana: 4, earth: 3, storm: 3 })), 'fox', STRONG), 'lean = the due branch (tie-break included) when open')
+ok(awakeningLean(pot(fox, 'mana', steep({ mana: 7 })), 'fox', STRONG)?.branch === 'enigma', 'lean: 7 Mana points at pure Enigma (7 of 8)')
+ok(awakeningLean(pot(fox, 'mana', []), 'fox', STRONG) !== null && awakeningLean(pot(fox, undefined, []), 'fox', STRONG) === null, 'lean: base spirit none')
+ok(awakeningLean({ ...ready, awakened: 'champion' }, 'fox', STRONG) === null, 'lean: awakened none')
+ok(autoAwaken(ready, 'fox', STRONG, FLAG_ON)?.awakened === 'champion', 'hook: flag ON + all keys met -> awakens')
+ok(autoAwaken(ready, 'fox', STRONG, FLAG_OFF) === null, 'hook: flag OFF -> nothing')
+ok(autoAwaken(ready, 'fox', STRONG) === null, 'hook: default flags (all off) -> nothing for players')
+ok(autoAwaken(ready, 'fox', WEAK, FLAG_ON) === null, 'hook: flag ON but a key unmet (stat) -> nothing')
+ok(autoAwaken(pot(fox, 'mana', steep({ mana: 4, earth: 3 }), BOND_MAX - 1), 'fox', STRONG, FLAG_ON) === null, 'hook: flag ON but bond short -> nothing')
+ok(autoAwaken(pot(fox, 'mana', steep({ mana: 4, earth: 3 }), BOND_MAX, { awakened: 'champion' }), 'fox', STRONG, FLAG_ON) === null, 'hook: already awakened -> nothing')
+ok(autoAwaken(pot(frog, 'mana', steep({ mana: 4, earth: 3 }), BOND_MAX, { mealsEaten: 99 }), 'frog', STRONG, new Set(['croakara'])) === null, 'hook: unnamed branch -> nothing')
+ok(autoAwaken(ready, 'fox', STRONG, new Set(['luminore'])) === null, "hook: another line's flag does not open hers")
 
 console.log(`spirit-awaken: ${pass} pass, ${fails.length} fail`)
 for (const f of fails) console.log('  FAIL ' + f)
