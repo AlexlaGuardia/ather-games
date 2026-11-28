@@ -92,17 +92,21 @@ export const V2_GUNS: Record<V2GunId, V2Gun> = {
     ...core(-0.028, -0.064), ...trigger(0.046, -0.078), grip(0.02, -0.05), ...stock(0.02),
   ] },
   // M196 (Alex 11-26: "remodel each gun as it gets tested"): the SPITTER, the shortbarrel (canon: SMG, high rate, burns hot fast).
-  // PLACEHOLDER LOOK for Alex to judge, off the same locked card: a short iron receiver, the family's chamber smaller, the shroud in
-  // dull BRONZE (the Spitter's mark in the family), a stub barrel with a bronze muzzle, the core below, a short stub stock. No
-  // magazine. grip / fore are the shipped SHORTBARREL anchors, so Alex's 11-22 Spitter hand tune still lands.
+  // M150 family pass (11-28): brought onto the locked card. An IRON shroud with TWO rows of short slots (was a bronze shroud, one
+  // row), the family's chamber with its dark dome, a stub barrel to a bronze muzzle cap, the core below, and a SKELETON stock: a
+  // straight iron tube off the receiver's top-rear and a lower strut, both to a bronze butt plate (was a solid stub). No magazine.
+  // grip / fore are the shipped SHORTBARREL anchors, so Alex's 11-22 Spitter hand tune still lands.
   spitter: { id: 'spitter', name: 'Spitter', grip: [0, -0.06, 0.03], fore: [0, -0.04, -0.2], railTop: 0.047, seatZ: -0.03, own: 'iron', sights: ['iron', 'holo'], parts: [
     slab([[-0.17, 0.045], [0.08, 0.045], [0.095, 0.025], [0.095, -0.03], [0.065, -0.05], [-0.155, -0.05], [-0.17, -0.035]], 0.046, 'iron', 0, 0.002),
-    ...channel(-0.15, 0.06, 0.018, 0.023), ...chamber(-0.07, -0.004, 0.072, 0.023), ...lever(0.005, -0.02, 0.023), ...gauge(0.055, -0.02, 0.023, 'bronze', 0.028),
-    bar([0, -0.002, -0.235], cut(0.046, 0.07, 0.008), 0.13, 'bronze', 0.002), ...slots(-0.292, 5, 0.0215, -0.002, 0.044, 0.023),
-    cyl([0, -0.002, -0.33], 0.024, 0.07, 'iron'), cyl([0, -0.002, -0.375], 0.038, 0.03, 'bronze', 'z', 16), bore(-0.3905, -0.002, 0.022),
-    ...core(-0.12, -0.05, 0.85), ...trigger(-0.044, -0.078), grip(-0.07, -0.05),
-    slab([[0.095, 0.025], [0.2, 0.03], [0.2, -0.07], [0.185, -0.07], [0.12, -0.03], [0.095, -0.03]], 0.03, 'iron', 0, 0.003),
-    slab([[0.199, 0.034], [0.214, 0.034], [0.214, -0.074], [0.199, -0.074]], 0.036, 'bronze', 0, 0.002),
+    ...channel(-0.15, 0.06, 0.018, 0.023), ...chamber(-0.07, -0.004, 0.074, 0.023, true), ...lever(0.005, -0.02, 0.023), ...gauge(0.055, -0.02, 0.023, 'bronze', 0.028),
+    bar([0, -0.002, -0.245], cut(0.048, 0.078, 0.008), 0.15, 'iron', 0.002),
+    ...slots(-0.304, 6, 0.0215, 0.014, 0.022, 0.024), ...slots(-0.304, 6, 0.0215, -0.018, 0.022, 0.024),
+    cyl([0, -0.002, -0.34], 0.026, 0.04, 'iron'), cyl([0, -0.002, -0.372], 0.038, 0.026, 'bronze', 'z', 16), bore(-0.3855, -0.002, 0.022),
+    ...core(-0.12, -0.05, 0.92), ...trigger(-0.044, -0.078), grip(-0.07, -0.05),
+    cyl([0, 0.024, 0.15], 0.014, 0.11, 'iron', 'z', 10),                                                                  // the stock's top tube
+    slab([[0.09, -0.016], [0.096, -0.028], [0.204, -0.012], [0.204, 0.002]], 0.012, 'iron', 0, 0.002),                     // its lower strut
+    cyl([0, 0.024, 0.098], 0.02, 0.016, 'iron', 'x', 10),                                                                  // the hinge knuckle
+    slab([[0.201, 0.038], [0.216, 0.038], [0.216, -0.066], [0.201, -0.066]], 0.034, 'bronze', 0, 0.002),                  // the bronze butt plate
   ] },
   // M150 s4 (Alex 11-27: "start working on the new gun models"): the REPEATER, the sidearm (canon: standard-issue, semi-auto, a
   // 2-rune core). Off the locked family card: a squared iron frame with the family's chamber, lever and gauge, the slotted shroud

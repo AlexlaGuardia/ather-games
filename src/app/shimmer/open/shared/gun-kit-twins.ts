@@ -24,10 +24,10 @@ export type TwinSide = 'left' | 'right'
 export interface RuneSlot { rune: 1 | 2; o: V3; size: [number, number]; normal: V3 }
 export interface TwinGun { side: TwinSide; rune: 1 | 2; parts: Part[]; core: Part[]; runeSlot: RuneSlot; grip: Model['grip']; fore: Model['fore'] }
 
-/** half the receiver's width (two barrels side by side) */
+/** half the receiver's width */
 export const TW_HALF = 0.027
-/** the barrels: two, side by side */
-export const TW_BARRELS = { n: 2, d: 0.026, x: 0.0135, y: 0.006, z0: -0.07, z1: -0.232 }
+/** the barrels: two, OVER AND UNDER (M150 family pass 11-28, off the locked card: the pair's barrels stack, each with its own bronze band). `y` = the pair's centre, `dy` = each barrel off it, `top` = the upper barrel's crown */
+export const TW_BARRELS = { n: 2, d: 0.022, x: 0, y: 0.006, dy: 0.0125, top: 0.006 + 0.0125 + 0.011, z0: -0.07, z1: -0.232 }
 /** the core half: its split face at the inner side, centre z, top y (under the receiver) */
 export const TW_CORE = { z: -0.026, top: -0.036, w: 0.022, h: 0.05, l: 0.034 }
 
@@ -48,16 +48,15 @@ function twin(side: TwinSide): TwinGun {
     // the priming lever and the heat gauge, OUTER side only (the side the hand's thumb is not on)
     cyl([out * (W + 0.004), -0.02, 0.022], 0.013, 0.01, 'bronze', 'x', 10), { ...box([out * (W + 0.007), -0.026, 0.033], [0.005, 0.008, 0.024], 'bronze'), rot: 0.55 },
     slab(circle(0.03, 0.012, 0.026, 16), 0.006, 'bronze', out * (W + 0.002), 0.001, circle(0.03, 0.012, 0.018, 16)), cyl([out * (W + 0.0005), 0.012, 0.03], 0.018, 0.002, 'slot', 'x', 16),
-    // THE TWO BARRELS, side by side, and the rib between them on top
-    ...[-1, 1].map(x => cyl([x * B.x, B.y, (B.z0 + B.z1) / 2], B.d, B.z0 - B.z1, 'iron')),
-    box([0, B.y + B.d / 2 + 0.001, -0.17], [0.006, 0.004, 0.09], 'iron'),
-    // the short slotted shroud over both (heat: the family's largest feature after the barrel)
-    bar([0, B.y, -0.115], cut(2 * W + 0.004, 0.042, 0.008), 0.09, 'iron', 0.002),
-    ...[0, 1, 2, 3].flatMap(i => [-1, 1].map(x => slab(cut(0.0105, 0.026, 0.0042, -0.148 + i * 0.0215, B.y), 0.003, 'slot', x * (W + 0.0024)))),
-    // the sawn end: a scorched ring, the bronze muzzle band, two bores
-    bar([0, B.y, -0.206], cut(2 * W + 0.002, 0.034, 0.008), 0.008, 'soot', 0.001),
-    bar([0, B.y, -0.222], cut(2 * W + 0.01, 0.038, 0.009), 0.02, 'bronze', 0.0015),
-    ...[-1, 1].map(x => cyl([x * B.x, B.y, B.z1 - 0.0015], 0.02, 0.002, 'slot', 'z', 14)),
+    // THE TWO BARRELS, over and under (the locked card: stacked, each standing out of the shroud to its own bronze band)
+    ...[1, -1].map(k => cyl([0, B.y + k * B.dy, (B.z0 + B.z1) / 2], B.d, B.z0 - B.z1, 'iron')),
+    box([0, B.y, -0.2], [0.008, B.dy * 2 - B.d + 0.004, 0.05], 'iron'),   // the web joining them ahead of the shroud
+    // the short slotted shroud over both: two rows of slots, one a barrel (heat: the family's largest feature after the barrel)
+    bar([0, B.y, -0.124], cut(0.038, 2 * B.dy + B.d + 0.01, 0.008), 0.108, 'iron', 0.002),
+    ...[0, 1, 2, 3].flatMap(i => [1, -1].flatMap(k => [-1, 1].map(x => slab(cut(0.0105, 0.012, 0.0036, -0.163 + i * 0.0225, B.y + k * B.dy), 0.003, 'slot', x * (0.019 + 0.0004))))),
+    // the muzzle: a bronze band on each barrel, two bores
+    ...[1, -1].map(k => cyl([0, B.y + k * B.dy, -0.222], B.d + 0.006, 0.02, 'bronze', 'z', 12)),
+    ...[1, -1].map(k => cyl([0, B.y + k * B.dy, B.z1 - 0.0015], 0.016, 0.002, 'slot', 'z', 10)),
     // the bronze trigger hoop
     slab(circle(0.046, -0.058, 0.044, 16), 0.008, 'bronze', 0, 0, circle(0.046, -0.058, 0.035, 16)), { ...box([0, -0.05, 0.047], [0.006, 0.026, 0.006], 'bronze'), rot: 0.35 },
     // the bird's-head grip and its bronze cap
@@ -86,6 +85,6 @@ const cache = new Map<TwinSide, Model>()
 export function twinsModel(side: TwinSide): Model {
   const had = cache.get(side); if (had) return had
   const g = TWINS[side]
-  const m: Model = { parts: g.parts, grip: g.grip, fore: g.fore, top: 0.032, sightZ: -0.1, eye: TW_BARRELS.y + TW_BARRELS.d / 2 + 0.003, merge: true }
+  const m: Model = { parts: g.parts, grip: g.grip, fore: g.fore, top: 0.032, sightZ: -0.1, eye: TW_BARRELS.top + 0.003, merge: true }
   cache.set(side, m); return m
 }

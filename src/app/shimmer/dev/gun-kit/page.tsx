@@ -83,7 +83,7 @@ export default function GunKit() {
   const fam = q?.get('family'), g = q?.get('gun') ?? '', s = q?.get('sight') ?? ''
   // M152 s1: ?twins=side|top|34|core|hip|ads, the DB2 Twins' bench (off in the game)
   const tw = q?.get('twins'); if (tw) return <div style={{ height: '100dvh' }}><Twins view={tw} /></div>
-  if (fam) { const gun = (g in V2_GUNS ? g : 'backbone') as V2GunId; return <div style={{ height: '100dvh' }}><Family view={fam} gun={gun} sight={(s in V2_SIGHTS ? s : V2_GUNS[gun].own) as V2SightId} yaw={Number(q!.get('yaw') ?? Math.PI / 2)} /></div> }
+  if (fam) { const gun = (fam === 'bench' || g in V2_GUNS ? g : 'backbone') as V2GunId; return <div style={{ height: '100dvh' }}><Family view={fam} gun={gun} sight={(s in V2_SIGHTS ? s : V2_GUNS[gun]?.own ?? 'iron') as V2SightId} yaw={Number(q!.get('yaw') ?? Math.PI / 2)} /></div> }
   return q ? <Kit q={q} /> : <div style={{ height: '100dvh', background: '#14131a' }} />
 }
 

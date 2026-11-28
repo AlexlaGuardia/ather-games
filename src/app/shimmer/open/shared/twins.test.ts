@@ -20,10 +20,12 @@ for (const side of ['left', 'right'] as const) {
   ok(Math.min(...zs) > -0.25 && Math.max(...zs) < 0.13 && Math.min(...ys) > -0.14 && Math.max(...ys) < 0.04, `${side}: fits a sawn-off sidearm (about 0.37 m long)`)
   ok(m.optic === undefined && !m.parts.some(p => p.c === 'glass' || p.c === 'dot' || p.c === 'lens'), `${side}: no sight of any kind (M152: no sights)`)
 }
-// two barrels each, side by side, with two bores at the sawn end
+// two barrels each, OVER AND UNDER (M150 family pass 11-28: the locked card stacks them), with two bores at the sawn end
 const barrels = (g: typeof L) => g.parts.filter(p => p.shape === 'cyl' && p.axis === 'z' && p.c === 'iron' && Math.abs(p.s[0] - TW_BARRELS.d) < 1e-9)
 const bores = (g: typeof L) => g.parts.filter(p => p.shape === 'cyl' && p.axis === 'z' && p.c === 'slot')
 ok(barrels(L).length === 2 && barrels(R).length === 2 && bores(L).length === 2, 'two barrels and two bores on each gun')
+ok([L, R].every(g => { const b = barrels(g); return b[0].o[0] === b[1].o[0] && Math.abs(b[0].o[1] - b[1].o[1]) >= TW_BARRELS.d }), 'the barrels stack over and under (same x, a barrel apart in y), as the locked card draws them')
+ok([L, R].every(g => g.parts.filter(p => p.c === 'bronze' && p.shape === 'cyl' && p.axis === 'z').length === 2), 'a bronze band on each barrel')
 // (2) ONE core in two halves: each gun a half, its split face flush with the gun's INNER side, the halves facing each other
 const xs = (g: typeof L) => g.core.filter(p => p.c === 'core').map(p => [p.o[0] - p.s[0] / 2, p.o[0] + p.s[0] / 2])
 ok(L.core.filter(p => p.c === 'core').length === 1 && R.core.filter(p => p.c === 'core').length === 1, 'one crystal half in each gun')

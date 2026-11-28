@@ -45,6 +45,14 @@ ok(modelOf({ id: 'backbone', slot: 'LONGBARREL' }) === live.backbone, 'letting g
   ok(createHash('sha1').update(JSON.stringify(all)).digest('hex') === 'cc8dcb4a4cf7e9942e85f4298c84102af7350861', 'every model in the game is byte-identical to before M149: ' + createHash('sha1').update(JSON.stringify(all)).digest('hex')) }
 const SLOT: Record<V2GunId, 'LONGBARREL' | 'REACHER' | 'SHORTBARREL' | 'SIDEARM' | 'BREACHER'> = { backbone: 'LONGBARREL', 'charred-rifle': 'LONGBARREL', lance: 'REACHER', spitter: 'SHORTBARREL', repeater: 'SIDEARM', roar: 'BREACHER' }
 ok(Object.keys(V2_GUNS).includes('spitter') && V2_GUNS.spitter.own === 'iron' && V2_GUNS.spitter.parts.some(p => p.c === 'bronze'), 'M196: the Spitter is in the new family, iron by default, with bronze on it')
+{ // M150 family pass (11-28): the Spitter on the locked card: an IRON shroud (not bronze), two rows of slots, a skeleton stock to a bronze butt
+  const sp = V2_GUNS.spitter.parts, shroud = sp.filter(p => p.shape === 'poly' && p.axis === 'z' && p.s[0] >= 0.12)
+  ok(shroud.length === 1 && shroud[0].c === 'iron', 'family pass: the Spitter shroud is iron (the card), not bronze')
+  const slotYs = new Set(sp.filter(p => p.c === 'slot' && p.shape === 'poly' && p.o[0] > 0 && p.pts!.every(([z]) => z < -0.17)).map(p => Math.round(p.pts!.reduce((a, [, y]) => a + y, 0) / p.pts!.length * 1000)))
+  ok(slotYs.size === 2, `family pass: two rows of shroud slots (rows at y ${[...slotYs]})`)
+  ok(sp.some(p => p.shape === 'cyl' && (p.axis ?? 'z') === 'z' && p.c === 'iron' && p.o[2] > 0.1 && p.s[2] >= 0.1), 'family pass: a skeleton stock tube runs back off the receiver')
+  ok(!sp.some(p => p.shape === 'poly' && p.c === 'iron' && p.s[0] >= 0.025 && p.pts!.some(([z]) => z > 0.18) && p.pts!.some(([, y]) => y < -0.06)), 'family pass: no solid stock slab any more')
+}
 for (const g of Object.values(V2_GUNS)) {
   const shipped = modelOf({ id: 'x', slot: SLOT[g.id] })
   ok(same(g.grip, shipped.grip) && same(g.fore, shipped.fore), `new ${g.id}: grip/fore are the shipped anchors (a saved hand tune lands)`)

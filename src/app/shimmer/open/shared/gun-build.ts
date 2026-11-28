@@ -66,7 +66,7 @@ const twinsKit = (): BenchKit => {
   const shift = (p: Part): Part => ({ ...p, o: [p.o[0] - TWINS.gap, p.o[1], p.o[2]] })
   const leftParts = TWINS.left.parts.map(shift), leftCore = new Set(TWINS.left.core.map(p => leftParts[TWINS.left.parts.indexOf(p)]))
   return { id: 'twins', name: 'DB2 Twins', parts: [...TWINS.right.parts, ...leftParts], grip: TWINS.right.grip, fore: TWINS.right.fore, railTop: 0.032, seatZ: -0.1,
-    own: null, sights: [], barrelZ: -0.072, stockZ: null, core: new Set([...TWINS.right.core, ...leftCore]), socket: [TW_CORE.top, TW_CORE.z], eye: TW_BARRELS.y + TW_BARRELS.d / 2 + 0.003 }
+    own: null, sights: [], barrelZ: -0.072, stockZ: null, core: new Set([...TWINS.right.core, ...leftCore]), socket: [TW_CORE.top, TW_CORE.z], eye: TW_BARRELS.top + 0.003 }
 }
 export const BENCH_KITS: Record<BenchKitId, BenchKit> = {
   backbone: fam(V2_GUNS.backbone, -0.161, 0.15), 'charred-rifle': fam(V2_GUNS['charred-rifle'], -0.158, 0.15), lance: fam(V2_GUNS.lance, -0.141, 0.17),

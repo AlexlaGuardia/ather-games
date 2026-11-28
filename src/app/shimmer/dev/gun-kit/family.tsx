@@ -6,6 +6,7 @@ import { Canvas, useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { modelGeometry, KIT_MATS, trisOf } from '../../open/shared/gun-kit-geo'
 import { V2_GUNS, V2_SIGHTS, v2Model, type V2GunId, type V2SightId } from '../../open/shared/gun-kit-v2'
+import { BENCH_KITS, builtModel, type BenchKitId } from '../../open/shared/gun-build'
 import { type Model, type PartColor } from '../../open/shared/gun-kit'
 import { buildKeeper, poseKeeper } from '../../open/shared/keeper-figure'
 import { gunProp } from '../../open/shared/held-gun-prop'
@@ -51,6 +52,9 @@ function Keeper({ m, today }: { m?: Model; today?: string }) {
 const IDS = Object.keys(V2_GUNS) as V2GunId[]
 const Lights = () => <><hemisphereLight args={['#ffffff', '#8a7f6a', 1.1]} /><directionalLight position={[2, 4, 5]} intensity={1.6} /><directionalLight position={[-3, 1, -2]} intensity={0.4} /></>
 export function Family({ view, gun, sight, yaw }: { view: string; gun: V2GunId; sight: V2SightId; yaw: number }) {
+  // M150 family pass (11-28): ?family=bench = EVERY bench gun (the family + the bench-only Grinder and Twins) side on, as built;
+  // ?family=bench&gun=<id> = that one gun alone. Muzzle left. The family-pass sheet is shot from here.
+  if (view === 'bench') return <BenchSide gun={gun as string} yaw={yaw} />
   useEffect(() => { (window as unknown as { __family?: unknown }).__family = { view, tris: Object.fromEntries(IDS.flatMap(g => V2_GUNS[g].sights.map(s => [`${g}+${s}`, trisOf(v2Model(g, s))]))), calls: Object.fromEntries(IDS.map(g => [g, modelGeometry(v2Model(g, V2_GUNS[g].own)).size])) } }, [view])
   if (view === 'third') return (
     <Canvas camera={{ position: [-1.6, 1.5, 2.4], fov: 36 }} onCreated={({ camera }) => camera.lookAt(0, 0.85, 0.2)}>
@@ -66,6 +70,23 @@ export function Family({ view, gun, sight, yaw }: { view: string; gun: V2GunId; 
       {view === 'sights' ? (Object.keys(V2_SIGHTS) as V2SightId[]).flatMap((s, i) => [0, 1].map(k => (
         <group key={s + k} position={[(i - 1) * 0.15 + (k ? 0.036 : -0.036), -0.04, 0]} rotation={[k ? 0.1 : 0, k ? -1.1 : 0, 0]}><V2Mesh m={{ ...v2Model('backbone', 'holo'), parts: V2_SIGHTS[s].parts }} /></group>)))
         : rows.map(([g, s], r) => <group key={g} position={[view === 'one' ? -0.04 : 0.06, view === 'one' ? 0 : 0.03 + (1 - r) * 0.33, 0]} rotation={[view === 'one' ? 0.18 : 0, yaw, 0]}><group position={[0, 0, view === 'one' ? 0.06 : 0.06]}><V2Mesh m={v2Model(g, s)} /></group></group>)}
+    </Canvas>
+  )
+}
+
+const BENCH_IDS = Object.keys(BENCH_KITS) as BenchKitId[]
+function BenchSide({ gun, yaw }: { gun: string; yaw: number }) {
+  const one = (BENCH_IDS as string[]).includes(gun) ? [gun as BenchKitId] : null
+  const ids = one ?? BENCH_IDS
+  useEffect(() => { (window as unknown as { __bench?: unknown }).__bench = { ids, tris: Object.fromEntries(ids.map(g => [g, trisOf(builtModel(g, BENCH_KITS[g].own))])) } }, [ids])
+  const cols = one ? 1 : 2, rows = Math.ceil(ids.length / cols)
+  return (
+    <Canvas orthographic camera={{ position: [0, 0, 5], zoom: one ? 1250 : 520, near: 0.1, far: 50 }}>
+      <color attach="background" args={['#dadad4']} /><Lights />
+      {ids.map((g, i) => {
+        const c = i % cols, r = Math.floor(i / cols)
+        return <group key={g} position={[one ? 0.04 : (c - 0.5) * 1.0 + 0.06, one ? 0 : ((rows - 1) / 2 - r) * 0.3, 0]} rotation={[0, yaw, 0]}><V2Mesh m={builtModel(g, BENCH_KITS[g].own)} /></group>
+      })}
     </Canvas>
   )
 }
